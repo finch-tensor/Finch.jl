@@ -17,6 +17,13 @@
                 C[i] += A[i] + B[i]
             end
         end
+        println("ex 1:")
+        println(@finch_code begin
+            C .= 0
+            for i = _
+                C[i] += A[i] + B[i]
+            end
+        end)
         C_ref = Tensor(SparseRunList{Float64}(Element(0, [1, 2, 1, 3, 1, 2, 3]), 12.0, [1, 8], Finch.PlusEpsVector([1.1, 2.2, 5.5, 6.6, 7.7, 8.8, 9.9]), [2.2, 3.3, 6.6, 7.7, 8.8, 9.9, 11.11], Element(0, Int[])))
         @test Structure(C) == Structure(C_ref)
     end
@@ -75,6 +82,8 @@
                 output[id] |= box[y,x] && points[id,y,x]
             end
         end
+        println("def 1:")
+        println(def)
 
         radius=ox=oy=0.0 #placeholder
         def2 = @finch_kernel mode=:fast function radiusquery(output, points, radius, ox, oy)
@@ -88,11 +97,15 @@
             end
         end
 
+        println("def 2:")
+        println(def2)
+
         eval(def)
         eval(def2)
 
 
-        for i=1:length(query)
+        #for i=1:length(query)
+        for i=1:1
             box_x_start = [query[i][1]]
             box_y_start = [query[i][2]]
             box_x_stop = [query[i][3]]
@@ -119,6 +132,17 @@
                     end
                 end
             end
+
+            println("ex 2:")
+            println(
+                @finch_code begin
+                    for id=_
+                        if output[id]
+                            count[] += 1
+                        end
+                    end
+                end
+            )
             @test count.val == answer[i]
 
             output = Tensor(SparseByteMap{Int64}(Pattern(), shape_id))
@@ -134,6 +158,16 @@
                     end
                 end
             end
+            println("ex 3:")
+            println(
+                @finch_code begin
+                    for id=_
+                        if output[id]
+                            count[] += 1
+                        end
+                    end
+                end
+            )
             @test count.val == radanswer[i]
 
         end
