@@ -1,0 +1,25 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+  \matrix (A) [matrix of math nodes,
+              nodes = {whclsty},
+              left delimiter  = (,
+              right delimiter = ),
+              ampersand replacement=\&] at (0,0)
+  {
+  \becl \& \becl \& \becl \& \blcl \& \blcl \& \blcl \& \brcl \& \brcl \& \bkcl \& \brcl \& \orcl\\
+  };
+
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-1.south west) -- ([yshift=-0*\myunit]A-1-3.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-4.south west) -- ([yshift=-0*\myunit]A-1-6.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-7.south west) -- ([yshift=-0*\myunit]A-1-8.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-9.south west) -- ([yshift=-0*\myunit]A-1-9.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-10.south west) -- ([yshift=-0*\myunit]A-1-10.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-11.south west) -- ([yshift=-0*\myunit]A-1-11.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-1*\myunit]A-1-1.south west) -- ([yshift=-1*\myunit]A-1-11.south east) node[namesty]{Stepper};
+\end{tikzpicture}%
+}
+\end{document}

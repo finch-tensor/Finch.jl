@@ -1,0 +1,22 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+  \matrix (A) [matrix of math nodes,
+              nodes = {whclsty},
+              left delimiter  = (,
+              right delimiter = ),
+              ampersand replacement=\&] at (0,0)
+  {
+  \zecl \& \zecl \& \zecl \& |[nzsty]|3.7 \& |[nzsty]|4.7 \& |[nzsty]|9.2 \& |[nzsty]|1.5 \& |[nzsty]|8.7 \& \zecl \& \zecl \& \zecl \\
+  };
+
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-1.south west) -- ([yshift=-0*\myunit]A-1-3.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-4.south west) -- ([yshift=-0*\myunit]A-1-8.south east) node[namesty]{Lookup};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-9.south west) -- ([yshift=-0*\myunit]A-1-11.south east) node[namesty]{Run};
+  \draw[lpltsty] ([yshift=-1*\myunit]A-1-1.south west) -- ([yshift=-1*\myunit]A-1-11.south east) node[namesty]{Sequence};
+\end{tikzpicture}%
+}
+\end{document}

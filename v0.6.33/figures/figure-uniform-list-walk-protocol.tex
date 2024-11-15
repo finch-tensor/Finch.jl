@@ -1,0 +1,36 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+\matrix (A) [matrix of math nodes,
+  nodes = {whclsty},
+  left delimiter  = (,
+  right delimiter = ),
+  ampersand replacement=\&] at (0,0)
+{
+  \zecl \& |[nzsty]|1.9 \& \zecl \& |[nzsty]|3.0 \& |[nzsty]|2.7 \& \zecl \& \zecl \& \zecl \& |[nzsty]|5.5 \& \zecl \& \zecl \\
+};
+
+\draw[lpltsty] ([yshift=-0*\myunit]A-1-1.south west) -- ([yshift=-0*\myunit]A-1-1.south east) node[namesty]{Run};
+%\draw[lpltsty] ([yshift=-0*\myunit]A-1-2.south west) -- ([yshift=-0*\myunit]A-1-2.south east) node[namesty]{Lookup};
+\draw[lpltsty] ([yshift=-0*\myunit]A-1-3.south west) -- ([yshift=-0*\myunit]A-1-3.south east) node[namesty]{Run};
+%\draw[lpltsty] ([yshift=-0*\myunit]A-1-4.south west) -- ([yshift=-0*\myunit]A-1-4.south east) node[namesty]{Lookup};
+%\draw[lpltsty] ([yshift=-0*\myunit]A-1-5.south west) -- ([yshift=-0*\myunit]A-1-5.south east) node[namesty]{Lookup};
+\draw[lpltsty] ([yshift=-0*\myunit]A-1-6.south west) -- ([yshift=-0*\myunit]A-1-8.south east) node[namesty]{Run};
+%\draw[lpltsty] ([yshift=-0*\myunit]A-1-9.south west) -- ([yshift=-0*\myunit]A-1-9.south east) node[namesty]{Lookup};
+\draw[lpltsty] ([yshift=-0*\myunit]A-1-10.south west) -- ([yshift=-0*\myunit]A-1-11.south east) node[namesty]{Run};
+
+\draw[lpltsty] ([yshift=-1*\myunit]A-1-1.south west) -- ([yshift=-1*\myunit]A-1-2.south east) node[namesty]{Spike};
+\draw[lpltsty] ([yshift=-1*\myunit]A-1-3.south west) -- ([yshift=-1*\myunit]A-1-4.south east) node[namesty]{Spike};
+\draw[lpltsty] ([yshift=-1*\myunit]A-1-5.south west) -- ([yshift=-1*\myunit]A-1-5.south east) node[namesty]{Spike};
+\draw[lpltsty] ([yshift=-1*\myunit]A-1-6.south west) -- ([yshift=-1*\myunit]A-1-9.south east) node[namesty]{Spike};
+
+\draw[lpltsty] ([yshift=-2*\myunit]A-1-1.south west) -- ([yshift=-2*\myunit]A-1-9.south east) node[namesty]{Stepper};
+
+\draw[lpltsty] ([yshift=-3*\myunit]A-1-1.south west) -- ([yshift=-3*\myunit]A-1-11.south east) node[namesty]{Sequence};
+
+\end{tikzpicture}%
+}
+\end{document}

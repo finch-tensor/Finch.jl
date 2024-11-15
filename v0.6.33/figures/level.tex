@@ -1,0 +1,66 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+
+\node (Ad2p1p) [anchor=north] {Tensor(lvl, pos=1)} at (9.0*\myunit, 0*\myunit):
+\matrix (Ad2p1) [matrix of math nodes,
+    nodes = {whclsty},
+    left delimiter  = (,
+    right delimiter = ),
+    ampersand replacement=\&,
+    anchor=north] at (9.0*\myunit, -2*\myunit)
+{
+|[fullsty]|\&|[fullsty]|\&|[fullsty]|\\
+};
+\matrix (Ad1p1) [matrix of math nodes,
+    nodes = {whclsty},
+    left delimiter  = (,
+    right delimiter = ),
+    ampersand replacement=\&,
+    anchor=north] at (2.75*\myunit, -5*\myunit)
+{
+|[zcsty]|\&|[fullsty]|\&|[fullsty]|\&|[fullsty]|\\
+};
+\node (Ad0p1) [below=of Ad1p1-1-2, nzsty] {11};
+\draw (Ad1p1-1-2.center) -- (Ad0p1.north) node [midway, fill=white] {2};
+\node (Ad0p2) [below=of Ad1p1-1-3, nzsty] {22};
+\draw (Ad1p1-1-3.center) -- (Ad0p2.north) node [midway, fill=white] {3};
+\node (Ad0p3) [below=of Ad1p1-1-4, nzsty] {33};
+\draw (Ad1p1-1-4.center) -- (Ad0p3.north) node [midway, fill=white] {4};
+\draw (Ad2p1-1-1.center) -- (Ad1p1.north) node [midway, fill=white] {:,1};
+\matrix (Ad1p2) [matrix of math nodes,
+    nodes = {whclsty},
+    left delimiter  = (,
+    right delimiter = ),
+    ampersand replacement=\&,
+    anchor=north] at (8.25*\myunit, -5*\myunit)
+{
+|[zcsty]|\&|[zcsty]|\&|[zcsty]|\&|[zcsty]|\\
+};
+\draw (Ad2p1-1-2.center) -- (Ad1p2.north) node [midway, fill=white] {:,2};
+\matrix (Ad1p3) [matrix of math nodes,
+    nodes = {whclsty},
+    left delimiter  = (,
+    right delimiter = ),
+    ampersand replacement=\&,
+    anchor=north] at (13.75*\myunit, -5*\myunit)
+{
+|[fullsty]|\&|[zcsty]|\&|[fullsty]|\&|[zcsty]|\\
+};
+\node (Ad0p4) [below=of Ad1p3-1-1, nzsty] {44};
+\draw (Ad1p3-1-1.center) -- (Ad0p4.north) node [midway, fill=white] {1};
+\node (Ad0p5) [below=of Ad1p3-1-3, nzsty] {55};
+\draw (Ad1p3-1-3.center) -- (Ad0p5.north) node [midway, fill=white] {3};
+\draw (Ad2p1-1-3.center) -- (Ad1p3.north) node [midway, fill=white] {:,3};
+\draw [whclsty, anchor=north east] let \p1 = (Ad2p1-1-1.north) in (-1, \y1) node {DenseLevel};
+
+\draw [whclsty, anchor=north east] let \p1 = (Ad1p1-1-1.north) in (-1, \y1) node {SparseListLevel};
+
+\draw [whclsty, anchor=north east] let \p1 = (Ad0p1.north) in (-1, \y1) node {ElementLevel};
+
+\end{tikzpicture}%
+}
+\end{document}
+

@@ -1,0 +1,30 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+\matrix (A) [matrix of math nodes,
+            nodes = {whclsty},
+            left delimiter  = (,
+            right delimiter = ),
+            ampersand replacement=\&,
+            anchor=north west] at (0,0)
+{
+  \zecl \& \zecl \& |[nzsty]|5.9 \& |[nzsty]|4.7 \& |[nzsty]|0.3 \& \zecl \& \zecl \& |[nzsty]|2.9 \& |[nzsty]|2.3 \& \zecl \& \zecl \\
+  |[nzsty]|6.0 \& \zecl \& \zecl \& \zecl \& |[nzsty]|4.2 \& |[nzsty]|7.5 \& |[nzsty]|5.6 \& \zecl \& \zecl \& \zecl \& \zecl \\
+  |[nzsty]|3.0 \& \zecl \& \zecl \& |[nzsty]|3.2 \& \zecl \& \zecl \& \zecl \& |[nzsty]|5.9 \& |[nzsty]|5.1 \& |[nzsty]|1.4 \& |[nzsty]|2.1 \\
+  \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|6.5 \& |[nzsty]|5.9 \& |[nzsty]|6.3 \& \zecl \& \zecl \\
+  \zecl \& \zecl \& |[nzsty]|2.7 \& |[nzsty]|5.0 \& |[nzsty]|0.9 \& \zecl \& \zecl \& |[nzsty]|1.4 \& |[nzsty]|2.3 \& \zecl \& \zecl \\
+  \zecl \& \zecl \& \zecl \& |[nzsty]|5.3 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+  \zecl \& \zecl \& |[nzsty]|0.9 \& |[nzsty]|3.9 \& |[nzsty]|8.2 \& \zecl \& \zecl \& |[nzsty]|0.1 \& |[nzsty]|4.4 \& |[nzsty]|4.1 \& \zecl \\
+  |[nzsty]|8.7 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|3.1 \\
+  |[nzsty]|7.9 \& \zecl \& |[nzsty]|2.3 \& \zecl \& \zecl \& |[nzsty]|9.0 \& |[nzsty]|9.1 \& |[nzsty]|2.5 \& |[nzsty]|1.1 \& |[nzsty]|0.8 \& |[nzsty]|8.6 \\
+  \zecl \& \zecl \& |[nzsty]|0.7 \& |[nzsty]|6.7 \& |[nzsty]|5.2 \& |[nzsty]|3.2 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+  |[nzsty]|1.8 \& \zecl \& \zecl \& |[nzsty]|3.6 \& \zecl \& |[nzsty]|4.1 \& |[nzsty]|0.7 \& |[nzsty]|7.7 \& |[nzsty]|3.1 \& \zecl \& |[nzsty]|3.7 \\
+  \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|6.2 \& |[nzsty]|6.4 \& |[nzsty]|6.5 \& \zecl \& \zecl \\
+};
+
+\draw[hlsty] (A-5-1.south west) rectangle (A-5-11.north east);
+\end{tikzpicture}}
+\end{document}

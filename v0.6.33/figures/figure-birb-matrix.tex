@@ -1,0 +1,27 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\begin{tikzpicture}[>=latex]
+\matrix (A) [matrix of math nodes,
+  nodes = {whclsty},
+  left delimiter  = (,
+  right delimiter = ),
+  ampersand replacement=\&] at (0,0)
+{
+  \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl\\
+  \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \brcl \& \brcl \& \blcl \& \blcl\\
+  \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \brcl \& \brcl \& \brcl \& \brcl \& \blcl\\
+  \becl \& \becl \& \becl \& \blcl \& \blcl \& \blcl \& \brcl \& \brcl \& \bkcl \& \brcl \& \orcl\\
+  \bkcl \& \brcl \& \brcl \& \becl \& \becl \& \becl \& \becl \& \brcl \& \brcl \& \brcl \& \blcl\\
+  \blcl \& \bkcl \& \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \becl \& \brcl \& \brcl \& \blcl\\
+  \blcl \& \blcl \& \bkcl \& \bkcl \& \brcl \& \brcl \& \bkcl \& \bkcl \& \brcl \& \blcl \& \blcl\\
+  \blcl \& \brcl \& \brcl \& \bkcl \& \bkcl \& \bkcl \& \bkcl \& \brcl \& \brcl \& \blcl \& \blcl\\
+  \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \blcl \& \blcl \& \blcl\\
+  \brcl \& \brcl \& \brcl \& \brcl \& \brcl \& \orcl \& \blcl \& \orcl \& \blcl \& \blcl \& \blcl\\
+  \blcl \& \blcl \& \blcl \& \blcl \& \blcl \& \orcl \& \blcl \& \orcl \& \blcl \& \blcl \& \blcl\\
+};
+
+\draw[hlsty] (A-4-1.south west) rectangle (A-4-11.north east);
+\end{tikzpicture}
+\end{document}

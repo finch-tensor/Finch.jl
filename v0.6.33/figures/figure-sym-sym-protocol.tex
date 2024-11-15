@@ -1,0 +1,21 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+  \matrix (A) [matrix of math nodes,
+              nodes = {whclsty},
+              left delimiter  = (,
+              right delimiter = ),
+              ampersand replacement=\&] at (0,0)
+  {
+  |[nzsty, fill=red!9!blue!63!green]|5.9 \& |[nzsty, fill=red!18!blue!63!green]|1.9 \& |[nzsty, fill=red!27!blue!63!green]|0.3 \& |[nzsty, fill=red!36!blue!63!green]|4.1 \& |[nzsty, fill=red!45!blue!63!green]|3.9 \& |[nzsty, fill=red!54!blue!63!green]|4.9 \& |[nzsty, fill=red!63!blue!63!green]|2.3 \& |[nzsty, fill=red!63!blue!72!green]|3.9 \& |[nzsty, fill=red!63!blue!81!green]|6.6 \& |[nzsty, fill=red!63!blue!90!green]|4.2 \& |[nzsty, fill=red!63!blue!100!green]|7.9 \\
+  };
+
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-1.south west) -- ([yshift=-0*\myunit]A-1-7.south east) node[namesty]{Lookup};
+  \draw[lpltsty] ([yshift=-0*\myunit]A-1-8.south west) -- ([yshift=-0*\myunit]A-1-11.south east) node[namesty]{Lookup};
+  \draw[lpltsty] ([yshift=-1*\myunit]A-1-1.south west) -- ([yshift=-1*\myunit]A-1-11.south east) node[namesty]{Sequence};
+\end{tikzpicture}%
+}
+\end{document}

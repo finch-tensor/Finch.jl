@@ -1,0 +1,28 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+\matrix (A) [matrix of math nodes,
+  nodes = {whclsty},
+  left delimiter  = (,
+  right delimiter = ),
+  ampersand replacement=\&] at (0,0)
+{
+|[nzsty]|0.4 \& |[nzsty]|3.8 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+|[nzsty]|4.1 \& |[nzsty]|1.1 \& |[nzsty]|1.7 \& |[nzsty]|3.2 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+\zecl \& |[nzsty]|1.9 \& |[nzsty]|7.8 \& |[nzsty]|6.9 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+\zecl \& |[nzsty]|9.0 \& |[nzsty]|2.4 \& |[nzsty]|9.4 \& |[nzsty]|9.9 \& |[nzsty]|4.6 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& |[nzsty]|2.6 \& |[nzsty]|8.2 \& |[nzsty]|5.7 \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& |[nzsty]|3.7 \& |[nzsty]|4.7 \& |[nzsty]|9.2 \& |[nzsty]|1.5 \& |[nzsty]|8.7 \& \zecl \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|7.0 \& |[nzsty]|1.4 \& |[nzsty]|6.9 \& \zecl \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|8.1 \& |[nzsty]|3.9 \& |[nzsty]|5.2 \& |[nzsty]|8.5 \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|2.3 \& |[nzsty]|6.3 \& \zecl \& \zecl \\
+\zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|2.8 \& |[nzsty]|5.7 \\
+\zecl \& \zecl \& \zecl \& \zecl  \& \zecl \& \zecl \& \zecl \& \zecl \& \zecl \& |[nzsty]|8.1 \& |[nzsty]|8.0 \\
+};
+
+\draw[hlsty] (A-6-1.south west) rectangle (A-6-11.north east);
+\end{tikzpicture}}
+\end{document}

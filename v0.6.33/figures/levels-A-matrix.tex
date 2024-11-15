@@ -1,0 +1,21 @@
+\documentclass{standalone}
+\input{common.tex}
+\begin{document}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[>=latex]
+
+\matrix (A) [matrix of math nodes,
+  nodes = {whclsty},
+  left delimiter  = (,
+  right delimiter = ),
+  ampersand replacement=\&] at (0,0)
+{
+\zecl \& \zecl \& |[nzsty]|4.4\\
+|[nzsty]|1.1 \& \zecl \& \zecl\\
+|[nzsty]|2.2 \& \zecl \& |[nzsty]|5.5\\
+|[nzsty]|3.3 \& \zecl \& \zecl\\
+};
+\end{tikzpicture}%
+}
+\end{document}
+
