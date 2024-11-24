@@ -7,12 +7,12 @@ function sort_mapjoin_args(args)
     return [immediate_args[perm]..., remainder...]
 end
 
-function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, index_sym_dict; read=true, cannonicalize=true, virtual_tns=false)
+function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, index_sym_dict; read_mode=true, cannonicalize=true, virtual_tns=false)
     if !isnothing(tensor) && isbits(tensor)
         return literal_instance(tensor)
     end
 
-    mode = read ? Reader() : Updater()
+    mode = read_mode ? reader() : updater()
     mode = literal_instance(mode)
     index_expressions = []
     for i in range(1, length(index_ids))
@@ -25,7 +25,7 @@ function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, inde
         else
             index_instance(index_ids[i])
         end
-        if read == true
+        if read_mode == true
             if protocols[i] == t_walk
                 index = call_instance(literal_instance(walk), index)
             elseif protocols[i] == t_gallop
@@ -59,11 +59,11 @@ function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode
             rhs.name
         end
         if virtual_aliases
-            return initialize_access(t_name, nothing, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize, virtual_tns=virtual_aliases)
+            return initialize_access(t_name, nothing, idxs, protocols, index_sym_dict, read_mode=true, cannonicalize=cannonicalize, virtual_tns=virtual_aliases)
         else
             tns = alias_dict[rhs.name]
             @assert all([get_dim_size(rhs.stats, idxs[i]) == size(tns)[i] for i in eachindex(idxs)]) "$(size(tns)) $(idxs) $([(X, Int64(x)) for (X,x) in rhs.stats.def.dim_sizes])"
-            return initialize_access(t_name, tns, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize)
+            return initialize_access(t_name, tns, idxs, protocols, index_sym_dict, read_mode=true, cannonicalize=cannonicalize)
         end
 
     elseif rhs.kind === Input
@@ -75,7 +75,7 @@ function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode
         else
             rhs.id
         end
-        return initialize_access(t_name, rhs.tns.val, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize)
+        return initialize_access(t_name, rhs.tns.val, idxs, protocols, index_sym_dict, read_mode=true, cannonicalize=cannonicalize)
     elseif rhs.kind == Value
         return literal_instance(rhs.val)
     elseif rhs.kind === MapJoin
@@ -124,7 +124,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
                                         output_idx_order,
                                         [t_default for _ in output_idx_order],
                                         index_sym_dict;
-                                        read=false,
+                                        read_mode=false,
                                         cannonicalize=cannonicalize)
     dec_instance = declare_instance(variable_instance(output_name),
                                                  literal_instance(output_default))

@@ -266,16 +266,16 @@ import Serialization
 bytes(x) = reinterpret(NTuple{sizeof(x), UInt8}, x)
 function update_structure_hash!(ctx, a::LogicNode, names=Dict{LogicNode,Int}())
     #delimit each hash blob with the kind of the node
-    SHA.update!(ctx, bytes(Int(a.kind)))
+    SHA.updater!(ctx, bytes(Int(a.kind)))
     if a.kind === field || a.kind === alias
-        SHA.update!(ctx, bytes(get!(names, a, length(names))))
+        SHA.updater!(ctx, bytes(get!(names, a, length(names))))
     elseif a.kind === immediate
         buffer = IOBuffer()
         Serialization.serialize(buffer, a.val)
-        SHA.update!(ctx, take!(buffer))
+        SHA.updater!(ctx, take!(buffer))
     elseif a.kind === subquery
         if haskey(names, a.lhs)
-            SHA.update!(ctx, a.lhs)
+            SHA.updater!(ctx, a.lhs)
         else
             names[a.lhs] = length(names)
             update_structure_hash!(ctx, a.lhs)
@@ -294,7 +294,7 @@ function update_structure_hash!(ctx, a::LogicNode, names=Dict{LogicNode,Int}())
         error("unimplemented")
     end
     #terminate each hash with an unused node kind
-    SHA.update!(ctx, bytes(typemax(Int)))
+    SHA.updater!(ctx, bytes(typemax(Int)))
 end
 
 

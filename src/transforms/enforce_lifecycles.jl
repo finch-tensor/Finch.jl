@@ -27,7 +27,7 @@ end
 function close_scope(prgm, ctx::EnforceLifecyclesVisitor)
     prgm = ctx(prgm)
     for tns in getmodified(prgm)
-        if ctx.modes[tns] !== reader
+        if ctx.modes[tns].kind !== reader
             prgm = block(prgm, freeze(tns))
         end
     end
@@ -47,10 +47,10 @@ end
 #assumes arguments to prgm have been visited already and their uses collected
 function open_stmt(prgm, ctx::EnforceLifecyclesVisitor)
     for (tns, mode) in ctx.uses
-        cur_mode = get(ctx.modes, tns, reader)
-        if mode === reader && cur_mode === updater
+        cur_mode = get(ctx.modes, tns, reader())
+        if mode.kind === reader && cur_mode.kind === updater
             prgm = block(freeze(tns), prgm)
-        elseif mode === updater && cur_mode === reader
+        elseif mode.kind === updater && cur_mode.kind === reader
             prgm = block(thaw(tns), prgm)
         end
         ctx.modes[tns] = mode
@@ -68,35 +68,35 @@ function (ctx::EnforceLifecyclesVisitor)(node::FinchNode)
         open_stmt(define(node.lhs, ctx(node.rhs), open_scope(ctx, node.body)), ctx)
     elseif node.kind === declare
         ctx.scoped_uses[node.tns] = ctx.uses
-        if get(ctx.modes, node.tns, reader) === updater
+        if get(ctx.modes, node.tns, reader()).kind === updater
             node = block(freeze(node.tns), node)
         end
-        ctx.modes[node.tns] = updater
+        ctx.modes[node.tns] = updater()
         node
     elseif node.kind === freeze
         haskey(ctx.modes, node.tns) || throw(EnforceLifecyclesError("cannot freeze undefined $(node.tns)"))
-        ctx.modes[node.tns] === reader && return block()
-        ctx.modes[node.tns] = reader
+        ctx.modes[node.tns].kind === reader && return block()
+        ctx.modes[node.tns] = reader()
         node
     elseif node.kind === thaw
-        get(ctx.modes, node.tns, reader) === updater && return block()
-        ctx.modes[node.tns] = updater
+        get(ctx.modes, node.tns, reader()).kind === updater && return block()
+        ctx.modes[node.tns].kind = updater()
         node
     elseif node.kind === assign
         return open_stmt(assign(ctx(node.lhs), ctx(node.op), ctx(node.rhs)), ctx)
     elseif node.kind === access
         idxs = map(ctx, node.idxs)
         uses = get(ctx.scoped_uses, getroot(node.tns), ctx.global_uses)
-        get(uses, getroot(node.tns), node.mode.val) !== node.mode.val &&
+        get(uses, getroot(node.tns), node.mode) != node.mode &&
             throw(EnforceLifecyclesError("cannot mix reads and writes to $(node.tns) outside of defining scope (hint: perhaps add a declaration like `var .= 0` or use an updating operator like `var += 1`)"))
-        uses[getroot(node.tns)] = node.mode.val
+        uses[getroot(node.tns)] = node.mode
         access(node.tns, node.mode, idxs...)
     elseif node.kind === yieldbind
         args_2 = map(node.args) do arg
             uses = get(ctx.scoped_uses, getroot(arg), ctx.global_uses)
-            get(uses, getroot(arg), reader) !== reader &&
+            get(uses, getroot(arg), reader()).kind !== reader &&
                 throw(EnforceLifecyclesError("cannot return $(arg) outside of defining scope"))
-            uses[getroot(arg)] = reader
+            uses[getroot(arg)] = reader()
             ctx(arg)
         end
         open_stmt(yieldbind(args_2...), ctx)

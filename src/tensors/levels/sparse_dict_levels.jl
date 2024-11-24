@@ -314,7 +314,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -366,7 +366,7 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode::Re
     )
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode::Reader, ::typeof(follow))
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode, ::typeof(follow))
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -385,10 +385,10 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode::Re
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode::Updater, proto) = begin
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) = begin
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
 end
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseDictLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseDictLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)

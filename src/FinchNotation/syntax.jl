@@ -14,8 +14,8 @@ const program_nodes = (
     call = call,
     access = access,
     yieldbind = yieldbind,
-    reader = literal(reader),
-    updater = literal(updater),
+    reader = reader,
+    updater = updater,
     variable = variable,
     tag = (ex) -> :(finch_leaf($(esc(ex)))),
     literal = literal,
@@ -36,8 +36,8 @@ const instance_nodes = (
     call = call_instance,
     access = access_instance,
     yieldbind = yieldbind_instance,
-    reader = literal_instance(reader),
-    updater = literal_instance(updater),
+    reader = read_instance,
+    updater = update_instance,
     variable = variable_instance,
     tag = (ex) -> :($tag_instance($(variable_instance(ex)), $finch_leaf_instance($(esc(ex))))),
     literal = literal_instance,
@@ -199,17 +199,17 @@ function (ctx::FinchParserVisitor)(ex::Expr)
         return :($(ctx.nodes.yieldbind)($(ctx(arg))))
     elseif @capture ex :ref(~tns, ~idxs...)
         mode = ctx.nodes.reader
-        return :($(ctx.nodes.access)($(ctx(tns)), $mode, $(map(ctx, idxs)...)))
+        return :($(ctx.nodes.access)($(ctx(tns)), $mode(), $(map(ctx, idxs)...)))
     elseif (@capture ex (~op)(~lhs, ~rhs)) && haskey(incs, op)
         return ctx(:($lhs << $(incs[op]) >>= $rhs))
     elseif @capture ex :(=)(:ref(~tns, ~idxs...), ~rhs)
         mode = ctx.nodes.updater
-        lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode, $(map(ctx, idxs)...)))
+        lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode(), $(map(ctx, idxs)...)))
         op = :($(ctx.nodes.literal)($initwrite))
         return :($(ctx.nodes.assign)($lhs, $op, $(ctx(rhs))))
     elseif @capture ex :>>=(:call(:<<, :ref(~tns, ~idxs...), ~op), ~rhs)
         mode = ctx.nodes.updater
-        lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode, $(map(ctx, idxs)...)))
+        lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode(), $(map(ctx, idxs)...)))
         return :($(ctx.nodes.assign)($lhs, $(ctx(op)), $(ctx(rhs))))
     elseif @capture ex :>>=(:call(:<<, ~lhs, ~op), ~rhs)
         error("Finch doesn't support incrementing definitions of variables")

@@ -50,10 +50,10 @@ Mark a tensor variable as declared in the context.
 """
 function set_declared!(ctx::ScopeContext, var, val)
     @assert var.kind === variable
-    @assert get(ctx.modes, var, reader) === reader
+    @assert get(ctx.modes, var, reader()) == reader()
     push!(ctx.defs, var)
     set_binding!(ctx, var, val)
-    ctx.modes[var] = updater
+    ctx.modes[var] = updater()
 end
 
 """
@@ -63,9 +63,9 @@ Mark a tensor variable as frozen in the context.
 """
 function set_frozen!(ctx::ScopeContext, var, val)
     @assert var.kind === variable
-    @assert ctx.modes[var] === updater
+    @assert ctx.modes[var] == updater()
     set_binding!(ctx, var, val)
-    ctx.modes[var] = reader
+    ctx.modes[var] = reader()
 end
 
 """
@@ -75,16 +75,16 @@ Mark a tensor variable as thawed in the context.
 """
 function set_thawed!(ctx::ScopeContext, var, val)
     @assert var.kind === variable
-    @assert get(ctx.modes, var, reader) === reader
+    @assert get(ctx.modes, var, reader()) == reader()
     set_binding!(ctx, var, val)
-    ctx.modes[var] = updater
+    ctx.modes[var] = updater()
 end
 """
     get_tensor_mode(ctx, var)
 
 Get the mode of a tensor variable in the context.
 """
-get_tensor_mode(ctx::ScopeContext, var) = get(ctx.modes, var, reader)
+get_tensor_mode(ctx::ScopeContext, var) = get(ctx.modes, var, reader())
 
 """
     open_scope(f, ctx)

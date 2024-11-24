@@ -333,7 +333,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
                             check = VirtualScalar(:UNREACHABLE, Bool, false, :check, checkval)
                             exts = virtual_level_size(ctx_2, lvl.buf)
                             inds = [index(freshen(ctx_2, :i, n)) for n = 1:length(exts)]
-                            prgm = assign(access(check, updater), and, call(isequal, access(left, reader, inds...), access(right, reader, inds...)))
+                            prgm = assign(access(check, updater()), and, call(isequal, access(left, reader(), inds...), access(right, reader(), inds...)))
                             for (ind, ext) in zip(inds, exts)
                                 prgm = loop(ind, ext, prgm)
                             end
@@ -354,7 +354,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
                         set_binding!(ctx_2, dst, virtual(VirtualSubFiber(lvl.lvl, value(q_2, Tp))))
                         exts = virtual_level_size(ctx_2, lvl.buf)
                         inds = [index(freshen(ctx_2, :i, n)) for n = 1:length(exts)]
-                        prgm = assign(access(dst, updater, inds...), initwrite(virtual_level_fill_value(lvl.lvl)), access(src, reader, inds...))
+                        prgm = assign(access(dst, updater(), inds...), initwrite(virtual_level_fill_value(lvl.lvl)), access(src, reader(), inds...))
                         for (ind, ext) in zip(inds, exts)
                             prgm = loop(ind, ext, prgm)
                         end
@@ -406,7 +406,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop)
     =#
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -448,7 +448,7 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode::Reade
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode::Updater, proto) =
+unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
 
 #Invariants of the level (Write Mode):
@@ -457,7 +457,7 @@ unfurl(ctx, fbr::VirtualSubFiber{VirtualRunListLevel}, ext, mode::Updater, proto
 # 3. for all p in 1:prevpos-1, ptr[p] is the number of runs in that position
 # 4. qos_fill is the position of the last index written
 
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualRunListLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualRunListLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)

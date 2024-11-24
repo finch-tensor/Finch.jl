@@ -267,7 +267,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos_s
     return lvl
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -321,9 +321,9 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode::Re
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode::Updater, proto) =
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseBandLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseBandLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)

@@ -264,7 +264,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, pos
     return lvl
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -305,10 +305,10 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode::Updater, proto) =
-    unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
+    unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)})
 
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseIntervalLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseIntervalLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)

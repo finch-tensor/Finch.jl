@@ -1,9 +1,3 @@
-struct Reader end
-struct Updater end
-
-const reader = Reader()
-const updater = Updater()
-
 const IS_TREE = 1
 const IS_STATEFUL = 2
 const IS_CONST = 4
@@ -17,7 +11,9 @@ const ID = 8
     virtual   =  4ID
     tag       =  5ID | IS_TREE
     call      =  6ID | IS_TREE
-    access    =  7ID | IS_TREE
+    reader      =  7ID | IS_TREE
+    updater    =  8ID | IS_TREE
+    access    =  9ID | IS_TREE
     cached    = 10ID | IS_TREE
     assign    = 11ID | IS_TREE | IS_STATEFUL
     loop      = 12ID | IS_TREE | IS_STATEFUL
@@ -87,6 +83,20 @@ tag
 Finch AST expression for the result of calling the function `op` on `args...`.
 """
 call
+
+"""
+    reader()
+
+Finch AST expression representing a read mode for an access operation.
+"""
+reader
+
+"""
+    updater()
+
+Finch AST expression representing an update mode for an access operation.
+"""
+updater
 
 """
     access(tns, mode, idx...)
@@ -259,6 +269,8 @@ function FinchNode(kind::FinchNodeKind, args::Vector)
     elseif (kind === value || kind === literal || kind === index || kind === variable || kind === virtual) && length(args) == 2
         return FinchNode(kind, args[1], args[2], FinchNode[])
     elseif (kind === cached && length(args) == 2) ||
+        (kind === reader && length(args) == 0) ||
+        (kind === updater && length(args) == 0) ||
         (kind === access && length(args) >= 2) ||
         (kind === tag && length(args) == 2) ||
         (kind === call && length(args) >= 1) ||
@@ -392,8 +404,6 @@ virtual.
 finch_leaf(arg) = literal(arg)
 finch_leaf(arg::Type) = literal(arg)
 finch_leaf(arg::Function) = literal(arg)
-finch_leaf(arg::Reader) = literal(arg)
-finch_leaf(arg::Updater) = literal(arg)
 finch_leaf(arg::FinchNode) = arg
 
 Base.convert(::Type{FinchNode}, x) = finch_leaf(x)

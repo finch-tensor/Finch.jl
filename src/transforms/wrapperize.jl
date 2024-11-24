@@ -82,62 +82,62 @@ function get_wrapper_rules(ctx, depth, alg)
         end),
         (@rule call(<, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                access(VirtualLoTriMask(), reader, j, call(+, i, 1))
+                access(VirtualLoTriMask(), reader(), j, call(+, i, 1))
             end
         end),
         (@rule call(<, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                access(VirtualUpTriMask(), reader, i, call(-, j, 1))
+                access(VirtualUpTriMask(), reader(), i, call(-, j, 1))
             end
         end),
         (@rule call(<=, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                access(VirtualLoTriMask(), reader, j, i)
+                access(VirtualLoTriMask(), reader(), j, i)
             end
         end),
         (@rule call(<=, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                access(VirtualUpTriMask(), reader, i, j)
+                access(VirtualUpTriMask(), reader(), i, j)
             end
         end),
         (@rule call(>, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                access(VirtualUpTriMask(), reader, j, call(-, i, 1))
+                access(VirtualUpTriMask(), reader(), j, call(-, i, 1))
             end
         end),
         (@rule call(>, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                access(VirtualLoTriMask(), reader, i, call(+, j, 1))
+                access(VirtualLoTriMask(), reader(), i, call(+, j, 1))
             end
         end),
         (@rule call(>=, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                access(VirtualUpTriMask(), reader, j, i)
+                access(VirtualUpTriMask(), reader(), j, i)
             end
         end),
         (@rule call(>=, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                access(VirtualLoTriMask(), reader, i, j)
+                access(VirtualLoTriMask(), reader(), i, j)
             end
         end),
         (@rule call(==, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                access(VirtualDiagMask(), reader, j, i)
+                access(VirtualDiagMask(), reader(), j, i)
             end
         end),
         (@rule call(==, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                access(VirtualDiagMask(), reader, i, j)
+                access(VirtualDiagMask(), reader(), i, j)
             end
         end),
         (@rule call(!=, ~i, ~j::isindex) => begin
             if depth(i) < depth(j)
-                call(!, access(VirtualDiagMask(), reader, j, i))
+                call(!, access(VirtualDiagMask(), reader(), j, i))
             end
         end),
         (@rule call(!=, ~i::isindex, ~j) => begin
             if depth(i) > depth(j)
-                call(!, access(VirtualDiagMask(), reader, i, j))
+                call(!, access(VirtualDiagMask(), reader(), i, j))
             end
         end),
         (@rule call(toeplitz, call(swizzle, ~A, ~sigma...), ~dim...) => begin
@@ -172,8 +172,8 @@ function get_wrapper_rules(ctx, depth, alg)
             A_3 = call(offset, A_2, [0 for _ in i1]..., call(-, getstart(I), 1), [0 for _ in i2]...)
             access(A_3, m, i1..., k, i2...)
         end),
-        (@rule assign(access(~a, updater, ~i...), initwrite, ~rhs) => begin
-            assign(access(a, updater, i...), call(initwrite, call(fill_value, a)), rhs)
+        (@rule assign(access(~a, updater(), ~i...), initwrite, ~rhs) => begin
+            assign(access(a, updater(), i...), call(initwrite, call(fill_value, a)), rhs)
         end),
         (@rule call(swizzle, call(swizzle, ~A, ~sigma_1...), ~sigma_2...) =>
             call(swizzle, A, sigma_1[getval.(sigma_2)]...)),
@@ -212,17 +212,17 @@ function wrapperize(ctx::AbstractCompiler, root)
         (@rule loop(~idx, ~ext, ~body) => begin
             counts = OrderedDict()
             for node in PostOrderDFS(body)
-                if @capture(node, access(~tn, reader, ~idxs...))
+                if @capture(node, access(~tn, reader(), ~idxs...))
                     counts[node] = get(counts, node, 0) + 1
                 end
             end
             applied = false
             for (node, count) in counts
                 if depth(idx) == depth(node)
-                    if @capture(node, access(~tn, reader, ~idxs...)) && count > 1
+                    if @capture(node, access(~tn, reader(), ~idxs...)) && count > 1
                         var = variable(Symbol(freshen(ctx, tn.val), "_", join([idx.val for idx in idxs])))
                         body = Postwalk(@rule node => var)(body)
-                        body = define(var, access(tn, reader, idxs...), body)
+                        body = define(var, access(tn, reader(), idxs...), body)
                         applied = true
                     end
                 end

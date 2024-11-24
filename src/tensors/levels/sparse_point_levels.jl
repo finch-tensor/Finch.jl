@@ -272,7 +272,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparsePointLeve
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -313,9 +313,9 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode::R
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode::Updater, proto) = 
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) = 
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparsePointLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparsePointLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
