@@ -12,8 +12,8 @@ struct LoopInstance{Idx, Ext, Body} <: FinchNodeInstance idx::Idx; ext::Ext; bod
 struct SieveInstance{Cond, Body} <: FinchNodeInstance cond::Cond; body::Body end
 struct AssignInstance{Lhs, Op, Rhs} <: FinchNodeInstance lhs::Lhs; op::Op; rhs::Rhs end
 struct CallInstance{Op, Args<:Tuple} <: FinchNodeInstance op::Op; args::Args end
-struct ReadInstance{} <: FinchNodeInstance end
-struct UpdateInstance{} <: FinchNodeInstance end
+struct ReaderInstance{} <: FinchNodeInstance end
+struct UpdaterInstance{} <: FinchNodeInstance end
 struct AccessInstance{Tns, Mode, Idxs} <: FinchNodeInstance tns::Tns; mode::Mode; idxs::Idxs end
 struct TagInstance{Var, Bind} <: FinchNodeInstance var::Var; bind::Bind end
 struct YieldBindInstance{Args} <: FinchNodeInstance args::Args end
@@ -37,8 +37,8 @@ Base.getproperty(::VariableInstance{val}, name::Symbol) where {val} = name == :n
 @inline sieve_instance(cond, args...) = SieveInstance(cond, sieve_instance(args...))
 @inline assign_instance(lhs, op, rhs) = AssignInstance(lhs, op, rhs)
 @inline call_instance(op, args...) = CallInstance(op, args)
-@inline read_instance() = ReadInstance()
-@inline update_instance() = UpdateInstance()
+@inline reader_instance() = ReaderInstance()
+@inline updater_instance() = UpdaterInstance()
 @inline access_instance(tns, mode, idxs...) = AccessInstance(tns, mode, idxs)
 @inline tag_instance(var, bind) = TagInstance(var, bind)
 @inline yieldbind_instance(args...) = YieldBindInstance(args)
@@ -64,8 +64,8 @@ instance_ctrs = Dict(
 	sieve => sieve_instance,
 	assign => assign_instance,
 	call => call_instance,
-	reader => read_instance,
-	updater => update_instance,
+	reader => reader_instance,
+	updater => updater_instance,
 	access => access_instance,
 	variable => variable_instance,
 	tag => tag_instance,
@@ -87,8 +87,8 @@ SyntaxInterface.operation(::LoopInstance) = loop
 SyntaxInterface.operation(::SieveInstance) = sieve
 SyntaxInterface.operation(::AssignInstance) = assign
 SyntaxInterface.operation(::CallInstance) = call
-SyntaxInterface.operation(::ReadInstance) = reader
-SyntaxInterface.operation(::UpdateInstance) = updater
+SyntaxInterface.operation(::ReaderInstance) = reader
+SyntaxInterface.operation(::UpdaterInstance) = updater
 SyntaxInterface.operation(::AccessInstance) = access
 SyntaxInterface.operation(::VariableInstance) = variable
 SyntaxInterface.operation(::TagInstance) = tag
@@ -103,8 +103,8 @@ SyntaxInterface.arguments(node::LoopInstance) = [node.idx, node.ext, node.body]
 SyntaxInterface.arguments(node::SieveInstance) = [node.cond, node.body]
 SyntaxInterface.arguments(node::AssignInstance) = [node.lhs, node.op, node.rhs]
 SyntaxInterface.arguments(node::CallInstance) = [node.op, node.args...]
-SyntaxInterface.arguments(node::ReadInstance) = []
-SyntaxInterface.arguments(node::UpdateInstance) = []
+SyntaxInterface.arguments(node::ReaderInstance) = []
+SyntaxInterface.arguments(node::UpdaterInstance) = []
 SyntaxInterface.arguments(node::AccessInstance) = [node.tns, node.mode, node.idxs...]
 SyntaxInterface.arguments(node::TagInstance) = [node.var, node.bind]
 SyntaxInterface.arguments(node::YieldBindInstance) = node.args

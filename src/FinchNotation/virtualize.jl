@@ -37,8 +37,8 @@ function Finch.virtualize(ctx, ex, ::Type{FinchNotation.CallInstance{Op, Args}})
     end
     call(op, args...)
 end
-Finch.virtualize(ctx, ex, ::Type{FinchNotation.ReadInstance}) = reader()
-Finch.virtualize(ctx, ex, ::Type{FinchNotation.UpdateInstance}) = updater()
+Finch.virtualize(ctx, ex, ::Type{FinchNotation.ReaderInstance}) = reader()
+Finch.virtualize(ctx, ex, ::Type{FinchNotation.UpdaterInstance}) = updater()
 function Finch.virtualize(ctx, ex, ::Type{FinchNotation.AccessInstance{Tns, Mode, Idxs}}) where {Tns, Mode, Idxs}
     tns = virtualize(ctx, :($ex.tns), Tns)
     idxs = map(enumerate(Idxs.parameters)) do (n, Idx)
