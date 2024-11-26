@@ -18,22 +18,24 @@ julia> tensor_tree(Tensor(Dense(Sharded(Element(0.0))), [1, 2, 3]))
       └─ 3.0
 ```
 """
-struct ShardedLevel{Lvl, Tp, Ptr, Val, Device} <: AbstractLevel
+struct ShardedLevel{Device, Lvl, Ptr, Val} <: AbstractLevel
+    device::Device
     lvl::Lvl
     ptr::Ptr
     val::Val
-    device::Device
 end
 const Sharded = ShardedLevel
 
-#similar_level(lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...)
-ShardedLevel(lvl::Lvl) where {Lvl} = ShardedLevel(lvl, postype(lvl)[], Lvl[])
-Base.summary(::Sharded{Lvl, Val}) where {Lvl, Val} = "Sharded($(Lvl))"
+ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} = ShardedLevel{Device}(device, lvl, postype(lvl)[], typeof(lvl)[])
+ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, val::Val) where {Device, Lvl, Ptr, Val} =
+    ShardedLevel{Device, Lvl, Ptr, Val}(device, lvl, ptr, val)
 
-similar_level(lvl::Sharded{Lvl, Val}, fill_value, eltype::Type, dims...) where {Lvl, Val} =
+Base.summary(::Sharded{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = "Sharded($(Lvl))"
+
+similar_level(lvl::Sharded{Device, Lvl, Ptr, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Val} =
     ShardedLevel(similar_level(lvl.lvl, fill_value, eltype, dims...))
 
-postype(::Type{<:Sharded{Lvl, Val}}) where {Lvl, Val} = postype(Lvl)
+postype(::Type{<:Sharded{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = postype(Lvl)
 
 function moveto(lvl::ShardedLevel, device)
     lvl_2 = moveto(lvl.lvl, device)
@@ -45,7 +47,7 @@ pattern!(lvl::ShardedLevel) = ShardedLevel(pattern!(lvl.lvl), map(pattern!, lvl.
 set_fill_value!(lvl::ShardedLevel, init) = ShardedLevel(set_fill_value!(lvl.lvl, init), map(lvl_2->set_fill_value!(lvl_2, init), lvl.val))
 Base.resize!(lvl::ShardedLevel, dims...) = ShardedLevel(resize!(lvl.lvl, dims...), map(lvl_2->resize!(lvl_2, dims...), lvl.val))
 
-function Base.show(io::IO, lvl::ShardedLevel{Lvl, Val}) where {Lvl, Val}
+function Base.show(io::IO, lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val}
     print(io, "Sharded(")
     if get(io, :compact, false)
         print(io, "…")
@@ -67,11 +69,11 @@ function labelled_children(fbr::SubFiber{<:ShardedLevel})
     [LabelledTree(SubFiber(lvl.val[pos], 1))]
 end
 
-@inline level_ndims(::Type{<:ShardedLevel{Lvl, Val}}) where {Lvl, Val} = level_ndims(Lvl)
-@inline level_size(lvl::ShardedLevel{Lvl, Val}) where {Lvl, Val} = level_size(lvl.lvl)
-@inline level_axes(lvl::ShardedLevel{Lvl, Val}) where {Lvl, Val} = level_axes(lvl.lvl)
-@inline level_eltype(::Type{ShardedLevel{Lvl, Val}}) where {Lvl, Val} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:ShardedLevel{Lvl, Val}}) where {Lvl, Val} = level_fill_value(Lvl)
+@inline level_ndims(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_ndims(Lvl)
+@inline level_size(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_size(lvl.lvl)
+@inline level_axes(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_axes(lvl.lvl)
+@inline level_eltype(::Type{ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_eltype(Lvl)
+@inline level_fill_value(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardedLevel})(idxs...)
     q = fbr.pos
@@ -107,7 +109,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualShardedLevel, ::DefaultStyle)
     end
 end
 
-function virtualize(ctx, ex, ::Type{ShardedLevel{Lvl, Val}}, tag=:lvl) where {Lvl, Val}
+function virtualize(ctx, ex, ::Type{ShardedLevel{Device, Lvl, Ptr, Val}}, tag=:lvl) where {Device, Lvl, Ptr, Val}
     sym = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
 
