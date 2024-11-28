@@ -91,7 +91,7 @@ eval(let
     x = rand(1)
     y = rand(1)
     @finch_kernel function spmv(y, A, x)
-        for j=_, i=_
+        for j = _, i = _
             y[i] += A[i, j] * x[j]
         end
     end
@@ -120,7 +120,7 @@ C = Tensor(Dense(SparseList(Element(0.0))))
 
 @finch (C .= 0; for i=_, j=_, k=_; C[j, i] += A[k, i] * B[k, i] end)
 """
-cmd = pipeline(`$(Base.julia_cmd()) --project=$(Base.active_project()) --eval $code`, stdout = IOBuffer())
+cmd = pipeline(`$(Base.julia_cmd()) --project=$(Base.active_project()) --eval $code`, stdout=IOBuffer())
 
 SUITE["compile"]["time_to_first_SpGeMM"] = @benchmarkable run(cmd)
 
@@ -131,7 +131,11 @@ let
 
     SUITE["compile"]["compile_SpGeMM"] = @benchmarkable begin
         A, B, C = ($A, $B, $C)
-        Finch.execute_code(:ex, typeof(Finch.@finch_program_instance (C .= 0; for i=_, j=_, k=_; C[j, i] += A[k, i] * B[k, j] end; return C)))
+        Finch.execute_code(:ex, typeof(Finch.@finch_program_instance (C .= 0;
+        for i = _, j = _, k = _
+            C[j, i] += A[k, i] * B[k, j]
+        end;
+        return C)))
     end
 end
 
@@ -141,7 +145,11 @@ let
 
     SUITE["compile"]["compile_pretty_triangle"] = @benchmarkable begin
         A, c = ($A, $c)
-        @finch_code (c .= 0; for i=_, j=_, k=_; c[] += A[i, j] * A[j, k] * A[i, k] end; return c)
+        @finch_code (c .= 0;
+        for i = _, j = _, k = _
+            c[] += A[i, j] * A[j, k] * A[i, k]
+        end;
+        return c)
     end
 end
 
@@ -186,22 +194,28 @@ end
 SUITE["indices"] = BenchmarkGroup()
 
 function spmv32(A, x)
-    y = Tensor(Dense{Int32}(Element{0.0, Float64, Int32}()))
-    @finch (y .= 0; for i=_, j=_; y[i] += A[j, i] * x[j] end)
+    y = Tensor(Dense{Int32}(Element{0.0,Float64,Int32}()))
+    @finch (y .= 0;
+    for i = _, j = _
+        y[i] += A[j, i] * x[j]
+    end)
     return y
 end
 
 SUITE["indices"]["SpMV_32"] = BenchmarkGroup()
 for mtx in ["SNAP/soc-Epinions1"]#, "SNAP/soc-LiveJournal1"]
     A = SparseMatrixCSC(matrixdepot(mtx))
-    A = Tensor(Dense{Int32}(SparseList{Int32}(Element{0.0, Float64, Int32}())), A)
-    x = Tensor(Dense{Int32}(Element{0.0, Float64, Int32}()), rand(size(A)[2]))
+    A = Tensor(Dense{Int32}(SparseList{Int32}(Element{0.0,Float64,Int32}())), A)
+    x = Tensor(Dense{Int32}(Element{0.0,Float64,Int32}()), rand(size(A)[2]))
     SUITE["indices"]["SpMV_32"][mtx] = @benchmarkable spmv32($A, $x)
 end
 
 function spmv_p1(A, x)
     y = Tensor(Dense(Element(0.0)))
-    @finch (y .= 0; for i=_, j=_; y[i] += A[j, i] * x[j] end)
+    @finch (y .= 0;
+    for i = _, j = _
+        y[i] += A[j, i] * x[j]
+    end)
     return y
 end
 
@@ -217,41 +231,70 @@ for mtx in ["SNAP/soc-Epinions1"]#, "SNAP/soc-LiveJournal1"]
 end
 
 function spmv64(A, x)
-    y = Tensor(Dense{Int64}(Element{0.0, Float64, Int64}()))
-    @finch (y .= 0; for i=_, j=_; y[i] += A[j, i] * x[j] end)
+    y = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()))
+    @finch (y .= 0;
+    for i = _, j = _
+        y[i] += A[j, i] * x[j]
+    end)
     return y
 end
 
 SUITE["indices"]["SpMV_64"] = BenchmarkGroup()
 for mtx in ["SNAP/soc-Epinions1"]#, "SNAP/soc-LiveJournal1"]
     A = SparseMatrixCSC(matrixdepot(mtx))
-    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0, Float64, Int64}())), A)
-    x = Tensor(Dense{Int64}(Element{0.0, Float64, Int64}()), rand(size(A)[2]))
+    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0,Float64,Int64}())), A)
+    x = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()), rand(size(A)[2]))
     SUITE["indices"]["SpMV_64"][mtx] = @benchmarkable spmv64($A, $x)
 end
 
 SUITE["parallel"] = BenchmarkGroup()
 
 function spmv_serial(A, x)
-    y = Tensor(Dense{Int64}(Element{0.0, Float64}()))
+    y = Tensor(Dense{Int64}(Element{0.0,Float64}()))
     @finch begin
         y .= 0
-        for i=_
-            for j=_
-                y[i] += A[j, i] * x[j]
+        for i = _
+            for j = _
+                y[j] += A[j, i] * x[i]
             end
         end
         return y
     end
 end
 
-function spmv_threaded(A, x)
-    y = Tensor(Dense{Int64}(Element{0.0, Float64}()))
+# function spmv_threaded(A, x)
+#     y = Tensor(Dense{Int64}(Element{0.0,Float64}()))
+#     @finch begin
+#         y .= 0
+#         for i = parallel(_)
+#             for j = _
+#                 y[i] += A[j, i] * x[j]
+#             end
+#         end
+#         return y
+#     end
+# end
+
+function spmv_atomic_element(A, x)
+    y = Tensor(Dense{Int64}(AtomicElement{0.0,Float64}()))
     @finch begin
         y .= 0
-        for i=parallel(_)
-            for j=_
-                y[i] += A[j, i] * x[j]
+        for i = parallel(_)
+            for j = _
+                y[j] += A[j, i] * x[i]
+            end
+        end
+        return y
+    end
+end
+
+function spmv_mutex(A, x)
+    y = Tensor(Dense{Int64}(Mutex(Element{0.0,Float64}())))
+    @finch begin
+        y .= 0
+        for i = parallel(_)
+            for j = _
+                y[j] += A[j, i] * x[i]
             end
         end
         return y
@@ -259,14 +302,18 @@ function spmv_threaded(A, x)
 end
 
 SUITE["parallel"]["SpMV_serial"] = BenchmarkGroup()
-SUITE["parallel"]["SpMV_threaded"] = BenchmarkGroup()
+# SUITE["parallel"]["SpMV_threaded"] = BenchmarkGroup()
+SUITE["parallel"]["SpMV_atomic_element"] = BenchmarkGroup()
+SUITE["parallel"]["SpMV_mutex"] = BenchmarkGroup()
 for (key, mtx) in [
     "SNAP/soc-Epinions1" => SparseMatrixCSC(matrixdepot("SNAP/soc-Epinions1")),
     "fsprand(10_000, 10_000, 0.01)" => fsprand(10_000, 10_000, 0.01)]
-    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0, Float64, Int64}())), mtx)
-    x = Tensor(Dense{Int64}(Element{0.0, Float64, Int64}()), rand(size(A)[2]))
+    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0,Float64,Int64}())), mtx)
+    x = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()), rand(size(A)[2]))
     SUITE["parallel"]["SpMV_serial"][key] = @benchmarkable spmv_serial($A, $x)
-    SUITE["parallel"]["SpMV_threaded"][key] = @benchmarkable spmv_threaded($A, $x)
+    # SUITE["parallel"]["SpMV_threaded"][key] = @benchmarkable spmv_threaded($A, $x)
+    SUITE["parallel"]["SpMV_atomic_element"][key] = @benchmarkable spmv_atomic_element($A, $x)
+    SUITE["parallel"]["SpMV_mutex"][key] = @benchmarkable spmv_mutex($A, $x)
 end
 
 SUITE["structure"] = BenchmarkGroup()
