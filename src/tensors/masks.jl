@@ -25,7 +25,8 @@ end
 
 FinchNotation.finch_leaf(x::VirtualDiagMaskColumn) = virtual(x)
 
-function unfurl(ctx, arr::VirtualDiagMask, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualDiagMask, ext, mode, proto)
+    @assert mode.kind === reader
     Unfurled(
         arr = arr,
         body = Lookup(
@@ -34,7 +35,8 @@ function unfurl(ctx, arr::VirtualDiagMask, ext, mode::Reader, proto)
     )
 end
 
-function unfurl(ctx, arr::VirtualDiagMaskColumn, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualDiagMaskColumn, ext, mode, proto)
+    @assert mode.kind === reader
     j = arr.j
     Sequence([
         Phase(
@@ -76,7 +78,7 @@ end
 
 FinchNotation.finch_leaf(x::VirtualUpTriMaskColumn) = virtual(x)
 
-function unfurl(ctx, arr::VirtualUpTriMask, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualUpTriMask, ext, mode, proto)
     Unfurled(
         arr = arr,
         body = Lookup(
@@ -85,7 +87,8 @@ function unfurl(ctx, arr::VirtualUpTriMask, ext, mode::Reader, proto)
     )
 end
 
-function unfurl(ctx, arr::VirtualUpTriMaskColumn, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualUpTriMaskColumn, ext, mode, proto)
+    @assert mode.kind === reader
     j = arr.j
     Sequence([
         Phase(
@@ -125,7 +128,8 @@ end
 
 FinchNotation.finch_leaf(x::VirtualLoTriMaskColumn) = virtual(x)
 
-function unfurl(ctx, arr::VirtualLoTriMask, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualLoTriMask, ext, mode, proto)
+    @assert mode.kind === reader
     Unfurled(
         arr = arr,
         body = Lookup(
@@ -134,7 +138,8 @@ function unfurl(ctx, arr::VirtualLoTriMask, ext, mode::Reader, proto)
     )
 end
 
-function unfurl(ctx, arr::VirtualLoTriMaskColumn, ext, mode::Reader, proto)
+function unfurl(ctx, arr::VirtualLoTriMaskColumn, ext, mode, proto)
+    @assert mode.kind === reader
     j = arr.j
     Sequence([
         Phase(

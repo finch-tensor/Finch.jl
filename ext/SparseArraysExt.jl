@@ -220,7 +220,7 @@ end
 #Finch.is_atomic(ctx, tns::VirtualSparseMatrixCSCColumn) = is_atomic(ctx, tns.mtx)[1]
 #Finch.is_concurrent(ctx, tns::VirtualSparseMatrixCSCColumn) = is_concurrent(ctx, tns.mtx)[1]
 
-function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     tag = arr.ex
     Unfurled(
         arr = arr,
@@ -230,7 +230,7 @@ function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ext, m
     )
 end
 
-function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     tag = arr.ex
     Unfurled(
         arr = arr,
@@ -383,7 +383,7 @@ function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     return arr
 end
 
-function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseVector, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseVector, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     tag = arr.ex
     Ti = arr.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -439,7 +439,7 @@ function Finch.unfurl(ctx::AbstractCompiler, arr::VirtualSparseVector, ext, mode
     )
 end
 
-function Finch.unfurl(ctx, arr::VirtualSparseVector, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function Finch.unfurl(ctx, arr::VirtualSparseVector, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     tag = arr.ex
     Tp = arr.Ti
     qos = freshen(ctx, tag, :_qos)

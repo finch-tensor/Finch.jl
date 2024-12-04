@@ -154,11 +154,15 @@ function freeze!(ctx, tns::VirtualSparseScalar)
     return tns
 end
 
-function instantiate(ctx, tns::VirtualSparseScalar, mode::Reader)
-    Switch(
-        tns.dirty => tns,
-        true => Simplify(FillLeaf(tns.Vf)),
-    )
+function instantiate(ctx, tns::VirtualSparseScalar, mode)
+    if mode.kind === reader
+        Switch(
+            tns.dirty => tns,
+            true => Simplify(FillLeaf(tns.Vf)),
+        )
+    else
+        tns
+    end
 end
 
 FinchNotation.finch_leaf(x::VirtualSparseScalar) = virtual(x)
@@ -329,11 +333,15 @@ function freeze!(ctx, tns::VirtualSparseShortCircuitScalar)
     return tns
 end
 
-function instantiate(ctx, tns::VirtualSparseShortCircuitScalar, mode::Reader)
-    Switch([
-        value(tns.dirty, Bool) => tns,
-        true => Simplify(FillLeaf(tns.Vf)),
-    ])
+function instantiate(ctx, tns::VirtualSparseShortCircuitScalar, mode)
+    if mode.kind === reader
+        Switch([
+            value(tns.dirty, Bool) => tns,
+            true => Simplify(FillLeaf(tns.Vf)),
+        ])
+    else
+        tns
+    end
 end
 
 FinchNotation.finch_leaf(x::VirtualSparseShortCircuitScalar) = virtual(x)

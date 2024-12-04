@@ -155,26 +155,26 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLe
     end)
 end
 
-function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode::Reader)
-    (lvl, pos) = (fbr.lvl, fbr.pos)
-    val = freshen(ctx.code, lvl.ex, :_val)
-    return Thunk(
-        preamble = quote
-            $val = $(lvl.val)[$(ctx(pos))]
-        end,
-        body = (ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val)
-    )
+function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)
+    if mode.kind === reader
+        (lvl, pos) = (fbr.lvl, fbr.pos)
+        val = freshen(ctx.code, lvl.ex, :_val)
+        return Thunk(
+            preamble = quote
+                $val = $(lvl.val)[$(ctx(pos))]
+            end,
+            body = (ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val)
+        )
+    else
+        fbr
+    end
 end
 
-function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode::Updater)
+function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode)
     fbr
 end
 
-function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode::Updater)
-    fbr
-end
-
-function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode::Updater, op, rhs)
+function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     op = ctx(op)
     rhs = ctx(rhs)
@@ -182,7 +182,7 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode
     :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end
 
-function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode::Updater, op, rhs)
+function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     push_preamble!(ctx, quote
         $(fbr.dirty) = true

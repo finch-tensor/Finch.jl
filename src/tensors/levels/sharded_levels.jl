@@ -1,51 +1,54 @@
 """
-    SeparateLevel{Lvl, [Val]}()
+    ShardedLevel{Lvl, [Val]}()
 
-A subfiber of a Separate level is a separate tensor of type `Lvl`, in it's
+A subfiber of a Sharded level is a separate tensor of type `Lvl`, in it's
 own memory space.
 
 Each sublevel is stored in a vector of type `Val` with `eltype(Val) = Lvl`.
 
 ```jldoctest
-julia> tensor_tree(Tensor(Dense(Separate(Element(0.0))), [1, 2, 3]))
+julia> tensor_tree(Tensor(Dense(Sharded(Element(0.0))), [1, 2, 3]))
 3-Tensor
 └─ Dense [1:3]
-   ├─ [1]: Pointer ->
+   ├─ [1]: Shard ->
    │  └─ 1.0
-   ├─ [2]: Pointer ->
+   ├─ [2]: Shard ->
    │  └─ 2.0
-   └─ [3]: Pointer ->
+   └─ [3]: Shard ->
       └─ 3.0
 ```
 """
-struct SeparateLevel{Lvl, Val} <: AbstractLevel
+struct ShardedLevel{Device, Lvl, Ptr, Val} <: AbstractLevel
+    device::Device
     lvl::Lvl
+    ptr::Ptr
     val::Val
 end
-const Separate = SeparateLevel
+const Sharded = ShardedLevel
 
-#similar_level(lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...)
-SeparateLevel(lvl::Lvl) where {Lvl} = SeparateLevel(lvl, Lvl[])
-Base.summary(::Separate{Lvl, Val}) where {Lvl, Val} = "Separate($(Lvl))"
+ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} = ShardedLevel{Device}(device, lvl, postype(lvl)[], typeof(lvl)[])
+ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, val::Val) where {Device, Lvl, Ptr, Val} =
+    ShardedLevel{Device, Lvl, Ptr, Val}(device, lvl, ptr, val)
 
-similar_level(lvl::Separate{Lvl, Val}, fill_value, eltype::Type, dims...) where {Lvl, Val} =
-    SeparateLevel(similar_level(lvl.lvl, fill_value, eltype, dims...))
+Base.summary(::Sharded{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = "Sharded($(Lvl))"
 
-postype(::Type{<:Separate{Lvl, Val}}) where {Lvl, Val} = postype(Lvl)
+similar_level(lvl::Sharded{Device, Lvl, Ptr, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Val} =
+    ShardedLevel(similar_level(lvl.lvl, fill_value, eltype, dims...))
 
-function moveto(lvl::SeparateLevel, device)
+postype(::Type{<:Sharded{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = postype(Lvl)
+
+function moveto(lvl::ShardedLevel, device)
     lvl_2 = moveto(lvl.lvl, device)
     val_2 = moveto(lvl.val, device)
-    return SeparateLevel(lvl_2, val_2)
+    return ShardedLevel(lvl_2, val_2)
 end
 
-pattern!(lvl::SeparateLevel) = SeparateLevel(pattern!(lvl.lvl), map(pattern!, lvl.val))
-set_fill_value!(lvl::SeparateLevel, init) = SeparateLevel(set_fill_value!(lvl.lvl, init), map(lvl_2->set_fill_value!(lvl_2, init), lvl.val))
-Base.resize!(lvl::SeparateLevel, dims...) = SeparateLevel(resize!(lvl.lvl, dims...), map(lvl_2->resize!(lvl_2, dims...), lvl.val))
+pattern!(lvl::ShardedLevel) = ShardedLevel(pattern!(lvl.lvl), map(pattern!, lvl.val))
+set_fill_value!(lvl::ShardedLevel, init) = ShardedLevel(set_fill_value!(lvl.lvl, init), map(lvl_2->set_fill_value!(lvl_2, init), lvl.val))
+Base.resize!(lvl::ShardedLevel, dims...) = ShardedLevel(resize!(lvl.lvl, dims...), map(lvl_2->resize!(lvl_2, dims...), lvl.val))
 
-
-function Base.show(io::IO, lvl::SeparateLevel{Lvl, Val}) where {Lvl, Val}
-    print(io, "Separate(")
+function Base.show(io::IO, lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val}
+    print(io, "Sharded(")
     if get(io, :compact, false)
         print(io, "…")
     else
@@ -56,30 +59,30 @@ function Base.show(io::IO, lvl::SeparateLevel{Lvl, Val}) where {Lvl, Val}
     print(io, ")")
 end
 
-labelled_show(io::IO, ::SubFiber{<:SeparateLevel}) =
+labelled_show(io::IO, ::SubFiber{<:ShardedLevel}) =
     print(io, "Pointer -> ")
 
-function labelled_children(fbr::SubFiber{<:SeparateLevel})
+function labelled_children(fbr::SubFiber{<:ShardedLevel})
     lvl = fbr.lvl
     pos = fbr.pos
     pos > length(lvl.val) && return []
     [LabelledTree(SubFiber(lvl.val[pos], 1))]
 end
 
-@inline level_ndims(::Type{<:SeparateLevel{Lvl, Val}}) where {Lvl, Val} = level_ndims(Lvl)
-@inline level_size(lvl::SeparateLevel{Lvl, Val}) where {Lvl, Val} = level_size(lvl.lvl)
-@inline level_axes(lvl::SeparateLevel{Lvl, Val}) where {Lvl, Val} = level_axes(lvl.lvl)
-@inline level_eltype(::Type{SeparateLevel{Lvl, Val}}) where {Lvl, Val} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:SeparateLevel{Lvl, Val}}) where {Lvl, Val} = level_fill_value(Lvl)
+@inline level_ndims(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_ndims(Lvl)
+@inline level_size(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_size(lvl.lvl)
+@inline level_axes(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_axes(lvl.lvl)
+@inline level_eltype(::Type{ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_eltype(Lvl)
+@inline level_fill_value(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_fill_value(Lvl)
 
-function (fbr::SubFiber{<:SeparateLevel})(idxs...)
+function (fbr::SubFiber{<:ShardedLevel})(idxs...)
     q = fbr.pos
     return SubFiber(fbr.lvl.val[q], 1)(idxs...)
 end
 
-countstored_level(lvl::SeparateLevel, pos) = pos
+countstored_level(lvl::ShardedLevel, pos) = pos
 
-mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
+mutable struct VirtualShardedLevel <: AbstractVirtualLevel
     lvl  # stand in for the sublevel for virutal resize, etc.
     ex
     val
@@ -88,25 +91,25 @@ mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
     Val
 end
 
-postype(lvl:: VirtualSeparateLevel) = postype(lvl.lvl)
+postype(lvl:: VirtualShardedLevel) = postype(lvl.lvl)
 
-is_level_injective(ctx, lvl::VirtualSeparateLevel) = [is_level_injective(ctx, lvl.lvl)..., true]
-function is_level_atomic(ctx, lvl::VirtualSeparateLevel)
+is_level_injective(ctx, lvl::VirtualShardedLevel) = [is_level_injective(ctx, lvl.lvl)..., true]
+function is_level_atomic(ctx, lvl::VirtualShardedLevel)
     (below, atomic) = is_level_atomic(ctx, lvl.lvl)
     return ([below; [atomic]], atomic)
 end
-function is_level_concurrent(ctx, lvl::VirtualSeparateLevel)
+function is_level_concurrent(ctx, lvl::VirtualShardedLevel)
     (data, _) = is_level_concurrent(ctx, lvl.lvl)
     return (data, true)
 end
 
-function lower(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, ::DefaultStyle)
+function lower(ctx::AbstractCompiler, lvl::VirtualShardedLevel, ::DefaultStyle)
     quote
-        $SeparateLevel{$(lvl.Lvl), $(lvl.Val)}($(ctx(lvl.lvl)), $(lvl.val))
+        $ShardedLevel{$(lvl.Lvl), $(lvl.Val)}($(ctx(lvl.lvl)), $(lvl.val))
     end
 end
 
-function virtualize(ctx, ex, ::Type{SeparateLevel{Lvl, Val}}, tag=:lvl) where {Lvl, Val}
+function virtualize(ctx, ex, ::Type{ShardedLevel{Device, Lvl, Ptr, Val}}, tag=:lvl) where {Device, Lvl, Ptr, Val}
     sym = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
 
@@ -115,37 +118,37 @@ function virtualize(ctx, ex, ::Type{SeparateLevel{Lvl, Val}}, tag=:lvl) where {L
               $val = $ex.val
     end)
     lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualSeparateLevel(lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Val)
+    VirtualShardedLevel(lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Val)
 end
 
-Base.summary(lvl::VirtualSeparateLevel) = "Separate($(lvl.Lvl))"
+Base.summary(lvl::VirtualShardedLevel) = "Sharded($(lvl.Lvl))"
 
-virtual_level_resize!(ctx, lvl::VirtualSeparateLevel, dims...) = (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
-virtual_level_size(ctx, lvl::VirtualSeparateLevel) = virtual_level_size(ctx, lvl.lvl)
-virtual_level_eltype(lvl::VirtualSeparateLevel) = virtual_level_eltype(lvl.lvl)
-virtual_level_fill_value(lvl::VirtualSeparateLevel) = virtual_level_fill_value(lvl.lvl)
+virtual_level_resize!(ctx, lvl::VirtualShardedLevel, dims...) = (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+virtual_level_size(ctx, lvl::VirtualShardedLevel) = virtual_level_size(ctx, lvl.lvl)
+virtual_level_eltype(lvl::VirtualShardedLevel) = virtual_level_eltype(lvl.lvl)
+virtual_level_fill_value(lvl::VirtualShardedLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_moveto_level(ctx, lvl::VirtualSeparateLevel, arch)
+function virtual_moveto_level(ctx, lvl::VirtualShardedLevel, arch)
 
     # Need to move each pointer...
     val_2 = freshen(ctx, lvl.val)
     push_preamble!(ctx, quote
-              $val_2 = $(lvl.val)
-              $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
-          end)
+            $val_2 = $(lvl.val)
+            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+        end)
     push_epilogue!(ctx, quote
-              $(lvl.val) = $val_2
-          end)
+            $(lvl.val) = $val_2
+        end)
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
 
-function declare_level!(ctx, lvl::VirtualSeparateLevel, pos, init)
+function declare_level!(ctx, lvl::VirtualShardedLevel, pos, init)
     #declare_level!(lvl.lvl, ctx_2, literal(1), init)
     return lvl
 end
 
-function assemble_level!(ctx, lvl::VirtualSeparateLevel, pos_start, pos_stop)
+function assemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
@@ -174,8 +177,8 @@ function assemble_level!(ctx, lvl::VirtualSeparateLevel, pos_start, pos_stop)
     lvl
 end
 
-supports_reassembly(::VirtualSeparateLevel) = true
-function reassemble_level!(ctx, lvl::VirtualSeparateLevel, pos_start, pos_stop)
+supports_reassembly(::VirtualShardedLevel) = true
+function reassemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
@@ -195,15 +198,15 @@ function reassemble_level!(ctx, lvl::VirtualSeparateLevel, pos_start, pos_stop)
     lvl
 end
 
-function freeze_level!(ctx, lvl::VirtualSeparateLevel, pos)
+function freeze_level!(ctx, lvl::VirtualShardedLevel, pos)
     return lvl
 end
 
-function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, pos)
+function thaw_level!(ctx::AbstractCompiler, lvl::VirtualShardedLevel, pos)
     return lvl
 end
 
-function instantiate(ctx, fbr::VirtualSubFiber{VirtualSeparateLevel}, mode)
+function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardedLevel}, mode)
     if mode.kind === reader
         (lvl, pos) = (fbr.lvl, fbr.pos)
         tag = lvl.ex
@@ -240,7 +243,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualSeparateLevel}, mode)
     end
 end
 
-function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualSeparateLevel}, mode)
+function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardedLevel}, mode)
     @assert mode.kind === updater
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex

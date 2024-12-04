@@ -181,8 +181,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         if length(root.idxs) > 0
             throw(FinchCompileError("Finch failed to completely lower an access to $tns"))
         end
-        @assert root.mode.kind === literal
-        return lower_access(ctx, tns, root.mode.val)
+        return lower_access(ctx, tns, root.mode)
     elseif root.kind === call
         root = simplify(ctx, root)
         if root.kind === call
@@ -227,13 +226,13 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         ctx(root.val)
     elseif root.kind === assign
         @assert root.lhs.kind === access
-        @assert root.lhs.mode.val === updater
+        @assert root.lhs.mode.kind === updater
         if length(root.lhs.idxs) > 0
             throw(FinchCompileError("Finch failed to completely lower an access to $tns"))
         end
         rhs = simplify(ctx, root.rhs)
         tns = resolve(ctx, root.lhs.tns)
-        return lower_assign(ctx, tns, root.lhs.mode.val, root.op, rhs)
+        return lower_assign(ctx, tns, root.lhs.mode, root.op, rhs)
     elseif root.kind === variable
         return ctx(get_binding(ctx, root))
     elseif root.kind === yieldbind
@@ -263,7 +262,7 @@ function lower_assign(ctx, tns, mode, op, rhs)
 end
 
 function lower_access(ctx, tns::Number, mode)
-    @assert node.mode.val === reader
+    @assert node.mode.kind === reader
     tns
 end
 
@@ -281,7 +280,7 @@ function lower_loop(ctx, root, ext)
     contain(ctx) do ctx_2
         root_2 = Rewrite(Postwalk(@rule access(~tns, ~mode, ~idxs...) => begin
             if !isempty(idxs) && root.idx == idxs[end]
-                tns_2 = unfurl(ctx_2, tns, root.ext.val, mode.val, (mode.val === reader ? defaultread : defaultupdate))
+                tns_2 = unfurl(ctx_2, tns, root.ext.val, mode, (mode.kind === reader ? defaultread : defaultupdate))
                 access(Unfurled(resolve(ctx_2, tns), tns_2), mode, idxs...)
             end
         end))(root)
@@ -311,7 +310,7 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
 
     root_2 = loop(tid, Extent(value(i, Int), value(i, Int)),
         loop(root.idx, ext.ext,
-            sieve(access(VirtualSplitMask(device.n), reader, root.idx, tid),
+            sieve(access(VirtualSplitMask(device.n), reader(), root.idx, tid),
                 root.body
             )
         )

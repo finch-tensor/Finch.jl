@@ -91,11 +91,11 @@ function get_sparsity_structure(tensor::Tensor)
     default_value = Finch.default(tensor)
     index_sym_dict = Dict()
     indices = [IndexExpr("t_" * string(i)) for i in 1:length(size(tensor))]
-    tensor_instance = initialize_access(:A, tensor, indices, [t_default for _ in indices], index_sym_dict, read=true)
+    tensor_instance = initialize_access(:A, tensor, indices, [t_default for _ in indices], index_sym_dict, read_mode=true)
     tensor_instance = call_instance(literal_instance(!=), tensor_instance, literal_instance(default_value))
     formats = [t_sparse_list for _ in indices ]
     output_tensor = initialize_tensor(formats, [dim for dim in size(tensor)], false)
-    output_instance = initialize_access(:output_tensor, output_tensor, indices, [t_default for _ in indices], index_sym_dict, read = false)
+    output_instance = initialize_access(:output_tensor, output_tensor, indices, [t_default for _ in indices], index_sym_dict, read_mode = false)
     full_prgm = assign_instance(output_instance, literal_instance(initwrite(false)), tensor_instance)
 
     for index in indices
@@ -153,7 +153,7 @@ function one_off_reduce(op,
     output_tensor = initialize_tensor(output_formats, output_dims, 0.0)
     loop_index_instances = [index_instance(index_sym_dict[idx]) for idx in loop_order]
     output_variable = tag_instance(variable_instance(:output_tensor), output_tensor)
-    output_access = initialize_access(:output_tensor, output_tensor, output_indices, [t_default for _ in output_indices], index_sym_dict; read=false)
+    output_access = initialize_access(:output_tensor, output_tensor, output_indices, [t_default for _ in output_indices], index_sym_dict; read_mode=false)
     op_instance = if op == max
         literal_instance(initmax(Finch.default(s)))
     elseif op == min
@@ -178,7 +178,7 @@ function count_non_default(A)
     indexes = [Symbol("i_$i") for i in 1:n]
     count = Scalar(0)
     index_sym_dict = Dict()
-    count_access = initialize_access(:count, count, [], [], index_sym_dict, read=false)
+    count_access = initialize_access(:count, count, [], [], index_sym_dict, read_mode=false)
     A_access = initialize_access(:A, A, indexes, [t_default for _ in indexes], index_sym_dict)
     prgm = call_instance(literal_instance(!=), A_access, literal_instance(d))
     prgm = assign_instance(count_access, literal_instance(+), prgm)
