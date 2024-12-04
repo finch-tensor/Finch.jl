@@ -1,13 +1,20 @@
 # Using Finch with Other Languages
 
-You can use Finch in other languages through interfaces like
-[julia.h](https://docs.julialang.org/en/v1/manual/embedding/) or
-[PyJulia](https://github.com/JuliaPy/pyjulia), but sparse arrays require special
+## Python
+
+Finch has a dedicated Python frontend which can be installed with `pip install finch-tensor`. The frontend is [Array-API](https://data-apis.org/array-api/latest/) compliant. The code for the python wrapper is available at the [finch-tensor-python](https://github.com/finch-tensor/finch-tensor-python) repo. Finch is also available as a backend to [pydata/sparse](https://sparse.pydata.org/en/stable/).
+
+You can also use [juliacall](https://github.com/JuliaPy/PythonCall.jl) to access more advanced Finch features from Python.
+
+## Other languages
+
+You can use Finch in other languages using Julia interfaces such as
+[julia.h](https://docs.julialang.org/en/v1/manual/embedding/), making
 considerations for converting between 0-indexed and 1-indexed arrays.
 
 ## 0-Index Compatibility
 
-Julia, Matlab, etc. index arrays [starting at
+Julia, Matlab, Fortran, etc. index arrays [starting at
 1](https://docs.julialang.org/en/v1/devdocs/offset-arrays/). C, python, etc.
 index starting at 0. In a dense array, we can simply subtract one from the
 index, and in fact, this is what Julia will does under the hood when you pass a
