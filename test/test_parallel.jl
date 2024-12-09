@@ -36,7 +36,7 @@
             CR .= 0
             for i = _
                 for j = _
-                    for  k = _
+                    for k = _
                         CR[i, j] += A[i, k] * B[k, j]
                     end
                 end
@@ -287,7 +287,7 @@
             CR .= 0
             for i = _
                 for j = _
-                    for  k = _
+                    for k = _
                         CR[i, j] += A[i, k] * B[k, j]
                     end
                 end
@@ -298,7 +298,7 @@
             CR .= 0
             for i = _
                 for j = _
-                    for  k = _
+                    for k = _
                         CR[i, j] += A[i, k] * B[k, j]
                     end
                 end
@@ -621,7 +621,7 @@
             end
         end
 
-        @test norm(y - A * x)/norm(A * x) < 1e-10
+        @test norm(y - A * x) / norm(A * x) < 1e-10
 
 
     end

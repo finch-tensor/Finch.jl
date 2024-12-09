@@ -2,7 +2,7 @@
 if abspath(PROGRAM_FILE) == @__FILE__
     using Pkg
     Pkg.activate(@__DIR__)
-    Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+    Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
     Pkg.instantiate()
 end
 
@@ -17,12 +17,12 @@ run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.")
 
 @add_arg_table! s begin
     "--overwrite", "-w"
-        action = :store_true
-        help = "overwrite reference output for $(Sys.WORD_SIZE)-bit systems"
+    action = :store_true
+    help = "overwrite reference output for $(Sys.WORD_SIZE)-bit systems"
     "suites"
-        nargs = '*'
-        default = ["all"]
-        help = "names of test suites to run, from: print, representation, constructors, conversions, merges, index, typical, kernels, issues, base, interface, galley, continuous, apps, fileio, docs, debug, continuous, algebra, moveto."
+    nargs = '*'
+    default = ["all"]
+    help = "names of test suites to run, from: print, representation, constructors, conversions, merges, index, typical, kernels, issues, base, interface, galley, continuous, apps, fileio, docs, debug, continuous, algebra, moveto."
 end
 parsed_args = parse_args(ARGS, s)
 
@@ -44,8 +44,8 @@ function check_output(fname, arg)
         end
         true
     else
-        reference = replace(read(ref_file, String), "\r"=>"")
-        result = replace(sprint(println, arg), "\r"=>"")
+        reference = replace(read(ref_file, String), "\r" => "")
+        result = replace(sprint(println, arg), "\r" => "")
         if reference == result
             return true
         else
@@ -64,7 +64,7 @@ function should_run(name)
     return ("all" in parsed_args["suites"] || name in parsed_args["suites"])
 end
 
-macro repl(io, ex, quiet = false)
+macro repl(io, ex, quiet=false)
     quote
         println($(esc(io)), "julia> ", Finch.striplines($(QuoteNode(ex))))
         if $(esc(quiet))
@@ -84,21 +84,49 @@ include("continuous_data.jl")
 include("utils.jl")
 
 @testset "Finch.jl" begin
-    if should_run("print") include("test_print.jl") end
-    if should_run("constructors") include("test_constructors.jl") end
-    if should_run("representation") include("test_representation.jl") end
-    if should_run("merges") include("test_merges.jl") end
-    if should_run("index") include("test_index.jl") end
-    if should_run("typical") include("test_typical.jl") end
-    if should_run("kernels") include("test_kernels.jl") end
-    if should_run("issues") include("test_issues.jl") end
-    if should_run("interface") include("test_interface.jl") end
-    if should_run("galley") include("test_galley.jl") end
+    if should_run("print")
+        include("test_print.jl")
+    end
+    if should_run("constructors")
+        include("test_constructors.jl")
+    end
+    if should_run("representation")
+        include("test_representation.jl")
+    end
+    if should_run("merges")
+        include("test_merges.jl")
+    end
+    if should_run("index")
+        include("test_index.jl")
+    end
+    if should_run("typical")
+        include("test_typical.jl")
+    end
+    if should_run("kernels")
+        include("test_kernels.jl")
+    end
+    if should_run("issues")
+        include("test_issues.jl")
+    end
+    if should_run("interface")
+        include("test_interface.jl")
+    end
+    if should_run("galley")
+        include("test_galley.jl")
+    end
     #if should_run("continuous") include("test_continuous.jl") end # TODO fails often because of https://github.com/willow-ahrens/Finch.jl/issues/378
-    if should_run("continuousexamples") include("test_continuousexamples.jl") end
-    if should_run("simple") include("test_simple.jl") end
-    if should_run("examples") include("test_examples.jl") end
-    if should_run("fileio") include("test_fileio.jl") end
+    if should_run("continuousexamples")
+        include("test_continuousexamples.jl")
+    end
+    if should_run("simple")
+        include("test_simple.jl")
+    end
+    if should_run("examples")
+        include("test_examples.jl")
+    end
+    if should_run("fileio")
+        include("test_fileio.jl")
+    end
     if should_run("docs") && Sys.WORD_SIZE == 64
         @testset "Documentation" begin
             if parsed_args["overwrite"]
@@ -108,8 +136,12 @@ include("utils.jl")
             end
         end
     end
-    if should_run("parallel") include("test_parallel.jl") end
+    if should_run("parallel")
+        include("test_parallel.jl")
+    end
     #if should_run("continuous") include("test_continuous.jl") end
     #algebra goes at the end since it calls refresh()
-    if should_run("algebra") include("test_algebra.jl") end
+    if should_run("algebra")
+        include("test_algebra.jl")
+    end
 end
