@@ -171,6 +171,19 @@ function moveto(vec::CPULocalVector, task::CPUThread)
     return temp
 end
 
+"""
+    local_memory(device)
+
+Returns the local memory type for a given device.
+"""
+function local_memory(device::CPU)
+    return CPULocalMemory(device)
+end
+
+function local_memory(device::Serial)
+    return device
+end
+
 struct Converter{f, T} end
 
 (::Converter{f, T})(x) where {f, T} = T(f(x))
