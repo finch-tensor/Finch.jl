@@ -18,62 +18,73 @@ julia> tensor_tree(Tensor(Dense(Sharded(Element(0.0))), [1, 2, 3]))
       └─ 3.0
 ```
 """
-struct ShardedLevel{Device, Lvl, Ptr, Val} <: AbstractLevel
+struct ShardedLevel{Device, Lvl, Ptr, Task, Val} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
+    task::Task
     val::Val
 end
 const Sharded = ShardedLevel
 
-ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} = ShardedLevel{Device}(device, moveto!(lvl, local_memory(device)), moveto!(postype(lvl)[], device), moveto!(postype(lvl)[], device), typeof(lvl)[])
-ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, val::Val) where {Device, Lvl, Ptr, Val} =
-    ShardedLevel{Device, Lvl, Ptr, Val}(device, lvl, ptr, val)
+ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} =
+    ShardedLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], typeof(lvl)[])
 
-Base.summary(::Sharded{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = "Sharded($(Lvl))"
+ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, task::Task, val::Val) where {Device, Lvl, Ptr, Task, Val} =
+    ShardedLevel{Device, Lvl, Ptr, Task, Val}(device, lvl, ptr, task, val)
 
-similar_level(lvl::Sharded{Device, Lvl, Ptr, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Val} =
-    ShardedLevel(similar_level(lvl.lvl, fill_value, eltype, dims...))
+Base.summary(::Sharded{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = "Sharded($(Lvl))"
 
-postype(::Type{<:Sharded{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = postype(Lvl)
+similar_level(lvl::Sharded{Device, Lvl, Ptr, Task, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Task, Val} =
+    ShardedLevel(lvl, similar_level(lvl.lvl, fill_value, eltype, dims...))
+
+postype(::Type{<:Sharded{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = postype(Lvl)
 
 function moveto(lvl::ShardedLevel, device)
     lvl_2 = moveto(lvl.lvl, device)
+    ptr_2 = moveto(lvl.ptr, device)
+    task_2 = moveto(lvl.task, device)
     val_2 = moveto(lvl.val, device)
-    return ShardedLevel(lvl_2, val_2)
+    return ShardedLevel(lvl_2, ptr_2, task_2, val_2)
 end
 
-pattern!(lvl::ShardedLevel) = ShardedLevel(pattern!(lvl.lvl), map(pattern!, lvl.val))
-set_fill_value!(lvl::ShardedLevel, init) = ShardedLevel(set_fill_value!(lvl.lvl, init), map(lvl_2->set_fill_value!(lvl_2, init), lvl.val))
-Base.resize!(lvl::ShardedLevel, dims...) = ShardedLevel(resize!(lvl.lvl, dims...), map(lvl_2->resize!(lvl_2, dims...), lvl.val))
+pattern!(lvl::ShardedLevel) = ShardedLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, map(pattern!, lvl.val))
+set_fill_value!(lvl::ShardedLevel, init) = ShardedLevel(set_fill_value!(lvl.lvl, init), lvl.ptr, lvl.task, map(lvl_2 -> set_fill_value!(lvl_2, init), lvl.val))
+Base.resize!(lvl::ShardedLevel, dims...) = ShardedLevel(resize!(lvl.lvl, dims...), lvl.ptr, lvl.task, map(lvl_2 -> resize!(lvl_2, dims...), lvl.val))
 
-function Base.show(io::IO, lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val}
+function Base.show(io::IO, lvl::ShardedLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val}
     print(io, "Sharded(")
     if get(io, :compact, false)
         print(io, "…")
     else
         show(io, lvl.lvl)
         print(io, ", ")
+        show(io, lvl.ptr)
+        print(io, ", ")
+        show(io, lvl.task)
+        print(io, ", ")
         show(io, lvl.val)
     end
     print(io, ")")
 end
 
-labelled_show(io::IO, ::SubFiber{<:ShardedLevel}) =
-    print(io, "Pointer -> ")
+function labelled_show(io::IO, fbr::SubFiber{<:ShardedLevel})
+    (lvl, pos) = (fbr.lvl, fbr.pos)
+    print(io, "shard($(lvl.task[pos])) -> ")
+end
 
 function labelled_children(fbr::SubFiber{<:ShardedLevel})
     lvl = fbr.lvl
     pos = fbr.pos
     pos > length(lvl.val) && return []
-    [LabelledTree(SubFiber(lvl.val[pos], 1))]
+    [LabelledTree(SubFiber(lvl.val[lvl.task[pos]], lvl.ptr[pos]))]
 end
 
-@inline level_ndims(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_ndims(Lvl)
-@inline level_size(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_size(lvl.lvl)
-@inline level_axes(lvl::ShardedLevel{Device, Lvl, Ptr, Val}) where {Device, Lvl, Ptr, Val} = level_axes(lvl.lvl)
-@inline level_eltype(::Type{ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:ShardedLevel{Device, Lvl, Ptr, Val}}) where {Device, Lvl, Ptr, Val} = level_fill_value(Lvl)
+@inline level_ndims(::Type{<:ShardedLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_ndims(Lvl)
+@inline level_size(lvl::ShardedLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = level_size(lvl.lvl)
+@inline level_axes(lvl::ShardedLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = level_axes(lvl.lvl)
+@inline level_eltype(::Type{ShardedLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_eltype(Lvl)
+@inline level_fill_value(::Type{<:ShardedLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardedLevel})(idxs...)
     q = fbr.pos
@@ -83,15 +94,17 @@ end
 countstored_level(lvl::ShardedLevel, pos) = pos
 
 mutable struct VirtualShardedLevel <: AbstractVirtualLevel
-    lvl  # stand in for the sublevel for virutal resize, etc.
+    lvl  # stand-in for the sublevel for virtual resize, etc.
     ex
     val
     Tv
     Lvl
+    Ptr
+    Task
     Val
 end
 
-postype(lvl:: VirtualShardedLevel) = postype(lvl.lvl)
+postype(lvl::VirtualShardedLevel) = postype(lvl.lvl)
 
 is_level_injective(ctx, lvl::VirtualShardedLevel) = [is_level_injective(ctx, lvl.lvl)..., true]
 function is_level_atomic(ctx, lvl::VirtualShardedLevel)
@@ -105,20 +118,24 @@ end
 
 function lower(ctx::AbstractCompiler, lvl::VirtualShardedLevel, ::DefaultStyle)
     quote
-        $ShardedLevel{$(lvl.Lvl), $(lvl.Val)}($(ctx(lvl.lvl)), $(lvl.val))
+        $ShardedLevel{$(lvl.Lvl), $(lvl.Ptr), $(lvl.Task), $(lvl.Val)}($(ctx(lvl.lvl)), $(lvl.val))
     end
 end
 
-function virtualize(ctx, ex, ::Type{ShardedLevel{Device, Lvl, Ptr, Val}}, tag=:lvl) where {Device, Lvl, Ptr, Val}
+function virtualize(ctx, ex, ::Type{ShardedLevel{Device, Lvl, Ptr, Task, Val}}, tag=:lvl) where {Device, Lvl, Ptr, Task, Val}
     sym = freshen(ctx, tag)
+    ptr = freshen(ctx, tag, :_ptr)
+    task = freshen(ctx, tag, :_task)
     val = freshen(ctx, tag, :_val)
 
     push_preamble!(ctx, quote
               $sym = $ex
+              $ptr = $ex.ptr
+              $task = $ex.task
               $val = $ex.val
     end)
     lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualShardedLevel(lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Val)
+    VirtualShardedLevel(lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Ptr, Task, Val)
 end
 
 Base.summary(lvl::VirtualShardedLevel) = "Sharded($(lvl.Lvl))"
@@ -129,8 +146,6 @@ virtual_level_eltype(lvl::VirtualShardedLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardedLevel) = virtual_level_fill_value(lvl.lvl)
 
 function virtual_moveto_level(ctx, lvl::VirtualShardedLevel, arch)
-
-    # Need to move each pointer...
     val_2 = freshen(ctx, lvl.val)
     push_preamble!(ctx, quote
             $val_2 = $(lvl.val)
@@ -142,9 +157,7 @@ function virtual_moveto_level(ctx, lvl::VirtualShardedLevel, arch)
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
-
 function declare_level!(ctx, lvl::VirtualShardedLevel, pos, init)
-    #declare_level!(lvl.lvl, ctx_2, literal(1), init)
     return lvl
 end
 
@@ -178,6 +191,7 @@ function assemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualShardedLevel) = true
+
 function reassemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
@@ -265,3 +279,4 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardedLevel}, mode)
             end
         )
     end
+end
