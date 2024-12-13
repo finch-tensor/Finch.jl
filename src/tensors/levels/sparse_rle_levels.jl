@@ -318,7 +318,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                             check = VirtualScalar(:UNREACHABLE, Bool, false, :check, checkval)
                             exts = virtual_level_size(ctx_2, lvl.buf)
                             inds = [index(freshen(ctx_2, :i, n)) for n = 1:length(exts)]
-                            prgm = assign(access(check, updater), and, call(isequal, access(left, reader, inds...), access(right, reader, inds...)))
+                            prgm = assign(access(check, updater()), and, call(isequal, access(left, reader(), inds...), access(right, reader(), inds...)))
                             for (ind, ext) in zip(inds, exts)
                                 prgm = loop(ind, ext, prgm)
                             end
@@ -340,7 +340,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                         set_binding!(ctx_2, dst, virtual(VirtualSubFiber(lvl.lvl, value(q_2, Tp))))
                         exts = virtual_level_size(ctx_2, lvl.buf)
                         inds = [index(freshen(ctx_2, :i, n)) for n = 1:length(exts)]
-                        prgm = assign(access(dst, updater, inds...), initwrite(virtual_level_fill_value(lvl.lvl)), access(src, reader, inds...))
+                        prgm = assign(access(dst, updater(), inds...), initwrite(virtual_level_fill_value(lvl.lvl)), access(src, reader(), inds...))
                         for (ind, ext) in zip(inds, exts)
                             prgm = loop(ind, ext, prgm)
                         end
@@ -393,7 +393,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, pos_
     return lvl
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseRunListLevel}, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseRunListLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -455,10 +455,10 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseRunListLevel}, ext, mode:
 end
 
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseRunListLevel}, ext, mode::Updater, proto) =
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseRunListLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
 
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseRunListLevel}, ext, mode::Updater, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseRunListLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)

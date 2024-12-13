@@ -48,7 +48,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
             idx_2 = (i, idx...)
             if length(idx_2) == arr.ndims
                 val = freshen(ctx, :val)
-                if mode === reader
+                if mode.kind === reader
                     Thunk(
                         preamble = quote
                             $val = $(arr.ex)[$(map(ctx, idx_2)...)]
@@ -76,7 +76,7 @@ end
 function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
     if arr.ndims == 0
         val = freshen(ctx, :val)
-        if mode === reader
+        if mode.kind === reader
             Thunk(
                 preamble = quote
                     $val = $(arr.ex)[]

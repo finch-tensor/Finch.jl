@@ -289,7 +289,7 @@ struct SparseCOOWalkTraversal
     stop
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode::Reader, proto)
+function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode, proto)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     Tp = postype(lvl)
     start = value(:($(lvl.ptr)[$(ctx(pos))]), Tp)
@@ -301,7 +301,7 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode::Rea
     )
 end
 
-function unfurl(ctx, trv::SparseCOOWalkTraversal, ext, mode::Reader, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(ctx, trv::SparseCOOWalkTraversal, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
     (lvl, R, start, stop) = (trv.lvl, trv.R, trv.start, trv.stop)
     tag = lvl.ex
     TI = lvl.TI
@@ -381,10 +381,10 @@ struct SparseCOOExtrudeTraversal
     prev_coord
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode::Updater, proto) =
+unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
     unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
 
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseCOOLevel}, ext, mode::Updater, proto)
+function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseCOOLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     TI = lvl.TI
@@ -419,7 +419,7 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseCOOLevel}, ext, mod
     )
 end
 
-function unfurl(ctx, trv::SparseCOOExtrudeTraversal, ext, mode::Updater, proto)#::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(ctx, trv::SparseCOOExtrudeTraversal, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)})
     (lvl, qos, fbr_dirty, coords) = (trv.lvl, trv.qos, trv.fbr_dirty, trv.coords)
     TI = lvl.TI
     Tp = postype(lvl)
