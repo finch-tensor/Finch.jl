@@ -1,8 +1,8 @@
 """
     ShardedLevel{Lvl, [Val]}()
 
-A subfiber of a Sharded level is a separate tensor of type `Lvl`, in it's
-own memory space.
+Each subfiber of a Sharded level is stored in a thread-local tensor of type
+`Lvl`, in a thread-local memory space.
 
 Each sublevel is stored in a vector of type `Val` with `eltype(Val) = Lvl`.
 
@@ -26,7 +26,7 @@ struct ShardedLevel{Device, Lvl, Ptr, Val} <: AbstractLevel
 end
 const Sharded = ShardedLevel
 
-ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} = ShardedLevel{Device}(device, lvl, postype(lvl)[], typeof(lvl)[])
+ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} = ShardedLevel{Device}(device, moveto!(lvl, local_memory(device)), moveto!(postype(lvl)[], device), moveto!(postype(lvl)[], device), typeof(lvl)[])
 ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, val::Val) where {Device, Lvl, Ptr, Val} =
     ShardedLevel{Device, Lvl, Ptr, Val}(device, lvl, ptr, val)
 
