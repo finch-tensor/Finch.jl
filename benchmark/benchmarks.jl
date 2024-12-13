@@ -258,15 +258,46 @@ function spmv_threaded(A, x)
     end
 end
 
+function spmv_atomic_element(A, x)
+    y = Tensor(Dense{Int64}(AtomicElement{0.0,Float64}()))
+    @finch begin
+        y .= 0
+        for j = parallel(_)
+            for i = _
+                y[i] += A[i, j] * x[j]
+            end
+        end
+        return y
+    end
+end
+
+function spmv_mutex(A, x)
+    y = Tensor(Dense{Int64}(Mutex(Element{0.0,Float64}())))
+    @finch begin
+        y .= 0
+        for j = parallel(_)
+            for i = _
+                y[i] += A[i, j] * x[j]
+            end
+        end
+        return y
+    end
+end
+
 SUITE["parallel"]["SpMV_serial"] = BenchmarkGroup()
 SUITE["parallel"]["SpMV_threaded"] = BenchmarkGroup()
+SUITE["parallel"]["SpMV_atomic_element"] = BenchmarkGroup()
+SUITE["parallel"]["SpMV_mutex"] = BenchmarkGroup()
 for (key, mtx) in [
     "SNAP/soc-Epinions1" => SparseMatrixCSC(matrixdepot("SNAP/soc-Epinions1")),
     "fsprand(10_000, 10_000, 0.01)" => fsprand(10_000, 10_000, 0.01)]
-    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0, Float64, Int64}())), mtx)
-    x = Tensor(Dense{Int64}(Element{0.0, Float64, Int64}()), rand(size(A)[2]))
-    SUITE["parallel"]["SpMV_serial"][key] = @benchmarkable spmv_serial($A, $x)
-    SUITE["parallel"]["SpMV_threaded"][key] = @benchmarkable spmv_threaded($A, $x)
+    A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0,Float64,Int64}())), mtx)
+    A_T = permutedims(A)
+    x = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()), rand(size(A)[2]))
+    SUITE["parallel"]["SpMV_serial"][key] = @benchmarkable spmv_serial($A_T, $x)
+    SUITE["parallel"]["SpMV_threaded"][key] = @benchmarkable spmv_threaded($A_T, $x)
+    SUITE["parallel"]["SpMV_atomic_element"][key] = @benchmarkable spmv_atomic_element($A, $x)
+    SUITE["parallel"]["SpMV_mutex"][key] = @benchmarkable spmv_mutex($A, $x)
 end
 
 SUITE["structure"] = BenchmarkGroup()
@@ -303,5 +334,3 @@ x = rand(N)
 SUITE["structure"]["banded"]["SparseList"] = @benchmarkable spmv_serial($A_ref, $x)
 SUITE["structure"]["banded"]["SparseBand"] = @benchmarkable spmv_serial($A, $x)
 SUITE["structure"]["banded"]["SparseInterval"] = @benchmarkable spmv_serial($A2, $x)
-
-SUITE = SUITE["structure"]

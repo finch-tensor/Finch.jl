@@ -35,9 +35,6 @@ julia> B = A + A
  0.0  0.0  6.0
 ```
 
-### How it Works
-Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically. 
-
 ### Sparse and Structured Tensors
 
 Finch supports most major sparse formats (CSR, CSC, DCSR, DCSC, CSF, COO, Hash, Bytemap). Finch also allows users to define their own sparse formats with a parameterized format language.
@@ -101,6 +98,9 @@ julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
   153.708 μs (667 allocations: 29.02 KiB)
 ```
 
+### How it Works
+Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically. 
+
 ## Learn More
 
 The following manuscripts provide a good description of the research behind Finch:
@@ -121,7 +121,7 @@ Radha Patel, Willow Ahrens, Saman Amarasinghe.
 [The Continuous Tensor Abstraction: Where Indices are Real](https://arxiv.org/abs/2407.01742).
 Jaeyeon Won, Willow Ahrens, Joel S. Emer, Saman Amarasinghe.
 
-[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706). [Galley.jl](https://github.com/kylebd99/Galley.jl).
+[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
 Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
 
 ## Contributing

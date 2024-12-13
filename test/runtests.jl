@@ -17,12 +17,12 @@ run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.")
 
 @add_arg_table! s begin
     "--overwrite", "-w"
-        action = :store_true
-        help = "overwrite reference output for $(Sys.WORD_SIZE)-bit systems"
+    action = :store_true
+    help = "overwrite reference output for $(Sys.WORD_SIZE)-bit systems"
     "suites"
-        nargs = '*'
-        default = ["all"]
-        help = "names of test suites to run, from: print, representation, constructors, conversions, merges, index, typical, kernels, issues, base, interface, galley, continuous, apps, fileio, docs, debug, continuous, algebra, moveto."
+    nargs = '*'
+    default = ["all"]
+    help = "names of test suites to run, from: print, constructors, representation, merges, index, typical, kernels, issues, interface, galley, continuous, continuousexamples, simple, examples, fileio, docs, parallel, algebra."
 end
 parsed_args = parse_args(ARGS, s)
 

@@ -74,6 +74,24 @@ function initialize_tensor(formats, dims, default_value; copy_data = nothing, st
     end
 end
 
+function tensor_initializer(formats, dims, default_value)
+    B = :(Element($default_value))
+    for i in range(1, length(dims))
+        DT = get_dim_type(dims[i])
+        if formats[i] == t_sparse_list
+            B = :(SparseList($B, $(DT(dims[i]))))
+        elseif formats[i] == t_dense
+            B = :(Dense($B, $(DT(dims[i]))))
+        elseif formats[i] == t_bytemap
+            B = :(SparseByteMap($B, $(DT(dims[i]))))
+        elseif formats[i] == t_hash
+            B = :(SparseDict($B, $(DT(dims[i]))))
+        else
+            println("Error: Attempted to initialize invalid level format type.")
+        end
+    end
+    return :(Tensor($B))
+end
 
 # Generates a tensor whose non-default entries are distributed uniformly randomly throughout.
 function uniform_tensor(shape, sparsity; formats = [], default_value = 0, non_default_value = 1)

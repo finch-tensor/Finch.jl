@@ -21,68 +21,38 @@ function cost_of_reformat(stat::TensorStats)
     end
 end
 
+function needs_reformat(stat::TensorStats, prefix::Vector{IndexExpr})
+    index_order = get_index_order(stat)
+    # Tensors are stored in column major, so we reverse the index order here
+    current_loop = 0
+    reformat = false
+    for idx in reverse(index_order)
+        idx_loop = Inf
+        if idx ∈ prefix
+            idx_loop = only(indexin([idx], prefix))
+        end
+        if idx_loop < current_loop
+            reformat = true
+        end
+        current_loop = idx_loop
+    end
+    return reformat
+end
+
 function get_reformat_set(input_stats::Vector{TensorStats}, prefix::Vector{IndexExpr})
     ref_set = Set()
     for i in eachindex(input_stats)
-        index_order = get_index_order(input_stats[i])
-        # Tensors are stored in column major, so we reverse the index order here
-        current_loop = 0
-        needs_reformat = false
-        for idx in reverse(index_order)
-            idx_loop = Inf
-            if idx ∈ prefix
-                idx_loop = only(indexin([idx], prefix))
-            end
-            if idx_loop < current_loop
-                needs_reformat = true
-            end
-            current_loop = idx_loop
-        end
-        needs_reformat && push!(ref_set, i)
+        needs_reformat(input_stats[i], prefix) && push!(ref_set, i)
     end
     return ref_set
 end
 
-# If output_vars is a vector, we assume that we will have to reindex it if it's just a set
-# prefix.
-function get_output_compat(output_vars::Vector{IndexExpr}, prefix::Vector{IndexExpr})
-    return if fully_compat_with_loop_prefix(output_vars, prefix)
-        FULL_PREFIX
-    elseif set_compat_with_loop_prefix(Set(output_vars), prefix)
-        SET_PREFIX
-    else
-        NO_PREFIX
-    end
-end
-
-# If output_vars is a set, we don't assume that we'll have to reindex it, so we treat any
-# prefix as a FULL_PREFIX.
-function get_output_compat(output_vars::Set{IndexExpr}, prefix::Vector{IndexExpr})
-    return if set_compat_with_loop_prefix(output_vars, prefix)
-        FULL_PREFIX
-    else
-        NO_PREFIX
-    end
-end
-
-
-@enum OUTPUT_COMPAT FULL_PREFIX=0 SET_PREFIX=1 NO_PREFIX=2
-PLAN_CLASS = Tuple{Set{IndexExpr}, OUTPUT_COMPAT, Set{Int}}
+PLAN_CLASS = Tuple{Set{IndexExpr}, Set{Int}}
 PLAN = Tuple{Vector{IndexExpr}, Float64}
 
 function cost_of_plan_class(pc::PLAN_CLASS, reformat_costs, output_size)
-    output_compat = pc[2]
-    rf_set = pc[3]
+    rf_set = pc[2]
     pc_cost = 0
-    if output_compat == FULL_PREFIX
-        pc_cost += output_size * SeqWriteCost
-    elseif output_compat == SET_PREFIX
-        pc_cost += output_size * SeqWriteCost
-    else
-        # Theoretically, this should be num_flops * RandomWriteCost, but we've seen that
-        # lead to aggressive transposing of inputs.
-        pc_cost += output_size * RandomWriteCost
-    end
     for i in rf_set
         pc_cost += reformat_costs[i]
     end
@@ -123,16 +93,14 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
     # At all times, we keep track of the best plans for each level of output compatability.
     # This will let us consider the cost of random writes and transposes at the end.
     reformat_costs = Dict(i => cost_of_reformat(transposable_stats[i]) for i in eachindex(transposable_stats))
-    PLAN_CLASS = Tuple{Set{IndexExpr}, OUTPUT_COMPAT, Set{Int}}
+    PLAN_CLASS = Tuple{Set{IndexExpr}, Set{Int}}
     PLAN = Tuple{Vector{IndexExpr}, Float64}
     optimal_plans = Dict{PLAN_CLASS, PLAN}()
     for var in all_vars
         prefix = [var]
-        v_set = Set(prefix)
         rf_set = get_reformat_set(transposable_stats, prefix)
-        output_compat = get_output_compat(output_vars, prefix)
-        class = (v_set, output_compat, rf_set)
-        cost = get_prefix_cost(var, v_set, conjunct_stats, disjunct_stats)
+        class = (Set(prefix), rf_set)
+        cost = get_prefix_cost(prefix, output_vars, conjunct_stats, disjunct_stats)
         optimal_plans[class] = (prefix, cost)
     end
 
@@ -152,7 +120,7 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
             end
             potential_vars = setdiff(potential_vars, prefix_set)
             if length(potential_vars) == 0
-                # If the query isn't connected, we will need to include a cross product
+                # If the remaining query isn't connected, we will need to include a cross product
                 potential_vars = setdiff(all_vars, prefix_set)
             end
 
@@ -161,9 +129,8 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
                 new_prefix = [prefix..., new_var]
 
                 rf_set = get_reformat_set(transposable_stats, new_prefix)
-                output_compat = get_output_compat(output_vars, new_prefix)
-                new_plan_class = (new_prefix_set, output_compat, rf_set)
-                new_cost = get_prefix_cost(new_var, new_prefix_set, conjunct_stats, disjunct_stats) + cost
+                new_plan_class = (new_prefix_set, rf_set)
+                new_cost = get_prefix_cost(new_prefix, output_vars, conjunct_stats, disjunct_stats) + cost
                 new_plan = (new_prefix, new_cost)
 
                 alt_cost = Inf
@@ -175,6 +142,7 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
                 end
             end
         end
+
         plans_by_set = Dict()
         for (plan_class, plan) in new_plans
             idx_set = plan_class[1]
@@ -189,17 +157,15 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
         undominated_plans = Dict()
         for (plan_class_1, plan_1) in new_plans
             cost_1 = plan_1[2]
-            output_compat_1 = plan_class_1[2]
-            reformat_set_1 = plan_class_1[3]
+            reformat_set_1 = plan_class_1[2]
             if cost_1 + cost_of_plan_class(plan_class_1, reformat_costs, output_size) > cost_bound
                 continue
             end
             is_dominated = false
             for (plan_class_2, plan_2) in plans_by_set[plan_class_1[1]]
                 cost_2 = plan_2[2]
-                output_compat_2 = plan_class_2[2]
-                reformat_set_2 = plan_class_2[3]
-                if cost_1 > cost_2 && output_compat_1 >= output_compat_2 && reformat_set_2 ⊆ reformat_set_1
+                reformat_set_2 = plan_class_2[2]
+                if cost_1 > cost_2 && reformat_set_2 ⊆ reformat_set_1
                     is_dominated = true
                     break
                 end

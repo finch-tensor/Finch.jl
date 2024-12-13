@@ -145,3 +145,22 @@ julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
 By taking advantage of the fact that C is highly sparse, Galley can better structure the computation. In the matrix chain multiplication,
 it always starts with the C,B matmul before multiplying with A. In the summation, it takes advantage of distributivity to pushing the reduction
 down to the inputs. It first sums over A and C, then multiplies those vectors with B.
+
+Because Galley adapts to the sparsity patterns of the first input tensor, it can
+be useful to distinguish between different uses of the same function using the
+`tag` keyword argument to `compute` or `fuse`.  For example, we may wish to
+distinguish one spmv from another, as follows:
+
+```jldoctest example2; setup=:(using Finch)
+julia> A = rand(1000, 1000); B = rand(1000, 1000); C = fsprand(1000, 1000, 0.0001);
+
+julia> fused((A, B, C) -> C .* (A * B), A, B, C, tag=:very_sparse_sddmm);
+
+julia> C = fsprand(1000, 1000, 0.9);
+
+julia> fused((A, B, C) -> C .* (A * B), A, B, C, tag=:very_dense_sddmm);
+
+```
+
+By distinguishing between the two uses of the same function, Galley can make
+better decisions about how to optimize each computation separately.

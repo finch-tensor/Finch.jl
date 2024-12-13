@@ -15,10 +15,21 @@ function (ctx::GalleyOptimizer)(prgm)
     output_vars = [Alias(a.name) for a in produce_node.args]
     galley_prgm = Plan(finch_hl_to_galley(normalize_hl(prgm))...)
     tns_inits, instance_prgm = galley(galley_prgm, ST=ctx.estimator, output_aliases=output_vars, verbose=verbosity, output_program_instance=true)
+    timer_idx = 1
     julia_prgm = :()
     if operation(instance_prgm) == Finch.block
         for body in instance_prgm.bodies
-            julia_prgm = :($julia_prgm; @finch mode=$(QuoteNode(finch_mode)) begin $(finch_unparse_program(nothing, body)) end)
+            if ctx.verbose 
+                timer_symbol = Symbol("t_$timer_idx")
+                julia_prgm = :($julia_prgm;
+                                $timer_symbol = time(); 
+                                @finch mode=$(QuoteNode(finch_mode)) begin $(finch_unparse_program(nothing, body)) end;
+                                println("Kernel ", $timer_idx, " Runtime: $(time() - $timer_symbol)"))
+                timer_idx += 1
+            else
+                julia_prgm = :($julia_prgm; @finch mode=$(QuoteNode(finch_mode)) begin $(finch_unparse_program(nothing, body)) end)
+            
+            end
         end
     else
         julia_prgm = :(@finch mode=$(QuoteNode(finch_mode)) begin $(finch_unparse_program(nothing, instance_prgm)) end)

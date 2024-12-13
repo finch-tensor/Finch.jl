@@ -125,7 +125,7 @@ function logical_query_to_physical_queries(query::PlanNode, ST, alias_stats::Dic
 
     if !isnothing(output_order)
         for i in eachindex(output_order)
-            if i ∉ get_index_set(output_stats)
+            if output_order[i] ∉ get_index_set(output_stats)
                 add_dummy_idx!(output_stats, output_order[i])
             end
         end

@@ -143,8 +143,10 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
                                                                 |>  Finch.dataflow
                                                                 |>  Finch.unquote_literals)
     verbose >= 2 && println("Expected Output Size: $(estimate_nnz(agg_expr.stats))")
+
     if return_prgm
-        return :($output_name = $output_tensor), prgm_instance
+        output_tensor_init = tensor_initializer(output_formats, output_dimensions, output_default)
+        return :($output_name = $output_tensor_init), prgm_instance
     end
     start_time = time()
     Finch.execute(prgm_instance, mode=:fast)

@@ -479,12 +479,15 @@ default_scheduler(;verbose=false) = LogicExecutor(DefaultLogicOptimizer(LogicCom
 """
     fused(f, args...; kwargs...)
 
-This function decorator modifies `f` to fuse the contained array
-operations and optimize the resulting program. The function must return a single
-array or tuple of arrays. `kwargs` are passed to [`compute`](@ref)
+This function decorator modifies `f` to fuse the contained array operations and
+optimize the resulting program. The function must return a single array or tuple
+of arrays.  Some keyword arguments can be passed to control the execution of the
+program:
+    - `verbose=false`: Print the generated code before execution
+    - `tag=:global`: A tag to distinguish between different classes of inputs for the same program.
 """
 function fused(f, args...; kwargs...)
-    compute(f(map(LazyTensor, args...)), kwargs...)
+    compute(f(map(LazyTensor, args)...); kwargs...)
 end
 
 current_scheduler = Ref{Any}(default_scheduler())
@@ -520,10 +523,13 @@ function with_scheduler(f, scheduler)
 end
 
 """
-    compute(args..., ctx=default_scheduler()) -> Any
+    compute(args...; ctx=default_scheduler(), kwargs...) -> Any
 
 Compute the value of a lazy tensor. The result is the argument itself, or a
-tuple of arguments if multiple arguments are passed.
+tuple of arguments if multiple arguments are passed. Some keyword arguments
+can be passed to control the execution of the program:
+    - `verbose=false`: Print the generated code before execution
+    - `tag=:global`: A tag to distinguish between different classes of inputs for the same program.
 """
 compute(args...; ctx=get_scheduler(), kwargs...) = compute_parse(set_options(ctx; kwargs...), map(lazy, args))
 compute(arg; ctx=get_scheduler(), kwargs...) = compute_parse(set_options(ctx; kwargs...), (lazy(arg),))[1]

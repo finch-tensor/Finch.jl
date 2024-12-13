@@ -4,7 +4,7 @@ CurrentModule = Finch
 
 # Benchmarking Tips
 
-Julia code is [nototoriously
+Julia code is [notoriously
 fussy](https://github.com/JuliaCI/BenchmarkTools.jl#why-does-this-package-exist)
 to benchmark.
 We'll use [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl)

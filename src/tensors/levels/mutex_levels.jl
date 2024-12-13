@@ -1,4 +1,3 @@
-
 """
     MutexLevel{Val, Lvl}()
 
@@ -73,6 +72,7 @@ end
 @inline level_axes(lvl::MutexLevel{AVal, Lvl}) where {AVal, Lvl} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{MutexLevel{AVal, Lvl}}) where {AVal, Lvl} = level_eltype(Lvl)
 @inline level_fill_value(::Type{<:MutexLevel{AVal, Lvl}}) where {AVal, Lvl} = level_fill_value(Lvl)
+data_rep_level(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = data_rep_level(Lvl)
 
 # FIXME: These.
 (fbr::Tensor{<:MutexLevel})() = SubFiber(fbr.lvl, 1)()
@@ -118,9 +118,9 @@ function virtualize(ctx, ex, ::Type{MutexLevel{AVal, Lvl}}, tag=:lvl) where {AVa
     sym = freshen(ctx, tag)
     atomics = freshen(ctx, tag, :_locks)
     push_preamble!(ctx, quote
-            $sym = $ex
-            $atomics = $ex.locks
-        end)
+        $sym = $ex
+        $atomics = $ex.locks
+    end)
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     temp = VirtualMutexLevel(lvl_2, sym, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl)
     temp
@@ -144,11 +144,11 @@ function assemble_level!(ctx, lvl::VirtualMutexLevel, pos_start, pos_stop)
     idx = freshen(ctx, :idx)
     lockVal = freshen(ctx, :lock)
     push_preamble!(ctx, quote
-              Finch.resize_if_smaller!($(lvl.locks), $(ctx(pos_stop)))
-              @inbounds for $idx = $(ctx(pos_start)):$(ctx(pos_stop))
-                $(lvl.locks)[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
-              end
-          end)
+        Finch.resize_if_smaller!($(lvl.locks), $(ctx(pos_stop)))
+        @inbounds for $idx = $(ctx(pos_start)):$(ctx(pos_stop))
+            $(lvl.locks)[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
+        end
+    end)
     assemble_level!(ctx, lvl.lvl, pos_start, pos_stop)
 end
 
@@ -159,11 +159,11 @@ function reassemble_level!(ctx, lvl::VirtualMutexLevel, pos_start, pos_stop)
     idx = freshen(ctx, :idx)
     lockVal = freshen(ctx, :lock)
     push_preamble!(ctx, quote
-              Finch.resize_if_smaller!($lvl.locks, $(ctx(pos_stop)))
-              @inbounds for $idx = $(ctx(pos_start)):$(ctx(pos_stop))
-                $lvl.locks[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
-              end
-          end)
+        Finch.resize_if_smaller!($lvl.locks, $(ctx(pos_stop)))
+        @inbounds for $idx = $(ctx(pos_start)):$(ctx(pos_stop))
+            $lvl.locks[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
+        end
+    end)
     reassemble_level!(ctx, lvl.lvl, pos_start, pos_stop)
     lvl
 end

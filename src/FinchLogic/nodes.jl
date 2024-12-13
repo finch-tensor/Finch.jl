@@ -218,7 +218,7 @@ function LogicNode(kind::LogicNodeKind, args::Vector)
             (kind === subquery && length(args) == 2) ||
             (kind === query && length(args) == 2) ||
             (kind === produces) ||
-            (kind === plan)
+            (kind === plan) 
             return LogicNode(kind, nothing, Any, args)
         else
             error("wrong number of arguments to $kind(...)")

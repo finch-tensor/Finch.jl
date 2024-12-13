@@ -7,9 +7,9 @@ interest from a contributor in the feature.
 
 ## Versions
 
-Finch is currently in a pre-release state. The API is not yet stable, and
-breaking changes may occur between minor versions. We follow [semantic
-versioning](https://semver.org/) and will release 1.0 when the API is stable.
+The Finch API is stable and
+we follow [semantic
+versioning](https://semver.org/) conventions.
 The main branch of the Finch repo is the most up-to-date development branch.
 While it is not stable, it should always pass tests.
 

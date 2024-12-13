@@ -35,22 +35,25 @@ end
 
 # The prefix cost is equal to the number of valid iterations times the number of tensors
 # which we need to access to handle that final iteration.
-function get_prefix_cost(new_var, vars::Set{IndexExpr},  conjunct_stats, disjunct_stats)
-    rel_conjuncts = [stat for stat in conjunct_stats if !isempty(get_index_set(stat) ∩ vars)]
-    rel_disjuncts = [stat for stat in disjunct_stats if !isempty(get_index_set(stat) ∩ vars)]
-    lookups = get_loop_lookups(vars, rel_conjuncts, rel_disjuncts)
+function get_prefix_cost(new_prefix::Vector{IndexExpr},  output_vars, conjunct_stats, disjunct_stats)
+    new_var = new_prefix[end]
+    prefix_set = Set(new_prefix)
+    rel_conjuncts = [stat for stat in conjunct_stats if !isempty(get_index_set(stat) ∩ prefix_set)]
+    rel_disjuncts = [stat for stat in disjunct_stats if !isempty(get_index_set(stat) ∩ prefix_set)]
+    lookups = get_loop_lookups(prefix_set, rel_conjuncts, rel_disjuncts)
     lookup_factor = 0
     for stat in union(rel_conjuncts, rel_disjuncts)
         if new_var ∉ get_index_set(stat)
             continue
         end
-        if isnothing(get_index_formats(stat))
-            rel_vars = get_index_set(stat) ∩ vars
+        if isnothing(get_index_order(stat)) || needs_reformat(stat, new_prefix)
+            rel_vars = get_index_set(stat) ∩ prefix_set
             approx_sparsity = estimate_nnz(stat; indices=rel_vars, conditional_indices=setdiff(rel_vars, [new_var])) / get_dim_size(stat, new_var)
-            is_dense = approx_sparsity > .01
+            is_dense = approx_sparsity > .05
             lookup_factor += is_dense ? SeqReadCost / 5 : SeqReadCost
             continue
         end
+
         format = get_index_format(stat, new_var)
         if format == t_dense
             lookup_factor += SeqReadCost / 5
@@ -60,5 +63,19 @@ function get_prefix_cost(new_var, vars::Set{IndexExpr},  conjunct_stats, disjunc
             lookup_factor += SeqReadCost
         end
     end
+
+    if output_vars isa Vector && new_var ∈ output_vars
+        new_var_idx = only(indexin([new_var], output_vars))
+        min_var_idx = minimum([x for x in indexin(new_prefix, output_vars) if !isnothing(x)])
+        is_rand_write = new_var_idx != min_var_idx
+        if is_rand_write
+            lookup_factor += RandomWriteCost
+        else
+            lookup_factor += SeqWriteCost
+        end
+    else
+        lookup_factor += SeqWriteCost
+    end
+
     return lookups * lookup_factor
 end

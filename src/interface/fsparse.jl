@@ -126,13 +126,13 @@ function fsprand_erdos_renyi_sample_knuth(r::AbstractRNG, M::Tuple, nnz::Int)
     I = ntuple(n -> Vector{typeof(M[n])}(undef, nnz), N)
 
     k = 1
-    function sample(n, p::Float64, i...)
+    function sample(n, i...)
         if n == 0
             if k <= nnz
                 for m = 1:N
                     I[m][k] = i[m]
                 end
-            elseif rand(r) * p < k
+            elseif rand(r) * k < nnz
                 l = rand(r, 1:nnz)
                 for m = 1:N
                     I[m][l] = i[m]
@@ -142,11 +142,11 @@ function fsprand_erdos_renyi_sample_knuth(r::AbstractRNG, M::Tuple, nnz::Int)
         else
             m = M[n]
             for i_n = 1:m
-                sample(n - 1, ((p - 1) * m) + i_n, i_n, i...)
+                sample(n - 1, i_n, i...)
             end
         end
     end
-    sample(N, 1.0)
+    sample(N)
 
     return I
 end
