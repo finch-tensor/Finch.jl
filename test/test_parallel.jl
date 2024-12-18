@@ -659,6 +659,5 @@
         end
 
         @test norm(y - permutedims(A) * x) / norm(permutedims(A) * x) < 1e-10
-
     end
 end

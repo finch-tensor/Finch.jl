@@ -9,6 +9,7 @@ using Finch
 using BenchmarkTools
 using MatrixDepot
 using SparseArrays
+using Random
 include(joinpath(@__DIR__, "../docs/examples/bfs.jl"))
 include(joinpath(@__DIR__, "../docs/examples/pagerank.jl"))
 include(joinpath(@__DIR__, "../docs/examples/shortest_paths.jl"))
@@ -245,6 +246,17 @@ function spmv_serial(A, x)
     end
 end
 
+function spmv_noinit(y, A, x)
+    @finch begin
+        for i=_
+            for j=_
+                y[i] += A[j, i] * x[j]
+            end
+        end
+        return y
+    end
+end
+
 function spmv_threaded(A, x)
     y = Tensor(Dense{Int64}(Element{0.0, Float64}()))
     @finch begin
@@ -302,11 +314,13 @@ end
 
 SUITE["structure"] = BenchmarkGroup()
 
-N = 100_000
+N = 1_000_000
 
 SUITE["structure"]["permutation"] = BenchmarkGroup()
 
-A_ref = Tensor(Dense(SparseList(Element(0.0))), fsparse(collect(1:N), collect(1:N), ones(N)))
+perm = randperm(N)
+
+A_ref = Tensor(Dense(SparseList(Element(0.0))), fsparse(collect(1:N), perm, ones(N)))
 
 A = Tensor(Dense(SparsePoint(Element(0.0))), A_ref)
 
@@ -314,13 +328,14 @@ x = rand(N)
 
 SUITE["structure"]["permutation"]["SparseList"] = @benchmarkable spmv_serial($A_ref, $x)
 SUITE["structure"]["permutation"]["SparsePoint"] = @benchmarkable spmv_serial($A, $x)
+SUITE["structure"]["permutation"]["baseline"] = @benchmarkable $x[$perm]
 
 SUITE["structure"]["banded"] = BenchmarkGroup()
 
 A_ref = Tensor(Dense(Sparse(Element(0.0))), N, N)
 
-@finch for i = _, j = _
-    if abs(i - j) < 2
+@finch for j = _, i = _
+    if j - 2 < i < j + 2
         A_ref[i, j] = 1.0
     end
 end
