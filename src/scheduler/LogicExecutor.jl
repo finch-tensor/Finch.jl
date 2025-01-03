@@ -18,6 +18,7 @@ function defer_tables(ex, node::LogicNode)
     end
 end
 
+
 """
     cache_deferred(ctx, root::LogicNode, seen)
 

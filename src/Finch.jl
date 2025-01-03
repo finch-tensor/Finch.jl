@@ -280,7 +280,7 @@ include("interface/einsum.jl")
 include("Galley/Galley.jl")
 using .Galley
 
-export galley_scheduler
+export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
 
 @deprecate default fill_value
 @deprecate redefault! set_fill_value!

@@ -214,3 +214,7 @@ function count_stored(A)
         return sum(pattern!(A))
     end
 end
+
+function geometric_round(b, x)
+    b^(floor(log(b, x))+.5)
+end
