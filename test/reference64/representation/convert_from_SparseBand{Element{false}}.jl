@@ -17,7 +17,7 @@ quote
     tmp_lvl_q_stop = tmp_lvl_ofs[1 + 1]
     tmp_lvl_i_2 = tmp_lvl_i1 - ((tmp_lvl_q_stop - tmp_lvl_ofs[1]) - 1)
     tmp_lvl_q_ofs = (tmp_lvl_q_stop - tmp_lvl_i1) - 1
-    phase_start_2 = max(1, tmp_lvl_i_2)
+    phase_start_2 = max(tmp_lvl_i_2, 1)
     phase_stop_2 = min(tmp_lvl.shape, tmp_lvl_i1)
     if phase_stop_2 >= phase_start_2
         for i_6 = phase_start_2:phase_stop_2

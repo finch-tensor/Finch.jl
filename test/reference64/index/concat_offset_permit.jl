@@ -31,7 +31,7 @@ begin
             C_lvl_qos += 1
         end
     end
-    phase_stop_2 = min(C_lvl.shape, 10, A_lvl.shape)
+    phase_stop_2 = min(C_lvl.shape, A_lvl.shape, 10)
     if phase_stop_2 >= 1
         A_lvl_q = A_lvl_ptr[1]
         A_lvl_q_stop = A_lvl_ptr[1 + 1]

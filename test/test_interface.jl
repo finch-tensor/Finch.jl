@@ -146,6 +146,12 @@ using Finch.FinchNotation: finch_unparse_program, @finch_program_instance
                 @test norm(y .- A * x) < 1e-10
             end
 
+            #https://github.com/finch-tensor/Finch.jl/issues/686
+            let
+                A = Tensor(Dense(SparseList(Element(0.0))), [0.0 0.0 4.4; 1.1 0.0 0.0; 2.2 0.0 5.5; 3.3 0.0 0.0])
+                @test countstored(A - A) == 5
+            end
+
             #https://github.com/finch-tensor/Finch.jl/issues/554
             let
                 @test broadcast(trunc, swizzle(Tensor(ones(1)), 1)) == Tensor(ones(1))
