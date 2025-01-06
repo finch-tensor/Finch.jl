@@ -12,7 +12,7 @@ begin
     else
         A_lvl_i1 = 0
     end
-    phase_start_2 = max(1, 1 + (3 - 1))
+    phase_start_2 = max(1, (3 - 1) + 1)
     phase_stop_2 = min(A_lvl.shape, A_lvl_i1, 3)
     if phase_stop_2 >= phase_start_2
         if A_lvl_idx[A_lvl_q] < phase_start_2

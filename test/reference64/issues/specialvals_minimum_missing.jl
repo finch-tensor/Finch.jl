@@ -50,7 +50,7 @@ begin
             end
         end
     end
-    phase_start_3 = max(1, 1 + yf_lvl_i1)
+    phase_start_3 = max(1, yf_lvl_i1 + 1)
     phase_stop_4 = yf_lvl.shape
     if phase_stop_4 >= phase_start_3
         cond_6 = 1 <= 1 + -phase_start_3 + phase_stop_4

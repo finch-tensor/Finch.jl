@@ -20,7 +20,7 @@ begin
     else
         A_lvl_i1 = 0
     end
-    phase_stop = min(3, A_lvl_i1 + -1)
+    phase_stop = min(3, -1 + A_lvl_i1)
     if phase_stop >= 1
         if A_lvl_idx[A_lvl_q] < 1 + 1
             A_lvl_q = Finch.scansearch(A_lvl_idx, 1 + 1, A_lvl_q, A_lvl_q_stop - 1)

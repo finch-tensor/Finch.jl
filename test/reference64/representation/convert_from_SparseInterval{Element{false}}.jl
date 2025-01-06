@@ -15,7 +15,7 @@ quote
     0 < 1 || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
     tmp_lvl_i_start = tmp_lvl_left[1]
     tmp_lvl_i_stop = tmp_lvl_right[1]
-    phase_start_2 = max(1, tmp_lvl_i_start)
+    phase_start_2 = max(tmp_lvl_i_start, 1)
     phase_stop_2 = min(tmp_lvl.shape, tmp_lvl_i_stop)
     if phase_stop_2 >= phase_start_2
         tmp_lvl_2_val = tmp_lvl_val[1]
