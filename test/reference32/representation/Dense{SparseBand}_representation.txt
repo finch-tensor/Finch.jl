@@ -1,24 +1,24 @@
 Dense{SparseBand} representation:
 
 5x5_falses: Bool[0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0; 0 0 0 0 0]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[]), 5, [1, 1, 1, 1, 1, 1], Int32[], [1]), 5))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[]), 5, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]), 5))
 countstored: 0
 5x5_trues: Bool[1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), 5, [1, 2, 3, 4, 5, 6], [5, 5, 5, 5, 5], [1, 6, 11, 16, 21, 26]), 5))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), 5, [5, 5, 5, 5, 5], [1, 6, 11, 16, 21, 26]), 5))
 countstored: 25
 4x4_one_bool: Bool[0 0 0 1; 0 0 0 0; 1 0 0 0; 0 1 0 0]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1]), 4, [1, 2, 3, 3, 4], [3, 4, 1], [1, 2, 3, 4]), 4))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1]), 4, [3, 4, 1, 1], [1, 2, 3, 3, 4]), 4))
 countstored: 3
 5x4_bool_mix: Bool[0 1 0 1; 0 0 0 0; 1 1 1 1; 1 1 1 1; 0 1 0 1]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]), 5, [1, 2, 3, 4, 5], [4, 5, 4, 5], [1, 3, 8, 10, 15]), 4))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{false, Bool, Int32}(Bool[1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]), 5, [4, 5, 4, 5], [1, 3, 8, 10, 15]), 4))
 countstored: 14
 5x5_zeros: [0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 5, [1, 1, 1, 1, 1, 1], Int32[], [1]), 5))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 5, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]), 5))
 countstored: 0
 5x5_ones: [1.0 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0 1.0; 1.0 1.0 1.0 1.0 1.0]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]), 5, [1, 2, 3, 4, 5, 6], [5, 5, 5, 5, 5], [1, 6, 11, 16, 21, 26]), 5))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]), 5, [5, 5, 5, 5, 5], [1, 6, 11, 16, 21, 26]), 5))
 countstored: 25
 5x5_float_mix: [0.0 1.0 2.0 2.0 3.0; 0.0 0.0 0.0 0.0 0.0; 1.0 1.0 2.0 0.0 0.0; 0.0 0.0 0.0 3.0 0.0; 0.0 0.0 0.0 0.0 0.0]
-tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}([1.0, 1.0, 0.0, 1.0, 2.0, 0.0, 2.0, 2.0, 0.0, 0.0, 3.0, 3.0]), 5, [1, 2, 3, 4, 5, 6], [3, 3, 3, 4, 1], [1, 2, 5, 8, 12, 13]), 5))
+tensor: Tensor(Dense{Int32}(SparseBand{Int32}(Element{0.0, Float64, Int32}([1.0, 1.0, 0.0, 1.0, 2.0, 0.0, 2.0, 2.0, 0.0, 0.0, 3.0, 3.0]), 5, [3, 3, 3, 4, 1], [1, 2, 5, 8, 12, 13]), 5))
 countstored: 12
 

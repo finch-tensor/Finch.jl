@@ -1,3 +1,4 @@
 Manifest.toml
 *.json
 *.o
+jl_*

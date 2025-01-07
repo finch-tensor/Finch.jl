@@ -54,6 +54,7 @@
     end
 
     ios = Dict()
+    compiled = Set()
 
     for (key, arr) = [
         ("5x_false", fill(false, 5)),
@@ -112,17 +113,21 @@
                         show(io, @finch_code (res .= 0; for i=_; res[i] = tmp[i] end))
                         io
                     end
-                    eval(@finch_kernel function roundtrip(res, tmp, ref)
-                        tmp .= 0
-                        for i = _
-                            tmp[i] = ref[i]
-                        end
-                        res .= 0
-                        for i = _
-                            res[i] = tmp[i]
-                        end
-                        return res
-                    end)
+                    roundtrip_key = typeof((res, tmp, ref))
+                    if !(roundtrip_key in compiled)
+                        eval(@finch_kernel function roundtrip(res, tmp, ref)
+                            tmp .= 0
+                            for i = _
+                                tmp[i] = ref[i]
+                            end
+                            res .= 0
+                            for i = _
+                                res[i] = tmp[i]
+                            end
+                            return res
+                        end)
+                        push!(compiled, roundtrip_key)
+                    end
                     res = roundtrip(res, tmp, ref).res
                     @test size(res) == size(ref)
                     @test axes(res) == axes(ref)
@@ -195,17 +200,21 @@
                 ref = dropfills!(ref, arr)
                 tmp = Tensor(lvl.Lvl(leaf()))
                 @testset "convert $(key) $(lvl.key)(Element())" begin
-                    eval(@finch_kernel function roundtrip(res, tmp, ref)
-                        tmp .= 0
-                        for j=_, i=_
-                            tmp[i, j] = ref[i, j]
-                        end
-                        res .= 0
-                        for j=_, i=_
-                            res[i, j] = tmp[i, j]
-                        end
-                        return res
-                    end)
+                    roundtrip_key = typeof((res, tmp, ref))
+                    if !(roundtrip_key in compiled)
+                        eval(@finch_kernel function roundtrip(res, tmp, ref)
+                            tmp .= 0
+                            for j=_, i=_
+                                tmp[i, j] = ref[i, j]
+                            end
+                            res .= 0
+                            for j=_, i=_
+                                res[i, j] = tmp[i, j]
+                            end
+                            return res
+                        end)
+                        push!(compiled, roundtrip_key)
+                    end
                     res = roundtrip(res, tmp, ref).res
                     @test size(res) == size(ref)
                     @test axes(res) == axes(ref)

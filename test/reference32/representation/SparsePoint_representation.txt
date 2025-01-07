@@ -1,6 +1,6 @@
 SparsePoint representation:
 
 6x_one_bool: Bool[0, 0, 1, 0, 0, 0]
-tensor: Tensor(SparsePoint{Int32}(Element{false, Bool, Int32}(Bool[1]), 6, [1, 2], [3]))
+tensor: Tensor(SparsePoint{Int32}(Element{false, Bool, Int32}(Bool[1]), 6, [3]))
 countstored: 1
 

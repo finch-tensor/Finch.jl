@@ -9,6 +9,29 @@ using Finch
 using BenchmarkTools
 using MatrixDepot
 using SparseArrays
+using Random
+using ArgParse
+
+s = ArgParseSettings("Run Finch.jl benchmarks. By default, all tests are run unless --include or --exclude options are provided. 
+If the environment variable FINCH_BENCHMARK_ARGS is set, it will override the given arguments.")
+
+@add_arg_table! s begin
+    "--include", "-i"
+    nargs = '*'
+    default = []
+    help = "list of benchmark suites to include, e.g., --include high-level structures"
+
+    "--exclude", "-e"
+    nargs = '*'
+    default = []
+    help = "list of benchmark suites to exclude, e.g., --exclude compile graphs"
+end
+
+if "FINCH_BENCHMARK_ARGS" in keys(ENV)
+    ARGS = split(ENV["FINCH_BENCHMARK_ARGS"], " ")
+end
+parsed_args = parse_args(ARGS, s)
+
 include(joinpath(@__DIR__, "../docs/examples/bfs.jl"))
 include(joinpath(@__DIR__, "../docs/examples/pagerank.jl"))
 include(joinpath(@__DIR__, "../docs/examples/shortest_paths.jl"))
@@ -19,72 +42,121 @@ SUITE = BenchmarkGroup()
 
 SUITE["high-level"] = BenchmarkGroup()
 
-let
-    k = Ref(0.0)
-    A = Tensor(Dense(Sparse(Element(0.0))), fsprand(10000, 10000, 0.01))
-    x = rand(1)
-    y = rand(1)
-    SUITE["high-level"]["permutedims(Dense(Sparse()))"] = @benchmarkable(permutedims($A, (2, 1)))
+for (scheduler_name, scheduler) in [
+    "default_scheduler" => Finch.default_scheduler(),
+    "galley_scheduler" => Finch.galley_scheduler(),
+]
+    let
+        A = Tensor(Dense(Sparse(Element(0.0))), fsprand(10000, 10000, 0.01))
+        SUITE["high-level"]["permutedims(Dense(Sparse()))"][scheduler_name] = @benchmarkable(permutedims($A, (2, 1)), setup = (Finch.set_scheduler!($scheduler)))
+    end
+
+    let
+        A = Tensor(Dense(Dense(Element(0.0))), rand(10000, 10000))
+        SUITE["high-level"]["permutedims(Dense(Dense()))"][scheduler_name] = @benchmarkable(permutedims($A, (2, 1)), setup = (Finch.set_scheduler!($scheduler)))
+    end
+
+    let
+        k = Ref(0.0)
+        x = rand(1)
+        y = rand(1)
+        SUITE["high-level"]["einsum_spmv_compile_overhead"][scheduler_name] = @benchmarkable(
+            begin
+                A, x, y = (A, $x, $y)
+                @einsum y[i] += A[i, j] * x[j]
+            end,
+            setup = (Finch.set_scheduler!($scheduler); A = Tensor(Dense(SparseList(Element($k[] += 1))), fsprand(1, 1, 1)))
+        )
+    end
+
+    let
+        N = 100000
+        function generate_kernel_defs()
+            for nnz1 in reverse([4, 4^2, 4^3, 4^4])
+                for nnz2 in reverse([4, 4^2, 4^3, 4^4])
+                    for nnz3 in reverse([4, 4^2, 4^3, 4^4])
+                        A = lazy(fsprand(N, N, nnz1))
+                        B = lazy(fsprand(N, N, nnz2))
+                        C = lazy(fsprand(N, N, nnz3))
+                        compute(A * B * C)
+                    end
+                end
+            end
+        end
+
+        SUITE["high-level"]["matchain_adaptive_overhead"][scheduler_name] = @benchmarkable(
+            begin
+                compute(A * B * C)
+            end,
+            setup = begin
+                Finch.set_scheduler!($scheduler)
+                N = $N
+                $generate_kernel_defs()
+                A = lazy(fsprand(N, N, 4))
+                B = lazy(fsprand(N, N, 4))
+                C = lazy(fsprand(N, N, 4))
+            end,
+            evals = 1
+        )
+    end
+
+    let
+        A = Tensor(Dense(SparseList(Element(0.0))), fsprand(1, 1, 1))
+        x = rand(1)
+        y = rand(1)
+        SUITE["high-level"]["einsum_spmv_call_overhead"][scheduler_name] = @benchmarkable(
+            begin
+                A, x, y = ($A, $x, $y)
+                @einsum y[i] += A[i, j] * x[j]
+            end,
+            setup = (Finch.set_scheduler!($scheduler);),
+            evals = 1
+        )
+    end
+
+    let
+        A = Tensor(Dense(SparseList(Element(0.0))), fsprand(1, 1, 1))
+        x = rand(1)
+        SUITE["high-level"]["compute_spmv_call_overhead"][scheduler_name] = @benchmarkable(
+            begin
+                A, x = (lazy($A), lazy($x))
+                compute(A * x)
+            end,
+            setup = (Finch.set_scheduler!($scheduler);),
+            evals = 1
+        )
+    end
+
+    let
+        N = 1_000
+        K = 1_000
+        p = 0.001
+        A = Tensor(Dense(Dense(Element(0.0))), rand(N, K))
+        B = Tensor(Dense(Dense(Element(0.0))), rand(K, N))
+        M = Tensor(Dense(SparseList(Element(0.0))), fsprand(N, N, p))
+
+        SUITE["high-level"]["sddmm_fused"][scheduler_name] = @benchmarkable(
+            begin
+                M = lazy($M)
+                A = lazy($A)
+                B = lazy($B)
+                compute(M .* (A * B))
+            end,
+            setup = (Finch.set_scheduler!($scheduler)),
+        )
+
+        SUITE["high-level"]["sddmm_unfused"][scheduler_name] = @benchmarkable(
+            begin
+                M = $M
+                A = $A
+                B = $B
+                M .* (A * B)
+            end,
+            setup = (Finch.set_scheduler!($scheduler)),
+        )
+    end 
 end
 
-let
-    k = Ref(0.0)
-    A = Tensor(Dense(Dense(Element(0.0))), rand(10000, 10000))
-    x = rand(1)
-    y = rand(1)
-    SUITE["high-level"]["permutedims(Dense(Dense()))"] = @benchmarkable(permutedims($A, (2, 1)))
-end
-
-let
-    k = Ref(0.0)
-    x = rand(1)
-    y = rand(1)
-    SUITE["high-level"]["einsum_spmv_compile_overhead"] = @benchmarkable(
-        begin
-            A, x, y = (A, $x, $y)
-            @einsum y[i] += A[i, j] * x[j]
-        end,
-        setup = (A = Tensor(Dense(SparseList(Element($k[] += 1))), fsprand(1, 1, 1)))
-    )
-end
-
-let
-    A = Tensor(Dense(SparseList(Element(0.0))), fsprand(1, 1, 1))
-    x = rand(1)
-    SUITE["high-level"]["einsum_spmv_call_overhead"] = @benchmarkable(
-        begin
-            A, x = ($A, $x)
-            @einsum y[i] += A[i, j] * x[j]
-        end,
-    )
-end
-
-let
-    N = 1_000
-    K = 1_000
-    p = 0.001
-    A = Tensor(Dense(Dense(Element(0.0))), rand(N, K))
-    B = Tensor(Dense(Dense(Element(0.0))), rand(K, N))
-    M = Tensor(Dense(SparseList(Element(0.0))), fsprand(N, N, p))
-
-    SUITE["high-level"]["sddmm_fused"] = @benchmarkable(
-        begin
-            M = lazy($M)
-            A = lazy($A)
-            B = lazy($B)
-            compute(M .* (A * B))
-        end,
-    )
-
-    SUITE["high-level"]["sddmm_unfused"] = @benchmarkable(
-        begin
-            M = $M
-            A = $A
-            B = $B
-            M .* (A * B)
-        end,
-    )
-end
 
 eval(let
     A = Tensor(Dense(SparseList(Element(0.0))), fsprand(1, 1, 1))
@@ -245,6 +317,17 @@ function spmv_serial(A, x)
     end
 end
 
+function spmv_noinit(y, A, x)
+    @finch begin
+        for i=_
+            for j=_
+                y[i] += A[j, i] * x[j]
+            end
+        end
+        return y
+    end
+end
+
 function spmv_threaded(A, x)
     y = Tensor(Dense{Int64}(Element{0.0, Float64}()))
     @finch begin
@@ -292,7 +375,7 @@ for (key, mtx) in [
     "SNAP/soc-Epinions1" => SparseMatrixCSC(matrixdepot("SNAP/soc-Epinions1")),
     "fsprand(10_000, 10_000, 0.01)" => fsprand(10_000, 10_000, 0.01)]
     A = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0,Float64,Int64}())), mtx)
-    A_T = permutedims(A)
+    A_T = Tensor(Dense{Int64}(SparseList{Int64}(Element{0.0,Float64,Int64}())), permutedims(A))
     x = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()), rand(size(A)[2]))
     SUITE["parallel"]["SpMV_serial"][key] = @benchmarkable spmv_serial($A_T, $x)
     SUITE["parallel"]["SpMV_threaded"][key] = @benchmarkable spmv_threaded($A_T, $x)
@@ -302,11 +385,13 @@ end
 
 SUITE["structure"] = BenchmarkGroup()
 
-N = 100_000
+N = 1_000_000
 
 SUITE["structure"]["permutation"] = BenchmarkGroup()
 
-A_ref = Tensor(Dense(SparseList(Element(0.0))), fsparse(collect(1:N), collect(1:N), ones(N)))
+perm = randperm(N)
+
+A_ref = Tensor(Dense(SparseList(Element(0.0))), fsparse(collect(1:N), perm, ones(N)))
 
 A = Tensor(Dense(SparsePoint(Element(0.0))), A_ref)
 
@@ -314,13 +399,14 @@ x = rand(N)
 
 SUITE["structure"]["permutation"]["SparseList"] = @benchmarkable spmv_serial($A_ref, $x)
 SUITE["structure"]["permutation"]["SparsePoint"] = @benchmarkable spmv_serial($A, $x)
+SUITE["structure"]["permutation"]["baseline"] = @benchmarkable $x[$perm]
 
 SUITE["structure"]["banded"] = BenchmarkGroup()
 
 A_ref = Tensor(Dense(Sparse(Element(0.0))), N, N)
 
-@finch for i = _, j = _
-    if abs(i - j) < 2
+@finch for j = _, i = _
+    if j - 2 < i < j + 2
         A_ref[i, j] = 1.0
     end
 end
@@ -334,3 +420,12 @@ x = rand(N)
 SUITE["structure"]["banded"]["SparseList"] = @benchmarkable spmv_serial($A_ref, $x)
 SUITE["structure"]["banded"]["SparseBand"] = @benchmarkable spmv_serial($A, $x)
 SUITE["structure"]["banded"]["SparseInterval"] = @benchmarkable spmv_serial($A2, $x)
+
+if !isempty(parsed_args["include"])
+    inc = reduce((a, b) -> :($a || $b), parsed_args["include"])
+    SUITE = eval(:(SUITE[@tagged $inc]))
+end
+if !isempty(parsed_args["exclude"])
+    exc = reduce((a, b) -> :($a || $b), parsed_args["exclude"])
+    SUITE = eval(:(SUITE[@tagged !$exc]))
+end

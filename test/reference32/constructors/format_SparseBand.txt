@@ -1,8 +1,8 @@
 Tensor(SparseBand(Element(0))) constructors:
-initialized tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}([2.0, 2.0, 0.0, 3.0]), 6, [1, 2], [5], [1, 5]))
-initialized tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}([2.0, 2.0, 0.0, 3.0]), 6, [1, 2], Int16[5], [1, 5]))
-sized tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 7, [1], Int32[], Int32[]))
-sized tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}(Float64[]), 7, [1], Int16[], Int32[]))
-empty tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 0, [1], Int32[], Int32[]))
-empty tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}(Float64[]), 0, [1], Int16[], Int32[]))
+initialized tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}([2.0, 2.0, 0.0, 3.0]), 6, [5], [1, 5]))
+initialized tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}([2.0, 2.0, 0.0, 3.0]), 6, Int16[5], [1, 5]))
+sized tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 7, Int32[], Int32[]))
+sized tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}(Float64[]), 7, Int16[], Int32[]))
+empty tensor: Tensor(SparseBand{Int32}(Element{0.0, Float64, Int32}(Float64[]), 0, Int32[], Int32[]))
+empty tensor: Tensor(SparseBand{Int16}(Element{0.0, Float64, Int32}(Float64[]), 0, Int16[], Int32[]))
 

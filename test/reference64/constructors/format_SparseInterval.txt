@@ -1,8 +1,8 @@
 Tensor(SparseInterval(Element(0))) constructors:
-initialized tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}([2.0]), 6, [1, 2], [3], [3]))
-initialized tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}([2.0]), 6, [1, 2], Int16[3], Int16[3]))
-sized tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}(Float64[]), 7, [1], Int64[], Int64[]))
-sized tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}(Float64[]), 7, [1], Int16[], Int16[]))
-empty tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}(Float64[]), 0, [1], Int64[], Int64[]))
-empty tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}(Float64[]), 0, [1], Int16[], Int16[]))
+initialized tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}([2.0]), 6, [3], [3]))
+initialized tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}([2.0]), 6, Int16[3], Int16[3]))
+sized tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}(Float64[]), 7, Int64[], Int64[]))
+sized tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}(Float64[]), 7, Int16[], Int16[]))
+empty tensor: Tensor(SparseInterval{Int64}(Element{0.0, Float64, Int64}(Float64[]), 0, Int64[], Int64[]))
+empty tensor: Tensor(SparseInterval{Int16}(Element{0.0, Float64, Int64}(Float64[]), 0, Int16[], Int16[]))
 

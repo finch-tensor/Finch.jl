@@ -410,11 +410,11 @@ function propagate_map_queries(root)
             end
         end
     end
-    Rewrite(Prewalk(Chain([
+    root = Rewrite(Prewalk(Chain([
         (a -> if haskey(props, a) props[a] end),
         (@rule query(~a, ~b) => if haskey(props, a) plan() end),
-        (@rule plan(~a1..., plan(), ~a2...) => plan(a1..., a2...)),
     ])))(root)
+    Rewrite(Postwalk(@rule plan(~a1..., plan(), ~a2...) => plan(a1..., a2...)))(root)
 end
 
 function propagate_map_queries_backward(root)

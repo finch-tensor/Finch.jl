@@ -304,6 +304,7 @@ end
 function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
+    tbl_2 = freshen(ctx, lvl.tbl_2)
     push_preamble!(ctx, quote
         $tbl_2 = $(lvl.tbl)
         $(lvl.tbl) = $moveto($(lvl.tbl), $(ctx(arch)))

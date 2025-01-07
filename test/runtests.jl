@@ -9,21 +9,29 @@ end
 using Test
 using ArgParse
 
-s = ArgParseSettings("Run Finch.jl tests. All tests are run by default. Specific
-test suites may be specified as positional arguments. Finch compares to
-reference output which depends on the system word size (currently
-$(Sys.WORD_SIZE)-bit). To overwrite $(Sys.WORD_SIZE==32 ? 64 : 32)-bit output,
-run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.")
+s = ArgParseSettings("Run Finch.jl tests. By default, all tests are run unless --include or --exclude options are provided. 
+Finch compares to reference output which depends on the system word size (currently $(Sys.WORD_SIZE)-bit).To overwrite $(Sys.WORD_SIZE==32 ? 64 : 32)-bit output, run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.
+If the environment variable FINCH_TEST_ARGS is set, it will override the given arguments.")
 
 @add_arg_table! s begin
     "--overwrite", "-w"
     action = :store_true
     help = "overwrite reference output for $(Sys.WORD_SIZE)-bit systems"
-    "suites"
+    "--include", "-i"
     nargs = '*'
-    default = ["all"]
-    help = "names of test suites to run, from: print, constructors, representation, merges, index, typical, kernels, issues, interface, galley, continuous, continuousexamples, simple, examples, fileio, docs, parallel, algebra."
+    default = []
+    help = "list of test suites to include, e.g., --include constructors merges"
+
+    "--exclude", "-e"
+    nargs = '*'
+    default = []
+    help = "list of test suites to exclude, e.g., --exclude parallel algebra"
 end
+
+if "FINCH_TEST_ARGS" in keys(ENV)
+    ARGS = split(ENV["FINCH_TEST_ARGS"], " ")
+end
+
 parsed_args = parse_args(ARGS, s)
 
 """
@@ -61,7 +69,9 @@ end
 
 function should_run(name)
     global parsed_args
-    return ("all" in parsed_args["suites"] || name in parsed_args["suites"])
+    inc = parsed_args["include"]
+    exc = parsed_args["exclude"]
+    return (isempty(inc) || name in inc) && !(name in exc)
 end
 
 macro repl(io, ex, quiet = false)
@@ -109,7 +119,7 @@ include("utils.jl")
         end
     end
     if should_run("parallel") include("test_parallel.jl") end
-    #if should_run("continuous") include("test_continuous.jl") end
+    if should_run("scheduler") include("test_scheduler.jl") end
     #algebra goes at the end since it calls refresh()
     if should_run("algebra") include("test_algebra.jl") end
 end

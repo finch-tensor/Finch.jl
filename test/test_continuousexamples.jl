@@ -38,10 +38,8 @@
         point_id = collect(Int64, 1:length(point_y))
         point_ptr_x = [1,length(point_x)+1]
         point_ptr_y = collect(Int64, 1:length(point_y)+1)
-        point_ptr_id = collect(Int64, 1:length(point_y)+1)
         points = Tensor(SparseList{Float64}(SparseList{Float64}(SparsePoint{Int64}(Pattern(),
                                                               shape_id,
-                                                              point_ptr_id,
                                                               point_id),
                                           shape,
                                           point_ptr_y,
@@ -55,15 +53,11 @@
         box_y_start = [query[1][2]]
         box_x_stop = [query[1][3]]
         box_y_stop = [query[1][4]]
-        box_ptr_x = [1,2]
-        box_ptr_y = [1,2]
         box = Tensor(SparseInterval{Float64}(SparseInterval{Float64}(Pattern(),
                                           shape,
-                                          box_ptr_y,
                                           box_y_start,
                                           box_y_stop),
                        shape,
-                       box_ptr_x,
                        box_x_start,
                        box_x_stop))
 
@@ -97,15 +91,11 @@
             box_y_start = [query[i][2]]
             box_x_stop = [query[i][3]]
             box_y_stop = [query[i][4]]
-            box_ptr_x = [1,2]
-            box_ptr_y = [1,2]
             box = Tensor(SparseInterval{Float64}(SparseInterval{Float64}(Pattern(),
                                        shape,
-                                       box_ptr_y,
                                        box_y_start,
                                        box_y_stop),
                     shape,
-                    box_ptr_x,
                     box_x_start,
                     box_x_stop))
 

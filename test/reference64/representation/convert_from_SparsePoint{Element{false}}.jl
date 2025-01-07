@@ -5,25 +5,18 @@ quote
     res_lvl_2 = res_lvl.lvl
     res_lvl_val = res_lvl.lvl.val
     tmp_lvl = ((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.lvl
-    tmp_lvl_ptr = tmp_lvl.ptr
     tmp_lvl_idx = tmp_lvl.idx
     tmp_lvl_val = tmp_lvl.lvl.val
     Finch.resize_if_smaller!(res_lvl_ptr, 1 + 1)
     Finch.fill_range!(res_lvl_ptr, 0, 1 + 1, 1 + 1)
     res_lvl_qos = 0 + 1
     0 < 1 || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
-    tmp_lvl_q = tmp_lvl_ptr[1]
-    tmp_lvl_q_stop = tmp_lvl_ptr[1 + 1]
-    if tmp_lvl_q < tmp_lvl_q_stop
-        tmp_lvl_i = tmp_lvl_idx[tmp_lvl_q]
-    else
-        tmp_lvl_i = 0
-    end
+    tmp_lvl_i = max(tmp_lvl_idx[1], 1)
     phase_stop = min(tmp_lvl_i, tmp_lvl.shape)
     if phase_stop >= 1
         if phase_stop < tmp_lvl_i
         else
-            tmp_lvl_2_val = tmp_lvl_val[tmp_lvl_q]
+            tmp_lvl_2_val = tmp_lvl_val[1]
             if res_lvl_qos > 0
                 res_lvl_qos_stop = max(0 << 1, 1)
                 Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)

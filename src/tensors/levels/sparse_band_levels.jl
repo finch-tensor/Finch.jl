@@ -1,5 +1,5 @@
 """
-SparseBandLevel{[Ti=Int], [Ptr, Idx, Ofs]}(lvl, [dim])
+SparseBandLevel{[Ti=Int], [Idx, Ofs]}(lvl, [dim])
 
 Like the [`SparseBlockListLevel`](@ref), but stores only a single block, and fills in zeros.
 
@@ -14,10 +14,9 @@ Dense [:,1:3]
 │ ├─[1]: 20.0
 │ ├─[3]: 40.0
 """
-struct SparseBandLevel{Ti, Ptr<:AbstractVector, Idx<:AbstractVector, Ofs<:AbstractVector, Lvl} <: AbstractLevel
+struct SparseBandLevel{Ti, Idx<:AbstractVector, Ofs<:AbstractVector, Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
-    ptr::Ptr
     idx::Idx
     ofs::Ofs
 end
@@ -26,20 +25,19 @@ const SparseBand = SparseBandLevel
 SparseBandLevel(lvl::Lvl) where {Lvl} = SparseBandLevel{Int}(lvl)
 SparseBandLevel(lvl, shape, args...) = SparseBandLevel{typeof(shape)}(lvl, shape, args...)
 SparseBandLevel{Ti}(lvl) where {Ti} = SparseBandLevel{Ti}(lvl, zero(Ti))
-SparseBandLevel{Ti}(lvl, shape) where {Ti} = SparseBandLevel{Ti}(lvl, shape, postype(lvl)[1], Ti[], postype(lvl)[])
-SparseBandLevel{Ti}(lvl::Lvl, shape, ptr::Ptr, idx::Idx, ofs::Ofs) where {Ti, Lvl, Ptr, Idx, Ofs} =
-    SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}(lvl, Ti(shape), ptr, idx, ofs)
+SparseBandLevel{Ti}(lvl, shape) where {Ti} = SparseBandLevel{Ti}(lvl, shape, Ti[], postype(lvl)[])
+SparseBandLevel{Ti}(lvl::Lvl, shape, idx::Idx, ofs::Ofs) where {Ti, Lvl, Idx, Ofs} =
+    SparseBandLevel{Ti, Idx, Ofs, Lvl}(lvl, Ti(shape), idx, ofs)
 
-function postype(::Type{SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}) where {Ti, Ptr, Idx, Ofs, Lvl}
+function postype(::Type{SparseBandLevel{Ti, Idx, Ofs, Lvl}}) where {Ti, Idx, Ofs, Lvl}
     return postype(Lvl)
 end
 
 function moveto(lvl::SparseBandLevel{Ti}, device) where {Ti}
     lvl_2 = moveto(lvl.lvl, device)
-    ptr_2 = moveto(lvl.ptr, device)
     idx_2 = moveto(lvl.idx, device)
     ofs_2 = moveto(lvl.ofs, device)
-    return SparseBandLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, ofs_2)
+    return SparseBandLevel{Ti}(lvl_2, lvl.shape, idx_2, ofs_2)
 end
 
 Base.summary(lvl::SparseBandLevel) = "SparseBand($(summary(lvl.lvl)))"
@@ -47,19 +45,19 @@ similar_level(lvl::SparseBandLevel, fill_value, eltype::Type, dim, tail...) =
     SparseBand(similar_level(lvl.lvl, fill_value, eltype, tail...), dim)
 
 pattern!(lvl::SparseBandLevel{Ti}) where {Ti} =
-    SparseBandLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.ptr, lvl.idx, lvl.ofs)
+    SparseBandLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.idx, lvl.ofs)
 
 function countstored_level(lvl::SparseBandLevel, pos)
-    countstored_level(lvl.lvl, lvl.ofs[lvl.ptr[pos + 1]]-1)
+    countstored_level(lvl.lvl, lvl.ofs[pos + 1]-1)
 end
 
 set_fill_value!(lvl::SparseBandLevel{Ti}, init) where {Ti} =
-    SparseBandLevel{Ti}(set_fill_value!(lvl.lvl, init), lvl.shape, lvl.ptr, lvl.idx, lvl.ofs)
+    SparseBandLevel{Ti}(set_fill_value!(lvl.lvl, init), lvl.shape, lvl.idx, lvl.ofs)
 
 Base.resize!(lvl::SparseBandLevel{Ti}, dims...) where {Ti} =
-    SparseBandLevel{Ti}(resize!(lvl.lvl, dims[1:end-1]...), dims[end], lvl.ptr, lvl.idx, lvl.ofs)
+    SparseBandLevel{Ti}(resize!(lvl.lvl, dims[1:end-1]...), dims[end], lvl.idx, lvl.ofs)
 
-function Base.show(io::IO, lvl::SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}) where {Ti, Ptr, Idx, Ofs, Lvl}
+function Base.show(io::IO, lvl::SparseBandLevel{Ti, Idx, Ofs, Lvl}) where {Ti, Idx, Ofs, Lvl}
     if get(io, :compact, false)
         print(io, "SparseBand(")
     else
@@ -72,8 +70,6 @@ function Base.show(io::IO, lvl::SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}) where {
     if get(io, :compact, false)
         print(io, "…")
     else
-        show(io, lvl.ptr)
-        print(io, ", ")
         show(io, lvl.idx)
         print(io, ", ")
         show(io, lvl.ofs)
@@ -87,37 +83,34 @@ labelled_show(io::IO, fbr::SubFiber{<:SparseBandLevel}) =
 function labelled_children(fbr::SubFiber{<:SparseBandLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    pos + 1 > length(lvl.ptr) && return []
     res = []
-    for r = lvl.ptr[pos]:lvl.ptr[pos + 1] - 1
-        i = lvl.idx[r]
-        qos = lvl.ofs[r]
-        l = lvl.ofs[r + 1] - lvl.ofs[r]
-        for qos = lvl.ofs[r]:lvl.ofs[r + 1] - 1
-            push!(res, LabelledTree(cartesian_label([range_label() for _ = 1:ndims(fbr) - 1]..., i - (lvl.ofs[r + 1] - 1) + qos), SubFiber(lvl.lvl, qos)))
-        end
+    for qos = lvl.ofs[pos]:lvl.ofs[pos + 1] - 1
+        i = lvl.idx[pos] - lvl.ofs[pos + 1] + qos + 1
+        push!(res, LabelledTree(cartesian_label([range_label() for _ = 1:ndims(fbr) - 1]..., i), SubFiber(lvl.lvl, qos)))
     end
     res
 end
 
-@inline level_ndims(::Type{<:SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}) where {Ti, Ptr, Idx, Ofs, Lvl} = 1 + level_ndims(Lvl)
+@inline level_ndims(::Type{<:SparseBandLevel{Ti, Idx, Ofs, Lvl}}) where {Ti, Idx, Ofs, Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseBandLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseBandLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}) where {Ti, Ptr, Idx, Ofs, Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}) where {Ti, Ptr, Idx, Ofs, Lvl} = level_fill_value(Lvl)
-data_rep_level(::Type{<:SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}) where {Ti, Ptr, Idx, Ofs, Lvl} = SparseData(data_rep_level(Lvl))
+@inline level_eltype(::Type{<:SparseBandLevel{Ti, Idx, Ofs, Lvl}}) where {Ti, Idx, Ofs, Lvl} = level_eltype(Lvl)
+@inline level_fill_value(::Type{<:SparseBandLevel{Ti, Idx, Ofs, Lvl}}) where {Ti, Idx, Ofs, Lvl} = level_fill_value(Lvl)
+data_rep_level(::Type{<:SparseBandLevel{Ti, Idx, Ofs, Lvl}}) where {Ti, Idx, Ofs, Lvl} = SparseData(data_rep_level(Lvl))
 
 (fbr::AbstractFiber{<:SparseBandLevel})() = fbr
 function (fbr::SubFiber{<:SparseBandLevel})(idxs...)
     isempty(idxs) && return fbr
     lvl = fbr.lvl
-    p = fbr.pos
-    r = lvl.ptr[p] + searchsortedfirst(@view(lvl.idx[lvl.ptr[p]:lvl.ptr[p + 1] - 1]), idxs[end]) - 1
-    r < lvl.ptr[p + 1] || return fill_value(fbr)
-    q = lvl.ofs[r + 1] - 1 - lvl.idx[r] + idxs[end]
-    q >= lvl.ofs[r] || return fill_value(fbr)
-    fbr_2 = SubFiber(lvl.lvl, q)
-    return fbr_2(idxs[1:end-1]...)
+    pos = fbr.pos
+    start = lvl.idx[pos] - lvl.ofs[pos + 1] + lvl.ofs[pos] + 1
+    stop = lvl.idx[pos]
+    if start <= idxs[end] <= stop
+        qos = lvl.ofs[pos] + idxs[end] - start
+        fbr_2 = SubFiber(lvl.lvl, qos)
+        return fbr_2(idxs[1:end-1]...)
+    end
+    return fill_value(fbr)
 end
 
 mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
@@ -130,7 +123,6 @@ mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
     ros_fill
     ros_stop
     dirty
-    ptr
     idx
     ofs
     prev_pos
@@ -149,7 +141,7 @@ end
 postype(lvl::VirtualSparseBandLevel) = postype(lvl.lvl)
 
 
-function virtualize(ctx, ex, ::Type{SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}, tag=:lvl) where {Ti, Ptr, Idx, Ofs, Lvl}
+function virtualize(ctx, ex, ::Type{SparseBandLevel{Ti, Idx, Ofs, Lvl}}, tag=:lvl) where {Ti, Idx, Ofs, Lvl}
     sym = freshen(ctx, tag)
     shape = value(:($sym.shape), Int)
     qos_fill = freshen(ctx, sym, :_qos_fill)
@@ -157,25 +149,22 @@ function virtualize(ctx, ex, ::Type{SparseBandLevel{Ti, Ptr, Idx, Ofs, Lvl}}, ta
     ros_fill = freshen(ctx, sym, :_ros_fill)
     ros_stop = freshen(ctx, sym, :_ros_stop)
     dirty = freshen(ctx, sym, :_dirty)
-    ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     ofs = freshen(ctx, tag, :_ofs)
     push_preamble!(ctx, quote
         $sym = $ex
-        $ptr = $sym.ptr
         $idx = $sym.idx
         $ofs = $sym.ofs
     end)
     prev_pos = freshen(ctx, sym, :_prev_pos)
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    VirtualSparseBandLevel(lvl_2, sym, Ti, shape, qos_fill, qos_stop, ros_fill, ros_stop, dirty, ptr, idx, ofs, prev_pos)
+    VirtualSparseBandLevel(lvl_2, sym, Ti, shape, qos_fill, qos_stop, ros_fill, ros_stop, dirty, idx, ofs, prev_pos)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, ::DefaultStyle)
     quote
         $SparseBandLevel{$(lvl.Ti)}(
             $(ctx(lvl.lvl)),
             $(ctx(lvl.shape)),
-            $(lvl.ptr),
             $(lvl.idx),
             $(lvl.ofs),
         )
@@ -199,19 +188,15 @@ virtual_level_eltype(lvl::VirtualSparseBandLevel) = virtual_level_eltype(lvl.lvl
 virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value(lvl.lvl)
 
 function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch)
-    ptr_2 = freshen(ctx, lvl.ptr)
     tbl_2 = freshen(ctx, lvl.tbl)
     ofs_2 = freshen(ctx, lvl.ofs)
     push_preamble!(ctx, quote
-        $ptr_2 = $(lvl.ptr)
         $tbl_2 = $(lvl.tbl)
         $ofs_2 = $(lvl.ofs)
-        $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
         $(lvl.tbl) = $moveto($(lvl.tbl), $(ctx(arch)))
         $(lvl.ofs) = $moveto($(lvl.ofs), $(ctx(arch)))
     end)
     push_epilogue!(ctx, quote
-        $(lvl.ptr) = $ptr_2
         $(lvl.tbl) = $tbl_2
         $(lvl.ofs) = $ofs_2
     end)
@@ -224,8 +209,6 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos,
     push_preamble!(ctx, quote
         $(lvl.qos_fill) = $(Tp(0))
         $(lvl.qos_stop) = $(Tp(0))
-        $(lvl.ros_fill) = $(Tp(0))
-        $(lvl.ros_stop) = $(Tp(0))
         Finch.resize_if_smaller!($(lvl.ofs), 1)
         $(lvl.ofs)[1] = 1
     end)
@@ -242,8 +225,10 @@ function assemble_level!(ctx, lvl::VirtualSparseBandLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
+        Finch.resize_if_smaller!($(lvl.idx), $pos_stop)
+        Finch.fill_range!($(lvl.idx), 1, $pos_start, $pos_stop)
+        Finch.resize_if_smaller!($(lvl.ofs), $pos_stop + 1)
+        Finch.fill_range!($(lvl.ofs), 0, $pos_start + 1, $pos_stop + 1)
     end
 end
 
@@ -251,17 +236,14 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos_s
     p = freshen(ctx, :p)
     Tp = postype(lvl)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    ros_stop = freshen(ctx, :ros_stop)
     qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(ctx, quote
-        resize!($(lvl.ptr), $pos_stop + 1)
+        resize!($(lvl.idx), $pos_stop)
+        resize!($(lvl.ofs), $pos_stop + 1)
         for $p = 2:($pos_stop + 1)
-            $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
+            $(lvl.ofs)[$p] += $(lvl.ofs)[$p - 1]
         end
-        $ros_stop = $(lvl.ptr)[$pos_stop + 1] - 1
-        resize!($(lvl.idx), $ros_stop)
-        resize!($(lvl.ofs), $ros_stop + 1)
-        $qos_stop = $(lvl.ofs)[$ros_stop + 1] - $(Tp(1))
+        $qos_stop = $(lvl.ofs)[$pos_stop + 1] - $(Tp(1))
     end)
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
@@ -285,19 +267,10 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseBandLevel}, ext, mode, ::
         arr = fbr,
         body = Thunk(
             preamble = quote
-                $my_r = $(lvl.ptr)[$(ctx(pos))]
-                $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + $(Tp(1))] - 1
-                if $my_r <= $my_r_stop
-                    $my_i1 = $(lvl.idx)[$my_r]
-                    $my_q_stop = $(lvl.ofs)[$my_r + $(Tp(1))]
-                    $my_i_start = $my_i1 - ($my_q_stop - $(lvl.ofs)[$my_r] - 1)
-                    $my_q_ofs = $my_q_stop - $my_i1 - $(Tp(1))
-                else
-                    $my_i_start = $(Ti(1))
-                    $my_i1 = $(Ti(0))
-                    $my_q_stop = $(Ti(0))
-                    $my_q = $(Ti(0))
-                end
+                $my_i1 = $(lvl.idx)[$(ctx(pos))]
+                $my_q_stop = $(lvl.ofs)[$(ctx(pos)) + $(Tp(1))]
+                $my_i_start = $my_i1 - ($my_q_stop - $(lvl.ofs)[$(ctx(pos))] - 1)
+                $my_q_ofs = $my_q_stop - $my_i1 - $(Tp(1))
             end,
             body = (ctx) -> Sequence([
                 Phase(
@@ -346,7 +319,6 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseBandLevel}, ext, mo
         arr = fbr,
         body = Thunk(
             preamble = quote
-                $ros = $ros_fill
                 $qos = $qos_fill + 1
                 $qos_set = $qos_fill
                 $my_i_prev = $(Ti(-1))
@@ -394,15 +366,9 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseBandLevel}, ext, mo
             ),
             epilogue = quote
                 if $my_i_prev > 0
-                    $ros += 1
-                    if $ros > $ros_stop
-                        $ros_stop = max($ros_stop << 1, 1)
-                        Finch.resize_if_smaller!($(lvl.idx), $ros_stop)
-                        Finch.resize_if_smaller!($(lvl.ofs), $ros_stop + 1)
-                    end
                     $qos = $qos_set
-                    $(lvl.idx)[$(ros)] = $my_i_set
-                    $(lvl.ofs)[$(ros) + 1] = $qos + 1
+                    $(lvl.idx)[$(ctx(pos))] = $my_i_set
+                    $(lvl.ofs)[$(ctx(pos)) + 1] = $my_i_set - $my_i_prev + 1
                     $(if issafe(get_mode_flag(ctx))
                         quote
                             $(lvl.prev_pos) = $(ctx(pos))
@@ -410,8 +376,6 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseBandLevel}, ext, mo
                     end)
                     $qos_fill = $qos
                 end
-                $(lvl.ptr)[$(ctx(pos)) + 1] += $ros - $ros_fill
-                $ros_fill = $ros
             end
         )
     )

@@ -352,7 +352,7 @@ function Base.:(==)(a::LogicNode, b::LogicNode)
     elseif a.kind === immediate
         return b.kind === immediate && a.val === b.val
     elseif a.kind === deferred
-        return b.kind === deferred && a.val === b.val && a.type === b.type
+        return b.kind === deferred && a.ex === b.ex && a.type === b.type
     elseif a.kind === field
         return b.kind === field && a.name == b.name
     elseif a.kind === alias
@@ -370,7 +370,7 @@ function Base.hash(a::LogicNode, h::UInt)
     elseif istree(a)
         return hash(a.kind, hash(a.children, h))
     elseif a.kind === deferred
-        return hash(a.kind, hash(a.val, hash(a.type, h)))
+        return hash(a.kind, hash(a.ex, hash(a.type, h)))
     else
         error("unimplemented")
     end
