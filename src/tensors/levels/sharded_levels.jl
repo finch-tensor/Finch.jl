@@ -28,7 +28,7 @@ end
 const Sharded = ShardedLevel
 
 ShardedLevel(device::Device, lvl::Lvl) where {Device, Lvl} =
-    ShardedLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], typeof(lvl)[])
+    ShardedLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], replicateto(lvl, device))
 
 ShardedLevel(device::Device, lvl::Lvl, ptr::Ptr, task::Task, val::Val) where {Device, Lvl, Ptr, Task, Val} =
     ShardedLevel{Device, Lvl, Ptr, Task, Val}(device, lvl, ptr, task, val)
@@ -44,7 +44,6 @@ function moveto(lvl::ShardedLevel, device)
     lvl_2 = moveto(lvl.lvl, device)
     ptr_2 = moveto(lvl.ptr, device)
     task_2 = moveto(lvl.task, device)
-    val_2 = moveto(lvl.val, device)
     return ShardedLevel(lvl_2, ptr_2, task_2, val_2)
 end
 
@@ -158,60 +157,42 @@ function virtual_moveto_level(ctx, lvl::VirtualShardedLevel, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualShardedLevel, pos, init)
-    return lvl
+    virtual_parallel_region!(ctx, lvl.device) do ctx, task
+        lvl_2 = virtualize(ctx, :($(lvl.ex).val[$(task)]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
+        declare_level!(ctx, lvl.lvl, literal($task), init)
+    end
 end
 
+"""
+assemble:
+    mapping is pos -> task, ptr. task says which task has it, ptr says which position in that task has it.
+
+read:
+    read from pos to task, ptr. simple.
+
+write:
+    allocate something for this task on that position, assemble on the task itself on demand. Complain if the task is wrong.
+
+The outer level needs to be concurrent, like denselevel.
+"""
 function assemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
     sym = freshen(ctx, :pointer_to_lvl)
     push_preamble!(ctx, quote
-        Finch.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
-        for $pos in $(ctx(pos_start)):$(ctx(pos_stop))
-            $sym = Finch.similar_level(
-                $(lvl.ex).lvl,
-                Finch.level_fill_value(typeof($(lvl.ex).lvl)),
-                Finch.level_eltype(typeof($(lvl.ex).lvl)),
-                $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...)
-            )
-            $(contain(ctx) do ctx_2
-                lvl_2 = virtualize(ctx_2.code, sym, lvl.Lvl, sym)
-                lvl_2 = declare_level!(ctx_2, lvl_2, literal(0), literal(virtual_level_fill_value(lvl_2)))
-                lvl_2 = virtual_level_resize!(ctx_2, lvl_2, virtual_level_size(ctx_2, lvl.lvl)...)
-                push_preamble!(ctx_2, assemble_level!(ctx_2, lvl_2, literal(1), literal(1)))
-                contain(ctx_2) do ctx_3
-                    lvl_2 = freeze_level!(ctx_3, lvl_2, literal(1))
-                    :($(lvl.val)[$(ctx_3(pos))] = $(ctx_3(lvl_2)))
-                end
-            end)
-        end
+        Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
+        Finch.resize_if_smaller!($(lvl.ptr), $(ctx(pos_stop)))
+        Finch.fill_range!($(lvl.task), $(ctx(pos_start)), $(ctx(pos_stop)), 0)
     end)
     lvl
 end
 
-supports_reassembly(::VirtualShardedLevel) = true
+supports_reassembly(::VirtualShardedLevel) = false
 
-function reassemble_level!(ctx, lvl::VirtualShardedLevel, pos_start, pos_stop)
-    pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
-    pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
-    pos = freshen(ctx, :pos)
-    push_preamble!(ctx, quote
-        for $idx in $(ctx(pos_start)):$(ctx(pos_stop))
-            $(contain(ctx) do ctx_2
-                lvl_2 = virtualize(ctx_2.code, :($(lvl.val)[$idx]), lvl.Lvl, sym)
-                push_preamble!(ctx_2, assemble_level!(ctx_2, lvl_2, literal(1), literal(1)))
-                lvl_2 = declare_level!(ctx_2, lvl_2, literal(1), init)
-                contain(ctx_2) do ctx_3
-                    lvl_2 = freeze_level!(ctx_3, lvl_2, literal(1))
-                    :($(lvl.val)[$(ctx_3(pos))] = $(ctx_3(lvl_2)))
-                end
-            end)
-        end
-    end)
-    lvl
-end
-
+"""
+these two are no-ops, we insteaed do these on instantiate
+"""
 function freeze_level!(ctx, lvl::VirtualShardedLevel, pos)
     return lvl
 end
@@ -257,26 +238,53 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardedLevel}, mode)
     end
 end
 
+#we need some sort of localization step at the start of a parallel region whereby we can thaw the shart level
+
+"""
+assemble:
+    mapping is pos -> task, ptr. task says which task has it, ptr says which position in that task has it.
+
+read:
+    read from pos to task, ptr. simple.
+
+write:
+    allocate something for this task on that position, assemble on the task itself on demand. Complain if the task is wrong.
+
+The outer level needs to be concurrent, like denselevel.
+"""
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardedLevel}, mode)
     @assert mode.kind === updater
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     sym = freshen(ctx, :pointer_to_lvl)
 
+    task = freshen(ctx, tag, :_task)
+
     return Thunk(
-        body = (ctx) -> begin
-            lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
-            lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
-            push_preamble!(ctx, assemble_level!(ctx, lvl_2, literal(1), literal(1)))
-            res = instantiate(ctx, VirtualHollowSubFiber(lvl_2, literal(1), fbr.dirty), mode)
-            push_epilogue!(ctx,
-                contain(ctx) do ctx_2
-                    lvl_2 = freeze_level!(ctx_2, lvl_2, literal(1))
-                    :($(lvl.val)[$(ctx_2(pos))] = $(ctx_2(lvl_2)))
+        preamble = quote
+                $task = $(lvl.task)[$(ctx(pos))]
+                if task == 0
+                    $(lvl.task)[$(ctx(pos))] = $(gettasknum(ctx))
+                    qos = local_qos_fill
+                    if $(lvl.local_qos_fill) > $(lvl.local_qos_stop)
+                        $local_qos_stop = max($local_qos_stop << 1, 1)
+                        $(contain(ctx_2->assemble_level!(ctx_2, lvl.lvl, value(qos_fill, Tp), value(qos_stop, Tp)), ctx))
+                    end
+                else
+                    qos = $(lvl.ptr)[$(ctx(pos))]
+                    qos_stop = $(lvl.local_qos_stop)
+                    #only in safe mode, we check if task == $(gettasknum(ctx)) and if not error("Task mismatch in ShardedLevel")
                 end
-            )
-            res
+                dirty = true
+            end)
+        end
+        body = (ctx) -> VirtualHollowSubFiber(lvl.lvl, local_)
+        epilogue = quote
+            #this task will always own this position forever, even if we don't write to it. Still, we try to be conservative of memory usage of the underlying level.
+            if dirty && $(lvl.ptr)[$(ctx(pos))] == 0
+                local_qos_fill += 1
+                $(lvl.ptr)[$(ctx(pos))] = $(lvl.local_qos_fill) += 1
             end
-        )
+        end
     end
 end
