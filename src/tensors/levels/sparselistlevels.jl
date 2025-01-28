@@ -270,6 +270,32 @@ function instantiate_reader(fbr::VirtualSubFiber{VirtualSparseListLevel}, ctx, s
                 Phase(
                     start = (ctx, ext) -> literal(lvl.Ti(1)),
                     stop = (ctx, ext) -> value(my_i1),
+                    #body = (ctx, ext) -> Stepper(
+                    #    seek = (ctx, ext) -> quote
+                    #        if $(lvl.ex).idx[$my_q] < $(ctx(getstart(ext)))
+                    #            $my_q = Finch.scansearch($(lvl.ex).idx, $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
+                    #        end
+                    #    end,
+                    #    preamble = :($my_i = $(lvl.ex).idx[$my_q]),
+                    #    stop = (ctx, ext) -> value(my_i),
+                    #    body = (ctx, ext) -> Sequence([
+                    #        Phase(
+                    #            stop = (ctx, ext) -> call(-, value(my_i, lvl.Ti), getunit(ext)),
+                    #            body = (ctx, ext) -> Run(Fill(virtual_level_default(lvl))),
+                    #        ),
+                    #        Phase(
+                    #            stop = (ctx, ext) -> value(my_i, lvl.Ti),
+                    #            body = (ctx,ext) -> Run(
+                    #                body = Simplify(instantiate_reader(VirtualSubFiber(lvl.lvl, value(my_q)), ctx, subprotos))
+                    #            )
+                    #        )
+                    #    ]),
+                    #    epilogue = (ctx, ext) -> quote
+                    #        $my_q += ($(ctx(getstop(ext))) == $my_i)
+                    #    end,
+                    #    finalstop = (ctx, ext) -> value(my_i1, lvl.Ti),
+                    #)
+
                     body = (ctx, ext) -> Stepper(
                         seek = (ctx, ext) -> quote
                             if $(lvl.ex).idx[$my_q] < $(ctx(getstart(ext)))
@@ -396,7 +422,7 @@ function instantiate_updater(fbr::VirtualTrackedSubFiber{VirtualSparseListLevel}
                 )
             ),
             epilogue = quote
-                $(lvl.ex).ptr[$(ctx(pos)) + 1] = $qos - $qos_fill - 1
+                $(lvl.ex).ptr[$(ctx(pos)) + 1] += $qos - $qos_fill - 1
                 $qos_fill = $qos - 1
             end
         )
