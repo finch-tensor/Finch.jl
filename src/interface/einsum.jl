@@ -18,10 +18,11 @@ struct EinsumArgument{T, Style}
     style::Style
     data::LogicNode
     extrude::Dict{Symbol, Bool}
+    shape::Dict{Symbol, UInt64}
     fill_value::T
 end
 
-EinsumArgument{T}(style::Style, data, extrude, fill_value) where {T, Style} = EinsumArgument{T, Style}(style, data, extrude, fill_value)
+EinsumArgument{T}(style::Style, data, extrude, shape, fill_value) where {T, Style} = EinsumArgument{T, Style}(style, data, extrude, shape, fill_value)
 
 Base.eltype(::EinsumArgument{T}) where {T} = T
 
@@ -29,6 +30,7 @@ einsum_access(tns::EinsumTensor, idxs...) = EinsumArgument{eltype(tns.arg)}(
     tns.style,
     relabel(tns.arg.data, map(field, idxs)...),
     Dict(idx => idx_extrude for (idx, idx_extrude) in zip(idxs, tns.arg.extrude)),
+    Dict(idx => idx_shape for (idx, idx_shape) in zip(idxs, tns.arg.shape)),
     tns.arg.fill_value
 )
 
@@ -36,10 +38,11 @@ einsum_op(op, args::EinsumArgument...) = EinsumArgument{return_type(DefaultAlgeb
     reduce(result_style, [arg.style for arg in args]; init=EinsumEagerStyle()),
     mapjoin(op, (arg.data for arg in args)...),
     mergewith(&, (arg.extrude for arg in args)...),
+    mergewith(&, (arg.shape for arg in args)...),
     op((arg.fill_value for arg in args)...)
 )
 
-einsum_immediate(val) = EinsumArgument{typeof(val)}(EinsumEagerStyle(), immediate(val), Dict(), val)
+einsum_immediate(val) = EinsumArgument{typeof(val)}(EinsumEagerStyle(), immediate(val), Dict(), Dict(), val)
 
 struct EinsumProgram{Style, Arg <: LazyTensor}
     style::Style
@@ -52,8 +55,9 @@ end
 
 function einsum(op, arg::EinsumArgument{T}, idxs...; init = initial_value(op, T)) where {T}
     extrude = ntuple(n -> arg.extrude[idxs[n]], length(idxs))
+    shape = ntuple(n -> arg.shape[idxs[n]], length(idxs))
     data = reorder(aggregate(immediate(op), immediate(init), arg.data, map(field, setdiff(collect(keys(arg.extrude)), idxs))...), map(field, idxs)...)
-    einsum_execute(arg.style, LazyTensor{typeof(init)}(data, extrude, init))
+    einsum_execute(arg.style, LazyTensor{typeof(init)}(data, extrude, shape, init))
 end
 
 function einsum_execute(::EinsumEagerStyle, arg)

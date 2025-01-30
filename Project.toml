@@ -33,6 +33,7 @@ TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77"
 HDF5Ext = "HDF5"
 NPZExt = "NPZ"
 SparseArraysExt = "SparseArrays"
+StatisticsExt = "Statistics"
 TensorMarketExt = "TensorMarket"
 
 [compat]
@@ -74,4 +75,4 @@ TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["ReTestItems", "Test", "ArgParse", "LinearAlgebra", "Random", "SparseArrays", "Graphs", "SimpleWeightedGraphs", "HDF5", "NPZ", "Pkg", "TensorMarket", "Documenter"]
+test = ["ReTestItems", "Test", "ArgParse", "LinearAlgebra", "Random", "SparseArrays", "Statistics", "Graphs", "SimpleWeightedGraphs", "HDF5", "NPZ", "Pkg", "TensorMarket", "Documenter"]
