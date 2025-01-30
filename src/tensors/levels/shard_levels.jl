@@ -96,6 +96,8 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     device
     lvl  # stand-in for the sublevel for virtual resize, etc.
     ex
+    ptr
+    task
     val
     Tv
     Device
@@ -137,7 +139,7 @@ function virtualize(ctx, ex, ::Type{ShardLevel{Device, Lvl, Ptr, Task, Val}}, ta
     end)
     device_2 = virtualize(ctx, :($ex.device), Device, sym)
     lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualShardLevel(device_2, lvl_2, sym, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val)
+    VirtualShardLevel(device_2, lvl_2, sym, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val)
 end
 
 Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
@@ -160,10 +162,14 @@ function virtual_moveto_level(ctx, lvl::VirtualShardLevel, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
-    virtual_parallel_region(ctx, lvl.device) do ctx, task
-        lvl_2 = virtualize(ctx, :($(lvl.ex).val[$(task)]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
-        declare_level!(ctx, lvl_2, literal(1), init)
-    end
+    push_preamble!(ctx, 
+        virtual_parallel_region(ctx, lvl.device) do ctx_2
+            lvl_2 = virtualize(ctx_2, :($(lvl.ex).val[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
+            declare_level!(ctx_2, lvl_2, literal(1), init)
+            println(ctx_2.code.preamble)
+        end
+    )
+    lvl
 end
 
 """
