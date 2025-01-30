@@ -30,13 +30,13 @@ const Shard = ShardLevel
 ShardLevel(device::Device, lvl::Lvl) where {Device, Lvl} =
     ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], moveto(lvl, device)) #TODO scatterto?
 
-#ShardLevel(device::Device, lvl::Lvl, ptr::Ptr, task::Task, val::Val) where {Device, Lvl, Ptr, Task, Val} =
-#    ShardLevel{Device, Lvl, Ptr, Task, Val}(device, lvl, ptr, task, val)
+ShardLevel{Device}(device, lvl::Lvl, ptr::Ptr, task::Task, val::Val) where {Device, Lvl, Ptr, Task, Val} =
+    ShardLevel{Device, Lvl, Ptr, Task, Val}(device, lvl, ptr, task, val)
 
 Base.summary(::Shard{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = "Shard($(Lvl))"
 
 similar_level(lvl::Shard{Device, Lvl, Ptr, Task, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Task, Val} =
-    ShardLevel(lvl, similar_level(lvl.lvl, fill_value, eltype, dims...))
+    ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...))
 
 postype(::Type{<:Shard{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = postype(Lvl)
 
@@ -93,10 +93,12 @@ end
 countstored_level(lvl::ShardLevel, pos) = pos
 
 mutable struct VirtualShardLevel <: AbstractVirtualLevel
+    device
     lvl  # stand-in for the sublevel for virtual resize, etc.
     ex
     val
     Tv
+    Device
     Lvl
     Ptr
     Task
@@ -133,8 +135,9 @@ function virtualize(ctx, ex, ::Type{ShardLevel{Device, Lvl, Ptr, Task, Val}}, ta
               $task = $ex.task
               $val = $ex.val
     end)
+    device_2 = virtualize(ctx, :($ex.device), Device, sym)
     lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualShardLevel(lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Ptr, Task, Val)
+    VirtualShardLevel(device_2, lvl_2, sym, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val)
 end
 
 Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
@@ -157,7 +160,7 @@ function virtual_moveto_level(ctx, lvl::VirtualShardLevel, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
-    virtual_parallel_region!(ctx, lvl.device) do ctx, task
+    virtual_parallel_region(ctx, lvl.device) do ctx, task
         lvl_2 = virtualize(ctx, :($(lvl.ex).val[$(task)]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
         declare_level!(ctx, lvl_2, literal(1), init)
     end
