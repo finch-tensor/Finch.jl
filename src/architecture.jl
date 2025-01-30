@@ -55,7 +55,7 @@ function virtualize(ctx, ex, ::Type{CPU})
 end
 lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle) =
     something(device.ex, :(CPU($(ctx(device.n)))))
-virtual_get_num_tasks(::VirtualCPU) = 1
+get_num_tasks(::VirtualCPU) = 1
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
@@ -68,14 +68,14 @@ struct Serial <: AbstractTask end
 const serial = Serial()
 get_device(::Serial) = CPU(1)
 get_parent_task(::Serial) = nothing
-get_task_number(::Serial) = 1
+get_task_num(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
 virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
 lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :(Serial())
 FinchNotation.finch_leaf(device::VirtualSerial) = virtual(device)
-virtual_get_device(::VirtualSerial) = VirtualCPU(nothing, 1)
-virtual_get_parent_task(::VirtualSerial) = nothing
-virtual_get_task_number(::VirtualSerial) = literal(1)
+get_device(::VirtualSerial) = VirtualCPU(nothing, 1)
+get_parent_task(::VirtualSerial) = nothing
+get_task_num(::VirtualSerial) = literal(1)
 
 struct CPUThread{Parent} <: AbstractTask
     tid::Int
@@ -84,7 +84,7 @@ struct CPUThread{Parent} <: AbstractTask
 end
 get_device(task::CPUThread) = task.device
 get_parent_task(task::CPUThread) = task.parent
-get_task_number(task::CPUThread) = task.tid
+get_task_num(task::CPUThread) = task.tid
 
 @inline function make_lock(::Type{Threads.Atomic{T}}) where {T}
     return Threads.Atomic{T}(zero(T))
@@ -140,9 +140,9 @@ function virtualize(ctx, ex, ::Type{CPUThread{Parent}}) where {Parent}
 end
 lower(ctx::AbstractCompiler, task::VirtualCPUThread, ::DefaultStyle) = :(CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
 FinchNotation.finch_leaf(device::VirtualCPUThread) = virtual(device)
-virtual_get_device(task::VirtualCPUThread) = task.dev
-virtual_get_parent_task(task::VirtualCPUThread) = task.parent
-virtual_get_task_number(task::VirtualCPUThread) = task.tid
+get_device(task::VirtualCPUThread) = task.dev
+get_parent_task(task::VirtualCPUThread) = task.parent
+get_task_num(task::VirtualCPUThread) = task.tid
 
 struct CPULocalMemory
     device::CPU
@@ -237,13 +237,15 @@ function virtual_parallel_region(f, ctx, ::Serial)
 end
 
 function virtual_parallel_region(f, ctx, device::VirtualCPU)
+    tid = freshen(ctx, :tid)
+
     code = contain(ctx) do ctx_2
-        subtask = VirtualCPUThread(value(i, Int), device, ctx_2.code.task)
+        subtask = VirtualCPUThread(value(tid, Int), device, ctx_2.code.task)
         contain(f, ctx_2, task=subtask)
     end
 
     return quote
-        Threads.@threads for $i = 1:$(ctx(device.n))
+        Threads.@threads for $tid = 1:$(ctx(device.n))
             Finch.@barrier begin
                 @inbounds @fastmath begin
                     $code

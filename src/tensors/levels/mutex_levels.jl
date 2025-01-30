@@ -214,7 +214,7 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
         sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
         atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
         lockVal = freshen(ctx, lvl.ex, :lockVal)
-        dev = lower(ctx, virtual_get_device(ctx.code.task), DefaultStyle())
+        dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
         push_preamble!(ctx, quote
             $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
             $lockVal = Finch.aquire_lock!($dev, $atomicData)
@@ -233,7 +233,7 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, ext, mode, p
     sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
-    dev = lower(ctx, virtual_get_device(ctx.code.task), DefaultStyle())
+    dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(ctx, quote
         $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
         $lockVal = Finch.aquire_lock!($dev, $atomicData)
@@ -250,7 +250,7 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode, op, rh
     sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
-    dev = lower(ctx, virtual_get_device(ctx.code.task), DefaultStyle())
+    dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(ctx, quote
         $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
         $lockVal = Finch.aquire_lock!($dev, $atomicData)
@@ -267,7 +267,7 @@ function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, mode, 
     sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
-    dev = lower(ctx, virtual_get_device(ctx.code.task), DefaultStyle())
+    dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(ctx, quote
         $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
         $lockVal = Finch.aquire_lock!($dev, $atomicData)

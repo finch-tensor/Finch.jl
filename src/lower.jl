@@ -293,9 +293,6 @@ lower_loop(ctx, root, ext::ParallelDimension) =
 function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualCPU)
     root = ensure_concurrent(root, ctx)
 
-    tid = index(freshen(ctx, :tid))
-    i = freshen(ctx, :i)
-
     decl_in_scope = unique(filter(!isnothing, map(node-> begin
         if @capture(node, declare(~tns, ~init))
             tns
@@ -308,25 +305,26 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
         end
     end, PostOrderDFS(root.body))))
 
-    root_2 = loop(tid, Extent(value(i, Int), value(i, Int)),
-        loop(root.idx, ext.ext,
-            sieve(access(VirtualSplitMask(device.n), reader(), root.idx, tid),
-                root.body
-            )
-        )
-    )
-
     for tns in setdiff(used_in_scope, decl_in_scope)
         virtual_moveto(ctx, resolve(ctx, tns), device)
     end
 
     virtual_parallel_region(ctx, device) do ctx_2
         subtask = ctx_2.task
+        tid = get_task_number(subtask)
         for tns in intersect(used_in_scope, decl_in_scope)
             virtual_moveto(ctx_3, resolve(ctx_3, tns), subtask)
         end
         contain(ctx_3) do ctx_4
             open_scope(ctx_4) do ctx_5
+                i = index(freshen(ctx, :i))
+                root_2 = loop(i, Extent(tid, tid),
+                    loop(root.idx, ext.ext,
+                        sieve(access(VirtualSplitMask(device.n), reader(), root.idx, i),
+                            root.body
+                        )
+                    )
+                )
                 ctx_5(instantiate!(ctx_5, root_2))
             end
         end
