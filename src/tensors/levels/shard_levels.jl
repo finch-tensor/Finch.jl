@@ -166,7 +166,6 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
         virtual_parallel_region(ctx, lvl.device) do ctx_2
             lvl_2 = virtualize(ctx_2, :($(lvl.ex).val[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
             declare_level!(ctx_2, lvl_2, literal(1), init)
-            println(ctx_2.code.preamble)
         end
     )
     lvl
