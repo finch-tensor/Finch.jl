@@ -57,7 +57,8 @@ function virtualize(ctx, ex, ::Type{CPU})
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     something(device.ex, :(CPU($(ctx(device.n)))))
-get_num_tasks(::VirtualCPU) = 1
+end
+get_num_tasks(::VirtualCPU) = literal(1)
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
