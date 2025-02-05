@@ -123,4 +123,4 @@ few tweaks defined in `.JuliaFormatter.toml`. Running the tests in overwrite
 mode will automatically reformat your code, but you can also add
 [`JuliaFormatter`](https://domluna.github.io/JuliaFormatter.jl/stable/#Editor-Plugins)
 to your editor to reformat as you go, or call
-`julia -e "using JuliaFormatter; format("path/to/Finch.jl")`.
+`julia -e "using JuliaFormatter; format("path/to/Finch.jl")` manually.
