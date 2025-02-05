@@ -32,7 +32,7 @@ function is_sorted_wrt_index_order(indices::Vector, index_order::Vector; loop_or
         return true
     end
     if loop_order
-        return issorted(indexin(indices, index_order), rev=true)
+        return issorted(indexin(indices, index_order); rev=true)
     else
         return issorted(indexin(indices, index_order))
     end
@@ -42,16 +42,16 @@ get_index_symbol(idx_num) = Symbol("v_$(idx_num)")
 get_tensor_symbol(tns_num) = Symbol("t_$(tns_num)")
 
 function get_dim_type(dim_size)
-    if dim_size*4 <= typemax(Int32)
+    if dim_size * 4 <= typemax(Int32)
         return Int32
-    elseif dim_size*4 <= typemax(Int64)
+    elseif dim_size * 4 <= typemax(Int64)
         return Int64
-    elseif dim_size*4 <= typemax(Int128)
+    elseif dim_size * 4 <= typemax(Int128)
         return Int128
     end
 end
 
-function initialize_tensor(formats, dims, default_value; copy_data = nothing, stats=nothing)
+function initialize_tensor(formats, dims, default_value; copy_data=nothing, stats=nothing)
     B = Element(default_value)
     for i in range(1, length(dims))
         DT = get_dim_type(dims[i])
@@ -94,12 +94,14 @@ function tensor_initializer(formats, dims, default_value)
 end
 
 # Generates a tensor whose non-default entries are distributed uniformly randomly throughout.
-function uniform_tensor(shape, sparsity; formats = [], default_value = 0, non_default_value = 1)
+function uniform_tensor(shape, sparsity; formats=[], default_value=0, non_default_value=1)
     if formats == []
         formats = [t_sparse_list for _ in 1:length(shape)]
     end
     tensor = initialize_tensor(formats, shape, default_value)
-    copyto!(tensor, fsprand(Tuple(shape), sparsity, (r, n)->[non_default_value for _ in 1:n]))
+    copyto!(
+        tensor, fsprand(Tuple(shape), sparsity, (r, n) -> [non_default_value for _ in 1:n])
+    )
     return tensor
 end
 
@@ -109,18 +111,33 @@ function get_sparsity_structure(tensor::Tensor)
     default_value = Finch.default(tensor)
     index_sym_dict = Dict()
     indices = [IndexExpr("t_" * string(i)) for i in 1:length(size(tensor))]
-    tensor_instance = initialize_access(:A, tensor, indices, [t_default for _ in indices], index_sym_dict, read=true)
-    tensor_instance = call_instance(literal_instance(!=), tensor_instance, literal_instance(default_value))
-    formats = [t_sparse_list for _ in indices ]
+    tensor_instance = initialize_access(
+        :A, tensor, indices, [t_default for _ in indices], index_sym_dict; read=true
+    )
+    tensor_instance = call_instance(
+        literal_instance(!=), tensor_instance, literal_instance(default_value)
+    )
+    formats = [t_sparse_list for _ in indices]
     output_tensor = initialize_tensor(formats, [dim for dim in size(tensor)], false)
-    output_instance = initialize_access(:output_tensor, output_tensor, indices, [t_default for _ in indices], index_sym_dict, read = false)
-    full_prgm = assign_instance(output_instance, literal_instance(initwrite(false)), tensor_instance)
+    output_instance = initialize_access(
+        :output_tensor,
+        output_tensor,
+        indices,
+        [t_default for _ in indices],
+        index_sym_dict;
+        read=false,
+    )
+    full_prgm = assign_instance(
+        output_instance, literal_instance(initwrite(false)), tensor_instance
+    )
 
     for index in indices
         full_prgm = loop_instance(index_instance(index_sym_dict[index]), Auto(), full_prgm)
     end
 
-    initializer = declare_instance(variable_instance(:output_tensor), literal_instance(false), literal_instance(auto))
+    initializer = declare_instance(
+        variable_instance(:output_tensor), literal_instance(false), literal_instance(auto)
+    )
     full_prgm = block_instance(initializer, full_prgm)
     Finch.execute(full_prgm)
     return output_tensor
@@ -151,9 +168,9 @@ end
 # Takes in a tensor `s` with indices `input_indices`, and outputs a tensor which has been
 # contracted to only `output_indices` using the aggregation operation `op`.
 function one_off_reduce(op,
-                        input_indices,
-                        output_indices,
-                        s::Tensor)
+    input_indices,
+    output_indices,
+    s::Tensor)
     s_stats = TensorDef(s, input_indices)
     loop_order = []
     for i in reverse(input_indices)
@@ -167,11 +184,20 @@ function one_off_reduce(op,
         output_formats = [t_sparse_list for _ in output_indices]
     end
     index_sym_dict = Dict()
-    tensor_instance = initialize_access(:s, s, input_indices, [t_default for _ in input_indices], index_sym_dict)
+    tensor_instance = initialize_access(
+        :s, s, input_indices, [t_default for _ in input_indices], index_sym_dict
+    )
     output_tensor = initialize_tensor(output_formats, output_dims, 0.0)
     loop_index_instances = [index_instance(index_sym_dict[idx]) for idx in loop_order]
     output_variable = tag_instance(variable_instance(:output_tensor), output_tensor)
-    output_access = initialize_access(:output_tensor, output_tensor, output_indices, [t_default for _ in output_indices], index_sym_dict; read=false)
+    output_access = initialize_access(
+        :output_tensor,
+        output_tensor,
+        output_indices,
+        [t_default for _ in output_indices],
+        index_sym_dict;
+        read=false,
+    )
     op_instance = if op == max
         literal_instance(initmax(Finch.default(s)))
     elseif op == min
@@ -184,9 +210,11 @@ function one_off_reduce(op,
     for index in reverse(loop_index_instances)
         full_prgm = loop_instance(index, Auto(), full_prgm)
     end
-    initializer = declare_instance(output_variable, literal_instance(0.0), literal_instance(auto))
+    initializer = declare_instance(
+        output_variable, literal_instance(0.0), literal_instance(auto)
+    )
     full_prgm = block_instance(initializer, full_prgm)
-    Finch.execute(full_prgm, mode=:fast)
+    Finch.execute(full_prgm; mode=:fast)
     return output_tensor
 end
 
@@ -196,16 +224,25 @@ function count_non_default(A)
     indexes = [Symbol("i_$i") for i in 1:n]
     count = Scalar(0)
     index_sym_dict = Dict()
-    count_access = initialize_access(:count, count, [], [], index_sym_dict, read=false)
-    A_access = initialize_access(:A, A, indexes, [t_default for _ in indexes], index_sym_dict)
+    count_access = initialize_access(:count, count, [], [], index_sym_dict; read=false)
+    A_access = initialize_access(
+        :A, A, indexes, [t_default for _ in indexes], index_sym_dict
+    )
     prgm = call_instance(literal_instance(!=), A_access, literal_instance(d))
     prgm = assign_instance(count_access, literal_instance(+), prgm)
     loop_index_instances = [index_instance(index_sym_dict[idx]) for idx in reverse(indexes)]
     for idx in reverse(loop_index_instances)
         prgm = loop_instance(idx, Auto(), prgm)
     end
-    prgm = block_instance(declare_instance(tag_instance(variable_instance(:count), count), literal_instance(0), literal_instance(auto)), prgm)
-    Finch.execute(prgm, mode=:fast)
+    prgm = block_instance(
+        declare_instance(
+            tag_instance(variable_instance(:count), count),
+            literal_instance(0),
+            literal_instance(auto),
+        ),
+        prgm,
+    )
+    Finch.execute(prgm; mode=:fast)
     return count[]
 end
 
@@ -216,5 +253,5 @@ function count_stored(A)
 end
 
 function geometric_round(b, x)
-    b^(floor(log(b, x))+.5)
+    b^(floor(log(b, x)) + 0.5)
 end

@@ -25,16 +25,20 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::LookupStyle)
         idx_sym = freshen(ctx, root.idx.name)
         body = contain(ctx) do ctx_2
             set_binding!(ctx_2, root.idx, value(idx_sym))
-            body_3 = Rewrite(Postwalk(
-                @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
-                    a_2 = get_point_body(ctx_2, a.val, root.ext.val, value(idx_sym))
-                    if a_2 != nothing
-                        access(a_2, m, i...)
-                    else
-                        access(a, m, i..., j)
+            body_3 = Rewrite(
+                Postwalk(
+                    @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
+                        a_2 = get_point_body(ctx_2, a.val, root.ext.val, value(idx_sym))
+                        if a_2 != nothing
+                            access(a_2, m, i...)
+                        else
+                            access(a, m, i..., j)
+                        end
                     end
-                end
-            ))(root.body)
+                ),
+            )(
+                root.body
+            )
             open_scope(ctx_2) do ctx_3
                 ctx_3(body_3)
             end
@@ -49,7 +53,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::LookupStyle)
             end
         else
             return quote
-                for $idx_sym = $(ctx(getstart(root.ext))):$(ctx(getstop(root.ext)))
+                for $idx_sym in ($(ctx(getstart(root.ext)))):($(ctx(getstop(root.ext))))
                     $body
                 end
             end

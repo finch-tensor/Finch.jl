@@ -22,16 +22,20 @@ combine_style(a::RunStyle, b::RunStyle) = RunStyle()
 
 function lower(ctx::AbstractCompiler, root::FinchNode, ::RunStyle)
     if root.kind === loop
-        root = Rewrite(Postwalk(
-            @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
-                a_2 = get_run_body(ctx, a.val, root.ext)
-                if a_2 != nothing
-                    access(a_2, m, i...)
-                else
-                    access(a, m, i..., j)
+        root = Rewrite(
+            Postwalk(
+                @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
+                    a_2 = get_run_body(ctx, a.val, root.ext)
+                    if a_2 != nothing
+                        access(a_2, m, i...)
+                    else
+                        access(a, m, i..., j)
+                    end
                 end
-            end
-        ))(root)
+            ),
+        )(
+            root
+        )
         if get_style(ctx, root) isa RunStyle #TODO do we need this always? Can we do this generically?
             error("run style couldn't lower runs")
         end
@@ -69,16 +73,20 @@ combine_style(a::RunStyle, b::AcceptRunStyle) = RunStyle()
 
 function lower(ctx::AbstractCompiler, root::FinchNode, ::AcceptRunStyle)
     if root.kind === loop
-        body = Rewrite(Postwalk(
-            @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
-                a_2 = get_acceptrun_body(ctx, a.val, root.ext)
-                if a_2 != nothing
-                    access(a_2, m, i...)
-                else
-                    access(a, m, i..., j)
+        body = Rewrite(
+            Postwalk(
+                @rule access(~a::isvirtual, ~m, ~i..., ~j) => begin
+                    a_2 = get_acceptrun_body(ctx, a.val, root.ext)
+                    if a_2 != nothing
+                        access(a_2, m, i...)
+                    else
+                        access(a, m, i..., j)
+                    end
                 end
-            end
-        ))(root.body)
+            ),
+        )(
+            root.body
+        )
         if root.idx in PostOrderDFS(body)
             #The loop body isn't constant after removing AcceptRuns, lower with a for-loop
             return ctx(root, LookupStyle())
@@ -96,4 +104,6 @@ end
 get_acceptrun_body(ctx, node, ext) = nothing
 get_acceptrun_body(ctx, node::AcceptRun, ext) = node.body(ctx, ext)
 
-get_point_body(ctx, node::AcceptRun, ext, idx) = node.body(ctx, similar_extent(ext,idx,idx))
+function get_point_body(ctx, node::AcceptRun, ext, idx)
+    node.body(ctx, similar_extent(ext, idx, idx))
+end

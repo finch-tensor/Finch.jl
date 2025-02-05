@@ -3,24 +3,71 @@ abstract type FinchNodeInstance end
 struct LiteralInstance{val} <: FinchNodeInstance end
 struct IndexInstance{name} <: FinchNodeInstance end
 struct VariableInstance{name} <: FinchNodeInstance end
-struct DefineInstance{Lhs, Rhs, Body} <: FinchNodeInstance lhs::Lhs; rhs::Rhs; body::Body end
-struct DeclareInstance{Tns, Init, Op} <: FinchNodeInstance tns::Tns; init::Init; op::Op end
-struct FreezeInstance{Tns, Op} <: FinchNodeInstance tns::Tns; op::Op end
-struct ThawInstance{Tns, Op} <: FinchNodeInstance tns::Tns; op::Op end
-struct BlockInstance{Bodies} <: FinchNodeInstance bodies::Bodies end
-struct LoopInstance{Idx, Ext, Body} <: FinchNodeInstance idx::Idx; ext::Ext; body::Body end
-struct SieveInstance{Cond, Body} <: FinchNodeInstance cond::Cond; body::Body end
-struct AssignInstance{Lhs, Op, Rhs} <: FinchNodeInstance lhs::Lhs; op::Op; rhs::Rhs end
-struct CallInstance{Op, Args<:Tuple} <: FinchNodeInstance op::Op; args::Args end
-struct AccessInstance{Tns, Mode, Idxs} <: FinchNodeInstance tns::Tns; mode::Mode; idxs::Idxs end
+struct DefineInstance{Lhs,Rhs,Body} <: FinchNodeInstance
+    lhs::Lhs
+    rhs::Rhs
+    body::Body
+end
+struct DeclareInstance{Tns,Init,Op} <: FinchNodeInstance
+    tns::Tns
+    init::Init
+    op::Op
+end
+struct FreezeInstance{Tns,Op} <: FinchNodeInstance
+    tns::Tns
+    op::Op
+end
+struct ThawInstance{Tns,Op} <: FinchNodeInstance
+    tns::Tns
+    op::Op
+end
+struct BlockInstance{Bodies} <: FinchNodeInstance
+    bodies::Bodies
+end
+struct LoopInstance{Idx,Ext,Body} <: FinchNodeInstance
+    idx::Idx
+    ext::Ext
+    body::Body
+end
+struct SieveInstance{Cond,Body} <: FinchNodeInstance
+    cond::Cond
+    body::Body
+end
+struct AssignInstance{Lhs,Op,Rhs} <: FinchNodeInstance
+    lhs::Lhs
+    op::Op
+    rhs::Rhs
+end
+struct CallInstance{Op,Args<:Tuple} <: FinchNodeInstance
+    op::Op
+    args::Args
+end
+struct AccessInstance{Tns,Mode,Idxs} <: FinchNodeInstance
+    tns::Tns
+    mode::Mode
+    idxs::Idxs
+end
 struct ReaderInstance{} <: FinchNodeInstance end
-struct UpdaterInstance{Op} <: FinchNodeInstance op::Op end
-struct TagInstance{Var, Bind} <: FinchNodeInstance var::Var; bind::Bind end
-struct YieldBindInstance{Args} <: FinchNodeInstance args::Args end
+struct UpdaterInstance{Op} <: FinchNodeInstance
+    op::Op
+end
+struct TagInstance{Var,Bind} <: FinchNodeInstance
+    var::Var
+    bind::Bind
+end
+struct YieldBindInstance{Args} <: FinchNodeInstance
+    args::Args
+end
 
-Base.getproperty(::LiteralInstance{val}, name::Symbol) where {val} = name == :val ? val : error("type LiteralInstance has no field $name")
-Base.getproperty(::IndexInstance{val}, name::Symbol) where {val} = name == :name ? val : error("type IndexInstance has no field $name")
-Base.getproperty(::VariableInstance{val}, name::Symbol) where {val} = name == :name ? val : error("type VariableInstance has no field $name")
+function Base.getproperty(::LiteralInstance{val}, name::Symbol) where {val}
+    name == :val ? val : error("type LiteralInstance has no field $name")
+end
+function Base.getproperty(::IndexInstance{val}, name::Symbol) where {val}
+    name == :name ? val : error("type IndexInstance has no field $name")
+end
+function Base.getproperty(::VariableInstance{val}, name::Symbol) where {val}
+    name == :name ? val : error("type VariableInstance has no field $name")
+end
 
 @inline literal_instance(val) = LiteralInstance{val}()
 @inline index_instance(name) = IndexInstance{name}()
@@ -53,27 +100,27 @@ AbstractTrees.children(node::FinchNodeInstance) = istree(node) ? arguments(node)
 isstateful(node::FinchNodeInstance) = Int(operation(node)) & IS_STATEFUL != 0
 
 instance_ctrs = Dict(
-	literal => literal_instance,
-	index => index_instance,
-	define => define_instance,
-	declare => declare_instance,
-	freeze => freeze_instance,
-	thaw => thaw_instance,
-	block => block_instance,
-	loop => loop_instance,
-	sieve => sieve_instance,
-	assign => assign_instance,
-	call => call_instance,
-	access => access_instance,
-	reader => reader_instance,
-	updater => updater_instance,
-	variable => variable_instance,
-	tag => tag_instance,
-	yieldbind => yieldbind_instance,
+    literal => literal_instance,
+    index => index_instance,
+    define => define_instance,
+    declare => declare_instance,
+    freeze => freeze_instance,
+    thaw => thaw_instance,
+    block => block_instance,
+    loop => loop_instance,
+    sieve => sieve_instance,
+    assign => assign_instance,
+    call => call_instance,
+    access => access_instance,
+    reader => reader_instance,
+    updater => updater_instance,
+    variable => variable_instance,
+    tag => tag_instance,
+    yieldbind => yieldbind_instance,
 )
 
 function SyntaxInterface.similarterm(::Type{FinchNodeInstance}, op::FinchNodeKind, args)
-	instance_ctrs[op](args...)
+    instance_ctrs[op](args...)
 end
 
 SyntaxInterface.operation(::LiteralInstance) = literal
@@ -109,13 +156,19 @@ SyntaxInterface.arguments(node::UpdaterInstance) = [node.op]
 SyntaxInterface.arguments(node::TagInstance) = [node.var, node.bind]
 SyntaxInterface.arguments(node::YieldBindInstance) = node.args
 
-Base.show(io::IO, node::LiteralInstance{val}) where {val} = print(io, "literal_instance(", val, ")")
-Base.show(io::IO, node::IndexInstance{name}) where {name} = print(io, "index_instance(", name, ")")
-Base.show(io::IO, node::VariableInstance{name}) where {name} = print(io, "variable_instance(:", name, ")")
+function Base.show(io::IO, node::LiteralInstance{val}) where {val}
+    print(io, "literal_instance(", val, ")")
+end
+function Base.show(io::IO, node::IndexInstance{name}) where {name}
+    print(io, "index_instance(", name, ")")
+end
+function Base.show(io::IO, node::VariableInstance{name}) where {name}
+    print(io, "variable_instance(:", name, ")")
+end
 function Base.show(io::IO, node::FinchNodeInstance)
-	print(io, instance_ctrs[operation(node)], "(")
-	join(io, arguments(node), ", ")
-	print(io, ")")
+    print(io, instance_ctrs[operation(node)], "(")
+    join(io, arguments(node), ", ")
+    print(io, ")")
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", node::FinchNodeInstance)
@@ -130,5 +183,5 @@ end
 Base.:(==)(a::VariableInstance, b::VariableInstance) = false
 Base.:(==)(a::VariableInstance{tag}, b::VariableInstance{tag}) where {tag} = true
 function Base.:(==)(a::FinchNodeInstance, b::FinchNodeInstance)
-	return operation(a) == operation(b) && arguments(a) == arguments(b)
+    return operation(a) == operation(b) && arguments(a) == arguments(b)
 end

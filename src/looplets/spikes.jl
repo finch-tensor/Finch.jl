@@ -25,10 +25,17 @@ combine_style(a::SpikeStyle, b::SpikeStyle) = SpikeStyle()
 
 function lower(ctx::AbstractCompiler, root::FinchNode, ::SpikeStyle)
     if root.kind === loop
-        body_ext = similar_extent(root.ext, getstart(root.ext), call(-, getstop(root.ext), getunit(root.ext)))
-        root_body = Rewrite(Postwalk(
-            @rule access(~a::isvirtual, ~i...) => access(get_spike_body(ctx, a.val, root.ext, body_ext), ~i...)
-        ))(root.body)
+        body_ext = similar_extent(
+            root.ext, getstart(root.ext), call(-, getstop(root.ext), getunit(root.ext))
+        )
+        root_body = Rewrite(
+            Postwalk(
+                @rule access(~a::isvirtual, ~i...) =>
+                    access(get_spike_body(ctx, a.val, root.ext, body_ext), ~i...)
+            ),
+        )(
+            root.body
+        )
         @assert isvirtual(root.ext)
         if prove(ctx, call(<=, measure(body_ext), 0))
             body_expr = quote end
@@ -44,9 +51,14 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::SpikeStyle)
         end
 
         tail_ext = similar_extent(root.ext, getstop(root.ext), getstop(root.ext))
-        root_tail = Rewrite(Postwalk(
-            @rule access(~a::isvirtual, ~i...) => access(get_spike_tail(ctx, a.val, root.ext, tail_ext), ~i...)
-        ))(root.body)
+        root_tail = Rewrite(
+            Postwalk(
+                @rule access(~a::isvirtual, ~i...) =>
+                    access(get_spike_tail(ctx, a.val, root.ext, tail_ext), ~i...)
+            ),
+        )(
+            root.body
+        )
         tail_expr = contain(ctx) do ctx_2
             (ctx_2)(loop(
                 root.idx,

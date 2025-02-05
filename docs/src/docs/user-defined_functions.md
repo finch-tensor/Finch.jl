@@ -1,6 +1,7 @@
 ```@meta
 CurrentModule = Finch
 ```
+
 # User-Defined Functions
 
 ## User Functions
@@ -20,6 +21,7 @@ Consider the greatest common divisor function `gcd`. This function is
 associative and commutative, and the greatest common divisor of 1 and anything
 else is 1, so 1 is an annihilator.  We declare these properties by overloading
 trait functions on Finch's default algebra as follows:
+
 ```
 Finch.isassociative(::Finch.DefaultAlgebra, ::typeof(gcd)) = true
 Finch.iscommutative(::Finch.DefaultAlgebra, ::typeof(gcd)) = true
@@ -28,6 +30,7 @@ Finch.isannihilator(::Finch.DefaultAlgebra, ::typeof(gcd), x) = x == 1
 
 Then, the following code will only call gcd when neither `u[i]` nor `v[i]` are 1
 (just once!).
+
 ```
 u = Tensor(SparseList(Element(1)), [3, 1, 6, 1, 9, 1, 4, 1, 8, 1])
 v = Tensor(SparseList(Element(1)), [1, 2, 3, 1, 1, 1, 1, 4, 1, 1])
@@ -78,6 +81,7 @@ refresh
 ```
 
 ### (Advanced) On World-Age and Generated Functions
+
 Julia uses a "world age" to describe the set of defined functions at a point in time. Generated functions run in the same world age in which they were defined, so they can't call functions defined after the generated function. This means that if Finch used normal generated functions, users can't define their own functions without first redefining all of Finch's generated functions.
 
 Finch uses special generators that run in the current world age, but do not
@@ -98,10 +102,12 @@ chose our approach to be the simple and flexible while keeping the kernel call
 overhead low.
 
 ## (Advanced) Separate Algebras
+
 If you want to define non-standard properties or custom rewrite rules for some
 functions in a separate context, you can represent these changes with your own
 algebra type.  We express this by subtyping `AbstractAlgebra` and defining
 properties as follows:
+
 ```
 struct MyAlgebra <: AbstractAlgebra end
 
@@ -115,7 +121,6 @@ We pass the algebra to Finch as an optional first argument:
 ```
 @finch MyAlgebra() (w .= 1; for i=_; w[i] = gcd(u[i], v[i]) end; return w)
 ```
-
 
 ### Rewriting
 

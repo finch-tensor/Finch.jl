@@ -30,7 +30,9 @@ function unwrap_thunk(ctx, node::FinchNode)
     if node.kind === virtual
         unwrap_thunk(ctx, node.val)
     elseif istree(node)
-        similarterm(node, operation(node), map(arg->unwrap_thunk(ctx, arg), arguments(node)))
+        similarterm(
+            node, operation(node), map(arg -> unwrap_thunk(ctx, arg), arguments(node))
+        )
     else
         node
     end

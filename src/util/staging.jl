@@ -1,8 +1,9 @@
-is_function_def(node) =
+function is_function_def(node)
     (@capture node :function(~args...)) ||
-    (@capture node :->(~args...)) ||
-    (@capture node (:(=))(:call(~f, ~args...), ~body)) ||
-    (@capture node (:(=))(:where(:call(~f, ~args...), ~types), ~body))
+        (@capture node :->(~args...)) ||
+        (@capture node (:(=))(:call(~f, ~args...), ~body)) ||
+        (@capture node (:(=))(:where(:call(~f, ~args...), ~types), ~body))
+end
 
 has_function_def(root) = any(is_function_def, PostOrderDFS(root))
 
@@ -19,7 +20,8 @@ eval and invokelatest strategy. Otherwise, it uses a generated function.
 This macro does not support type parameters, varargs, or keyword arguments.
 """
 macro staged(def)
-    (@capture def :function(:call(~name, ~args...), ~body)) || throw(ArgumentError("unrecognized function definition in @staged"))
+    (@capture def :function(:call(~name, ~args...), ~body)) ||
+        throw(ArgumentError("unrecognized function definition in @staged"))
 
     name_generator = gensym(Symbol(name, :_generator))
     name_invokelatest = gensym(Symbol(name, :_invokelatest))
@@ -35,12 +37,16 @@ macro staged(def)
         end
 
         function $name_eval_invokelatest($(args...))
-            code = $name_generator($(map((arg)->:(typeof($arg)), args)...),)
+            code = $name_generator($(map((arg) -> :(typeof($arg)), args)...))
             def = quote
-                function $($(QuoteNode(name_invokelatest)))($($(map(arg -> :(:($($(QuoteNode(arg)))::$(typeof($arg)))), args)...)))
+                function $($(QuoteNode(name_invokelatest)))(
+                    $($(map(arg -> :(:($($(QuoteNode(arg)))::$(typeof($arg)))), args)...))
+                )
                     $($(QuoteNode(name_eval_invokelatest)))($($(map(QuoteNode, args)...)))
                 end
-                function $($(QuoteNode(name_eval_invokelatest)))($($(map(arg -> :(:($($(QuoteNode(arg)))::$(typeof($arg)))), args)...)))
+                function $($(QuoteNode(name_eval_invokelatest)))(
+                    $($(map(arg -> :(:($($(QuoteNode(arg)))::$(typeof($arg)))), args)...))
+                )
                     $code
                 end
             end
@@ -50,25 +56,27 @@ macro staged(def)
 
         @generated function $name($(args...))
             # Taken from https://github.com/NHDaly/StagedFunctions.jl/blob/6fafbc560421f70b05e3df330b872877db0bf3ff/src/StagedFunctions.jl#L116
-            body_2 = () -> begin
-                code = $name_generator($(args...))
-                if has_function_def(macroexpand($@__MODULE__, code))
-                    :($($(name_invokelatest))($($(map(QuoteNode, args)...))))
-                else
-                    quote
-                        $code
+            body_2 =
+                () -> begin
+                    code = $name_generator($(args...))
+                    if has_function_def(macroexpand($@__MODULE__, code))
+                        :($($(name_invokelatest))($($(map(QuoteNode, args)...))))
+                    else
+                        quote
+                            $code
+                        end
                     end
                 end
-            end
             Core._apply_pure(body_2, ())
         end
-
     end
 
-    return esc(quote
-        push!(staged_defs, $(QuoteNode(def)))
-        $(def)
-    end)
+    return esc(
+        quote
+            push!(staged_defs, $(QuoteNode(def)))
+            $(def)
+        end,
+    )
 end
 
 """

@@ -55,7 +55,6 @@ julia> pattern!(A)
  0  1  0  1  0  0
  0  0  0  0  1  0
  0  0  0  0  0  0
-
 ```
 
 ```@docs
@@ -79,7 +78,12 @@ are stored explicitly or not. If users wish to make this distinction, they shoul
 instead store a tensor of tuples of the form `(value, is_fill)`. For example,
 
 ```jldoctest example3; setup = :(using Finch)
-julia> A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [(1.0, false), (0.0, true), (3.0, false)]; fill_value=(0.0, true))
+julia> A = fsparse(
+           [1, 1, 2, 3],
+           [2, 4, 5, 6],
+           [(1.0, false), (0.0, true), (3.0, false)];
+           fill_value=(0.0, true),
+       )
 3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{(0.0, true), Tuple{Float64, Bool}, Int64, Vector{Tuple{Float64, Bool}}}}}:
  (0.0, 1)  (1.0, 0)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)
  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (3.0, 0)  (0.0, 1)
@@ -102,10 +106,9 @@ julia> sum(map(first, B))
 
 ### Converting Between Formats
 
-You can convert between tensor formats with the `Tensor` constructor. Simply construct a new Tensor in the desired format and 
+You can convert between tensor formats with the `Tensor` constructor. Simply construct a new Tensor in the desired format and
 
 ```jldoctest tensorformats; setup = :(using Finch)
-# Create an empty 4x3 sparse matrix in CSC format
 julia> A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
 3×4 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  0.0  2.0  1.0
@@ -117,7 +120,6 @@ julia> B = Tensor(DCSCFormat(), A)
  0.0  0.0  2.0  1.0
  0.0  0.0  1.0  0.0
  1.0  0.0  0.0  0.0
-
 ```
 
 ### Storage Order
@@ -166,5 +168,4 @@ julia> dropfills!(swizzle(Tensor(CSCFormat()), 2, 1), A)
  0.0  0.0  2.0  1.0
  0.0  0.0  1.0  0.0
  1.0  0.0  0.0  0.0
-
 ```

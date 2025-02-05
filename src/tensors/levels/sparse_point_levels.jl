@@ -31,7 +31,7 @@ julia> tensor_tree(Tensor(SparsePoint(Dense(Element(0.0))), [0 0 0; 0 0 30; 0 0 
 
 ```
 """
-struct SparsePointLevel{Ti, Idx, Lvl} <: AbstractLevel
+struct SparsePointLevel{Ti,Idx,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     idx::Idx
@@ -42,18 +42,20 @@ SparsePointLevel(lvl, shape::Ti) where {Ti} = SparsePointLevel{Ti}(lvl, shape)
 SparsePointLevel{Ti}(lvl) where {Ti} = SparsePointLevel{Ti}(lvl, zero(Ti))
 SparsePointLevel{Ti}(lvl, shape) where {Ti} = SparsePointLevel{Ti}(lvl, shape, Ti[])
 
-SparsePointLevel{Ti}(lvl::Lvl, shape, idx::Idx) where {Ti, Lvl, Idx} =
-    SparsePointLevel{Ti, Idx, Lvl}(lvl, shape, idx)
+function SparsePointLevel{Ti}(lvl::Lvl, shape, idx::Idx) where {Ti,Lvl,Idx}
+    SparsePointLevel{Ti,Idx,Lvl}(lvl, shape, idx)
+end
 
 Base.summary(lvl::SparsePointLevel) = "SparsePoint($(summary(lvl.lvl)))"
-similar_level(lvl::SparsePointLevel, fill_value, eltype::Type, dim, tail...) =
+function similar_level(lvl::SparsePointLevel, fill_value, eltype::Type, dim, tail...)
     SparsePoint(similar_level(lvl.lvl, fill_value, eltype, tail...), dim)
+end
 
-function postype(::Type{SparsePointLevel{Ti, Idx, Lvl}}) where {Ti, Idx, Lvl}
+function postype(::Type{SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl}
     return postype(Lvl)
 end
 
-function moveto(lvl::SparsePointLevel{Ti, Idx, Lvl}, Tm) where {Ti, Idx, Lvl}
+function moveto(lvl::SparsePointLevel{Ti,Idx,Lvl}, Tm) where {Ti,Idx,Lvl}
     lvl_2 = moveto(lvl.lvl, Tm)
     idx_2 = moveto(lvl.idx, Tm)
     return SparsePointLevel{Ti}(lvl_2, lvl.shape, idx_2)
@@ -63,16 +65,19 @@ function countstored_level(lvl::SparsePointLevel, pos)
     countstored_level(lvl.lvl, pos)
 end
 
-pattern!(lvl::SparsePointLevel{Ti}) where {Ti} =
+function pattern!(lvl::SparsePointLevel{Ti}) where {Ti}
     SparsePointLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.idx)
+end
 
-set_fill_value!(lvl::SparsePointLevel{Ti}, init) where {Ti} =
+function set_fill_value!(lvl::SparsePointLevel{Ti}, init) where {Ti}
     SparsePointLevel{Ti}(set_fill_value!(lvl.lvl, init), lvl.shape, lvl.idx)
+end
 
-Base.resize!(lvl::SparsePointLevel{Ti}, dims...) where {Ti} =
-    SparsePointLevel{Ti}(resize!(lvl.lvl, dims[1:end-1]...), dims[end], lvl.idx)
+function Base.resize!(lvl::SparsePointLevel{Ti}, dims...) where {Ti}
+    SparsePointLevel{Ti}(resize!(lvl.lvl, dims[1:(end - 1)]...), dims[end], lvl.idx)
+end
 
-function Base.show(io::IO, lvl::SparsePointLevel{Ti, Idx, Lvl}) where {Ti, Lvl, Idx}
+function Base.show(io::IO, lvl::SparsePointLevel{Ti,Idx,Lvl}) where {Ti,Lvl,Idx}
     if get(io, :compact, false)
         print(io, "SparsePoint(")
     else
@@ -80,7 +85,7 @@ function Base.show(io::IO, lvl::SparsePointLevel{Ti, Idx, Lvl}) where {Ti, Lvl, 
     end
     show(io, lvl.lvl)
     print(io, ", ")
-    show(IOContext(io, :typeinfo=>Ti), lvl.shape)
+    show(IOContext(io, :typeinfo => Ti), lvl.shape)
     print(io, ", ")
     if !get(io, :compact, false)
         show(io, lvl.idx)
@@ -90,33 +95,56 @@ function Base.show(io::IO, lvl::SparsePointLevel{Ti, Idx, Lvl}) where {Ti, Lvl, 
     print(io, ")")
 end
 
-labelled_show(io::IO, fbr::SubFiber{<:SparsePointLevel}) =
-    print(io, "SparsePoint (", fill_value(fbr), ") [", ":,"^(ndims(fbr) - 1), "1:", size(fbr)[end], "]")
+function labelled_show(io::IO, fbr::SubFiber{<:SparsePointLevel})
+    print(
+        io,
+        "SparsePoint (",
+        fill_value(fbr),
+        ") [",
+        ":,"^(ndims(fbr) - 1),
+        "1:",
+        size(fbr)[end],
+        "]",
+    )
+end
 
 function labelled_children(fbr::SubFiber{<:SparsePointLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    [LabelledTree(cartesian_label([range_label() for _ = 1:ndims(fbr) - 1]..., max(lvl.idx[pos], 1)), SubFiber(lvl.lvl, pos))]
+    [
+        LabelledTree(
+            cartesian_label(
+                [range_label() for _ in 1:(ndims(fbr) - 1)]..., max(lvl.idx[pos], 1)
+            ),
+            SubFiber(lvl.lvl, pos),
+        ),
+    ]
 end
 
-@inline level_ndims(::Type{<:SparsePointLevel{Ti, Idx, Lvl}}) where {Ti, Idx, Lvl} = 1 + level_ndims(Lvl)
+@inline level_ndims(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
+    1 + level_ndims(Lvl)
 @inline level_size(lvl::SparsePointLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparsePointLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparsePointLevel{Ti, Idx, Lvl}}) where {Ti, Idx, Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:SparsePointLevel{Ti, Idx, Lvl}}) where {Ti, Idx, Lvl} = level_fill_value(Lvl)
-data_rep_level(::Type{<:SparsePointLevel{Ti, Idx, Lvl}}) where {Ti, Idx, Lvl} = SparseData(data_rep_level(Lvl))
+@inline level_eltype(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
+    level_eltype(Lvl)
+@inline level_fill_value(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
+    level_fill_value(Lvl)
+function data_rep_level(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl}
+    SparseData(data_rep_level(Lvl))
+end
 
-isstructequal(a::T, b::T) where {T <: SparsePoint} =
+function isstructequal(a::T, b::T) where {T<:SparsePoint}
     a.shape == b.shape &&
-    a.idx == b.idx &&
-    isstructequal(a.lvl, b.lvl)
+        a.idx == b.idx &&
+        isstructequal(a.lvl, b.lvl)
+end
 
 (fbr::AbstractFiber{<:SparsePointLevel})() = fbr
 function (fbr::SubFiber{<:SparsePointLevel{Ti}})(idxs...) where {Ti}
     isempty(idxs) && return fbr
     lvl = fbr.lvl
     if idxs[end] == lvl.idx[fbr.pos]
-        return SubFiber(lvl.lvl, fbr.pos)(idxs[1:end-1]...)
+        return SubFiber(lvl.lvl, fbr.pos)(idxs[1:(end - 1)]...)
     else
         fill_value(fbr)
     end
@@ -130,7 +158,9 @@ mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
     shape
 end
 
-is_level_injective(ctx, lvl::VirtualSparsePointLevel) = [is_level_injective(ctx, lvl.lvl)..., false]
+function is_level_injective(ctx, lvl::VirtualSparsePointLevel)
+    [is_level_injective(ctx, lvl.lvl)..., false]
+end
 
 function is_level_atomic(ctx, lvl::VirtualSparsePointLevel)
     (below, atomic) = is_level_atomic(ctx, lvl.lvl)
@@ -141,13 +171,18 @@ function is_level_concurrent(ctx, lvl::VirtualSparsePointLevel)
     return ([data; [false]], false)
 end
 
-function virtualize(ctx, ex, ::Type{SparsePointLevel{Ti, Idx, Lvl}}, tag=:lvl) where {Ti, Idx, Lvl}
+function virtualize(
+    ctx, ex, ::Type{SparsePointLevel{Ti,Idx,Lvl}}, tag=:lvl
+) where {Ti,Idx,Lvl}
     sym = freshen(ctx, tag)
     idx = freshen(ctx, tag, :_idx)
-    push_preamble!(ctx, quote
-        $sym = $ex
-        $idx = $sym.idx
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+            $idx = $sym.idx
+        end,
+    )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     shape = value(:($sym.shape), Int)
     VirtualSparsePointLevel(lvl_2, sym, Ti, idx, shape)
@@ -171,7 +206,7 @@ end
 
 function virtual_level_resize!(ctx, lvl::VirtualSparsePointLevel, dims...)
     lvl.shape = getstop(dims[end])
-    lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:end-1]...)
+    lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl
 end
 
@@ -202,9 +237,12 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    push_preamble!(ctx, quote
-        resize!($(lvl.idx), $pos_stop)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            resize!($(lvl.idx), $pos_stop)
+        end,
+    )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(pos_stop))
     return lvl
 end
@@ -219,17 +257,29 @@ end
 function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
-    push_preamble!(ctx, quote
-        $idx_2 = $(lvl.idx)
-        $(lvl.idx) = $moveto($(lvl.idx), $(ctx(arch)))
-    end)
-    push_epilogue!(ctx, quote
-        $(lvl.idx) = $idx_2
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $idx_2 = $(lvl.idx)
+            $(lvl.idx) = $moveto($(lvl.idx), $(ctx(arch)))
+        end,
+    )
+    push_epilogue!(
+        ctx,
+        quote
+            $(lvl.idx) = $idx_2
+        end,
+    )
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(
+    ctx,
+    fbr::VirtualSubFiber{VirtualSparsePointLevel},
+    ext,
+    mode,
+    ::Union{typeof(defaultread),typeof(walk)},
+)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -237,47 +287,62 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode, :
     my_i = freshen(ctx, tag, :_i)
     pos = cache!(ctx, :pos, simplify(ctx, pos))
 
-    Thunk(
-        preamble = quote
+    Thunk(;
+        preamble=quote
             $my_i = max($(lvl.idx)[$(ctx(pos))], $(Ti(1)))
         end,
-        body = (ctx) -> Sequence([
-            Phase(
-                start = (ctx, ext) -> literal(lvl.Ti(1)),
-                stop = (ctx, ext) -> value(my_i),
-                body = (ctx, ext) -> truncate(
+        body=(ctx) -> Sequence([
+            Phase(;
+                start=(ctx, ext) -> literal(lvl.Ti(1)),
+                stop=(ctx, ext) -> value(my_i),
+                body=(ctx, ext) -> truncate(
                     ctx,
-                    Spike(
+                    Spike(;
                         body = FillLeaf(virtual_level_fill_value(lvl)),
-                        tail = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
+                        tail = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
                     ),
                     similar_extent(ext, getstart(ext), value(my_i)),
-                    ext
-                )
+                    ext,
+                ),
             ),
-            Phase(
+            Phase(;
                 stop = (ctx, ext) -> lvl.shape,
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
-            )
-        ])
+                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+            ),
+        ]),
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparsePointLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) = 
-    unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparsePointLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(
+    ctx,
+    fbr::VirtualSubFiber{VirtualSparsePointLevel},
+    ext,
+    mode,
+    proto::Union{typeof(defaultupdate),typeof(extrude)},
+)
+    unfurl(
+        ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
+    )
+end
+function unfurl(
+    ctx,
+    fbr::VirtualHollowSubFiber{VirtualSparsePointLevel},
+    ext,
+    mode,
+    ::Union{typeof(defaultupdate),typeof(extrude)},
+)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     dirty = freshen(ctx, tag, :dirty)
     Tp = postype(lvl)
     pos = cache!(ctx, :pos, simplify(ctx, pos))
 
-    Lookup(
-        body = (ctx, idx) -> Thunk(
+    Lookup(;
+        body=(ctx, idx) -> Thunk(;
             preamble = quote
                 $dirty = false
             end,
-            body = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
+            body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
             epilogue = quote
                 if $dirty
                     $(fbr.dirty) = true
@@ -286,7 +351,7 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparsePointLevel}, ext, m
                     end
                     $(lvl.idx)[$(ctx(pos))] = $(ctx(idx))
                 end
-            end
-        )
+            end,
+        ),
     )
 end

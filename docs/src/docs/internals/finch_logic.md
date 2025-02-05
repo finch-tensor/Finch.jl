@@ -41,4 +41,3 @@ isfield
 ```
 
 ## Executing FinchLogic
-

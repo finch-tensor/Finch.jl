@@ -9,6 +9,8 @@ using Test
 using Documenter
 using Finch
 
-DocMeta.setdocmeta!(Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true)
+DocMeta.setdocmeta!(
+    Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true
+)
 
 doctest(Finch)

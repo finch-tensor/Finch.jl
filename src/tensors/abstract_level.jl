@@ -1,19 +1,13 @@
 abstract type AbstractLevel end
 abstract type AbstractVirtualLevel end
 
-virtual_level_ndims(lvl:: AbstractVirtualLevel, ctx) = length(virtual_level_size(lvl, ctx))
-
+virtual_level_ndims(lvl::AbstractVirtualLevel, ctx) = length(virtual_level_size(lvl, ctx))
 
 #is_laminable_updater(lvl::AbstractVirtualLevel, ctx, ::Union{::typeof(defaultread), ::typeof(walk), ::typeof(gallop), ::typeof(follow), typeof(defaultupdate), typeof(laminate), typeof(extrude)}, protos...) = false
 
 #is_laminable_updater(lvl::AbstractVirtualLevel, ctx) = false
 
-
-
 #is_level_injective(ctx, lvl::AbstractVirtualLevel) = false
-
-
-
 
 # supports_reassembly(lvl::AbstractVirtualLevel) = false
 """
@@ -73,7 +67,6 @@ that we have potentially updated `1:pos`.
 """
 function freeze_level! end
 
-
 """
     thaw_level!(ctx, lvl, pos, init)
 
@@ -81,7 +74,6 @@ Given the last reference position, `pos`, thaw all fibers within `lvl` assuming
 that we have previously assembled and frozen `1:pos`.
 """
 function thaw_level! end
-
 
 """
     assemble_level!(ctx, lvl, pos, new_pos)

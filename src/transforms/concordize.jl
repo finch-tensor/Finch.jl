@@ -4,7 +4,9 @@ end
 
 depth_calculator(root) = DepthCalculator(DepthCalculatorVisitor()(root))
 
-(ctx::DepthCalculator)(node::FinchNode) = maximum(node -> get(ctx.rec, node, 0), PostOrderDFS(node))
+function (ctx::DepthCalculator)(node::FinchNode)
+    maximum(node -> get(ctx.rec, node, 0), PostOrderDFS(node))
+end
 
 @kwdef struct DepthCalculatorVisitor
     depth = 1
@@ -15,7 +17,7 @@ function (ctx::DepthCalculatorVisitor)(node::FinchNode)
     if node.kind === loop
         ctx(node.ext)
         ctx.rec[node.idx] = ctx.depth
-        ctx_2 = DepthCalculatorVisitor(depth=ctx.depth+1, rec=ctx.rec)
+        ctx_2 = DepthCalculatorVisitor(; depth=ctx.depth + 1, rec=ctx.rec)
         ctx_2(node.body)
     elseif node.kind === define
         ctx.rec[node.lhs] = ctx.depth
@@ -52,15 +54,24 @@ function (ctx::ConcordizeVisitor)(node::FinchNode)
 
     selects = []
 
-    if node.kind === loop || node.kind === assign || node.kind === define || node.kind === sieve
-        node = Rewrite(Postwalk(Fixpoint(
-            @rule access(~tns, ~mode, ~i..., ~j::isboundnotindex, ~k::All(isboundindex)...) => begin
-                j_2 = index(freshen(ctx, :s))
-                push!(selects, j_2 => j)
-                push!(ctx.scope, j_2)
-                access(tns, mode, i..., j_2, k...)
-            end
-        )))(node)
+    if node.kind === loop || node.kind === assign || node.kind === define ||
+        node.kind === sieve
+        node = Rewrite(
+            Postwalk(
+                Fixpoint(
+                    @rule access(
+                        ~tns, ~mode, ~i..., ~j::isboundnotindex, ~k::All(isboundindex)...
+                    ) => begin
+                        j_2 = index(freshen(ctx, :s))
+                        push!(selects, j_2 => j)
+                        push!(ctx.scope, j_2)
+                        access(tns, mode, i..., j_2, k...)
+                    end
+                ),
+            ),
+        )(
+            node
+        )
     end
 
     if node.kind === loop
@@ -131,20 +142,35 @@ function concordize(ctx::AbstractCompiler, root)
         for node in PostOrderDFS(root)
             if @capture node access(~tns, ~mode, ~i...)
                 for n in 1:length(i)
-                    if 1 <= depth(i[n]) < maximum(depth.(i[n+1:end]), init=0)
-                        push_preamble!(ctx, quote
-                            @warn("Performance Warning: non-concordant traversal of $($(sprint(Finch.FinchNotation.display_expression, MIME"text/plain"(), node))) (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)")
-                        end)
+                    if 1 <= depth(i[n]) < maximum(depth.(i[(n + 1):end]); init=0)
+                        push_preamble!(
+                            ctx,
+                            quote
+                                @warn(
+                                    "Performance Warning: non-concordant traversal of $($(sprint(Finch.FinchNotation.display_expression, MIME"text/plain"(), node))) (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
+                                )
+                            end,
+                        )
                     end
                 end
             end
         end
     end
-    root = Rewrite(Postwalk(Fixpoint(@rule access(~tns, ~mode, ~i..., ~j::isindex, ~k...) => begin
-        if depth(j) <= maximum(depth.(k), init=0)
-            access(~tns, ~mode, ~i..., call(identity, j), ~k...)
-        end
-    end)))(root)
-    tnss = unique([getroot(node.tns) for node in PostOrderDFS(root) if node.kind === access])
+    root = Rewrite(
+        Postwalk(
+            Fixpoint(
+                @rule access(~tns, ~mode, ~i..., ~j::isindex, ~k...) => begin
+                    if depth(j) <= maximum(depth.(k); init=0)
+                        access(~tns, ~mode, ~i..., call(identity, j), ~k...)
+                    end
+                end
+            ),
+        ),
+    )(
+        root
+    )
+    tnss = unique([
+        getroot(node.tns) for node in PostOrderDFS(root) if node.kind === access
+    ])
     ConcordizeVisitor(ctx, tnss)(root)
 end

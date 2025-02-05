@@ -1,6 +1,8 @@
 
 virtual_size(ctx, tns::FinchNode) = virtual_size(ctx, resolve(ctx, tns))
-virtual_resize!(ctx, tns::FinchNode, dims...) = virtual_resize!(ctx, resolve(ctx, tns), dims...)
+function virtual_resize!(ctx, tns::FinchNode, dims...)
+    virtual_resize!(ctx, resolve(ctx, tns), dims...)
+end
 virtual_fill_value(ctx, tns::FinchNode) = virtual_fill_value(ctx, resolve(ctx, tns))
 
 function instantiate(ctx::AbstractCompiler, tns::FinchNode, mode)
@@ -13,19 +15,23 @@ function instantiate(ctx::AbstractCompiler, tns::FinchNode, mode)
     end
 end
 
-declare!(ctx::AbstractCompiler, tns::FinchNode, init) = declare!(ctx, resolve(ctx, tns), init)
+function declare!(ctx::AbstractCompiler, tns::FinchNode, init)
+    declare!(ctx, resolve(ctx, tns), init)
+end
 thaw!(ctx::AbstractCompiler, tns::FinchNode) = thaw!(ctx, resolve(ctx, tns))
 freeze!(ctx::AbstractCompiler, tns::FinchNode) = freeze!(ctx, resolve(ctx, tns))
 
-unfurl(ctx, tns::FinchNode, ext, mode, proto) =
+function unfurl(ctx, tns::FinchNode, ext, mode, proto)
     unfurl(ctx, resolve(ctx, tns), ext, mode, proto)
+end
 
-lower_access(ctx::AbstractCompiler, tns::FinchNode, mode) =
+function lower_access(ctx::AbstractCompiler, tns::FinchNode, mode)
     lower_access(ctx, resolve(ctx, tns), mode)
+end
 
-lower_assign(ctx::AbstractCompiler, tns::FinchNode, mode, op, rhs) =
+function lower_assign(ctx::AbstractCompiler, tns::FinchNode, mode, op, rhs)
     lower_assign(ctx, resolve(ctx, tns), mode, op, rhs)
-    
+end
 
 is_injective(ctx, lvl::FinchNode) = is_injective(ctx, resolve(ctx, lvl))
 is_atomic(ctx, lvl::FinchNode) = is_atomic(ctx, resolve(ctx, lvl))

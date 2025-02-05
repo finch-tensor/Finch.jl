@@ -54,6 +54,7 @@ not up to date.
 │   │   └── ...
 │   └── ...
 ├── test                       # tests
+│   ├──  suites                # test suite files, each suite can run independently
 │   ├──  reference32           # reference output for 32-bit systems
 │   ├──  reference64           # reference output for 64-bit systems
 │   ├──  runtests.jl           # runs the test suite. (pass -h for options and more info!)

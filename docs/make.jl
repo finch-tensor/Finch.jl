@@ -2,7 +2,7 @@
 if abspath(PROGRAM_FILE) == @__FILE__
     using Pkg
     Pkg.activate(@__DIR__)
-    Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+    Pkg.develop(PackageSpec(; path=joinpath(@__DIR__, "..")))
     Pkg.instantiate()
 end
 
@@ -10,7 +10,9 @@ using Documenter
 using Documenter.Remotes
 using Finch
 
-DocMeta.setdocmeta!(Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true)
+DocMeta.setdocmeta!(
+    Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true
+)
 
 makedocs(;
     modules=[Finch],
@@ -21,7 +23,7 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://finch-tensor.github.io/Finch.jl",
         assets=["assets/favicon.ico"],
-        size_threshold = 1_000_000,
+        size_threshold=1_000_000,
     ),
     pages=[
         "Home" => "index.md",
@@ -53,7 +55,7 @@ makedocs(;
                 "Compiler Interfaces" => "docs/internals/compiler_interface.md",
                 "Finch Notation" => "docs/internals/finch_notation.md",
                 "Finch Logic" => "docs/internals/finch_logic.md",
-        #        "Looplets and Coiteration" => "internals/looplets_coiteration.md",
+                #        "Looplets and Coiteration" => "internals/looplets_coiteration.md",
             ],
         ],
         "Community and Contributions" => "CONTRIBUTING.md",

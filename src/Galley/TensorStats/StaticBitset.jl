@@ -1,8 +1,8 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 # This is a rework of the SmallBitSet Class from Julia Base.
 using Base: union!, union, setdiff!, setdiff, intersect!, intersect, eltype, empty
-using Base: emptymutable, copy, copymutable,push!, delete!, empty!, isempty,in,issubset
-using Base: ⊊,==,iterate, length, hash
+using Base: emptymutable, copy, copymutable, push!, delete!, empty!, isempty, in, issubset
+using Base: ⊊, ==, iterate, length, hash
 Bits = UInt128
 struct SmallBitSet <: AbstractSet{Int}
     bits::Bits
@@ -98,9 +98,10 @@ function Base.setdiff(s1::SmallBitSet, s2::SmallBitSet)
     SmallBitSet(s1.bits & ~s2.bits)
 end
 
-@inline Base.in(n::Integer, s::SmallBitSet) = _is_convertible_Int(n) ? _bits_getindex(s.bits, Int(n)) : false
+@inline Base.in(n::Integer, s::SmallBitSet) =
+    _is_convertible_Int(n) ? _bits_getindex(s.bits, Int(n)) : false
 
-function Base.iterate(s::SmallBitSet, idx = 0)
+function Base.iterate(s::SmallBitSet, idx=0)
     word = 0
     while word == 0
         idx == 128 && return nothing
@@ -121,7 +122,7 @@ function Base.:(==)(s1::SmallBitSet, s2::SmallBitSet)
     return s1.bits == s2.bits
 end
 
-Base.issubset(a::SmallBitSet, b::SmallBitSet) = a == intersect(a,b)
+Base.issubset(a::SmallBitSet, b::SmallBitSet) = a == intersect(a, b)
 Base.:(⊊)(a::SmallBitSet, b::SmallBitSet) = a <= b && a != b
 
 function Base.hash(s::SmallBitSet)

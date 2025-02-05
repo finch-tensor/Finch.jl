@@ -8,7 +8,7 @@ function (ctx::ShortCircuitVisitor)(node::FinchNode)
             guard => assign(access(body, m, i...), op, rhs)
         end
     elseif istree(node)
-        mapreduce(vcat, enumerate(arguments(node)), init=[]) do (n, arg)
+        mapreduce(vcat, enumerate(arguments(node)); init=[]) do (n, arg)
             map(ctx(arg)) do (guard, body)
                 args_2 = copy(arguments(node))
                 args_2[n] = body

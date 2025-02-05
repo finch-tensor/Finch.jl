@@ -18,16 +18,20 @@ function bellmanford(edges, source=1)
     active_prev[source] = true
     active = Tensor(SparseByteMap(Pattern()), n)
 
-    for iter = 1:n
-        @finch for j=_; if active_prev[j] dists[j] <<minby>>= dists_prev[j] end end
+    for iter in 1:n
+        @finch for j in _
+            if active_prev[j]
+                dists[j] << minby >>= dists_prev[j]
+            end
+        end
 
         @finch begin
             active .= false
-            for j = _
+            for j in _
                 if active_prev[j]
-                    for i = _
+                    for i in _
                         let d = first(dists_prev[j]) + edges[i, j]
-                            dists[i] <<minby>>= (d, j)
+                            dists[i] << minby >>= (d, j)
                             active[i] |= d < first(dists_prev[i])
                         end
                     end

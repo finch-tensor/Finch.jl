@@ -12,24 +12,25 @@ to automatically follow best practices for getting reliable julia benchmarks. We
 follow the [Julia Performance Tips](https://docs.julialang.org/en/v1/manual/performance-tips/).
 
 Finch is even trickier to benchmark, for a few reasons:
-1. The first time an @finch function is called, it is compiled, which takes an
-   extra long time. @finch can also incur dynamic dispatch costs if the array
-   types are not [type
-   stable](https://docs.julialang.org/en/v1/manual/faq/#man-type-stability). We
-   can remedy this by using [`@finch_kernel`](@ref), which simplifies
-   benchmarking by compiling the function ahead of time, so it behaves like a
-   normal Julia function. If you must use `@finch`, try to ensure that the code
-   is type-stable.
-2. Finch tensors reuse memory from previous calls, so the first time a tensor is
-   used in a Finch function, it will allocate memory, but subsequent times not so
-   much. If we want to benchmark the memory allocation, we can reconstruct the
-   tensor each time. Otherwise, we can let the repeated executions of the kernel
-   measure the non-allocating runtime.
-3. Runtime for sparse code often depends on the sparsity pattern, so it's
-   important to benchmark with representative data. Using standard matrices or tensors from
-   [MatrixDepot.jl](https://github.com/JuliaLinearAlgebra/MatrixDepot.jl) or
-   [TensorDepot.jl](https://github.com/finch-tensor/TensorDepot.jl) is a good
-   way to do this.
+
+ 1. The first time an @finch function is called, it is compiled, which takes an
+    extra long time. @finch can also incur dynamic dispatch costs if the array
+    types are not [type
+    stable](https://docs.julialang.org/en/v1/manual/faq/#man-type-stability). We
+    can remedy this by using [`@finch_kernel`](@ref), which simplifies
+    benchmarking by compiling the function ahead of time, so it behaves like a
+    normal Julia function. If you must use `@finch`, try to ensure that the code
+    is type-stable.
+ 2. Finch tensors reuse memory from previous calls, so the first time a tensor is
+    used in a Finch function, it will allocate memory, but subsequent times not so
+    much. If we want to benchmark the memory allocation, we can reconstruct the
+    tensor each time. Otherwise, we can let the repeated executions of the kernel
+    measure the non-allocating runtime.
+ 3. Runtime for sparse code often depends on the sparsity pattern, so it's
+    important to benchmark with representative data. Using standard matrices or tensors from
+    [MatrixDepot.jl](https://github.com/JuliaLinearAlgebra/MatrixDepot.jl) or
+    [TensorDepot.jl](https://github.com/finch-tensor/TensorDepot.jl) is a good
+    way to do this.
 
 ````julia
 using Finch
@@ -57,7 +58,7 @@ Construct a Finch kernel for sparse matrix-vector multiply
 ````julia
 eval(@finch_kernel function spmv(y, A, x)
     y .= 0
-    for j = _, i = _
+    for j in _, i in _
         y[i] += A[i, j] * x[j]
     end
 end)
@@ -114,4 +115,3 @@ BenchmarkTools.Trial: 10000 samples with 202 evaluations.
 
  Memory estimate: 608 bytes, allocs estimate: 2.
 ````
-

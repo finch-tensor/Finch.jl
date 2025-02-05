@@ -31,7 +31,8 @@ function get_switch_cases(ctx, node::FinchNode)
         map(product(map(arg -> get_switch_cases(ctx, arg), arguments(node))...)) do case
             guards = map(first, case)
             bodies = map(last, case)
-            return simplify(ctx, call(and, guards...)) => similarterm(node, operation(node), collect(bodies))
+            return simplify(ctx, call(and, guards...)) =>
+                similarterm(node, operation(node), collect(bodies))
         end
     else
         [(literal(true) => node)]
@@ -56,5 +57,5 @@ end
 
 Base.show(io::IO, ex::Switch) = Base.show(io, MIME"text/plain"(), ex)
 function Base.show(io::IO, mime::MIME"text/plain", ex::Switch)
-	print(io, "Switch([...])")
+    print(io, "Switch([...])")
 end

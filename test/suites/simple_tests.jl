@@ -7,18 +7,17 @@
 
     @finch begin
         x .= 0
-        for i = _
+        for i in _
             x[i] = y[i]
         end
     end
 
     @finch begin
         z .= 0
-        for i = _
+        for i in _
             z[i] = x[i]
         end
     end
-
 
     @test z == y
 end

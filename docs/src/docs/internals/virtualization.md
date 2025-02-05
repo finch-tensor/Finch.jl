@@ -22,7 +22,10 @@ julia> A = Tensor(SparseList(Element(0)), [0, 2, 0, 0, 3]);
 
 julia> B = Tensor(Dense(Element(0)), [11, 12, 13, 14, 15]);
 
-julia> @finch (C .= 0; for i=_; C[i] = A[i] * B[i] end);
+julia> @finch (C .= 0;
+       for i in _
+           C[i] = A[i] * B[i]
+       end);
 
 julia> C
 5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
@@ -37,7 +40,6 @@ julia> tensor_tree(C)
 └─ SparseList (0) [1:5]
    ├─ [2]: 24
    └─ [5]: 45
-
 ```
 
 The
@@ -46,8 +48,11 @@ macro allows us to see the result of applying a macro. Let's examine what
 happens when we use the `@finch` macro (we've stripped line numbers from the
 result to clean it up):
 
-```jldoctest example1; filter=r"Finch\.FinchNotation\."
-julia> (@macroexpand @finch (C .= 0; for i=_; C[i] = A[i] * B[i] end)) |> Finch.striplines |> Finch.regensym
+```jldoctest example1; filter=r"Finch.FinchNotation."
+julia> Finch.regensym(Finch.striplines((@macroexpand @finch (C .= 0;
+       for i in _
+           C[i] = A[i] * B[i]
+       end))))
 quote
     _res_1 = (Finch.execute)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.declare_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), literal_instance(0), (Finch.FinchNotation.literal_instance)(Finch.auto)), begin
                         let i = index_instance(i)
@@ -61,7 +66,6 @@ quote
         _res_1
     end
 end
-
 ```
 
 In the above output, `@finch` creates an AST of program instances, then calls
@@ -73,7 +77,11 @@ convenient to use the unexported macro `Finch.finch_program_instance`:
 ```jldoctest example1
 julia> using Finch: @finch_program_instance
 
-julia> prgm = Finch.@finch_program_instance (C .= 0; for i=_; C[i] = A[i] * B[i] end; return C)
+julia> prgm = Finch.@finch_program_instance (C .= 0;
+       for i in _
+           C[i] = A[i] * B[i]
+       end;
+       return C)
 Finch program instance: begin
   tag(C, Tensor(SparseList(Element(0)))) .= 0
   for i = Auto()
@@ -89,7 +97,7 @@ contains only the program portion; there may be many program instances with
 different inputs, but the same program type. We can run our program using
 `Finch.execute`, which returns a `NamedTuple` of outputs.
 
-```jldoctest example1; filter=r"Finch\.FinchNotation\."
+```jldoctest example1; filter=r"Finch.FinchNotation."
 julia> typeof(prgm)
 Finch.FinchNotation.BlockInstance{Tuple{Finch.FinchNotation.DeclareInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.LiteralInstance{0}, Finch.FinchNotation.LiteralInstance{Finch.FinchNotation.Auto()}}, Finch.FinchNotation.LoopInstance{Finch.FinchNotation.IndexInstance{:i}, Finch.FinchNotation.Auto, Finch.FinchNotation.AssignInstance{Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.UpdaterInstance{Finch.FinchNotation.LiteralInstance{initwrite}}, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}, Finch.FinchNotation.LiteralInstance{initwrite}, Finch.FinchNotation.CallInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:*}, Finch.FinchNotation.LiteralInstance{*}}, Tuple{Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:A}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.ReaderInstance, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}, Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:B}, Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.ReaderInstance, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}}}}}, Finch.FinchNotation.YieldBindInstance{Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}}}}}
 
@@ -112,13 +120,21 @@ julia> function pointwise_sum(As...)
            B = Tensor(Dense(Element(0)))
            isempty(As) && return B
            i = Finch.FinchNotation.index_instance(:i)
-           A_vars = [Finch.FinchNotation.tag_instance(Finch.FinchNotation.variable_instance(Symbol(:A, n)), As[n]) for n in 1:length(As)]
+           A_vars = [
+               Finch.FinchNotation.tag_instance(
+                   Finch.FinchNotation.variable_instance(Symbol(:A, n)), As[n]
+               ) for n in 1:length(As)
+           ]
            #create a list of variable instances with different names to hold the input tensors
            ex = @finch_program_instance 0
            for A_var in A_vars
                ex = @finch_program_instance $A_var[i] + $ex
            end
-           prgm = @finch_program_instance (B .= 0; for i=_; B[i] = $ex end; return B)
+           prgm = @finch_program_instance (B .= 0;
+           for i in _
+               B[i] = $ex
+           end;
+           return B)
            return Finch.execute(prgm).B
        end
 pointwise_sum (generic function with 1 method)
@@ -127,7 +143,6 @@ julia> pointwise_sum([1, 2], [3, 4])
 2 Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
  4
  6
-
 ```
 
 ## Virtualization
@@ -146,6 +161,7 @@ Finch AST nodes have both instance and virtual representations. For example, the
 literal `42` is represented as `Finch.FinchNotation.LiteralInstance(42)` and
 then virtualized to `literal(42)`.  The virtualization process is implemented by
 the `virtualize` function.
+
 ```jldoctest example2; setup = :(using Finch)
 julia> A = Tensor(SparseList(Element(0)), [0, 2, 0, 0, 3]);
 
@@ -160,7 +176,7 @@ julia> typeof(B)
 Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}
 
 julia> inst = Finch.@finch_program_instance begin
-           for i = _
+           for i in _
                s[] += A[i]
            end
        end
@@ -177,7 +193,7 @@ Finch program: for i = virtual(Finch.FinchNotation.Auto)
 end
 
 julia> @finch_code begin
-           for i = _
+           for i in _
                s[] += A[i]
            end
        end
@@ -223,7 +239,7 @@ quote
 end
 
 julia> @finch_code begin
-           for i = _
+           for i in _
                s[] += B[i]
            end
        end
@@ -241,7 +257,6 @@ quote
     s.val = s_val
     result
 end
-
 ```
 
 ### The "virtual" IR Node
@@ -284,9 +299,9 @@ structure of the program as one would call constructors to build it. For
 example,
 
 ```jldoctest example2; setup = :(using Finch)
-julia> prgm_inst = Finch.@finch_program_instance for i = _
-            s[] += A[i]
-        end;
+julia> prgm_inst = Finch.@finch_program_instance for i in _
+           s[] += A[i]
+       end;
 
 julia> println(prgm_inst)
 loop_instance(index_instance(i), Finch.FinchNotation.Auto(), assign_instance(access_instance(tag_instance(variable_instance(:s), Scalar{0, Int64}(0)), updater_instance(tag_instance(variable_instance(:+), literal_instance(+)))), tag_instance(variable_instance(:+), literal_instance(+)), access_instance(tag_instance(variable_instance(:A), Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))), reader_instance(), tag_instance(variable_instance(:i), index_instance(i)))))
@@ -296,9 +311,9 @@ Finch program instance: for i = Auto()
   tag(s, Scalar{0, Int64})[] <<tag(+, +)>>= tag(A, Tensor(SparseList(Element(0))))[tag(i, i)]
 end
 
-julia> prgm = Finch.@finch_program for i = _
-               s[] += A[i]
-           end;
+julia> prgm = Finch.@finch_program for i in _
+           s[] += A[i]
+       end;
 
 julia> println(prgm)
 loop(index(i), virtual(Finch.FinchNotation.Auto()), assign(access(literal(Scalar{0, Int64}(0)), updater(literal(+))), literal(+), access(literal(Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))), reader(), index(i))))
@@ -307,7 +322,6 @@ julia> prgm
 Finch program: for i = virtual(Finch.FinchNotation.Auto)
   Scalar{0, Int64}(0)[] <<+>>= Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))[i]
 end
-
 ```
 
 Both the virtual and instance representations of Finch IR define
@@ -326,5 +340,4 @@ true
 
 julia> idx
 Finch program: i
-
 ```

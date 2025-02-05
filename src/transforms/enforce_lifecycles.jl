@@ -10,13 +10,13 @@ struct EnforceLifecyclesError
 end
 
 function open_scope(ctx::EnforceLifecyclesVisitor, prgm)
-    ctx_2 = EnforceLifecyclesVisitor(;kwfields(ctx)..., uses=Dict())
+    ctx_2 = EnforceLifecyclesVisitor(; kwfields(ctx)..., uses=Dict())
     close_scope(prgm, ctx_2)
 end
 
 function getmodified(node::FinchNode)
     if node.kind === block
-        return unique(mapreduce(getmodified, vcat, node.bodies, init=[]))
+        return unique(mapreduce(getmodified, vcat, node.bodies; init=[]))
     elseif node.kind === declare || node.kind === thaw
         return [node.tns]
     else
@@ -76,7 +76,8 @@ function (ctx::EnforceLifecyclesVisitor)(node::FinchNode)
         ctx.modes[node.tns] = updater(node.op)
         node
     elseif node.kind === freeze
-        haskey(ctx.modes, node.tns) || throw(EnforceLifecyclesError("cannot freeze undefined $(node.tns)"))
+        haskey(ctx.modes, node.tns) ||
+            throw(EnforceLifecyclesError("cannot freeze undefined $(node.tns)"))
         ctx.modes[node.tns].kind === reader && return block()
         ctx.modes[node.tns] = reader()
         node
@@ -94,22 +95,36 @@ function (ctx::EnforceLifecyclesVisitor)(node::FinchNode)
         uses = get(ctx.scoped_uses, getroot(node.tns), ctx.global_uses)
         mode = get(uses, getroot(node.tns), node.mode)
         mode.kind != node.mode.kind &&
-            throw(EnforceLifecyclesError("cannot mix reads and writes to $(node.tns) outside of defining scope (hint: perhaps add a declaration like `var .= 0` or use an updating operator like `var += 1`)"))
+            throw(
+                EnforceLifecyclesError(
+                    "cannot mix reads and writes to $(node.tns) outside of defining scope (hint: perhaps add a declaration like `var .= 0` or use an updating operator like `var += 1`)"
+                ),
+            )
         mode.kind === updater && mode.op != node.mode.op &&
-            throw(EnforceLifecyclesError("cannot mix reduction operators to $(node.tns) outside of defining scope (hint: perhaps add a declaration like `var .= 0` or use an updating operator like `var += 1`)"))
+            throw(
+                EnforceLifecyclesError(
+                    "cannot mix reduction operators to $(node.tns) outside of defining scope (hint: perhaps add a declaration like `var .= 0` or use an updating operator like `var += 1`)"
+                ),
+            )
         uses[getroot(node.tns)] = node.mode
         access(node.tns, node.mode, idxs...)
     elseif node.kind === yieldbind
         args_2 = map(node.args) do arg
             uses = get(ctx.scoped_uses, getroot(arg), ctx.global_uses)
             get(uses, getroot(arg), reader()).kind !== reader &&
-                throw(EnforceLifecyclesError("cannot return $(arg) outside of defining scope"))
+                throw(
+                    EnforceLifecyclesError(
+                        "cannot return $(arg) outside of defining scope"
+                    ),
+                )
             uses[getroot(arg)] = reader()
             ctx(arg)
         end
         open_stmt(yieldbind(args_2...), ctx)
     elseif istree(node)
-        return similarterm(node, operation(node), simple_map(FinchNode, ctx, arguments(node)))
+        return similarterm(
+            node, operation(node), simple_map(FinchNode, ctx, arguments(node))
+        )
     else
         return node
     end
@@ -123,7 +138,15 @@ function infer_declare_ops(node, ops=Dict())
             ops[getroot(node.tns)] = node.mode.op
         end
         if istree(node)
-            similarterm(node, operation(node), reverse(simple_map(FinchNode, n->infer_declare_ops(n, ops), reverse(arguments(node)))))
+            similarterm(
+                node,
+                operation(node),
+                reverse(
+                    simple_map(
+                        FinchNode, n -> infer_declare_ops(n, ops), reverse(arguments(node))
+                    ),
+                ),
+            )
         else
             node
         end

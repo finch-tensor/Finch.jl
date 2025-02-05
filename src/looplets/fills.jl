@@ -23,7 +23,14 @@ combine_style(a::FillStyle, b::StepperStyle) = FillStyle()
 combine_style(a::FillStyle, b::JumperStyle) = FillStyle()
 
 function lower(ctx::AbstractCompiler, root::FinchNode, ::FillStyle)
-    ctx(Postwalk(@rule access(~a::isvirtual, ~m, ~i...) => visit_fill_leaf_leaf(access(a, m, i...), a.val))(root))
+    ctx(
+        Postwalk(
+            @rule access(~a::isvirtual, ~m, ~i...) =>
+                visit_fill_leaf_leaf(access(a, m, i...), a.val)
+        )(
+            root
+        ),
+    )
 end
 
 visit_fill_leaf_leaf(node, tns) = nothing

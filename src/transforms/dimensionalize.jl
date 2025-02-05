@@ -26,11 +26,13 @@ have unique index names.
 See also: [`virtual_size`](@ref), [`virtual_resize!`](@ref), [`combinedim`](@ref)
 """
 function dimensionalize!(prgm, ctx)
-    prgm = DeclareDimensions(ctx=ctx)(prgm)
+    prgm = DeclareDimensions(; ctx=ctx)(prgm)
     return prgm
 end
 
-struct FinchCompileError msg end
+struct FinchCompileError
+    msg
+end
 
 function (ctx::DeclareDimensions)(node::FinchNode)
     if node.kind === access
@@ -41,8 +43,16 @@ function (ctx::DeclareDimensions)(node::FinchNode)
         else
             shape = virtual_size(ctx.ctx, tns)
         end
-        length(idxs) > length(shape) && throw(DimensionMismatch("more indices than dimensions in $(sprint(show, MIME("text/plain"), node))"))
-        length(idxs) < length(shape) && throw(DimensionMismatch("less indices than dimensions in $(sprint(show, MIME("text/plain"), node))"))
+        length(idxs) > length(shape) && throw(
+            DimensionMismatch(
+                "more indices than dimensions in $(sprint(show, MIME("text/plain"), node))"
+            ),
+        )
+        length(idxs) < length(shape) && throw(
+            DimensionMismatch(
+                "less indices than dimensions in $(sprint(show, MIME("text/plain"), node))"
+            ),
+        )
         idxs = map(zip(shape, idxs)) do (dim, idx)
             if isindex(idx)
                 ctx.dims[idx] = resultdim(ctx.ctx, dim, get(ctx.dims, idx, auto))
@@ -58,8 +68,13 @@ function (ctx::DeclareDimensions)(node::FinchNode)
         end
         ctx.dims[node.idx] = node.ext.val
         body = ctx(node.body)
-        ctx.dims[node.idx] != auto || throw(FinchCompileError("could not resolve dimension of index $(node.idx)"))
-        return loop(node.idx, cache_dim!(ctx.ctx, getname(node.idx), resolvedim(ctx.dims[node.idx])), body)
+        ctx.dims[node.idx] != auto ||
+            throw(FinchCompileError("could not resolve dimension of index $(node.idx)"))
+        return loop(
+            node.idx,
+            cache_dim!(ctx.ctx, getname(node.idx), resolvedim(ctx.dims[node.idx])),
+            body,
+        )
     elseif node.kind === block
         block(map(ctx, node.bodies)...)
     elseif node.kind === declare

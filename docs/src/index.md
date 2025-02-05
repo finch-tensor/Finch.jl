@@ -12,7 +12,9 @@ use case. This allows users to write readable, high-level sparse array programs 
 At the [Julia](https://julialang.org/downloads/) REPL, install the latest stable version by running:
 
 ```julia
-julia> using Pkg; Pkg.add("Finch")
+julia> using Pkg;
+       Pkg.add("Finch");
+
 ```
 
 ## Quickstart
@@ -21,6 +23,7 @@ julia> using Pkg; Pkg.add("Finch")
 julia> using Finch
 
 # Create a sparse tensor
+
 julia> A = Tensor(CSCFormat(), [1 0 0; 0 2 0; 0 0 3])
 3×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  1.0  0.0  0.0
@@ -28,6 +31,7 @@ julia> A = Tensor(CSCFormat(), [1 0 0; 0 2 0; 0 0 3])
  0.0  0.0  3.0
 
 # Perform a simple operation
+
 julia> B = A + A
 3×3 Tensor{DenseLevel{Int64, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  2.0  0.0  0.0
@@ -55,26 +59,33 @@ Finch supports many high-level array operations out of the box, such as `+`, `*`
 julia> using Finch
 
 # Define sparse tensor A
+
 julia> A = Tensor(Dense(SparseList(Element(0.0))), [0 1.1 0; 2.2 0 3.3; 4.4 0 0; 0 0 5.5])
 
 # Define sparse tensor B
+
 julia> B = Tensor(Dense(SparseList(Element(0.0))), [0 1 1; 1 0 0; 0 0 1; 0 0 1])
 
 # Element-wise multiplication
+
 julia> C = A .* B
 
 # Element-wise max
+
 julia> C = max.(A, B)
 
 # Sum over rows
-julia> D = sum(C, dims=2)
+
+julia> D = sum(C; dims=2)
+
 ```
 
 For situations where more complex operations are needed, Finch supports an `@einsum` syntax on sparse and structured tensors.
+
 ```julia
 julia> @einsum E[i] += A[i, j] * B[i, j]
 
-julia> @einsum F[i, k] <<max>>= A[i, j] + B[j, k]
+julia> @einsum F[i, k] << max >>= A[i, j] + B[j, k]
 
 ```
 
@@ -85,9 +96,13 @@ sparsity patterns of the inputs.
 ```julia
 julia> using Finch, BenchmarkTools
 
-julia> A = fsprand(1000, 1000, 0.1); B = fsprand(1000, 1000, 0.1); C = fsprand(1000, 1000, 0.0001);
+julia> A = fsprand(1000, 1000, 0.1);
+       B = fsprand(1000, 1000, 0.1);
+       C = fsprand(1000, 1000, 0.0001);
 
-julia> A = lazy(A); B = lazy(B); C = lazy(C);
+julia> A = lazy(A);
+       B = lazy(B);
+       C = lazy(C);
 
 julia> sum(A * B * C)
 
@@ -99,7 +114,8 @@ julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
 ```
 
 ### How it Works
-Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically. 
+
+Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically.
 
 ## Learn More
 
@@ -108,7 +124,7 @@ The following manuscripts provide a good description of the research behind Finc
 [Finch: Sparse and Structured Array Programming with Control Flow](https://arxiv.org/abs/2404.16730).
 Willow Ahrens, Teodoro Fields Collin, Radha Patel, Kyle Deeds, Changwan Hong, Saman Amarasinghe.
 
-[Looplets: A Language for Structured Coiteration](https://doi.org/10.1145/3579990.3580020). CGO 2023. 
+[Looplets: A Language for Structured Coiteration](https://doi.org/10.1145/3579990.3580020). CGO 2023.
 Willow Ahrens, Daniel Donenfeld, Fredrik Kjolstad, Saman Amarasinghe.
 
 ## Beyond Finch

@@ -67,14 +67,13 @@ julia> C = lazy(A);
 
 julia> D = lazy(B);
 
-julia> E = (C .+ D)/2;
+julia> E = (C .+ D) / 2;
 
 julia> compute(E)
 3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  1.5  0.0  3.0  0.0  0.0
  0.0  0.0  0.0  0.0  4.5  0.0
  0.0  0.0  0.0  0.0  0.0  0.0
-
 ```
 
 In the above example, `E` is a fused operation that adds `C` and `D` together
@@ -94,14 +93,15 @@ The `lazy` and `compute` functions allow the compiler to fuse operations togethe
 ```julia
 julia> using BenchmarkTools
 
-julia> A = fsprand(1000, 1000, 100); B = Tensor(rand(1000, 1000)); C = Tensor(rand(1000, 1000));
+julia> A = fsprand(1000, 1000, 100);
+       B = Tensor(rand(1000, 1000));
+       C = Tensor(rand(1000, 1000));
 
 julia> @btime A .* (B * C);
   145.940 ms (859 allocations: 7.69 MiB)
 
 julia> @btime compute(lazy(A) .* (lazy(B) * lazy(C)));
   694.666 μs (712 allocations: 60.86 KiB)
-
 ```
 
 ## Optimizers
@@ -119,8 +119,8 @@ default_scheduler
 
 ### The Galley Optimizer
 
-Galley is a cost-based optimizer for Finch's lazy evaluation interface based on techniques from database 
-query optimization. To use Galley, you just add the parameter `ctx=galley_optimizer()` to the `compute` 
+Galley is a cost-based optimizer for Finch's lazy evaluation interface based on techniques from database
+query optimization. To use Galley, you just add the parameter `ctx=galley_optimizer()` to the `compute`
 function. While the default optimizer (`ctx=default_scheduler()`) makes decisions entirely based on
 the types of the inputs, Galley gathers statistics on their sparsity to make cost-based based optimization
 decisions.
@@ -130,16 +130,19 @@ galley_scheduler
 ```
 
 ```julia
-julia> A = fsprand(1000, 1000, 0.1); B = fsprand(1000, 1000, 0.1); C = fsprand(1000, 1000, 0.0001);
+julia> A = fsprand(1000, 1000, 0.1);
+       B = fsprand(1000, 1000, 0.1);
+       C = fsprand(1000, 1000, 0.0001);
 
-julia> A = lazy(A); B = lazy(B); C = lazy(C);
+julia> A = lazy(A);
+       B = lazy(B);
+       C = lazy(C);
 
 julia> @btime compute(sum(A * B * C));
   282.503 ms (1018 allocations: 184.43 MiB)
 
 julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
   152.792 μs (672 allocations: 28.81 KiB)
-
 ```
 
 By taking advantage of the fact that C is highly sparse, Galley can better structure the computation. In the matrix chain multiplication,
@@ -152,13 +155,15 @@ be useful to distinguish between different uses of the same function using the
 distinguish one spmv from another, as follows:
 
 ```jldoctest example2; setup=:(using Finch)
-julia> A = rand(1000, 1000); B = rand(1000, 1000); C = fsprand(1000, 1000, 0.0001);
+julia> A = rand(1000, 1000);
+       B = rand(1000, 1000);
+       C = fsprand(1000, 1000, 0.0001);
 
-julia> fused((A, B, C) -> C .* (A * B), A, B, C, tag=:very_sparse_sddmm);
+julia> fused((A, B, C) -> C .* (A * B), A, B, C; tag=:very_sparse_sddmm);
 
 julia> C = fsprand(1000, 1000, 0.9);
 
-julia> fused((A, B, C) -> C .* (A * B), A, B, C, tag=:very_dense_sddmm);
+julia> fused((A, B, C) -> C .* (A * B), A, B, C; tag=:very_dense_sddmm);
 
 ```
 

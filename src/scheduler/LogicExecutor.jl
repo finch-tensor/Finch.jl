@@ -6,18 +6,24 @@ is given as input to the program.
 """
 function defer_tables(ex, node::LogicNode)
     if @capture node table(~tns::isimmediate, ~idxs...)
-        table(deferred(:($ex.tns.val), typeof(tns.val), tns.val), map(enumerate(node.idxs)) do (i, idx)
-            defer_tables(:($ex.idxs[$i]), idx)
-        end)
+        table(
+            deferred(:($ex.tns.val), typeof(tns.val), tns.val),
+            map(enumerate(node.idxs)) do (i, idx)
+                defer_tables(:($ex.idxs[$i]), idx)
+            end,
+        )
     elseif istree(node)
-        similarterm(node, operation(node), map(enumerate(node.children)) do (i, child)
-            defer_tables(:($ex.children[$i]), child)
-        end)
+        similarterm(
+            node,
+            operation(node),
+            map(enumerate(node.children)) do (i, child)
+                defer_tables(:($ex.children[$i]), child)
+            end,
+        )
     else
         node
     end
 end
-
 
 """
     cache_deferred(ctx, root::LogicNode, seen)
@@ -25,14 +31,18 @@ end
 Replace deferred expressions with simpler expressions, and cache their evaluation in the preamble.
 """
 function cache_deferred!(ctx, root::LogicNode)
-    seen::Dict{Any, LogicNode} = Dict{Any, LogicNode}()
-    return Rewrite(Postwalk(node -> if isdeferred(node)
-        get!(seen, node.val) do
-            var = freshen(ctx, :V)
-            push_preamble!(ctx, :($var = $(node.ex)::$(node.type)))
-            deferred(var, node.type, node.imm)
-        end
-    end))(root)
+    seen::Dict{Any,LogicNode} = Dict{Any,LogicNode}()
+    return Rewrite(
+        Postwalk(node -> if isdeferred(node)
+            get!(seen, node.val) do
+                var = freshen(ctx, :V)
+                push_preamble!(ctx, :($var = $(node.ex)::$(node.type)))
+                deferred(var, node.type, node.imm)
+            end
+        end),
+    )(
+        root
+    )
 end
 
 function logic_executor_code(ctx, prgm)
@@ -45,9 +55,9 @@ function logic_executor_code(ctx, prgm)
     end
     code = pretty(code)
     fname = gensym(Symbol(:compute, hash(get_structure(prgm)))) #The fact that we need this hash is worrisome (it indicates that our gensyms are not always unique)
-    return :(function $fname(prgm)
-            $code
-        end) |> striplines
+    return striplines(:(function $fname(prgm)
+        $code
+    end))
 end
 
 """
@@ -67,8 +77,8 @@ end
 Base.:(==)(a::LogicExecutor, b::LogicExecutor) = a.ctx == b.ctx && a.verbose == b.verbose
 Base.hash(a::LogicExecutor, h::UInt) = hash(LogicExecutor, hash(a.ctx, hash(a.verbose, h)))
 
-LogicExecutor(ctx; tag = :global, verbose = false) = LogicExecutor(ctx, tag, verbose)
-function set_options(ctx::LogicExecutor; tag = ctx.tag, verbose = ctx.verbose, kwargs...)
+LogicExecutor(ctx; tag=:global, verbose=false) = LogicExecutor(ctx, tag, verbose)
+function set_options(ctx::LogicExecutor; tag=ctx.tag, verbose=ctx.verbose, kwargs...)
     LogicExecutor(set_options(ctx.ctx; kwargs...), tag, verbose)
 end
 

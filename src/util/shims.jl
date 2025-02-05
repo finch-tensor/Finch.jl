@@ -1,5 +1,5 @@
 function fill_range!(arr, v, i, j)
-    @simd for k = i:j
+    @simd for k in i:j
         arr[k] = v
     end
     arr
@@ -19,13 +19,15 @@ return the first value of `v` greater than or equal to `x`, within the range
 exponential search strategy which involves two steps: 1) searching for binary search bounds
 via exponential steps rightward 2) binary searching within those bounds.
 """
-Base.@propagate_inbounds function scansearch(v, x, lo::T1, hi::T2) where {T1<:Integer, T2<:Integer} # TODO types for `lo` and `hi` #406
+Base.@propagate_inbounds function scansearch(
+    v, x, lo::T1, hi::T2
+) where {T1<:Integer,T2<:Integer} # TODO types for `lo` and `hi` #406
     u = T1(1)
     d = T1(1)
     p = lo
     while p < hi && v[p] < x
         d <<= 0x01
-        p +=  d
+        p += d
     end
     lo = p - d
     hi = min(p, hi) + u
@@ -41,7 +43,9 @@ Base.@propagate_inbounds function scansearch(v, x, lo::T1, hi::T2) where {T1<:In
     return hi
 end
 
-Base.@propagate_inbounds function bin_scansearch(v, x, lo::T1, hi::T2) where {T1<:Integer, T2<:Integer} # TODO types for `lo` and `hi` #406
+Base.@propagate_inbounds function bin_scansearch(
+    v, x, lo::T1, hi::T2
+) where {T1<:Integer,T2<:Integer} # TODO types for `lo` and `hi` #406
     u = T1(1)
     lo = lo - u
     hi = hi + u
@@ -63,12 +67,14 @@ Wrap `ex` in a let block that captures all free variables in `ex` that are bound
 ensuring that the variables in `ex` are not mutated by the arguments.
 """
 macro barrier(args_ex...)
-    (args, ex) = args_ex[1:end-1], args_ex[end]
+    (args, ex) = args_ex[1:(end - 1)], args_ex[end]
     f = gensym()
-    esc(quote
-        $f = Finch.@closure ($(args...),) -> $ex
-        $f()
-    end)
+    esc(
+        quote
+            $f = Finch.@closure ($(args...),) -> $ex
+            $f()
+        end,
+    )
 end
 
 # wrap_closure is taken from https://github.com/c42f/FastClosures.jl
@@ -87,7 +93,11 @@ function wrap_closure(module_, ex)
     elseif @capture ex :function(:call(~f, ~args...), ~body)
         push!(bound_vars, f)
     else
-        throw(ArgumentError("Argument to @closure must be a closure!  (Got $closure_expression)"))
+        throw(
+            ArgumentError(
+                "Argument to @closure must be a closure!  (Got $closure_expression)"
+            ),
+        )
     end
     append!(bound_vars, [v for v in args])
     find_var_uses!(captured_vars, bound_vars, body)
@@ -163,19 +173,19 @@ function find_var_uses!(capture_vars, bound_vars, ex)
             find_var_uses!(capture_vars, copy(bound_vars), ex.args[1])
             catch_bindings = copy(bound_vars)
             !isa(ex.args[2], Symbol) || push!(catch_bindings, ex.args[2])
-            find_var_uses!(capture_vars,catch_bindings,ex.args[3])
+            find_var_uses!(capture_vars, catch_bindings, ex.args[3])
             if length(ex.args) > 3
                 finally_bindings = copy(bound_vars)
-                find_var_uses!(capture_vars,finally_bindings,ex.args[4])
+                find_var_uses!(capture_vars, finally_bindings, ex.args[4])
             end
         elseif ex.head == :call
             find_var_uses!(capture_vars, bound_vars, ex.args[2:end])
         elseif ex.head == :local
-           foreach(ex.args) do e
-               if !isa(e, Symbol)
-                   find_var_uses!(capture_vars, bound_vars, e)
-               end
-           end
+            foreach(ex.args) do e
+                if !isa(e, Symbol)
+                    find_var_uses!(capture_vars, bound_vars, e)
+                end
+            end
         elseif ex.head == :(::)
             find_var_uses_lhs!(capture_vars, bound_vars, ex)
         else
@@ -185,8 +195,9 @@ function find_var_uses!(capture_vars, bound_vars, ex)
     capture_vars
 end
 
-find_var_uses!(capture_vars, bound_vars, exs::Vector) =
-    foreach(e->find_var_uses!(capture_vars, bound_vars, e), exs)
+function find_var_uses!(capture_vars, bound_vars, exs::Vector)
+    foreach(e -> find_var_uses!(capture_vars, bound_vars, e), exs)
+end
 
 # Find variable uses on the left hand side of an assignment.  Some of what may
 # be variable uses turn into bindings in this context (cf. tuple unpacking).
@@ -205,4 +216,6 @@ function find_var_uses_lhs!(capture_vars, bound_vars, ex)
     end
 end
 
-find_var_uses_lhs!(capture_vars, bound_vars, exs::Vector) = foreach(e->find_var_uses_lhs!(capture_vars, bound_vars, e), exs)
+function find_var_uses_lhs!(capture_vars, bound_vars, exs::Vector)
+    foreach(e -> find_var_uses_lhs!(capture_vars, bound_vars, e), exs)
+end

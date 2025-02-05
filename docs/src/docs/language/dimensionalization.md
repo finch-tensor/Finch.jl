@@ -10,11 +10,12 @@ A = fsprand(3, 4, 0.5)
 B = fsprand(4, 5, 0.5)
 C = Tensor(Dense(SparseList(Element(0.0))))
 @finch begin
-C .= 0
-for i = 1:3
-    for j = _
-        for k = _
-            C[i, j] += A[i, k] * B[k, j]
+    C .= 0
+    for i in 1:3
+        for j in _
+            for k in _
+                C[i, j] += A[i, k] * B[k, j]
+            end
         end
     end
 end
@@ -32,25 +33,29 @@ exempt a tensor from dimensionalization by wrapping the corresponding index in
 
 ```julia
 @finch begin
-y .= 0
-for i = 1:3
-    y[~i] += x[i]
+    y .= 0
+    for i in 1:3
+        y[~i] += x[i]
+    end
 end
 ```
+
 does not set the dimension of `y`, and `y` does not participate in
 dimensionalization.
 
 In summary, the rules of index dimensionalization are as follows:
-- Indices have dimensions
-- Using an index in an access “hints” that the index should have the corresponding dimension
-- Loop dimensions are equal to the “meet” of all hints in the loop body and the loop bounds
-- The meet usually asserts that dimensions match, but may also e.g. propagate info about parallelization
+
+  - Indices have dimensions
+  - Using an index in an access “hints” that the index should have the corresponding dimension
+  - Loop dimensions are equal to the “meet” of all hints in the loop body and the loop bounds
+  - The meet usually asserts that dimensions match, but may also e.g. propagate info about parallelization
 
 The rules of declaration dimensionalization are as follows:
-- Declarations have dimensions
-- Left hand side (updating) tensor access “hint” the size of that tensor
-- The dimensions of a declaration are the “meet” of all hints from the declaration to the first read
-- The new dimensions of the declared tensor are used when the tensor is on the right hand side (reading) access.
+
+  - Declarations have dimensions
+  - Left hand side (updating) tensor access “hint” the size of that tensor
+  - The dimensions of a declaration are the “meet” of all hints from the declaration to the first read
+  - The new dimensions of the declared tensor are used when the tensor is on the right hand side (reading) access.
 
 ```@docs
 Finch.FinchNotation.Auto

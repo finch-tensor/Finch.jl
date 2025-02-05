@@ -17,7 +17,7 @@ A transformation to call `instantiate` on tensors before executing an
 expression.
 """
 function instantiate!(ctx, prgm)
-    prgm = InstantiateTensors(ctx=ctx)(prgm)
+    prgm = InstantiateTensors(; ctx=ctx)(prgm)
     return prgm
 end
 
@@ -52,8 +52,9 @@ function (ctx::InstantiateTensors)(node::FinchNode)
     end
 end
 
-execute(ex; algebra = DefaultAlgebra(), mode = :safe) =
+function execute(ex; algebra=DefaultAlgebra(), mode=:safe)
     execute_impl(ex, Val(algebra), Val(mode))
+end
 
 getvalue(::Type{Val{v}}) where {v} = v
 
@@ -63,24 +64,30 @@ getvalue(::Type{Val{v}}) where {v} = v
         return quote
             try
                 begin
-                    $(code |> unblock)
+                    $(unblock(code))
                 end
             catch
                 println("Error executing code:")
-                println($(QuoteNode(code |> pretty |> unquote_literals)))
+                println($(QuoteNode(unquote_literals(pretty(code)))))
                 rethrow()
             end
         end
     else
         return quote
             @inbounds @fastmath begin
-                $(code |> pretty |> unquote_literals)
+                $(unquote_literals(pretty(code)))
             end
         end
     end
 end
 
-function execute_code(ex, T; algebra = DefaultAlgebra(), mode = :safe, ctx = FinchCompiler(algebra = algebra, mode=mode))
+function execute_code(
+    ex,
+    T;
+    algebra=DefaultAlgebra(),
+    mode=:safe,
+    ctx=FinchCompiler(; algebra=algebra, mode=mode),
+)
     code = contain(ctx) do ctx_2
         prgm = nothing
         prgm = virtualize(ctx_2.code, ex, T)
@@ -99,18 +106,20 @@ function lower_global(ctx, prgm)
     prgm = evaluate_partial(ctx, prgm)
     code = contain(ctx) do ctx_2
         quote
-            $(begin
-                prgm = wrapperize(ctx_2, prgm)
-                prgm = enforce_lifecycles(prgm)
-                prgm = dimensionalize!(prgm, ctx_2)
-                prgm = concordize(ctx_2, prgm)
-                prgm = evaluate_partial(ctx_2, prgm)
-                prgm = simplify(ctx_2, prgm) #appears necessary
-                prgm = instantiate!(ctx_2, prgm)
-                contain(ctx_2) do ctx_3
-                    ctx_3(prgm)
+            $(
+                begin
+                    prgm = wrapperize(ctx_2, prgm)
+                    prgm = enforce_lifecycles(prgm)
+                    prgm = dimensionalize!(prgm, ctx_2)
+                    prgm = concordize(ctx_2, prgm)
+                    prgm = evaluate_partial(ctx_2, prgm)
+                    prgm = simplify(ctx_2, prgm) #appears necessary
+                    prgm = instantiate!(ctx_2, prgm)
+                    contain(ctx_2) do ctx_3
+                        ctx_3(prgm)
+                    end
                 end
-            end)
+            )
             $(get_result(ctx))
         end
     end
@@ -167,29 +176,44 @@ sparsity information to reliably skip iterations when possible.
 See also: [`@finch_code`](@ref)
 """
 macro finch(opts_ex...)
-    length(opts_ex) >= 1 || throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
-    (opts, ex) = (opts_ex[1:end-1], opts_ex[end])
+    length(opts_ex) >= 1 ||
+        throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
+    (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
     prgm = :(
-        $(FinchNotation.block_instance)(
-            $prgm,
-            $(FinchNotation.yieldbind_instance)(
-                $(map(FinchNotation.variable_instance, FinchNotation.finch_parse_default_yieldbind(ex))...)
-            )
-        )
+    $(FinchNotation.block_instance)(
+        $prgm,
+        $(FinchNotation.yieldbind_instance)(
+            $(
+                map(
+                    FinchNotation.variable_instance,
+                    FinchNotation.finch_parse_default_yieldbind(ex),
+                )...
+            ),
+        ),
     )
+)
     res = esc(:res)
     thunk = quote
-        res = $execute($prgm, ;$(map(esc, opts)...),)
+        res = $execute($prgm, ; $(map(esc, opts)...))
     end
-    for tns in something(FinchNotation.finch_parse_yieldbind(ex), FinchNotation.finch_parse_default_yieldbind(ex))
-        push!(thunk.args, quote
-            $(esc(tns)) = res[$(QuoteNode(tns))]
-        end)
+    for tns in something(
+        FinchNotation.finch_parse_yieldbind(ex),
+        FinchNotation.finch_parse_default_yieldbind(ex),
+    )
+        push!(
+            thunk.args,
+            quote
+                $(esc(tns)) = res[$(QuoteNode(tns))]
+            end,
+        )
     end
-    push!(thunk.args, quote
-        res
-    end)
+    push!(
+        thunk.args,
+        quote
+            res
+        end,
+    )
     thunk
 end
 
@@ -201,19 +225,31 @@ Return the code that would be executed in order to run a finch program `prgm`.
 See also: [`@finch`](@ref)
 """
 macro finch_code(opts_ex...)
-    length(opts_ex) >= 1 || throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
-    (opts, ex) = (opts_ex[1:end-1], opts_ex[end])
+    length(opts_ex) >= 1 ||
+        throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
+    (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
     prgm = :(
-        $(FinchNotation.block_instance)(
-            $prgm,
-            $(FinchNotation.yieldbind_instance)(
-                $(map(FinchNotation.variable_instance, FinchNotation.finch_parse_default_yieldbind(ex))...)
-            )
-        )
+    $(FinchNotation.block_instance)(
+        $prgm,
+        $(FinchNotation.yieldbind_instance)(
+            $(
+                map(
+                    FinchNotation.variable_instance,
+                    FinchNotation.finch_parse_default_yieldbind(ex),
+                )...
+            ),
+        ),
     )
+)
     return quote
-        $execute_code(:ex, typeof($prgm); $(map(esc, opts)...)) |> pretty |> unresolve |> dataflow |> unquote_literals
+        unquote_literals(
+            dataflow(
+                unresolve(pretty($execute_code(
+                    :ex, typeof($prgm); $(map(esc, opts)...)
+                ))),
+            ),
+        )
     end
 end
 
@@ -226,19 +262,34 @@ type `prgm`. Here, `fname` is the name of the function and `args` is a
 
 See also: [`@finch`](@ref)
 """
-function finch_kernel(fname, args, prgm; algebra = DefaultAlgebra(), mode = :safe, ctx = FinchCompiler(algebra=algebra, mode=mode))
+function finch_kernel(
+    fname,
+    args,
+    prgm;
+    algebra=DefaultAlgebra(),
+    mode=:safe,
+    ctx=FinchCompiler(; algebra=algebra, mode=mode),
+)
     maybe_typeof(x) = x isa Type ? x : typeof(x)
     unreachable = gensym(:unreachable)
     code = contain(ctx) do ctx_2
         foreach(args) do (key, val)
-            set_binding!(ctx_2, variable(key), finch_leaf(virtualize(ctx_2.code, key, maybe_typeof(val), key)))
+            set_binding!(
+                ctx_2,
+                variable(key),
+                finch_leaf(virtualize(ctx_2.code, key, maybe_typeof(val), key)),
+            )
         end
-        execute_code(unreachable, prgm, algebra = algebra, mode = mode, ctx = ctx_2)
+        execute_code(unreachable, prgm; algebra=algebra, mode=mode, ctx=ctx_2)
     end
     if unreachable in PostOrderDFS(code)
-        throw(FinchNotation.FinchSyntaxError("Attempting to interpolate value from local scope into @finch_kernel, pass values as function arguments or use \$ to interpolate explicitly."))
+        throw(
+            FinchNotation.FinchSyntaxError(
+                "Attempting to interpolate value from local scope into @finch_kernel, pass values as function arguments or use \$ to interpolate explicitly."
+            ),
+        )
     end
-    code = code |> pretty |> unresolve |> dataflow |> unquote_literals
+    code = unquote_literals(dataflow(unresolve(pretty(code))))
     arg_defs = map(((key, val),) -> :($key::$(maybe_typeof(val))), args)
     striplines(:(function $fname($(arg_defs...))
         @inbounds @fastmath $(striplines(unblock(code)))
@@ -255,11 +306,12 @@ representative argument instances or types.
 See also: [`@finch`](@ref)
 """
 macro finch_kernel(opts_def...)
-    length(opts_def) >= 1 || throw(ArgumentError("expected at least one argument to @finch(opts..., def)"))
-    (opts, def) = (opts_def[1:end-1], opts_def[end])
+    length(opts_def) >= 1 ||
+        throw(ArgumentError("expected at least one argument to @finch(opts..., def)"))
+    (opts, def) = (opts_def[1:(end - 1)], opts_def[end])
     (@capture def :function(:call(~name, ~args...), ~ex)) ||
-    (@capture def :(=)(:call(~name, ~args...), ~ex)) ||
-    throw(ArgumentError("unrecognized function definition in @finch_kernel"))
+        (@capture def :(=)(:call(~name, ~args...), ~ex)) ||
+        throw(ArgumentError("unrecognized function definition in @finch_kernel"))
     named_args = map(arg -> :($(QuoteNode(arg)) => $(esc(arg))), args)
     prgm = FinchNotation.finch_parse_instance(ex)
     for arg in args
@@ -270,6 +322,8 @@ macro finch_kernel(opts_def...)
         end
     end
     return quote
-        $finch_kernel($(QuoteNode(name)), Any[$(named_args...),], typeof($prgm); $(map(esc, opts)...))
+        $finch_kernel(
+            $(QuoteNode(name)), Any[$(named_args...),], typeof($prgm); $(map(esc, opts)...)
+        )
     end
 end

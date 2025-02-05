@@ -77,7 +77,7 @@ option to configure the number of processors.
 ```
 
 You can also filter to only run a selection of test suitesusing the `--include` or
-`--exclude` arguments, or 
+`--exclude` arguments, or
 
 ```
 ./test/runtests.jl --include constructors interface_einsum interface_asmd
@@ -115,3 +115,9 @@ The `/docs` directory includes Finch documentation in `/src`, and a built
 website in `/build`. You can build the website with `./docs/make.jl`. You can
 run doctests with `./docs/test.jl`, and fix doctests with `./docs/fix.jl`,
 though both are included as part of the test suite.
+
+## Code Style
+
+We use [Blue Style](https://github.com/JuliaDiff/BlueStyle) formatting, with a few tweaks
+defined in `.JuliaFormatter.toml`. Running the tests in overwrite mode will
+automatically reformat your code, but you can also add [`JuliaFormatter`](https://domluna.github.io/JuliaFormatter.jl/stable/#Editor-Plugins) to your editor to reformat as you go.

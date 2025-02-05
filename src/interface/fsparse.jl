@@ -27,11 +27,21 @@ SparseCOO (0.0) [1:3×1:3×1:3]
       1.0       2.0       3.0
 """
 fsparse(iV::AbstractVector, args...; kwargs...) = fsparse_parse((), iV, args...; kwargs...)
-fsparse_parse(I, i::AbstractVector, args...; kwargs...) = fsparse_parse((I..., i), args...; kwargs...)
+function fsparse_parse(I, i::AbstractVector, args...; kwargs...)
+    fsparse_parse((I..., i), args...; kwargs...)
+end
 fsparse_parse(I, V::AbstractVector; kwargs...) = fsparse_impl(I, V; kwargs...)
 fsparse_parse(I, V::AbstractVector, m::Tuple; kwargs...) = fsparse_impl(I, V, m; kwargs...)
-fsparse_parse(I, V::AbstractVector, m::Tuple, combine; kwargs...) = fsparse_impl(I, V, m, combine; kwargs...)
-function fsparse_impl(I::Tuple, V::Vector, shape = map(maximum, I), combine = eltype(V) isa Bool ? (|) : (+); fill_value = zero(eltype(V)))
+function fsparse_parse(I, V::AbstractVector, m::Tuple, combine; kwargs...)
+    fsparse_impl(I, V, m, combine; kwargs...)
+end
+function fsparse_impl(
+    I::Tuple,
+    V::Vector,
+    shape=map(maximum, I),
+    combine=eltype(V) isa Bool ? (|) : (+);
+    fill_value=zero(eltype(V)),
+)
     C = map(tuple, reverse(I)...)
     dirty = false
     if !issorted(C)
@@ -44,12 +54,16 @@ function fsparse_impl(I::Tuple, V::Vector, shape = map(maximum, I), combine = el
         P = unique(p -> C[p], 1:length(C))
         C = C[P]
         push!(P, length(I[1]) + 1)
-        V = map((start, stop) -> foldl(combine, @view V[start:stop - 1]), P[1:end - 1], P[2:end])
+        V = map(
+            (start, stop) -> foldl(combine, @view V[start:(stop - 1)]),
+            P[1:(end - 1)],
+            P[2:end],
+        )
         dirty = true
     end
     if dirty
         I = map(i -> similar(i, length(C)), I)
-        foreach(((p, c),) -> ntuple(n->I[n][p] = c[n], length(I)), enumerate(C))
+        foreach(((p, c),) -> ntuple(n -> I[n][p] = c[n], length(I)), enumerate(C))
         I = reverse(I)
     else
         I = map(copy, I)
@@ -64,11 +78,19 @@ Like [`fsparse`](@ref), but the coordinates must be sorted and unique, and memor
 is reused.
 """
 fsparse!(args...; kwargs...) = fsparse!_parse((), args...; kwargs...)
-fsparse!_parse(I, i::AbstractVector, args...; kwargs...) = fsparse!_parse((I..., i), args...; kwargs...)
+function fsparse!_parse(I, i::AbstractVector, args...; kwargs...)
+    fsparse!_parse((I..., i), args...; kwargs...)
+end
 fsparse!_parse(I, V::AbstractVector; kwargs...) = fsparse!_impl(I, V; kwargs...)
-fsparse!_parse(I, V::AbstractVector, M::Tuple; kwargs...) = fsparse!_impl(I, V, M; kwargs...)
-function fsparse!_impl(I::Tuple, V, shape = map(maximum, I); fill_value = zero(eltype(V)))
-    return Tensor(SparseCOO{length(I), Tuple{map(eltype, I)...}}(Element{fill_value, eltype(V), Int}(V), shape, [1, length(V) + 1], I))
+function fsparse!_parse(I, V::AbstractVector, M::Tuple; kwargs...)
+    fsparse!_impl(I, V, M; kwargs...)
+end
+function fsparse!_impl(I::Tuple, V, shape=map(maximum, I); fill_value=zero(eltype(V)))
+    return Tensor(
+        SparseCOO{length(I),Tuple{map(eltype, I)...}}(
+            Element{fill_value,eltype(V),Int}(V), shape, [1, length(V) + 1], I
+        ),
+    )
 end
 
 """
@@ -114,9 +136,13 @@ fsprand_parse_type(r, args...) = fsprand_parse_shape(r, (), (), args...)
 
 fsprand_parse_shape(r, T, M, m, args...) = fsprand_parse_shape(r, T, (M..., m), args...)
 fsprand_parse_shape(r, T, M, p::AbstractFloat) = fsprand_parse_shape(r, T, M, p, rand)
-fsprand_parse_shape(r, T, M, p::AbstractFloat, rfn::Function) = fsprand_erdos_renyi_gilbert(r, T, M, p, rfn)
+function fsprand_parse_shape(r, T, M, p::AbstractFloat, rfn::Function)
+    fsprand_erdos_renyi_gilbert(r, T, M, p, rfn)
+end
 fsprand_parse_shape(r, T, M, nnz::Integer) = fsprand_parse_shape(r, T, M, nnz, rand)
-fsprand_parse_shape(r, T, M, nnz::Integer, rfn::Function) = fsprand_erdos_renyi(r, T, M, nnz, rfn)
+function fsprand_parse_shape(r, T, M, nnz::Integer, rfn::Function)
+    fsprand_erdos_renyi(r, T, M, nnz, rfn)
+end
 #fsprand_parse_shape(r, T, M) = throw(ArgumentError("No float p given to fsprand"))
 
 #https://github.com/JuliaStats/StatsBase.jl/blob/60fb5cd400c31d75efd5cdb7e4edd5088d4b1229/src/sampling.jl#L137-L182
@@ -129,19 +155,19 @@ function fsprand_erdos_renyi_sample_knuth(r::AbstractRNG, M::Tuple, nnz::Int)
     function sample(n, i...)
         if n == 0
             if k <= nnz
-                for m = 1:N
+                for m in 1:N
                     I[m][k] = i[m]
                 end
             elseif rand(r) * k < nnz
                 l = rand(r, 1:nnz)
-                for m = 1:N
+                for m in 1:N
                     I[m][l] = i[m]
                 end
             end
             k += 1
         else
             m = M[n]
-            for i_n = 1:m
+            for i_n in 1:m
                 sample(n - 1, i_n, i...)
             end
         end
@@ -164,7 +190,7 @@ function fsprand_erdos_renyi_sample_self_avoid(r::AbstractRNG, M::Tuple, nnz::In
         push!(S, i)
         if length(S) > k
             k += 1
-            for m = 1:N
+            for m in 1:N
                 I[m][k] = i[m]
             end
         end
@@ -174,13 +200,13 @@ function fsprand_erdos_renyi_sample_self_avoid(r::AbstractRNG, M::Tuple, nnz::In
 end
 
 function fsprand_erdos_renyi(r::AbstractRNG, T, M::Tuple, nnz::Int, rfn)
-    if nnz / prod(M, init=1.0) < 0.15
+    if nnz / prod(M; init=1.0) < 0.15
         I = fsprand_erdos_renyi_sample_self_avoid(r, M, nnz)
     else
         I = fsprand_erdos_renyi_sample_knuth(r, M, nnz)
     end
     p = sortperm(map(tuple, reverse(I)...))
-    for n = 1:length(I)
+    for n in 1:length(I)
         permute!(I[n], p)
     end
     V = rfn(r, T..., nnz)
@@ -188,10 +214,10 @@ function fsprand_erdos_renyi(r::AbstractRNG, T, M::Tuple, nnz::Int, rfn)
 end
 
 function fsprand_erdos_renyi_gilbert(r::AbstractRNG, T, M::Tuple, p::AbstractFloat, rfn)
-    n = prod(M, init=1.0)
+    n = prod(M; init=1.0)
     q = 1 - p
     #We wish to sample nnz from binomial(n, p).
-    if n <= typemax(Int)*(1 - eps())
+    if n <= typemax(Int) * (1 - eps())
         #Ideally, n is representable as an Int
         _n = Int(prod(M))
         nnz = rand(r, Binomial(_n, p))
@@ -273,10 +299,10 @@ See also: (`findnz`)(https://docs.julialang.org/en/v1/stdlib/SparseArrays/#Spars
 function ffindnz(src)
     tmp = Tensor(
         SparseCOOLevel{ndims(src)}(
-            ElementLevel{zero(eltype(src)), eltype(src)}()))
+            ElementLevel{zero(eltype(src)),eltype(src)}()))
     tmp = copyto!(tmp, src)
     nnz = tmp.lvl.ptr[2] - 1
     tbl = tmp.lvl.tbl
     val = tmp.lvl.lvl.val
-    (ntuple(n->tbl[n][1:nnz], ndims(src))..., val[1:nnz])
+    (ntuple(n -> tbl[n][1:nnz], ndims(src))..., val[1:nnz])
 end

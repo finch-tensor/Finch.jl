@@ -26,7 +26,8 @@ julia> tensor_tree(x)
 
 ```
 """
-struct SparseIntervalLevel{Ti, Left<:AbstractVector, Right<:AbstractVector, Lvl} <: AbstractLevel
+struct SparseIntervalLevel{Ti,Left<:AbstractVector,Right<:AbstractVector,Lvl} <:
+       AbstractLevel
     lvl::Lvl
     shape::Ti
     left::Left
@@ -35,26 +36,34 @@ end
 
 const SparseInterval = SparseIntervalLevel
 SparseIntervalLevel(lvl::Lvl) where {Lvl} = SparseIntervalLevel{Int}(lvl)
-SparseIntervalLevel(lvl, shape::Ti, args...) where {Ti} = SparseIntervalLevel{Ti}(lvl, shape, args...)
+function SparseIntervalLevel(lvl, shape::Ti, args...) where {Ti}
+    SparseIntervalLevel{Ti}(lvl, shape, args...)
+end
 SparseIntervalLevel{Ti}(lvl) where {Ti} = SparseIntervalLevel{Ti}(lvl, zero(Ti))
-SparseIntervalLevel{Ti}(lvl, shape) where {Ti} = SparseIntervalLevel{Ti}(lvl, shape, Ti[], Ti[])
+function SparseIntervalLevel{Ti}(lvl, shape) where {Ti}
+    SparseIntervalLevel{Ti}(lvl, shape, Ti[], Ti[])
+end
 
-SparseIntervalLevel{Ti}(lvl::Lvl, shape, left::Left, right::Right) where {Ti, Lvl, Left, Right} =
-    SparseIntervalLevel{Ti, Left, Right, Lvl}(lvl, shape, left, right)
+function SparseIntervalLevel{Ti}(
+    lvl::Lvl, shape, left::Left, right::Right
+) where {Ti,Lvl,Left,Right}
+    SparseIntervalLevel{Ti,Left,Right,Lvl}(lvl, shape, left, right)
+end
 
 Base.summary(lvl::SparseIntervalLevel) = "SparseInterval($(summary(lvl.lvl)))"
-similar_level(lvl::SparseIntervalLevel, fill_value, eltype::Type, dim, tail...) =
+function similar_level(lvl::SparseIntervalLevel, fill_value, eltype::Type, dim, tail...)
     SparseInterval(similar_level(lvl.lvl, fill_value, eltype, tail...), dim)
+end
 
-function memtype(::Type{SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl}
+function memtype(::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}) where {Ti,Left,Right,Lvl}
     return Ti
 end
 
-function postype(::Type{SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl}
+function postype(::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}) where {Ti,Left,Right,Lvl}
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseIntervalLevel{Ti, Left, Right, Lvl}, Tm) where {Ti, Left, Right, Lvl}
+function moveto(lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm) where {Ti,Left,Right,Lvl}
     lvl_2 = moveto(lvl.lvl, Tm)
     left_2 = moveto(lvl.left, Tm)
     right_2 = moveto(lvl.right, Tm)
@@ -65,16 +74,23 @@ function countstored_level(lvl::SparseIntervalLevel, pos)
     countstored_level(lvl.lvl, pos)
 end
 
-pattern!(lvl::SparseIntervalLevel{Ti}) where {Ti} =
+function pattern!(lvl::SparseIntervalLevel{Ti}) where {Ti}
     SparseIntervalLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.left, lvl.right)
+end
 
-set_fill_value!(lvl::SparseIntervalLevel{Ti}, init) where {Ti} =
+function set_fill_value!(lvl::SparseIntervalLevel{Ti}, init) where {Ti}
     SparseIntervalLevel{Ti}(set_fill_value!(lvl.lvl, init), lvl.shape, lvl.left, lvl.right)
+end
 
-Base.resize!(lvl::SparseIntervalLevel{Ti}, dims...) where {Ti} =
-    SparseIntervalLevel{Ti}(resize!(lvl.lvl, dims[1:end-1]...), dims[end], lvl.left, lvl.right)
+function Base.resize!(lvl::SparseIntervalLevel{Ti}, dims...) where {Ti}
+    SparseIntervalLevel{Ti}(
+        resize!(lvl.lvl, dims[1:(end - 1)]...), dims[end], lvl.left, lvl.right
+    )
+end
 
-function Base.show(io::IO, lvl::SparseIntervalLevel{Ti, Left, Right, Lvl}) where {Ti, Lvl, Left, Right}
+function Base.show(
+    io::IO, lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}
+) where {Ti,Lvl,Left,Right}
     if get(io, :compact, false)
         print(io, "SparseInterval(")
     else
@@ -82,7 +98,7 @@ function Base.show(io::IO, lvl::SparseIntervalLevel{Ti, Left, Right, Lvl}) where
     end
     show(io, lvl.lvl)
     print(io, ", ")
-    show(IOContext(io, :typeinfo=>Ti), lvl.shape)
+    show(IOContext(io, :typeinfo => Ti), lvl.shape)
     print(io, ", ")
     if get(io, :compact, false)
         print(io, "…")
@@ -94,29 +110,59 @@ function Base.show(io::IO, lvl::SparseIntervalLevel{Ti, Left, Right, Lvl}) where
     print(io, ")")
 end
 
-labelled_show(io::IO, fbr::SubFiber{<:SparseIntervalLevel}) =
-    print(io, "SparseInterval (", fill_value(fbr), ") [", ":,"^(ndims(fbr) - 1), "1:", size(fbr)[end], "]")
+function labelled_show(io::IO, fbr::SubFiber{<:SparseIntervalLevel})
+    print(
+        io,
+        "SparseInterval (",
+        fill_value(fbr),
+        ") [",
+        ":,"^(ndims(fbr) - 1),
+        "1:",
+        size(fbr)[end],
+        "]",
+    )
+end
 
 function labelled_children(fbr::SubFiber{<:SparseIntervalLevel})
     lvl = fbr.lvl
     pos = fbr.pos
     if lvl.left[pos] <= lvl.right[pos]
-        [LabelledTree(cartesian_label([range_label() for _ = 1:ndims(fbr) - 1]..., range_label(lvl.left[pos], lvl.right[pos])), SubFiber(lvl.lvl, pos))]
+        [
+            LabelledTree(
+                cartesian_label(
+                    [range_label() for _ in 1:(ndims(fbr) - 1)]...,
+                    range_label(lvl.left[pos], lvl.right[pos]),
+                ),
+                SubFiber(lvl.lvl, pos),
+            ),
+        ]
     end
 end
 
-@inline level_ndims(::Type{<:SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl} = 1 + level_ndims(Lvl)
+@inline level_ndims(
+    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+) where {Ti,Left,Right,Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseIntervalLevel) = (level_size(lvl.lvl)..., lvl.shape)
-@inline level_axes(lvl::SparseIntervalLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl}= level_fill_value(Lvl)
-data_rep_level(::Type{<:SparseIntervalLevel{Ti, Left, Right, Lvl}}) where {Ti, Left, Right, Lvl} = SparseData(data_rep_level(Lvl))
+@inline level_axes(lvl::SparseIntervalLevel) =
+    (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
+@inline level_eltype(
+    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+) where {Ti,Left,Right,Lvl} = level_eltype(Lvl)
+@inline level_fill_value(
+    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+) where {Ti,Left,Right,Lvl} = level_fill_value(Lvl)
+function data_rep_level(
+    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+) where {Ti,Left,Right,Lvl}
+    SparseData(data_rep_level(Lvl))
+end
 
-isstructequal(a::T, b::T) where {T <: SparseInterval} =
+function isstructequal(a::T, b::T) where {T<:SparseInterval}
     a.shape == b.shape &&
-    a.left == b.left &&
-    a.right == b.right &&
-    isstructequal(a.lvl, b.lvl)
+        a.left == b.left &&
+        a.right == b.right &&
+        isstructequal(a.lvl, b.lvl)
+end
 
 (fbr::AbstractFiber{<:SparseIntervalLevel})() = fbr
 function (fbr::SubFiber{<:SparseIntervalLevel})(idxs...)
@@ -125,11 +171,10 @@ function (fbr::SubFiber{<:SparseIntervalLevel})(idxs...)
     pos = fbr.pos
     if lvl.left[pos] <= idxs[end] <= lvl.right[pos]
         fbr_2 = SubFiber(lvl.lvl, pos)
-        return fbr_2(idxs[1:end-1]...)
+        return fbr_2(idxs[1:(end - 1)]...)
     end
     return fill_value(fbr)
 end
-
 
 mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
     lvl
@@ -143,7 +188,9 @@ mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-is_level_injective(ctx, lvl::VirtualSparseIntervalLevel) = [false, is_level_injective(ctx, lvl.lvl)...]
+function is_level_injective(ctx, lvl::VirtualSparseIntervalLevel)
+    [false, is_level_injective(ctx, lvl.lvl)...]
+end
 function is_level_atomic(ctx, lvl::VirtualSparseIntervalLevel)
     (below, atomic) = is_level_atomic(ctx, lvl.lvl)
     return ([below; [atomic]], atomic)
@@ -153,21 +200,28 @@ function is_level_concurrent(ctx, lvl::VirtualSparseIntervalLevel)
     return ([data; [false]], false)
 end
 
-function virtualize(ctx, ex, ::Type{SparseIntervalLevel{Ti, Left, Right, Lvl}}, tag=:lvl) where {Ti, Left, Right, Lvl}
+function virtualize(
+    ctx, ex, ::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}, tag=:lvl
+) where {Ti,Left,Right,Lvl}
     sym = freshen(ctx, tag)
     left = freshen(ctx, tag, :_left)
     right = freshen(ctx, tag, :_right)
-    push_preamble!(ctx, quote
-        $sym = $ex
-        $left = $sym.left
-        $right = $sym.right
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+            $left = $sym.left
+            $right = $sym.right
+        end,
+    )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     shape = value(:($sym.shape), Int)
     qos_fill = freshen(ctx, sym, :_qos_fill)
     qos_stop = freshen(ctx, sym, :_qos_stop)
     prev_pos = freshen(ctx, sym, :_prev_pos)
-    VirtualSparseIntervalLevel(lvl_2, sym, Ti, left, right, shape, qos_fill, qos_stop, prev_pos)
+    VirtualSparseIntervalLevel(
+        lvl_2, sym, Ti, left, right, shape, qos_fill, qos_stop, prev_pos
+    )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::DefaultStyle)
     quote
@@ -189,13 +243,14 @@ end
 
 function virtual_level_resize!(ctx, lvl::VirtualSparseIntervalLevel, dims...)
     lvl.shape = getstop(dims[end])
-    lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:end-1]...)
+    lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl
 end
 
-
 virtual_level_eltype(lvl::VirtualSparseIntervalLevel) = virtual_level_eltype(lvl.lvl)
-virtual_level_fill_value(lvl::VirtualSparseIntervalLevel) = virtual_level_fill_value(lvl.lvl)
+function virtual_level_fill_value(lvl::VirtualSparseIntervalLevel)
+    virtual_level_fill_value(lvl.lvl)
+end
 postype(lvl::VirtualSparseIntervalLevel) = postype(lvl.lvl)
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, pos, init)
@@ -212,7 +267,12 @@ function assemble_level!(ctx, lvl::VirtualSparseIntervalLevel, pos_start, pos_st
         Finch.resize_if_smaller!($(lvl.left), $pos_stop)
         Finch.resize_if_smaller!($(lvl.right), $pos_stop)
         Finch.fill_range!($(lvl.left), 1, $pos_start, $pos_stop)
-        Finch.fill_range!($(lvl.right), $(ctx(call(-, 1, getunit(virtual_level_size(ctx, lvl)[end])))), $pos_start, $pos_stop)
+        Finch.fill_range!(
+            $(lvl.right),
+            $(ctx(call(-, 1, getunit(virtual_level_size(ctx, lvl)[end])))),
+            $pos_start,
+            $pos_stop,
+        )
         $(assemble_level!(ctx, lvl.lvl, value(pos_start), value(pos_stop)))
     end
 end
@@ -220,10 +280,13 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    push_preamble!(ctx, quote
-        resize!($(lvl.left), $pos_stop)
-        resize!($(lvl.right), $pos_stop)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            resize!($(lvl.left), $pos_stop)
+            resize!($(lvl.right), $pos_stop)
+        end,
+    )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(pos_stop))
     return lvl
 end
@@ -235,7 +298,13 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, pos
     return lvl
 end
 
-function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode, ::Union{typeof(defaultread), typeof(walk)})
+function unfurl(
+    ctx,
+    fbr::VirtualSubFiber{VirtualSparseIntervalLevel},
+    ext,
+    mode,
+    ::Union{typeof(defaultread),typeof(walk)},
+)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
@@ -243,51 +312,66 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode
     my_i_stop = freshen(ctx, tag, :_i_stop)
     my_i_start = freshen(ctx, tag, :_i_start)
 
-    Thunk(
-        preamble = quote
+    Thunk(;
+        preamble=quote
             $my_i_start = $(lvl.left)[$(ctx(pos))]
             $my_i_stop = $(lvl.right)[$(ctx(pos))]
         end,
-        body = (ctx) -> Sequence([
-            Phase(
-                start = (ctx, ext) -> literal(lvl.Ti(1)),
-                stop = (ctx, ext) -> call(-, value(my_i_start, lvl.Ti), getunit(ext)),
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+        body=(ctx) -> Sequence([
+            Phase(;
+                start=(ctx, ext) -> literal(lvl.Ti(1)),
+                stop=(ctx, ext) -> call(-, value(my_i_start, lvl.Ti), getunit(ext)),
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
             ),
-            Phase(
+            Phase(;
                 stop = (ctx, ext) -> value(my_i_stop, lvl.Ti),
                 body = (ctx, ext) -> Run(Simplify(instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode))),
             ),
-            Phase(
+            Phase(;
                 stop = (ctx, ext) -> lvl.shape,
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
-            )
-        ])
+                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+            ),
+        ]),
     )
 end
 
-unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseIntervalLevel}, ext, mode, proto::Union{typeof(defaultupdate), typeof(extrude)}) =
-    unfurl(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto)
+function unfurl(
+    ctx,
+    fbr::VirtualSubFiber{VirtualSparseIntervalLevel},
+    ext,
+    mode,
+    proto::Union{typeof(defaultupdate),typeof(extrude)},
+)
+    unfurl(
+        ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
+    )
+end
 
-function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseIntervalLevel}, ext, mode, ::Union{typeof(defaultupdate), typeof(extrude)})
+function unfurl(
+    ctx,
+    fbr::VirtualHollowSubFiber{VirtualSparseIntervalLevel},
+    ext,
+    mode,
+    ::Union{typeof(defaultupdate),typeof(extrude)},
+)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.ex
     Tp = postype(lvl)
     Ti = lvl.Ti
     dirty = freshen(ctx, tag, :dirty)
 
-    Thunk(
-        body = (ctx) -> AcceptRun(
-            body = (ctx, ext) -> Thunk(
+    Thunk(;
+        body=(ctx) -> AcceptRun(;
+            body=(ctx, ext) -> Thunk(;
                 preamble = quote
                     $dirty = false
                 end,
-                body = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
+                body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
                 epilogue = quote
                     if $dirty
                         $(fbr.dirty) = true
                         $(lvl.left)[$(ctx(pos))] < $(lvl.right)[$(ctx(pos))] &&
-                            throw(FinchProtocolError("SparseIntervalLevels can only be updated once"))
+                        throw(FinchProtocolError("SparseIntervalLevels can only be updated once"))
                         $(lvl.left)[$(ctx(pos))] = $(ctx(getstart(ext)))
                         $(lvl.right)[$(ctx(pos))] = $(ctx(getstop(ext)))
                         $(if issafe(get_mode_flag(ctx))
@@ -296,8 +380,8 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualSparseIntervalLevel}, ext
                             end
                         end)
                     end
-                end
-            )
+                end,
+            ),
         ),
     )
 end

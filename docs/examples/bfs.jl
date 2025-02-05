@@ -23,16 +23,16 @@ function bfs(edges, source=5)
     while F_nnz > 0
         @finch begin
             _F .= false
-            for j=_, k=_
+            for j in _, k in _
                 if F[j] && edges[k, j] && !(V[k])
                     _F[k] |= true
-                    P[k] <<choose(0)>>= j #Only set the parent for this vertex
+                    P[k] << choose(0) >>= j #Only set the parent for this vertex
                 end
             end
         end
         c = Scalar(0)
         @finch begin
-            for k=_
+            for k in _
                 let _f = _F[k]
                     V[k] |= _f
                     c[] += _f

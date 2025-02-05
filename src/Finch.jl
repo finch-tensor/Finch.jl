@@ -24,7 +24,8 @@ using UnsafeAtomics
 export @finch, @finch_program, @finch_code, @finch_kernel, value
 
 export Tensor
-export DenseFormat, CSFFormat, CSCFormat, DCSFFormat, DCSCFormat, HashFormat, ByteMapFormat, COOFormat
+export DenseFormat,
+    CSFFormat, CSCFormat, DCSFFormat, DCSCFormat, HashFormat, ByteMapFormat, COOFormat
 export SparseRunList, SparseRunListLevel
 export RunList, RunListLevel
 export SparseInterval, SparseIntervalLevel
@@ -74,7 +75,9 @@ struct NotImplementedError <: Exception
     msg::String
 end
 
-const FINCH_VERSION = VersionNumber(TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"])
+const FINCH_VERSION = VersionNumber(
+    TOML.parsefile(joinpath(dirname(@__DIR__), "Project.toml"))["version"]
+)
 
 include("util/convenience.jl")
 include("util/special_functions.jl")
@@ -163,8 +166,8 @@ const SparseLevel = SparseDictLevel
 
 A dense format with a fill value of `z`.
 """
-function DenseFormat(N, z = 0.0, T = typeof(z))
-    fmt = ElementLevel{z, T}()
+function DenseFormat(N, z=0.0, T=typeof(z))
+    fmt = ElementLevel{z,T}()
     for i in 1:N
         fmt = DenseLevel(fmt)
     end
@@ -178,9 +181,9 @@ An `N`-dimensional CSC format with a fill value of `z`.
 CSF supports random access in the rightmost index, and uses
 a tree structure to store the rest of the data.
 """
-function CSFFormat(N, z = 0.0, T = Float64)
-    fmt = ElementLevel{z, T}()
-    for i in 1:N-1
+function CSFFormat(N, z=0.0, T=Float64)
+    fmt = ElementLevel{z,T}()
+    for i in 1:(N - 1)
         fmt = SparseListLevel(fmt)
     end
     DenseLevel(fmt)
@@ -192,7 +195,7 @@ end
 A CSC format with a fill value of `z`. CSC stores a sparse matrix as a
 dense array of lists.
 """
-CSCFormat(z = 0.0, T = typeof(z)) = CSFFormat(2, z, T)
+CSCFormat(z=0.0, T=typeof(z)) = CSFFormat(2, z, T)
 
 """
     DCSFFormat(z = 0.0, T = typeof(z))
@@ -200,8 +203,8 @@ CSCFormat(z = 0.0, T = typeof(z)) = CSFFormat(2, z, T)
 A DCSF format with a fill value of `z`. DCSF stores a sparse tensor as a
 list of lists of lists.
 """
-function DCSFFormat(N, z = 0.0, T = typeof(z))
-    fmt = ElementLevel{z, T}()
+function DCSFFormat(N, z=0.0, T=typeof(z))
+    fmt = ElementLevel{z,T}()
     for i in 1:N
         fmt = SparseListLevel(fmt)
     end
@@ -214,16 +217,16 @@ end
 A DCSC format with a fill value of `z`. DCSC stores a sparse matrix as a
 list of lists.
 """
-DCSCFormat(z = 0.0, T = typeof(z)) = DCSFFormat(2, z, T)
+DCSCFormat(z=0.0, T=typeof(z)) = DCSFFormat(2, z, T)
 
 """
     HashFormat(N, z = 0.0, T = typeof(z))
 
 A hash-table based format with a fill value of `z`.
 """
-function HashFormat(N, z = 0.0, T = typeof(z))
-    fmt = ElementLevel{z, T}()
-    for i in 1:N-1
+function HashFormat(N, z=0.0, T=typeof(z))
+    fmt = ElementLevel{z,T}()
+    for i in 1:(N - 1)
         fmt = SparseDictLevel(fmt)
     end
     DenseLevel(fmt)
@@ -234,8 +237,8 @@ end
 
 A byte-map based format with a fill value of `z`.
 """
-function ByteMapFormat(N, z = 0.0, T = typeof(z))
-    fmt = ElementLevel{z, T}()
+function ByteMapFormat(N, z=0.0, T=typeof(z))
+    fmt = ElementLevel{z,T}()
     for i in 1:N
         fmt = SparseByteMapLevel(fmt)
     end
@@ -248,7 +251,7 @@ end
 An `N`-dimensional COO format with a fill value of `z`. COO stores a
 sparse tensor as a list of coordinates.
 """
-COOFormat(N, z = 0.0, T = typeof(z)) = SparseCOOLevel{N}(ElementLevel{z, T}())
+COOFormat(N, z=0.0, T=typeof(z)) = SparseCOOLevel{N}(ElementLevel{z,T}())
 
 include("postprocess.jl")
 
@@ -298,9 +301,13 @@ export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
 
 @static if !isdefined(Base, :get_extension)
     function __init__()
-        @require SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf" include("../ext/SparseArraysExt.jl")
+        @require SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf" include(
+            "../ext/SparseArraysExt.jl"
+        )
         @require HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f" include("../ext/HDF5Ext.jl")
-        @require TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77" include("../ext/TensorMarketExt.jl")
+        @require TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77" include(
+            "../ext/TensorMarketExt.jl"
+        )
         @require NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605" include("../ext/NPZExt.jl")
     end
 end
@@ -315,9 +322,11 @@ end
         A = Tensor(Dense(SparseList(Element(0.0))))
         x = Tensor(SparseList(Element(0.0)))
         Finch.execute_code(:ex, typeof(Finch.@finch_program_instance begin
-                for j=_, i=_; y[i] += A[i, j] * x[j] end
+            for j in _, i in _
+                y[i] += A[i, j] * x[j]
             end
-        ))
+        end
+))
 
         if @load_preference("precompile", true)
             @info "Running enhanced precompilation... (to disable, run `using Preferences; Preferences.set_preferences!(\"Finch\", \"precompile\"=>false)`"

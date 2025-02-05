@@ -26,26 +26,26 @@ end
 FinchNotation.finch_leaf(x::VirtualDiagMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualDiagMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Lookup(
-            body = (ctx, j) -> VirtualDiagMaskColumn(j)
-        )
+    Unfurled(;
+        arr=arr,
+        body=Lookup(;
+            body=(ctx, j) -> VirtualDiagMaskColumn(j)
+        ),
     )
 end
 
 function unfurl(ctx, arr::VirtualDiagMaskColumn, ext, mode, proto::typeof(defaultread))
     j = arr.j
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> j,
-            body = (ctx, ext) -> Run(body=FillLeaf(true)),
+            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
-        Phase(body = (ctx, ext) -> Run(body=FillLeaf(false)))
+        Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
 end
 
@@ -77,24 +77,24 @@ end
 FinchNotation.finch_leaf(x::VirtualUpTriMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualUpTriMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Lookup(
-            body = (ctx, j) -> VirtualUpTriMaskColumn(j)
-        )
+    Unfurled(;
+        arr=arr,
+        body=Lookup(;
+            body=(ctx, j) -> VirtualUpTriMaskColumn(j)
+        ),
     )
 end
 
 function unfurl(ctx, arr::VirtualUpTriMaskColumn, ext, mode, proto::typeof(defaultread))
     j = arr.j
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> value(:($(ctx(j)))),
-            body = (ctx, ext) -> Run(body=FillLeaf(true))
+            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
-        Phase(
-            body = (ctx, ext) -> Run(body=FillLeaf(false)),
-        )
+        Phase(;
+            body=(ctx, ext) -> Run(; body=FillLeaf(false))
+        ),
     ])
 end
 
@@ -126,24 +126,24 @@ end
 FinchNotation.finch_leaf(x::VirtualLoTriMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualLoTriMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Lookup(
-            body = (ctx, j) -> VirtualLoTriMaskColumn(j)
-        )
+    Unfurled(;
+        arr=arr,
+        body=Lookup(;
+            body=(ctx, j) -> VirtualLoTriMaskColumn(j)
+        ),
     )
 end
 
 function unfurl(ctx, arr::VirtualLoTriMaskColumn, ext, mode, proto::typeof(defaultread))
     j = arr.j
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
-            body = (ctx, ext) -> Run(body=FillLeaf(true)),
-        )
+        Phase(;
+            body=(ctx, ext) -> Run(; body=FillLeaf(true))
+        ),
     ])
 end
 
@@ -182,33 +182,33 @@ end
 FinchNotation.finch_leaf(x::VirtualBandMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualBandMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Lookup(
-            body = (ctx, j_lo) -> VirtualBandMaskSlice(j_lo)
-        )
+    Unfurled(;
+        arr=arr,
+        body=Lookup(;
+            body=(ctx, j_lo) -> VirtualBandMaskSlice(j_lo)
+        ),
     )
 end
 
 function unfurl(ctx, arr::VirtualBandMaskSlice, ext, mode, proto::typeof(defaultread))
-    Lookup(
-        body = (ctx, j_hi) -> VirtualBandMaskColumn(arr.j_lo, j_hi)
+    Lookup(;
+        body=(ctx, j_hi) -> VirtualBandMaskColumn(arr.j_lo, j_hi)
     )
 end
 
 function unfurl(ctx, arr::VirtualBandMaskColumn, ext, mode, proto::typeof(defaultread))
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> k,
-            body = (ctx, ext) -> Run(body=FillLeaf(true))
+            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
-        Phase(
-            body = (ctx, ext) -> Run(body=FillLeaf(false)),
-        )
+        Phase(;
+            body=(ctx, ext) -> Run(; body=FillLeaf(false))
+        ),
     ])
 end
 
@@ -240,11 +240,11 @@ end
 FinchNotation.finch_leaf(x::VirtualSplitMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualSplitMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Lookup(
-            body = (ctx, j) -> VirtualSplitMaskColumn(arr.P, j)
-        )
+    Unfurled(;
+        arr=arr,
+        body=Lookup(;
+            body=(ctx, j) -> VirtualSplitMaskColumn(arr.P, j)
+        ),
     )
 end
 
@@ -252,15 +252,15 @@ function unfurl(ctx, arr::VirtualSplitMaskColumn, ext_2, mode, proto::typeof(def
     j = arr.j
     P = arr.P
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> call(+, call(-, getstart(ext_2), 1), call(fld, call(*, measure(ext_2), call(-, j, 1)), P)),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> call(+, call(-, getstart(ext_2), 1), call(fld, call(*, measure(ext_2), j), P)),
-            body = (ctx, ext) -> Run(body=FillLeaf(true)),
+            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
-        Phase(body = (ctx, ext) -> Run(body=FillLeaf(false)))
+        Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
 end
 
@@ -301,62 +301,66 @@ function Finch.virtual_call(ctx, ::typeof(chunkmask), b, dim)
 end
 
 FinchNotation.finch_leaf(x::VirtualChunkMask) = virtual(x)
-Finch.virtual_size(ctx, arr::VirtualChunkMask) = (arr.dim, Extent(literal(1), call(cld, measure(arr.dim), arr.b)))
+function Finch.virtual_size(ctx, arr::VirtualChunkMask)
+    (arr.dim, Extent(literal(1), call(cld, measure(arr.dim), arr.b)))
+end
 
 struct VirtualChunkMaskColumn
-    arr :: VirtualChunkMask
+    arr::VirtualChunkMask
     j
 end
 
 struct VirtualChunkMaskCleanupColumn
-    arr :: VirtualChunkMask
+    arr::VirtualChunkMask
 end
 
 FinchNotation.finch_leaf(x::VirtualChunkMaskColumn) = virtual(x)
 FinchNotation.finch_leaf(x::VirtualChunkMaskCleanupColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualChunkMask, ext, mode, proto::typeof(defaultread))
-    Unfurled(
-        arr = arr,
-        body = Sequence([
-            Phase(
+    Unfurled(;
+        arr=arr,
+        body=Sequence([
+            Phase(;
                 stop = (ctx, ext) -> call(cld, measure(arr.dim), arr.b),
-                body = (ctx, ext) -> Lookup(
-                    body = (ctx, j) -> VirtualChunkMaskColumn(arr, j)
-                )
+                body = (ctx, ext) -> Lookup(;
+                body=(ctx, j) -> VirtualChunkMaskColumn(arr, j)
             ),
-            Phase(
-                body = (ctx, ext) -> Run(
-                    body = VirtualChunkMaskCleanupColumn(arr)
-                )
-            )
-        ])
+            ),
+            Phase(;
+                body=(ctx, ext) -> Run(;
+                    body=VirtualChunkMaskCleanupColumn(arr)
+                ),
+            ),
+        ]),
     )
 end
 
 function unfurl(ctx, arr::VirtualChunkMaskColumn, ext, mode, proto::typeof(defaultread))
     j = arr.j
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> call(*, arr.arr.b, call(-, j, 1)),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> call(*, arr.arr.b, j),
-            body = (ctx, ext) -> Run(body=FillLeaf(true)),
+            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
-        Phase(body = (ctx, ext) -> Run(body=FillLeaf(false)))
+        Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
 end
 
-function unfurl(ctx, arr::VirtualChunkMaskCleanupColumn, ext, mode, proto::typeof(defaultread))
+function unfurl(
+    ctx, arr::VirtualChunkMaskCleanupColumn, ext, mode, proto::typeof(defaultread)
+)
     Sequence([
-        Phase(
+        Phase(;
             stop = (ctx, ext) -> call(*, call(fld, measure(arr.arr.dim), arr.arr.b), arr.arr.b),
-            body = (ctx, ext) -> Run(body=FillLeaf(false))
+            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
-        Phase(
-            body = (ctx, ext) -> Run(body=FillLeaf(true)),
-        )
+        Phase(;
+            body=(ctx, ext) -> Run(; body=FillLeaf(true))
+        ),
     ])
 end

@@ -1,6 +1,7 @@
 ```@meta
 CurrentModule = Finch
 ```
+
 # Optimization Tips for Finch
 
 It's easy to ask Finch to run the same operation in different ways. However,
@@ -18,9 +19,14 @@ concordant traversal of a sparse matrix, as the outer loops access the higher
 levels of the tensor tree:
 
 ```jldoctest example1; setup=:(using Finch)
-A = Tensor(Dense(SparseList(Element(0.0))), fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)))
+A = Tensor(
+    Dense(SparseList(Element(0.0))),
+    fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
+)
 s = Scalar(0.0)
-@finch for j=_, i=_ ; s[] += A[i, j] end
+@finch for j in _, i in _
+    s[] += A[i, j]
+end
 
 # output
 
@@ -32,7 +38,9 @@ over only the nonzeros in order. If our matrix is `m × n` with `nnz` nonzeros,
 this takes `O(n + nnz)` time.
 
 ```jldoctest example1
-@finch_code for j=_, i=_ ; s[] += A[i, j] end
+@finch_code for j in _, i in _
+    s[] += A[i, j]
+end
 
 # output
 
@@ -82,7 +90,6 @@ quote
 end
 ```
 
-
 When the loop order does not correspond to storage order, we call this
 *discordant* iteration. For example, if we swap the loop order in the
 above example, then Finch needs to randomly access each sparse column for each
@@ -94,7 +101,9 @@ arrays unless we really need to and they support it efficiently!
 Note the double for loop in the following code
 
 ```jldoctest example1
-@finch_code for i=_, j=_ ; s[] += A[i, j] end # DISCORDANT, DO NOT DO THIS
+@finch_code for i in _, j in _
+    s[] += A[i, j]
+end # DISCORDANT, DO NOT DO THIS
 
 # output
 
@@ -160,9 +169,16 @@ For example, if `A` is `m × n` with `nnz` nonzeros, the following Finch kernel 
 densify `B`, filling it with `m * n` stored values:
 
 ```jldoctest example1
-A = Tensor(Dense(SparseList(Element(0.0))), fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)))
+A = Tensor(
+    Dense(SparseList(Element(0.0))),
+    fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
+)
 B = Tensor(Dense(SparseList(Element(0.0)))) #DO NOT DO THIS, B has the wrong fill value
-@finch (B .= 0; for j=_, i=_; B[i, j] = A[i, j] + 1 end; return B)
+@finch (B .= 0;
+for j in _, i in _
+    B[i, j] = A[i, j] + 1
+end;
+return B)
 countstored(B)
 
 # output
@@ -173,9 +189,16 @@ countstored(B)
 Since `A` is filled with `0.0`, adding `1` to the fill value produces `1.0`. However, `B` can only represent a fill value of `0.0`. Instead, we should specify `1.0` for the fill.
 
 ```jldoctest example1
-A = Tensor(Dense(SparseList(Element(0.0))), fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)))
+A = Tensor(
+    Dense(SparseList(Element(0.0))),
+    fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
+)
 B = Tensor(Dense(SparseList(Element(1.0))))
-@finch (B .= 1; for j=_, i=_; B[i, j] = A[i, j] + 1 end; return B)
+@finch (B .= 1;
+for j in _, i in _
+    B[i, j] = A[i, j] + 1
+end;
+return B)
 countstored(B)
 
 # output
@@ -190,10 +213,17 @@ program variables. Continuing our above example, if we obscure the value of `1`
 behind a variable `x`, Finch can only determine that `x` has type `Int`, not that it is `1`.
 
 ```jldoctest example1
-A = Tensor(Dense(SparseList(Element(0.0))), fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)))
+A = Tensor(
+    Dense(SparseList(Element(0.0))),
+    fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
+)
 B = Tensor(Dense(SparseList(Element(1.0))))
 x = 1 #DO NOT DO THIS, Finch cannot see the value of x anymore
-@finch (B .= 1; for j=_, i=_; B[i, j] = A[i, j] + x end; return B)
+@finch (B .= 1;
+for j in _, i in _
+    B[i, j] = A[i, j] + x
+end;
+return B)
 countstored(B)
 
 # output
@@ -206,7 +236,11 @@ However, there are some situations where you may want a value to be dynamic. For
 ```julia
 function saxpy(x, a, y)
     z = Tensor(SparseList(Element(0.0)))
-    @finch (z .= 0; for i=_; z[i] = a * x[i] + y[i] end; return z)
+    @finch (z .= 0;
+    for i in _
+        z[i] = a * x[i] + y[i]
+    end;
+    return z)
 end
 ```
 
@@ -216,11 +250,18 @@ Unless you declare the properties of your functions using Finch's [User-Defined 
 the meaning of `*`.
 
 ```jldoctest example1
-A = Tensor(Dense(SparseList(Element(0.0))), fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)))
+A = Tensor(
+    Dense(SparseList(Element(0.0))),
+    fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
+)
 B = ones(4, 3)
 C = Scalar(0.0)
 f(x, y) = x * y # DO NOT DO THIS, Obscures *
-@finch (C .= 0; for j=_, i=_; C[] += f(A[i, j], B[i, j]) end; return C)
+@finch (C .= 0;
+for j in _, i in _
+    C[] += f(A[i, j], B[i, j])
+end;
+return C)
 
 # output
 
@@ -230,7 +271,11 @@ f(x, y) = x * y # DO NOT DO THIS, Obscures *
 Checking the generated code, we see that this code is indeed densifying (notice the for-loop which repeatedly evaluates `f(B[i, j], 0.0)`).
 
 ```jldoctest example1
-@finch_code (C .= 0; for j=_, i=_; C[] += f(A[i, j], B[i, j]) end; return C)
+@finch_code (C .= 0;
+for j in _, i in _
+    C[] += f(A[i, j], B[i, j])
+end;
+return C)
 
 # output
 

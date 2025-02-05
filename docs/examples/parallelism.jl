@@ -13,22 +13,21 @@ println("serial")
     (A, x, y) = $((A, x, y))
     Finch.@finch begin
         y .= 0
-        for j = _
-            for i = _
+        for j in _
+            for i in _
                 y[j] += A[walk(i), j] * x[i]
             end
         end
     end
 end
 
-
 println("parallel")
 @btime begin
     (A, x, y) = $(A, x, y)
     Finch.@finch begin
         y .= 0
-        for j = parallel(_)
-            for i = _
+        for j in parallel(_)
+            for i in _
                 y[j] += A[walk(i), j] * x[i]
             end
         end

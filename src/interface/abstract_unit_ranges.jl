@@ -17,7 +17,7 @@ function virtualize(ctx, ex, arrtype::Type{<:AbstractUnitRange{T}}, tag=:tns) wh
 end
 
 function virtual_size(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange)
-    return [Extent(literal(1), value(:(length($(arr.ex))), Int)),]
+    return [Extent(literal(1), value(:(length($(arr.ex))), Int))]
 end
 
 virtual_resize!(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange, idx_dim) = arr
@@ -28,11 +28,11 @@ end
 
 function unfurl(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange, ext, mode, proto)
     if mode.kind === reader
-        Unfurled(
-            arr = arr,
-            body = Lookup(
-                body = (ctx, i) -> FillLeaf(value(:($(arr.ex)[$(ctx(i))])))
-            )
+        Unfurled(;
+            arr=arr,
+            body=Lookup(;
+                body=(ctx, i) -> FillLeaf(value(:($(arr.ex)[$(ctx(i))])))
+            ),
         )
     else
         throw(FinchProtocolError("$(arr.arrtype) is not writeable"))

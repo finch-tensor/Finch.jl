@@ -43,14 +43,13 @@ end
 (fbr::AbstractFiber{<:PatternLevel})() = true
 data_rep_level(::Type{<:PatternLevel}) = ElementData(false, Bool)
 
-isstructequal(a::T, b::T)  where {T <: Pattern} = true
+isstructequal(a::T, b::T) where {T<:Pattern} = true
 
 postype(::Type{<:PatternLevel{Tp}}) where {Tp} = Tp
 
 function moveto(lvl::PatternLevel{Tp}, device) where {Tp}
     return PatternLevel{Tp}()
 end
-
 
 """
     pattern!(fbr)
@@ -112,7 +111,8 @@ virtual_level_eltype(::VirtualPatternLevel) = Bool
 postype(lvl::VirtualPatternLevel) = lvl.Tp
 
 function declare_level!(ctx, lvl::VirtualPatternLevel, pos, init)
-    init == literal(false) || throw(FinchProtocolError("Must initialize Pattern Levels to false"))
+    init == literal(false) ||
+        throw(FinchProtocolError("Must initialize Pattern Levels to false"))
     lvl
 end
 

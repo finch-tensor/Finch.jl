@@ -4,7 +4,7 @@ using Finch
 
 isdefined(Base, :get_extension) ? (using TensorMarket) : (using ..TensorMarket)
 
-function Finch.fttread(filename::AbstractString, infoonly = false, retcoord=false)
+function Finch.fttread(filename::AbstractString, infoonly=false, retcoord=false)
     infoonly && return ttread(filename, true)
     out = ttread(filename, false, retcoord)
     if out isa Tuple
@@ -22,7 +22,7 @@ end
 
 function Finch.fttwrite(filename::AbstractString, A)
     IV = ffindnz(A)
-    I = IV[1:end-1]
+    I = IV[1:(end - 1)]
     V = IV[end]
     ttwrite(filename, I, V, size(A))
 end
@@ -34,7 +34,7 @@ end
 
 function Finch.ftnswrite(filename::AbstractString, A)
     IV = ffindnz(A)
-    I = IV[1:end-1]
+    I = IV[1:(end - 1)]
     V = IV[end]
     tnswrite(filename, I, V)
 end

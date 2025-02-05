@@ -4,16 +4,16 @@ const IS_CONST = 4
 const ID = 8
 
 @enum FinchNodeKind begin
-    literal   =  0ID | IS_CONST
-    value     =  1ID | IS_CONST
-    index     =  2ID
-    variable  =  3ID
-    virtual   =  4ID
-    tag       =  5ID | IS_TREE
-    call      =  6ID | IS_TREE
-    access    =  7ID | IS_TREE
-    reader    =  8ID | IS_TREE
-    updater   =  9ID | IS_TREE
+    literal   = 0ID | IS_CONST
+    value     = 1ID | IS_CONST
+    index     = 2ID
+    variable  = 3ID
+    virtual   = 4ID
+    tag       = 5ID | IS_TREE
+    call      = 6ID | IS_TREE
+    access    = 7ID | IS_TREE
+    reader    = 8ID | IS_TREE
+    updater   = 9ID | IS_TREE
     cached    = 10ID | IS_TREE
     assign    = 11ID | IS_TREE | IS_STATEFUL
     loop      = 12ID | IS_TREE | IS_STATEFUL
@@ -269,9 +269,15 @@ function SyntaxInterface.similarterm(::Type{FinchNode}, op::FinchNodeKind, args)
 end
 
 function FinchNode(kind::FinchNodeKind, args::Vector)
-    if (kind === value || kind === literal || kind === index || kind === variable || kind === virtual) && length(args) == 1
+    if (
+        kind === value || kind === literal || kind === index || kind === variable ||
+        kind === virtual
+    ) && length(args) == 1
         return FinchNode(kind, args[1], Any, FinchNode[])
-    elseif (kind === value || kind === literal || kind === index || kind === variable || kind === virtual) && length(args) == 2
+    elseif (
+        kind === value || kind === literal || kind === index || kind === variable ||
+        kind === virtual
+    ) && length(args) == 2
         return FinchNode(kind, args[1], args[2], FinchNode[])
     elseif (kind === cached && length(args) == 2) ||
         (kind === reader && length(args) == 0) ||
@@ -301,50 +307,85 @@ end
 function Base.getproperty(node::FinchNode, sym::Symbol)
     if sym === :kind || sym === :val || sym === :type || sym === :children
         return Base.getfield(node, sym)
-    elseif node.kind === index && sym === :name node.val::Symbol
-    elseif node.kind === variable && sym === :name node.val::Symbol
-    elseif node.kind === tag && sym === :var node.children[1]
-    elseif node.kind === tag && sym === :bind node.children[2]
-    elseif node.kind === updater && sym === :op node.children[1]
-    elseif node.kind === access && sym === :tns node.children[1]
-    elseif node.kind === access && sym === :mode node.children[2]
-    elseif node.kind === access && sym === :idxs @view node.children[3:end]
-    elseif node.kind === call && sym === :op node.children[1]
-    elseif node.kind === call && sym === :args @view node.children[2:end]
-    elseif node.kind === cached && sym === :arg node.children[1]
-    elseif node.kind === cached && sym === :ref node.children[2]
-    elseif node.kind === loop && sym === :idx node.children[1]
-    elseif node.kind === loop && sym === :ext node.children[2]
-    elseif node.kind === loop && sym === :body node.children[3]
-    elseif node.kind === sieve && sym === :cond node.children[1]
-    elseif node.kind === sieve && sym === :body node.children[2]
-    elseif node.kind === assign && sym === :lhs node.children[1]
-    elseif node.kind === assign && sym === :op node.children[2]
-    elseif node.kind === assign && sym === :rhs node.children[3]
-    elseif node.kind === define && sym === :lhs node.children[1]
-    elseif node.kind === define && sym === :rhs node.children[2]
-    elseif node.kind === define && sym === :body node.children[3]
-    elseif node.kind === declare && sym === :tns node.children[1]
-    elseif node.kind === declare && sym === :init node.children[2]
-    elseif node.kind === declare && sym === :op node.children[3]
-    elseif node.kind === freeze && sym === :tns node.children[1]
-    elseif node.kind === freeze && sym === :op node.children[2]
-    elseif node.kind === thaw && sym === :tns node.children[1]
-    elseif node.kind === thaw && sym === :op node.children[2]
-    elseif node.kind === block && sym === :bodies node.children
-    elseif node.kind === yieldbind && sym === :args node.children
+    elseif node.kind === index && sym === :name
+        node.val::Symbol
+    elseif node.kind === variable && sym === :name
+        node.val::Symbol
+    elseif node.kind === tag && sym === :var
+        node.children[1]
+    elseif node.kind === tag && sym === :bind
+        node.children[2]
+    elseif node.kind === updater && sym === :op
+        node.children[1]
+    elseif node.kind === access && sym === :tns
+        node.children[1]
+    elseif node.kind === access && sym === :mode
+        node.children[2]
+    elseif node.kind === access && sym === :idxs
+        @view node.children[3:end]
+    elseif node.kind === call && sym === :op
+        node.children[1]
+    elseif node.kind === call && sym === :args
+        @view node.children[2:end]
+    elseif node.kind === cached && sym === :arg
+        node.children[1]
+    elseif node.kind === cached && sym === :ref
+        node.children[2]
+    elseif node.kind === loop && sym === :idx
+        node.children[1]
+    elseif node.kind === loop && sym === :ext
+        node.children[2]
+    elseif node.kind === loop && sym === :body
+        node.children[3]
+    elseif node.kind === sieve && sym === :cond
+        node.children[1]
+    elseif node.kind === sieve && sym === :body
+        node.children[2]
+    elseif node.kind === assign && sym === :lhs
+        node.children[1]
+    elseif node.kind === assign && sym === :op
+        node.children[2]
+    elseif node.kind === assign && sym === :rhs
+        node.children[3]
+    elseif node.kind === define && sym === :lhs
+        node.children[1]
+    elseif node.kind === define && sym === :rhs
+        node.children[2]
+    elseif node.kind === define && sym === :body
+        node.children[3]
+    elseif node.kind === declare && sym === :tns
+        node.children[1]
+    elseif node.kind === declare && sym === :init
+        node.children[2]
+    elseif node.kind === declare && sym === :op
+        node.children[3]
+    elseif node.kind === freeze && sym === :tns
+        node.children[1]
+    elseif node.kind === freeze && sym === :op
+        node.children[2]
+    elseif node.kind === thaw && sym === :tns
+        node.children[1]
+    elseif node.kind === thaw && sym === :op
+        node.children[2]
+    elseif node.kind === block && sym === :bodies
+        node.children
+    elseif node.kind === yieldbind && sym === :args
+        node.children
     else
         error("type FinchNode($(node.kind), ...) has no property $sym")
     end
 end
 
 function Base.show(io::IO, node::FinchNode)
-    if node.kind === literal || node.kind === index || node.kind === variable || node.kind === virtual
+    if node.kind === literal || node.kind === index || node.kind === variable ||
+        node.kind === virtual
         print(io, node.kind, "(", node.val, ")")
     elseif node.kind === value
         print(io, node.kind, "(", node.val, ", ", node.type, ")")
     else
-        print(io, node.kind, "("); join(io, node.children, ", "); print(io, ")")
+        print(io, node.kind, "(")
+        join(io, node.children, ", ")
+        print(io, ")")
     end
 end
 
@@ -383,7 +424,8 @@ function Base.hash(a::FinchNode, h::UInt)
     if !istree(a)
         if a.kind === value
             return hash(value, hash(a.val, hash(a.type, h)))
-        elseif a.kind === literal || a.kind === virtual || a.kind === index || a.kind === variable
+        elseif a.kind === literal || a.kind === virtual || a.kind === index ||
+            a.kind === variable
             return hash(a.kind, hash(a.val, h))
         else
             error("unimplemented")
@@ -425,6 +467,6 @@ finch_pattern(arg) = finch_leaf(arg)
 finch_pattern(arg::RewriteTools.Slot) = arg
 finch_pattern(arg::RewriteTools.Segment) = arg
 finch_pattern(arg::RewriteTools.Term) = arg
-function RewriteTools.term(f::FinchNodeKind, args...; type = nothing)
+function RewriteTools.term(f::FinchNodeKind, args...; type=nothing)
     RewriteTools.Term(f, [finch_pattern.(args)...])
 end

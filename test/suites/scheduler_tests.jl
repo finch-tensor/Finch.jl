@@ -11,7 +11,7 @@
                     Finch.immediate(:B),
                     Finch.immediate(:C),
                     Finch.immediate(:D),
-                )
+                ),
             ),
             Finch.query(Finch.alias(:E), Finch.alias(:A)),
             Finch.produces(Finch.alias(:E)),
@@ -23,7 +23,7 @@
                     Finch.immediate(:B),
                     Finch.immediate(:C),
                     Finch.immediate(:D),
-                )
+                ),
             ),
             Finch.produces(Finch.alias(:E)),
         )
@@ -33,9 +33,9 @@
     end
 
     @testset "finch_unparse" begin
-        prgm = @finch_program quote 
+        prgm = @finch_program quote
             A .= 0
-            for i = _
+            for i in _
                 A[i] += 1
             end
         end
@@ -53,20 +53,34 @@
         prgm_in = plan(
             query(A, table(0, i, j)),
             query(B, table(0, i, j)),
-            query(C, aggregate(+, 0, mapjoin(*,
-                reorder(relabel(A, i, k), i, k, j),
-                reorder(relabel(B, j, k), i, k, j)
-            ))),
+            query(
+                C,
+                aggregate(
+                    +,
+                    0,
+                    mapjoin(*,
+                        reorder(relabel(A, i, k), i, k, j),
+                        reorder(relabel(B, j, k), i, k, j),
+                    ),
+                ),
+            ),
             produces(C))
         B_2 = alias(:B_2)
         prgm_out = plan(
             query(A, table(0, i, j)),
             query(B, table(0, i, j)),
             query(B_2, reorder(relabel(B, i, j), j, i)),
-            query(C, aggregate(+, 0, mapjoin(*,
-                reorder(relabel(A, i, k), i, k, j),
-                reorder(relabel(B_2, k, j), i, k, j)
-            ))),
+            query(
+                C,
+                aggregate(
+                    +,
+                    0,
+                    mapjoin(*,
+                        reorder(relabel(A, i, k), i, k, j),
+                        reorder(relabel(B_2, k, j), i, k, j),
+                    ),
+                ),
+            ),
             produces(C))
         @test Finch.concordize(prgm_in) == prgm_out
 
@@ -77,11 +91,14 @@
         prgm_in = plan(
             query(A, table(0, i, j)),
             query(B, table(0, i, j)),
-            query(C, mapjoin(+,
-                reorder(relabel(A, i, j), j, i),
-                reorder(relabel(B, j, i), i, j)
-            )),
-            produces(C)
+            query(
+                C,
+                mapjoin(+,
+                    reorder(relabel(A, i, j), j, i),
+                    reorder(relabel(B, j, i), i, j),
+                ),
+            ),
+            produces(C),
         )
         A_2 = alias(:A_2)
         prgm_out = plan(
@@ -89,23 +106,26 @@
             query(A_2, reorder(relabel(A, i, j), j, i)),
             query(B, table(0, i, j)),
             query(B_2, reorder(relabel(B, i, j), j, i)),
-            query(C, mapjoin(+,
-                reorder(relabel(A_2, j, i), j, i),
-                reorder(relabel(B_2, i, j), i, j)
-            )),
-            produces(C)
+            query(
+                C,
+                mapjoin(+,
+                    reorder(relabel(A_2, j, i), j, i),
+                    reorder(relabel(B_2, i, j), i, j),
+                ),
+            ),
+            produces(C),
         )
         @test Finch.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j)),
             query(B, reorder(relabel(A, i, j), i, j)),
-            produces(B)
+            produces(B),
         )
         prgm_out = plan(
             query(A, table(0, i, j)),
             query(B, reorder(relabel(A, i, j), i, j)),
-            produces(B)
+            produces(B),
         )
         @test Finch.concordize(prgm_in) == prgm_out
 
@@ -115,7 +135,7 @@
             query(B, table(0, i, j)),
             query(C, reorder(relabel(A, i, j), j, i)),
             query(D, reorder(relabel(B, j, i), i, j)),
-            produces(C, D)
+            produces(C, D),
         )
         prgm_out = plan(
             query(A, table(0, i, j)),
@@ -124,18 +144,21 @@
             query(B_2, reorder(relabel(B, i, j), j, i)),
             query(C, reorder(relabel(A_2, j, i), j, i)),
             query(D, reorder(relabel(B_2, i, j), i, j)),
-            produces(C, D)
+            produces(C, D),
         )
         @test Finch.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j)),
             query(B, table(0, i, j)),
-            query(C, mapjoin(+,
-                reorder(relabel(A, i, k), k, i),
-                reorder(relabel(B, k, j), j, k)
-            )),
-            produces(C)
+            query(
+                C,
+                mapjoin(+,
+                    reorder(relabel(A, i, k), k, i),
+                    reorder(relabel(B, k, j), j, k),
+                ),
+            ),
+            produces(C),
         )
         C_2 = alias(:C_2)
         prgm_out = plan(
@@ -143,23 +166,26 @@
             query(A_2, reorder(relabel(A, i, j), j, i)),
             query(B, table(0, i, j)),
             query(B_2, reorder(relabel(B, i, j), j, i)),
-            query(C, mapjoin(+,
-                reorder(relabel(A_2, k, i), k, i),
-                reorder(relabel(B_2, j, k), j, k)
-            )),
-            produces(C)
+            query(
+                C,
+                mapjoin(+,
+                    reorder(relabel(A_2, k, i), k, i),
+                    reorder(relabel(B_2, j, k), j, k),
+                ),
+            ),
+            produces(C),
         )
         @test Finch.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0)),
-            query(B, reorder(relabel(A, ), )),
-            produces(B)
+            query(B, reorder(relabel(A))),
+            produces(B),
         )
         prgm_out = plan(
             query(A, table(0)),
-            query(B, reorder(relabel(A, ), )),
-            produces(B)
+            query(B, reorder(relabel(A))),
+            produces(B),
         )
         @test Finch.concordize(prgm_in) == prgm_out
 
@@ -167,11 +193,14 @@
             query(A, table(0, i, j, k)),
             query(B, reorder(relabel(A, i, j, k), k, j, i)),
             query(C, reorder(relabel(A, i, j, k), j, k, i)),
-            query(D, mapjoin(*,
-                reorder(relabel(B, k, j, i), i, j, k),
-                reorder(relabel(C, j, k, i), i, j, k)
-            )),
-            produces(D)
+            query(
+                D,
+                mapjoin(*,
+                    reorder(relabel(B, k, j, i), i, j, k),
+                    reorder(relabel(C, j, k, i), i, j, k),
+                ),
+            ),
+            produces(D),
         )
         A_3 = alias(:A_3)
         C_2 = alias(:C_2)
@@ -183,11 +212,14 @@
             query(B_2, reorder(relabel(B, k, j, i), i, j, k)),
             query(C, reorder(relabel(A_3, j, k, i), j, k, i)),
             query(C_2, reorder(relabel(C, j, k, i), i, j, k)),
-            query(D, mapjoin(*,
-                reorder(relabel(B_2, i, j, k), i, j, k),
-                reorder(relabel(C_2, i, j, k), i, j, k)
-            )),
-            produces(D)
+            query(
+                D,
+                mapjoin(*,
+                    reorder(relabel(B_2, i, j, k), i, j, k),
+                    reorder(relabel(C_2, i, j, k), i, j, k),
+                ),
+            ),
+            produces(D),
         )
         @test Finch.concordize(prgm_in) == prgm_out
     end
@@ -205,17 +237,19 @@
         @test Finch.push_fields(expr_in) == expr_out
 
         # Test 2: Nested reorders and relabels on a table
-        expr_in = reorder(relabel(reorder(relabel(table(A, i, j, k), j, i, k), k, j, i), i, k, j), j, i, k)
+        expr_in = reorder(
+            relabel(reorder(relabel(table(A, i, j, k), j, i, k), k, j, i), i, k, j), j, i, k
+        )
         expr_out = reorder(table(A, k, j, i), j, i, k)
         @test Finch.push_fields(expr_in) == expr_out
 
         # Test 3: Mapjoin with internal reordering and relabeling
         expr_in = mapjoin(+,
-                    reorder(relabel(table(A, i, j), j, i), i, j),
-                    reorder(relabel(table(A, j, i), i, j), j, i))
+            reorder(relabel(table(A, i, j), j, i), i, j),
+            reorder(relabel(table(A, j, i), i, j), j, i))
         expr_out = mapjoin(+,
-                    reorder(table(A, j, i), i, j),
-                    reorder(table(A, i, j), j, i))
+            reorder(table(A, j, i), i, j),
+            reorder(table(A, i, j), j, i))
         @test Finch.push_fields(expr_in) == expr_out
 
         # Test 4: Immediate values absorbing relabel and reorder
@@ -225,17 +259,19 @@
 
         # Test 5: Complex nested structure with mapjoin and aggregates
         expr_in = mapjoin(+,
-                    reorder(relabel(mapjoin(*,
+            reorder(
+                relabel(
+                    mapjoin(*,
                         reorder(relabel(table(A, i, j, k), k, j, i), i, j, k),
                         table(A, j, i, k)), i, k, j), j, i, k),
-                    mapjoin(*,
-                        reorder(relabel(table(A, i, j, k), j, i, k), k, j, i)))
+            mapjoin(*,
+                reorder(relabel(table(A, i, j, k), j, i, k), k, j, i)))
         expr_out = mapjoin(+,
-                    mapjoin(*,
-                        reorder(table(A, j, k, i), j, i, k),
-                        reorder(table(A, k, i, j), j, i, k)),
-                    mapjoin(*,
-                        reorder(table(A, j, i, k), k, j, i)))
+            mapjoin(*,
+                reorder(table(A, j, k, i), j, i, k),
+                reorder(table(A, k, i, j), j, i, k)),
+            mapjoin(*,
+                reorder(table(A, j, i, k), k, j, i)))
         @test Finch.push_fields(expr_in) == expr_out
 
         #=
@@ -249,5 +285,4 @@
                 ), i13, i14, i15), i14))
         =#
     end
-
 end

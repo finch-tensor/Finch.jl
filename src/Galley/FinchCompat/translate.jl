@@ -1,35 +1,68 @@
 function push_relabels(prgm)
-    prgm = Rewrite(Fixpoint(Prewalk(Chain([
-        (@rule relabel(mapjoin(~op, ~args...), ~idxs...) => begin
-            idxs_2 = getfields(mapjoin(op, args...))
-            mapjoin(op, map(arg -> relabel(reorder(arg, idxs_2...), idxs...), args)...)
-            end),
-            (@rule relabel(aggregate(~op, ~init, ~arg, ~idxs1...), ~idxs2...) => begin
-                arg_idxs = Finch.getfields(arg)
-                arg_relabel_idxs = filter((i) -> i ∉ idxs1, arg_idxs)
-                relabel_dict = merge(Dict(i=>i for i in idxs1), Dict(arg_relabel_idxs[i]=>idxs2[i] for i in eachindex(idxs2)))
-                aggregate(op, init, relabel(arg, [relabel_dict[i] for i in arg_idxs]...), idxs1...)
-            end),
-            (@rule relabel(relabel(~arg, ~idxs...), ~idxs_2...) =>
-                relabel(~arg, ~idxs_2...)),
-            (@rule relabel(reorder(~arg, ~idxs_1...), ~idxs_2...) => begin
-                idxs_3 = getfields(arg)
-                reidx = Dict(map(Pair, idxs_1, idxs_2)...)
-                idxs_4 = map(idx -> get(reidx, idx, idx), idxs_3)
-                reorder(relabel(arg, idxs_4...), idxs_2...)
-            end),
-            (@rule relabel(table(~arg, ~idxs_1...), ~idxs_2...) => begin
-                table(arg, idxs_2...)
-            end),
-            (@rule relabel(~arg::isimmediate) => arg),
-    ]))))(prgm)
+    prgm = Rewrite(
+        Fixpoint(
+            Prewalk(
+                Chain([
+                    (@rule relabel(mapjoin(~op, ~args...), ~idxs...) => begin
+                        idxs_2 = getfields(mapjoin(op, args...))
+                        mapjoin(
+                            op,
+                            map(arg -> relabel(reorder(arg, idxs_2...), idxs...), args)...,
+                        )
+                    end),
+                    (@rule relabel(aggregate(~op, ~init, ~arg, ~idxs1...), ~idxs2...) =>
+                        begin
+                            arg_idxs = Finch.getfields(arg)
+                            arg_relabel_idxs = filter((i) -> i ∉ idxs1, arg_idxs)
+                            relabel_dict = merge(
+                                Dict(i => i for i in idxs1),
+                                Dict(
+                                    arg_relabel_idxs[i] => idxs2[i] for
+                                    i in eachindex(idxs2)
+                                ),
+                            )
+                            aggregate(
+                                op,
+                                init,
+                                relabel(arg, [relabel_dict[i] for i in arg_idxs]...),
+                                idxs1...,
+                            )
+                        end),
+                    (@rule relabel(relabel(~arg, ~idxs...), ~idxs_2...) =>
+                        relabel(~arg, ~idxs_2...)),
+                    (@rule relabel(reorder(~arg, ~idxs_1...), ~idxs_2...) => begin
+                        idxs_3 = getfields(arg)
+                        reidx = Dict(map(Pair, idxs_1, idxs_2)...)
+                        idxs_4 = map(idx -> get(reidx, idx, idx), idxs_3)
+                        reorder(relabel(arg, idxs_4...), idxs_2...)
+                    end),
+                    (@rule relabel(table(~arg, ~idxs_1...), ~idxs_2...) => begin
+                        table(arg, idxs_2...)
+                    end),
+                    (@rule relabel(~arg::isimmediate) => arg),
+                ]),
+            ),
+        ),
+    )(
+        prgm
+    )
 end
 
 function aggs_to_mapjoins(prgm)
-    Rewrite(Fixpoint(Prewalk(Chain([
-        (@rule aggregate(~op, ~init, ~arg) => arg where isnothing(init)),
-        (@rule aggregate(~op, ~init, ~arg) => mapjoin(op, init, arg)),
-    ]))))(prgm)
+    Rewrite(
+        Fixpoint(
+            Prewalk(
+                Chain([
+                    (@rule aggregate(~op, ~init, ~arg) => if isnothing(init)
+                        arg
+                    end),
+                    (@rule aggregate(~op, ~init, ~arg) => mapjoin(op, init, arg)),
+                ]),
+            ),
+        ),
+    )(
+        prgm
+    )
 end
 
 function compatible_order(order1, order2)
@@ -61,7 +94,7 @@ function compatible_order(order1, order2)
 end
 
 function remove_reorders(prgm::LogicNode)
-    queries = collect(prgm.bodies[1:end-1])
+    queries = collect(prgm.bodies[1:(end - 1)])
     new_queries = []
     for q in queries
         expr = q.rhs
@@ -71,8 +104,23 @@ function remove_reorders(prgm::LogicNode)
             expr = expr.arg
         end
         output_idx_order = Finch.getfields(expr)
-        expr = Rewrite(Fixpoint(Postwalk(Chain([(@rule reorder(~arg, ~idxs2...) =>
-                            reorder(aggregate(nothing, nothing, arg, setdiff(getfields(arg), idxs2)...), idxs2...) where length(idxs2) < length(getfields(arg)))]))))(expr)
+        expr = Rewrite(
+            Fixpoint(
+                Postwalk(
+                    @rule reorder(~arg, ~idxs2...) =>
+                        if length(idxs2) < length(getfields(arg))
+                            reorder(
+                                aggregate(
+                                    nothing, nothing, arg, setdiff(getfields(arg), idxs2)...
+                                ),
+                                idxs2...,
+                            )
+                        end
+                ),
+            ),
+        )(
+            expr
+        )
         bc_idxs = Set()
         for n in PostOrderDFS(expr)
             if n.kind == reorder
@@ -86,10 +134,18 @@ function remove_reorders(prgm::LogicNode)
             end
         end
         bc_idxs = setdiff(bc_idxs, table_idxs)
-        expr = Rewrite(Fixpoint(Postwalk(Chain([
-                        (@rule reorder(~arg, ~idxs1...)=> arg),
-                        (@rule aggregate(~op, ~init, ~arg, ~agg_idxs...)=>
-                                aggregate(op, init, arg, setdiff(agg_idxs, bc_idxs)...))]))))(expr)
+        expr = Rewrite(
+            Fixpoint(
+                Postwalk(
+                    Chain([
+                        (@rule reorder(~arg, ~idxs1...) => arg),
+                        (@rule aggregate(~op, ~init, ~arg, ~agg_idxs...) =>
+                            aggregate(op, init, arg, setdiff(agg_idxs, bc_idxs)...))]),
+                ),
+            ),
+        )(
+            expr
+        )
         expr = reorder(expr, output_idx_order...)
         if !isnothing(format)
             expr = reformat(format, expr)
@@ -101,7 +157,7 @@ function remove_reorders(prgm::LogicNode)
 end
 
 function unwrap_subqueries(prgm::LogicNode)
-    Rewrite(Postwalk(Chain([@rule subquery(~lhs, ~rhs)=>rhs])))(prgm)
+    Rewrite(Postwalk(Chain([@rule subquery(~lhs, ~rhs) => rhs])))(prgm)
 end
 
 function normalize_hl(prgm::LogicNode)
@@ -137,7 +193,7 @@ function finch_hl_to_galley(prgm::LogicNode)
         query_nodes = [q for q in prgm.bodies if q.kind == query]
         return PlanNode[finch_hl_to_galley(q) for q in query_nodes]
     elseif prgm.kind == produces
-        return # TODO: Change Galley to accept a produces list
+        return nothing # TODO: Change Galley to accept a produces list
     elseif prgm.kind == query
         rhs = finch_hl_to_galley(prgm.rhs)
         if rhs.kind != Materialize
@@ -156,24 +212,34 @@ function finch_hl_to_galley(prgm::LogicNode)
         return Mat(idxs..., finch_hl_to_galley(prgm.arg))
     elseif prgm.kind == aggregate
         return Aggregate(finch_hl_to_galley(prgm.op),
-                        finch_hl_to_galley(prgm.init),
-                        [finch_hl_to_galley(i) for i in prgm.idxs]...,
-                         finch_hl_to_galley(prgm.arg))
+            finch_hl_to_galley(prgm.init),
+            [finch_hl_to_galley(i) for i in prgm.idxs]...,
+            finch_hl_to_galley(prgm.arg))
     elseif prgm.kind == mapjoin
         return MapJoin(finch_hl_to_galley(prgm.op),
-                        [finch_hl_to_galley(arg) for arg in prgm.args]...)
+            [finch_hl_to_galley(arg) for arg in prgm.args]...)
     elseif prgm.kind == table
         if prgm.tns.kind == deferred
             if prgm.tns.imm isa Tensor
-                return Input(prgm.tns.imm, [finch_hl_to_galley(i) for i in prgm.idxs]..., string(prgm.tns.ex))
+                return Input(
+                    prgm.tns.imm,
+                    [finch_hl_to_galley(i) for i in prgm.idxs]...,
+                    string(prgm.tns.ex),
+                )
             else
-                return Input(Tensor(prgm.tns.imm), [finch_hl_to_galley(i) for i in prgm.idxs]..., string(prgm.tns.ex))
+                return Input(
+                    Tensor(prgm.tns.imm),
+                    [finch_hl_to_galley(i) for i in prgm.idxs]...,
+                    string(prgm.tns.ex),
+                )
             end
         else
             if prgm.tns.val isa Tensor
                 return Input(prgm.tns.val, [finch_hl_to_galley(i) for i in prgm.idxs]...)
             else
-                return Input(Tensor(prgm.tns.val), [finch_hl_to_galley(i) for i in prgm.idxs]...)
+                return Input(
+                    Tensor(prgm.tns.val), [finch_hl_to_galley(i) for i in prgm.idxs]...
+                )
             end
         end
     elseif prgm.kind == relabel
@@ -186,6 +252,8 @@ function finch_hl_to_galley(prgm::LogicNode)
     elseif prgm.kind == immediate
         return Value(prgm.val)
     else
-        throw(error("Finch Logic statements of kind $(prgm.kind) is not supported by Galley."))
+        throw(
+            error("Finch Logic statements of kind $(prgm.kind) is not supported by Galley.")
+        )
     end
 end

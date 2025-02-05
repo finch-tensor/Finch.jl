@@ -36,9 +36,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::SequenceStyle)
         end
 
         for (key, body) in phases
-            push!(thunk.args, contain(ctx) do ctx_2
-                ctx_2(loop(root.idx, root.ext, body))
-            end)
+            push!(
+                thunk.args,
+                contain(ctx) do ctx_2
+                    ctx_2(loop(root.idx, root.ext, body))
+                end,
+            )
         end
 
         return thunk
@@ -52,10 +55,15 @@ function get_sequence_phases(ctx, node::FinchNode, ext)
     if node.kind === virtual
         get_sequence_phases(ctx, node.val, ext)
     elseif istree(node)
-        map(flatten((product(map(arg -> get_sequence_phases(ctx, arg, ext), arguments(node))...),))) do phases
+        map(
+            flatten((
+                product(map(arg -> get_sequence_phases(ctx, arg, ext), arguments(node))...),
+            )),
+        ) do phases
             keys = map(first, phases)
             bodies = map(last, phases)
-            return reduce(vcat, keys, init=[]) => similarterm(node, operation(node), collect(bodies))
+            return reduce(vcat, keys; init=[]) =>
+                similarterm(node, operation(node), collect(bodies))
         end
     else
         [[] => node]
@@ -69,7 +77,10 @@ function get_sequence_phases(ctx, node::Sequence, ext)
     for curr in node.phases
         curr_start = call(+, prev_stop, getunit(ext))
         curr_stop = getstop(phase_range(ctx, curr, ext))
-        push!(new_phases, Phase(body = curr.body, start = (ctx, ext_2) -> curr_start, stop = curr.stop))
+        push!(
+            new_phases,
+            Phase(; body=curr.body, start=(ctx, ext_2) -> curr_start, stop=curr.stop),
+        )
         prev_stop = curr_stop
     end
 

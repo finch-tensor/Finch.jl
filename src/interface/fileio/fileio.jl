@@ -15,7 +15,8 @@ function fwrite(filename::AbstractString, tns)
         ftnswrite(filename, tns)
     elseif endswith(filename, ".ttx") || endswith(filename, ".mtx")
         fttwrite(filename, tns)
-    elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") || endswith(filename, ".bspnpy")
+    elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") ||
+        endswith(filename, ".bspnpy")
         bspwrite(filename, tns)
     else
         error("Unknown file extension for file $filename")
@@ -39,7 +40,8 @@ function fread(filename::AbstractString)
         ftnsread(filename)
     elseif endswith(filename, ".ttx") || endswith(filename, ".mtx")
         fttread(filename)
-    elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") || endswith(filename, ".bspnpy")
+    elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") ||
+        endswith(filename, ".bspnpy")
         bspread(filename)
     else
         error("Unknown file extension for file $filename")

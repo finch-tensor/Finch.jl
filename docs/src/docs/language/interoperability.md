@@ -61,12 +61,12 @@ julia> obov.data
  0
  2
  3
-
 ```
 
 ### `CIndex`
 
 !!! warning
+    
     `CIndex` is no longer recommended - use `PlusOneVector` instead.
 
 Finch also interoperates with the [CIndices](https://github.com/JuliaSparse/CIndices.jl)
@@ -77,14 +77,20 @@ position type of a Finch array to represent arrays in other languages.
 For example, if `idx_c`, `ptr_c`, and `val_c` are the internal arrays of a CSC
 matrix in a zero-indexed language, we can represent that matrix as a one-indexed
 Finch array without copying by calling
+
 ```@meta
 DocTestSetup = quote
     using Finch
     using CIndices
 end
 ```
+
 ```jldoctest example2
-julia> m = 4; n = 3; ptr_c = [0, 3, 3, 5]; idx_c = [1, 2, 3, 0, 2]; val_c = [1.1, 2.2, 3.3, 4.4, 5.5];
+julia> m = 4;
+       n = 3;
+       ptr_c = [0, 3, 3, 5];
+       idx_c = [1, 2, 3, 0, 2];
+       val_c = [1.1, 2.2, 3.3, 4.4, 5.5];
 
 julia> ptr_jl = reinterpret(CIndex{Int}, ptr_c)
 4-element reinterpret(CIndex{Int64}, ::Vector{Int64}):
@@ -101,7 +107,12 @@ julia> idx_jl = reinterpret(CIndex{Int}, idx_c)
  1
  3
 
-julia> A = Tensor(Dense(SparseList{CIndex{Int}}(Element{0.0, Float64, CIndex{Int}}(val_c), m, ptr_jl, idx_jl), n))
+julia> A = Tensor(
+           Dense(
+               SparseList{CIndex{Int}}(Element{0.0,Float64,CIndex{Int}}(val_c), m, ptr_jl, idx_jl),
+               n,
+           ),
+       )
 CIndex{Int64}(4)×3 Tensor{DenseLevel{Int64, SparseListLevel{CIndex{Int64}, Base.ReinterpretArray{CIndex{Int64}, 1, Int64, Vector{Int64}, false}, Base.ReinterpretArray{CIndex{Int64}, 1, Int64, Vector{Int64}, false}, ElementLevel{0.0, Float64, CIndex{Int64}, Vector{Float64}}}}}:
  0.0  0.0  4.4
  1.1  0.0  0.0

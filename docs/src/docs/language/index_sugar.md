@@ -17,15 +17,15 @@ The following table lists the recognized index expressions and their equivalent
 tensor expressions, where `i` is an index, `a, b` are constants, `p` is an
 iteration protocol, and `x` is an expression:
 
-| Original Expression | Transformed Expression                  |
-|---------------------|-----------------------------------------|
-| `A[i + a]`          | `offset(A, 1)[i]`                       |
-| `A[i + x]`          | `toeplitz(A, 1)[i, x]`                  |
-| `A[(a:b)(i)]`       | `window(A, a:b)[i]`                     |
-| `A[a * i]`          | `scale(A, (3,))[i]`                     |
-| `A[i * x]`          | `products(A, 1)[i, j]`                  |
-| `A[~i]`             | `permissive(A)[i]`                      |
-| `A[p(i)]`           | `protocolize(A, p)[i]`                 |
+| Original Expression | Transformed Expression |
+|:------------------- |:---------------------- |
+| `A[i + a]`          | `offset(A, 1)[i]`      |
+| `A[i + x]`          | `toeplitz(A, 1)[i, x]` |
+| `A[(a:b)(i)]`       | `window(A, a:b)[i]`    |
+| `A[a * i]`          | `scale(A, (3,))[i]`    |
+| `A[i * x]`          | `products(A, 1)[i, j]` |
+| `A[~i]`             | `permissive(A)[i]`     |
+| `A[p(i)]`           | `protocolize(A, p)[i]` |
 
 Each of these tensor modifiers is described below:
 
@@ -38,4 +38,3 @@ products
 permissive
 protocolize
 ```
-

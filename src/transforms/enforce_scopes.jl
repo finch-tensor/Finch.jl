@@ -21,7 +21,7 @@ struct ScopeError
 end
 
 function open_scope(ctx::EnforceScopesVisitor, prgm)
-    prgm = EnforceScopesVisitor(;kwfields(ctx)..., vars = copy(ctx.vars), scope = Set())(prgm)
+    prgm = EnforceScopesVisitor(; kwfields(ctx)..., vars=copy(ctx.vars), scope=Set())(prgm)
 end
 
 function (ctx::EnforceScopesVisitor)(node::FinchNode)
@@ -34,10 +34,12 @@ function (ctx::EnforceScopesVisitor)(node::FinchNode)
         push!(ctx.scope, tns)
         declare(ctx(tns), init, op)
     elseif @capture node freeze(~tns, ~op)
-        node.tns in ctx.scope || ctx.scope === ctx.global_scope || throw(ScopeError("cannot freeze $tns not defined in this scope"))
+        node.tns in ctx.scope || ctx.scope === ctx.global_scope ||
+            throw(ScopeError("cannot freeze $tns not defined in this scope"))
         freeze(ctx(tns), op)
     elseif @capture node thaw(~tns, ~op)
-        node.tns in ctx.scope || ctx.scope === ctx.global_scope || throw(ScopeError("cannot thaw $tns not defined in this scope"))
+        node.tns in ctx.scope || ctx.scope === ctx.global_scope ||
+            throw(ScopeError("cannot thaw $tns not defined in this scope"))
         thaw(ctx(tns), op)
     elseif node.kind === variable
         if !(node in ctx.scope)
@@ -54,7 +56,8 @@ function (ctx::EnforceScopesVisitor)(node::FinchNode)
         #TODO why not just freshen variables?
         rhs = ctx(node.rhs)
         var = node.lhs
-        haskey(ctx.vars, var) && throw(ScopeError("In node $(node) variable $(var) is already bound."))
+        haskey(ctx.vars, var) &&
+            throw(ScopeError("In node $(node) variable $(var) is already bound."))
         ctx.vars[var] = node.rhs
         define(node.lhs, rhs, open_scope(ctx, node.body))
     elseif istree(node)

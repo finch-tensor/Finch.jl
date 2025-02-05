@@ -3,7 +3,6 @@ abstract type AbstractVirtualDevice end
 abstract type AbstractTask end
 abstract type AbstractVirtualTask end
 
-
 """
     aquire_lock!(dev::AbstractDevice, val)
 
@@ -48,12 +47,15 @@ get_num_tasks(dev::CPU) = dev.n
 end
 function virtualize(ctx, ex, ::Type{CPU})
     sym = freshen(ctx, :cpu)
-    push_preamble!(ctx, quote
-        $sym = $ex
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+        end,
+    )
     VirtualCPU(sym, virtualize(ctx, :($sym.n), Int))
 end
-lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle) =
+function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     something(device.ex, :(CPU($(ctx(device.n)))))
 get_num_tasks(::VirtualCPU) = 1
 
@@ -94,26 +96,25 @@ end
     return Threads.SpinLock()
 end
 
-@inline function aquire_lock!(dev:: CPU, val::Threads.Atomic{T}) where {T}
+@inline function aquire_lock!(dev::CPU, val::Threads.Atomic{T}) where {T}
     # Keep trying to catch x === false so we can set it to true.
     while (Threads.atomic_cas!(x, zero(T), one(T)) === one(T))
-
     end
     # when it is true because we did it, we leave, but let's make sure it is true in debug mode.
     @assert x === one(T)
 end
 
-@inline function aquire_lock!(dev:: CPU, val::Threads.SpinLock)
+@inline function aquire_lock!(dev::CPU, val::Threads.SpinLock)
     lock(val)
     @assert islocked(val)
 end
 
-@inline function release_lock!(dev:: CPU, val::Threads.Atomic{T}) where {T}
+@inline function release_lock!(dev::CPU, val::Threads.Atomic{T}) where {T}
     # set the atomic to false so someone else can grab it.
     Threads.atomic_cas!(x, one(T), zero(T))
 end
 
-@inline function release_lock!(dev:: CPU, val::Base.Threads.SpinLock)
+@inline function release_lock!(dev::CPU, val::Base.Threads.SpinLock)
     @assert islocked(val)
     unlock(val)
 end
@@ -135,10 +136,12 @@ function virtualize(ctx, ex, ::Type{CPUThread{Parent}}) where {Parent}
     VirtualCPUThread(
         virtualize(ctx, :($sym.tid), Int),
         virtualize(ctx, :($sym.dev), CPU),
-        virtualize(ctx, :($sym.parent), Parent)
+        virtualize(ctx, :($sym.parent), Parent),
     )
 end
-lower(ctx::AbstractCompiler, task::VirtualCPUThread, ::DefaultStyle) = :(CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
+function lower(ctx::AbstractCompiler, task::VirtualCPUThread, ::DefaultStyle)
+    :(CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
+end
 FinchNotation.finch_leaf(device::VirtualCPUThread) = virtual(device)
 get_device(task::VirtualCPUThread) = task.dev
 get_parent_task(task::VirtualCPUThread) = task.parent
@@ -147,8 +150,8 @@ get_task_num(task::VirtualCPUThread) = task.tid
 struct CPULocalMemory
     device::CPU
 end
-function moveto(vec::V, mem::CPULocalMemory) where {V <: Vector}
-    CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:mem.device.n])
+function moveto(vec::V, mem::CPULocalMemory) where {V<:Vector}
+    CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:(mem.device.n)])
 end
 
 struct CPULocalVector{V}
@@ -156,8 +159,9 @@ struct CPULocalVector{V}
     data::Vector{V}
 end
 
-CPULocalVector{V}(device::CPU) where {V} =
-    CPULocalVector{V}(device, [V([]) for _ in 1:device.n])
+function CPULocalVector{V}(device::CPU) where {V}
+    CPULocalVector{V}(device, [V([]) for _ in 1:(device.n)])
+end
 
 Base.eltype(::Type{CPULocalVector{V}}) where {V} = eltype(V)
 Base.ndims(::Type{CPULocalVector{V}}) where {V} = ndims(V)
@@ -190,7 +194,7 @@ end
 
 struct Converter{f, T} end
 
-(::Converter{f, T})(x) where {f, T} = T(f(x))
+(::Converter{f,T})(x) where {f,T} = T(f(x))
 
 @propagate_inbounds function atomic_modify!(::Serial, vec, idx, op, x)
     @inbounds begin
@@ -210,24 +214,47 @@ end
     Base.unsafe_store!(pointer(vec, idx), x, :sequentially_consistent)
 end
 
-@propagate_inbounds function atomic_modify!(::CPU, vec, idx, op::InitWriter{Vf}, x) where {Vf}
+@propagate_inbounds function atomic_modify!(
+    ::CPU, vec, idx, op::InitWriter{Vf}, x
+) where {Vf}
     Base.unsafe_store!(pointer(vec, idx), x, :sequentially_consistent)
 end
 
-for T = [Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Int128, UInt128, Float16, Float32, Float64]
+for T in [
+    Bool,
+    Int8,
+    UInt8,
+    Int16,
+    UInt16,
+    Int32,
+    UInt32,
+    Int64,
+    UInt64,
+    Int128,
+    UInt128,
+    Float16,
+    Float32,
+    Float64,
+]
     if T <: AbstractFloat
         ops = [+, -]
     else
         ops = [+, -, *, /, %, &, |, ⊻, ⊼, max, min]
     end
     for op in ops
-        @eval @propagate_inbounds function atomic_modify!(::CPU, vec::Vector{$T}, idx, ::typeof($op), x::$T)
+        @eval @propagate_inbounds function atomic_modify!(
+            ::CPU, vec::Vector{$T}, idx, ::typeof($op), x::$T
+        )
             UnsafeAtomics.modify!(pointer(vec, idx), $op, x, UnsafeAtomics.seq_cst)
         end
     end
 
-    @eval @propagate_inbounds function atomic_modify!(::CPU, vec::Vector{$T}, idx, op::Chooser{Vf}, x::$T) where {Vf}
-        UnsafeAtomics.cas!(pointer(vec, idx), $T(Vf), x, UnsafeAtomics.seq_cst, UnsafeAtomics.seq_cst)
+    @eval @propagate_inbounds function atomic_modify!(
+        ::CPU, vec::Vector{$T}, idx, op::Chooser{Vf}, x::$T
+    ) where {Vf}
+        UnsafeAtomics.cas!(
+            pointer(vec, idx), $T(Vf), x, UnsafeAtomics.seq_cst, UnsafeAtomics.seq_cst
+        )
     end
 
 end

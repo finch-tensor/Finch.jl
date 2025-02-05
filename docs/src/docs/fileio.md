@@ -1,6 +1,7 @@
 ```@meta
 CurrentModule = Finch
 ```
+
 # Finch Tensor File Input/Output
 
 All of the file formats supported by Finch are listed below. Each format has a

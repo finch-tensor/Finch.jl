@@ -80,7 +80,7 @@ Return the virtual program corresponding to the Julia expression `ex` of type
 argument is used to name the resulting virtual variable.
 """
 virtualize(ctx, ex, T, tag) = virtualize(ctx, ex, T)
-function virtualize(ctx, ex, T::Type{NamedTuple{names, args}}) where {names, args}
+function virtualize(ctx, ex, T::Type{NamedTuple{names,args}}) where {names,args}
     Dict(map(zip(names, args.parameters)) do (name, arg)
         name => virtualize(ctx, :($ex.$(QuoteNode(name))), arg, name)
     end...)

@@ -6,16 +6,16 @@ const IS_STATEFUL = 2
 const ID = 4
 
 @enum PlanNodeKind begin
-    Value        =  1ID             #  Value(x::Any)
-    Index        =  2ID             #  Index(x::Union{String, Symbol})
-    Alias        =  3ID             #  Alias(x::Union{String, Symbol})
-    Input        =  4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
-    MapJoin      =  5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
-    Aggregate    =  6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
-    Materialize  =  7ID | IS_TREE   #  Materialize(formats::Vector{Formats}, idx_order::Vector{TI}, arg:PlanNode)
-    Query        =  8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
-    Outputs      =  9ID | IS_TREE   #  Outputs(args...::TI)
-    Plan         = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
+    Value       = 1ID             #  Value(x::Any)
+    Index       = 2ID             #  Index(x::Union{String, Symbol})
+    Alias       = 3ID             #  Alias(x::Union{String, Symbol})
+    Input       = 4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
+    MapJoin     = 5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
+    Aggregate   = 6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
+    Materialize = 7ID | IS_TREE   #  Materialize(formats::Vector{Formats}, idx_order::Vector{TI}, arg:PlanNode)
+    Query       = 8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
+    Outputs     = 9ID | IS_TREE   #  Outputs(args...::TI)
+    Plan        = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
 end
 Mat = Materialize
 Agg = Aggregate
@@ -54,14 +54,14 @@ function PlanNode(kind::PlanNodeKind, args::Vector)
         if (kind === Input && length(args) >= 1)
             if args[1] isa Tensor
                 if length(args) - 1 > length(size(args[1]))
-                    return PlanNode(kind, args[1:end-1], Symbol(args[end]), nothing)
+                    return PlanNode(kind, args[1:(end - 1)], Symbol(args[end]), nothing)
                 else
                     PlanNode(kind, args, Symbol(hash(args)), nothing)
                 end
             elseif args[1].kind === Value
                 if args[1].val isa Tensor
                     if length(args) - 1 > length(size(args[1].val))
-                        return PlanNode(kind, args[1:end-1], Symbol(args[end]), nothing)
+                        return PlanNode(kind, args[1:(end - 1)], Symbol(args[end]), nothing)
                     else
                         PlanNode(kind, args, Symbol(hash(args)), nothing)
                     end
@@ -70,13 +70,15 @@ function PlanNode(kind::PlanNodeKind, args::Vector)
                 end
             elseif args[1].kind === Materialize
                 mat_expr = args[1]
-                new_idxs = [Index(x) for x  in args[2:end]]
+                new_idxs = [Index(x) for x in args[2:end]]
                 mat_expr = plan_copy(mat_expr)
                 freshen_idxs!(mat_expr)
                 internal_expr = mat_expr.expr
                 old_idxs = [idx for idx in mat_expr.idx_order]
                 @assert length(new_idxs) == length(old_idxs)
-                new_idx_translate = Dict(old_idxs[i].name => new_idxs[i].name for i in eachindex(old_idxs))
+                new_idx_translate = Dict(
+                    old_idxs[i].name => new_idxs[i].name for i in eachindex(old_idxs)
+                )
                 for (i, j) in new_idx_translate
                     relabel_index(internal_expr, i, j)
                 end
@@ -93,10 +95,21 @@ function PlanNode(kind::PlanNodeKind, args::Vector)
             idxs = length(args) > 1 ? args[2:end] : []
             return PlanNode(kind, idxs, args[1], nothing)
         elseif (kind === Materialize)
-            num_indices = sum([arg isa Symbol || (arg isa PlanNode && arg.kind === Index) for arg in args[1:end-1]]; init=0)
-            if num_indices == length(args)-1
-                return PlanNode(kind, [[t_undef for _ in args[1:end-1]]..., args...], nothing, nothing)
-            elseif num_indices == (length(args)-1)/2
+            num_indices = sum(
+                [
+                    arg isa Symbol || (arg isa PlanNode && arg.kind === Index) for
+                    arg in args[1:(end - 1)]
+                ];
+                init=0,
+            )
+            if num_indices == length(args) - 1
+                return PlanNode(
+                    kind,
+                    [[t_undef for _ in args[1:(end - 1)]]..., args...],
+                    nothing,
+                    nothing,
+                )
+            elseif num_indices == (length(args) - 1) / 2
                 return PlanNode(kind, args, nothing, nothing)
             else
                 error("wrong number of arguments to $kind(...)")
@@ -135,7 +148,7 @@ Base.copy(x::Nothing) = nothing
 logic_leaf(arg) = Value(arg)
 logic_leaf(arg::Type) = Value(arg)
 logic_leaf(arg::Function) = Value(arg)
-logic_leaf(arg::Union{Symbol, String}) = Index(arg)
+logic_leaf(arg::Union{Symbol,String}) = Index(arg)
 logic_leaf(arg::PlanNode) = arg
 
 Base.convert(::Type{PlanNode}, x) = logic_leaf(x)
@@ -147,60 +160,133 @@ galley_pattern(arg) = logic_leaf(arg)
 galley_pattern(arg::RewriteTools.Slot) = arg
 galley_pattern(arg::RewriteTools.Segment) = arg
 galley_pattern(arg::RewriteTools.Term) = arg
-function RewriteTools.term(f::PlanNodeKind, args...; type = nothing)
+function RewriteTools.term(f::PlanNodeKind, args...; type=nothing)
     RewriteTools.Term(f, [galley_pattern.(args)...])
 end
 
 function Base.getproperty(node::PlanNode, sym::Symbol)
-    if sym === :kind || sym === :val || sym === :children || sym == :stats || sym == :node_id
+    if sym === :kind || sym === :val || sym === :children || sym == :stats ||
+        sym == :node_id
         return Base.getfield(node, sym)
-    elseif node.kind === Index && sym === :name node.val
-    elseif node.kind === Alias && sym === :name node.val
-    elseif node.kind === Alias && sym === :idxs node.children
-    elseif node.kind === Input && sym === :id node.val
-    elseif node.kind === Input && sym === :tns node.children[1]
-    elseif node.kind === Input && sym === :idxs begin length(node.children) > 1 ? node.children[2:end] : [] end
-    elseif node.kind === MapJoin && sym === :op node.children[1]
-    elseif node.kind === MapJoin && sym === :args @view node.children[2:end]
-    elseif node.kind === Aggregate && sym === :op node.children[1]
-    elseif node.kind === Aggregate && sym === :init node.children[2]
-    elseif node.kind === Aggregate && sym === :idxs begin length(node.children) > 3 ? node.children[3:end-1] : [] end
-    elseif node.kind === Aggregate && sym === :arg node.children[end]
-    elseif node.kind === Materialize && sym === :formats begin length(node.children) > 1 ? node.children[1:Int((length(node.children)-1)/2)] : [] end
-    elseif node.kind === Materialize && sym === :idx_order begin length(node.children) > 1 ? node.children[Int((length(node.children)-1)/2)+1:length(node.children)-1] : [] end
-    elseif node.kind === Materialize && sym === :expr node.children[end]
-    elseif node.kind === Query && sym === :name node.children[1]
-    elseif node.kind === Query && sym === :expr node.children[2]
-    elseif node.kind === Query && sym === :loop_order begin length(node.children) > 2 ? node.children[3:end] : [] end
-    elseif node.kind === Outputs && sym === :names node.children
-    elseif node.kind === Plan && sym === :queries @view node.children[1:end]
+    elseif node.kind === Index && sym === :name
+        node.val
+    elseif node.kind === Alias && sym === :name
+        node.val
+    elseif node.kind === Alias && sym === :idxs
+        node.children
+    elseif node.kind === Input && sym === :id
+        node.val
+    elseif node.kind === Input && sym === :tns
+        node.children[1]
+    elseif node.kind === Input && sym === :idxs
+        begin
+            length(node.children) > 1 ? node.children[2:end] : []
+        end
+    elseif node.kind === MapJoin && sym === :op
+        node.children[1]
+    elseif node.kind === MapJoin && sym === :args
+        @view node.children[2:end]
+    elseif node.kind === Aggregate && sym === :op
+        node.children[1]
+    elseif node.kind === Aggregate && sym === :init
+        node.children[2]
+    elseif node.kind === Aggregate && sym === :idxs
+        begin
+            length(node.children) > 3 ? node.children[3:(end - 1)] : []
+        end
+    elseif node.kind === Aggregate && sym === :arg
+        node.children[end]
+    elseif node.kind === Materialize && sym === :formats
+        begin
+            if length(node.children) > 1
+                node.children[1:Int((length(node.children) - 1) / 2)]
+            else
+                []
+            end
+        end
+    elseif node.kind === Materialize && sym === :idx_order
+        begin
+            if length(node.children) > 1
+                node.children[(Int((length(node.children) - 1) / 2) + 1):(length(node.children) - 1)]
+            else
+                []
+            end
+        end
+    elseif node.kind === Materialize && sym === :expr
+        node.children[end]
+    elseif node.kind === Query && sym === :name
+        node.children[1]
+    elseif node.kind === Query && sym === :expr
+        node.children[2]
+    elseif node.kind === Query && sym === :loop_order
+        begin
+            length(node.children) > 2 ? node.children[3:end] : []
+        end
+    elseif node.kind === Outputs && sym === :names
+        node.children
+    elseif node.kind === Plan && sym === :queries
+        @view node.children[1:end]
     else
         error("type PlanNode($(node.kind), ...) has no property $sym")
     end
 end
 
 function Base.setproperty!(node::PlanNode, sym::Symbol, v)
-    if sym === :kind || sym === :val || sym === :children || sym == :stats || sym == :node_id
+    if sym === :kind || sym === :val || sym === :children || sym == :stats ||
+        sym == :node_id
         return Base.setfield!(node, sym, v)
-    elseif node.kind === Index && sym === :name node.val = v
-    elseif node.kind === Alias && sym === :name node.val = v
-    elseif node.kind === Input && sym === :id node.val = v
-    elseif node.kind === Input && sym === :tns node.children[1] = v
-    elseif node.kind === Input && sym === :idxs begin node.children = [node.children[1], v...] end
-    elseif node.kind === MapJoin && sym === :op node.children[1] = v
-    elseif node.kind === MapJoin && sym === :args begin node.children = [node.children[1], v...] end
-    elseif node.kind === Aggregate && sym === :op node.children[1] = v
-    elseif node.kind === Aggregate && sym === :init node.children[2] = v
-    elseif node.kind === Aggregate && sym === :idxs begin node.children = [node.children[1], node.children[2], v..., node.children[end]] end
-    elseif node.kind === Aggregate && sym === :arg node.children[end] = v
-    elseif node.kind === Materialize && sym === :formats begin node.children = [v..., node.idx_order..., node.expr] end
-    elseif node.kind === Materialize && sym === :idx_order begin node.children = [node.formats..., v..., node.expr] end
-    elseif node.kind === Materialize && sym === :expr node.children[end] = v
-    elseif node.kind === Query && sym === :name node.children[1] = v
-    elseif node.kind === Query && sym === :expr node.children[2] = v
-    elseif node.kind === Query && sym === :loop_order begin node.children = [node.name, node.expr, v...] end
-    elseif node.kind === Outputs && sym === :names node.children = v
-    elseif node.kind === Plan && sym === :queries begin node.children = [v...] end
+    elseif node.kind === Index && sym === :name
+        node.val = v
+    elseif node.kind === Alias && sym === :name
+        node.val = v
+    elseif node.kind === Input && sym === :id
+        node.val = v
+    elseif node.kind === Input && sym === :tns
+        node.children[1] = v
+    elseif node.kind === Input && sym === :idxs
+        begin
+            node.children = [node.children[1], v...]
+        end
+    elseif node.kind === MapJoin && sym === :op
+        node.children[1] = v
+    elseif node.kind === MapJoin && sym === :args
+        begin
+            node.children = [node.children[1], v...]
+        end
+    elseif node.kind === Aggregate && sym === :op
+        node.children[1] = v
+    elseif node.kind === Aggregate && sym === :init
+        node.children[2] = v
+    elseif node.kind === Aggregate && sym === :idxs
+        begin
+            node.children = [node.children[1], node.children[2], v..., node.children[end]]
+        end
+    elseif node.kind === Aggregate && sym === :arg
+        node.children[end] = v
+    elseif node.kind === Materialize && sym === :formats
+        begin
+            node.children = [v..., node.idx_order..., node.expr]
+        end
+    elseif node.kind === Materialize && sym === :idx_order
+        begin
+            node.children = [node.formats..., v..., node.expr]
+        end
+    elseif node.kind === Materialize && sym === :expr
+        node.children[end] = v
+    elseif node.kind === Query && sym === :name
+        node.children[1] = v
+    elseif node.kind === Query && sym === :expr
+        node.children[2] = v
+    elseif node.kind === Query && sym === :loop_order
+        begin
+            node.children = [node.name, node.expr, v...]
+        end
+    elseif node.kind === Outputs && sym === :names
+        node.children = v
+    elseif node.kind === Plan && sym === :queries
+        begin
+            node.children = [v...]
+        end
     else
         error("type PlanNode($(node.kind), ...) has no property $sym")
     end
@@ -238,7 +324,8 @@ function Base.:(==)(a::PlanNode, b::PlanNode)
     elseif a.kind === Index
         return b.kind === Index && a.name == b.name
     elseif a.kind == Aggregate
-        return b.kind === Aggregate && a.op == b.op && a.init == b.init && Set(a.idxs) == Set(b.idxs) && a.arg == b.arg
+        return b.kind === Aggregate && a.op == b.op && a.init == b.init &&
+               Set(a.idxs) == Set(b.idxs) && a.arg == b.arg
     elseif istree(a)
         return a.kind === b.kind && a.children == b.children
     else
@@ -330,12 +417,12 @@ function planToString(n::PlanNode, depth::Int)
             protocols = get_index_protocols(n.stats)
             for i in eachindex(idxs)
                 output *= "$prefix$(idxs[i])::$(protocols[i])"
-                prefix =","
+                prefix = ","
             end
         else
             for arg in children(n)
                 output *= prefix * planToString(arg, depth + 1)
-                prefix =","
+                prefix = ","
             end
         end
         output *= ")"
@@ -367,7 +454,7 @@ function planToString(n::PlanNode, depth::Int)
     prefix = ""
     for arg in children(n)
         output *= prefix * planToString(arg, depth + 1)
-        prefix =","
+        prefix = ","
     end
     output *= ")"
 end
@@ -377,11 +464,15 @@ function Base.show(io::IO, input::PlanNode)
 end
 
 # The goal of this is to emulate deepcopy except for the actual data
-function plan_copy(n::PlanNode; copy_statistics= true)
+function plan_copy(n::PlanNode; copy_statistics=true)
     if n.kind === Input
         tensor_val = Value(n.tns.val)
         tensor_val.node_id = n.tns.node_id
-        p = Input(tensor_val, [plan_copy(idx, copy_statistics=copy_statistics) for idx in n.idxs]..., n.id)
+        p = Input(
+            tensor_val,
+            [plan_copy(idx; copy_statistics=copy_statistics) for idx in n.idxs]...,
+            n.id,
+        )
         p.stats = (copy_statistics && !isnothing(n.stats)) ? copy_stats(n.stats) : n.stats
         p.node_id = n.node_id
         return p
@@ -389,7 +480,7 @@ function plan_copy(n::PlanNode; copy_statistics= true)
         stats = (copy_statistics && !isnothing(n.stats)) ? copy_stats(n.stats) : n.stats
         children = []
         for i in eachindex(n.children)
-            push!(children, plan_copy(n.children[i], copy_statistics=copy_statistics))
+            push!(children, plan_copy(n.children[i]; copy_statistics=copy_statistics))
         end
         return PlanNode(n.kind, children, n.val, stats, n.node_id)
     end
@@ -409,7 +500,9 @@ function is_disjunctive(n::PlanNode)
     for node in PostOrderDFS(n)
         if node.kind === MapJoin
             map_op = node.op.val
-            all_conjuncts = all([isannihilator(map_op, get_default_value(arg.stats)) for arg in node.args])
+            all_conjuncts = all([
+                isannihilator(map_op, get_default_value(arg.stats)) for arg in node.args
+            ])
             if !all_conjuncts
                 return true
             end
@@ -438,9 +531,13 @@ function get_conjunctive_and_disjunctive_inputs(n::PlanNode, disjunct_branch=fal
         end
         return (conjuncts=conjuncts, disjuncts=disjuncts)
     elseif n.kind === Input || n.kind === Alias
-        return disjunct_branch ? (conjuncts=[], disjuncts=[n]) : (conjuncts=[n], disjuncts=[])
+        return if disjunct_branch
+            (conjuncts=[], disjuncts=[n])
+        else
+            (conjuncts=[n], disjuncts=[])
+        end
     elseif n.kind === Value
-        return (conjuncts = [], disjuncts = [])
+        return (conjuncts=[], disjuncts=[])
     end
 end
 
@@ -456,6 +553,6 @@ end
 
 function Σ(args...)
     @assert length(args) >= 2
-    indices = args[1:end-1]
+    indices = args[1:(end - 1)]
     return Aggregate(+, 0, indices..., args[end])
 end

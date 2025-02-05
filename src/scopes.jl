@@ -4,8 +4,8 @@
 A context for managing variable bindings and tensor modes.
 """
 @kwdef struct ScopeContext
-    bindings::Dict{FinchNode, FinchNode} = Dict{FinchNode, FinchNode}()
-    modes::Dict{Any, Any} = Dict()
+    bindings::Dict{FinchNode,FinchNode} = Dict{FinchNode,FinchNode}()
+    modes::Dict{Any,Any} = Dict()
     defs = Set()
 end
 
@@ -35,13 +35,15 @@ set_binding!(ctx::ScopeContext, var, val) = ctx.bindings[var] = val
 
 Get the binding of a variable in the context, or return a default value.
 """
-get_binding(ctx::AbstractCompiler, var, val) = has_binding(ctx, var) ? get_binding(ctx, var) : val
+get_binding(ctx::AbstractCompiler, var, val) =
+    has_binding(ctx, var) ? get_binding(ctx, var) : val
 """
     get_binding!(ctx, var, val)
 
 Get the binding of a variable in the context, or set it to a default value.
 """
-get_binding!(ctx::AbstractCompiler, var, val) = has_binding(ctx, var) ? get_binding(ctx, var) : set_binding!(ctx, var, val)
+get_binding!(ctx::AbstractCompiler, var, val) =
+    has_binding(ctx, var) ? get_binding(ctx, var) : set_binding!(ctx, var, val)
 
 """
     set_declared!(ctx, var, val, op)
@@ -92,7 +94,7 @@ get_tensor_mode(ctx::ScopeContext, var) = get(ctx.modes, var, reader())
 Call the function `f(ctx_2)` in a new scope `ctx_2`.
 """
 function open_scope(f::F, ctx::ScopeContext) where {F}
-    ctx_2 = ScopeContext(bindings=copy(ctx.bindings), modes=ctx.modes)
+    ctx_2 = ScopeContext(; bindings=copy(ctx.bindings), modes=ctx.modes)
     res = f(ctx_2)
     for tns in ctx_2.defs
         pop!(ctx.modes, tns, nothing)

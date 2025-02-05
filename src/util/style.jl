@@ -4,7 +4,9 @@ struct UnknownStyle end
 @nospecialize
 
 result_style(a, b) = _result_style(a, b, combine_style(a, b), combine_style(b, a))
-_result_style(a, b, c::UnknownStyle, d::UnknownStyle) = throw(MethodError(combine_style, (a, b)))
+function _result_style(a, b, c::UnknownStyle, d::UnknownStyle)
+    throw(MethodError(combine_style, (a, b)))
+end
 _result_style(a, b, c, d::UnknownStyle) = c
 _result_style(a, b, c::UnknownStyle, d) = d
 _result_style(a, b, c, d) = c #This is actually deterministic I think.

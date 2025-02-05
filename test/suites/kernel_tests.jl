@@ -1,4 +1,4 @@
-@testitem "kernels" setup=[CheckOutput] begin
+@testitem "kernels" setup = [CheckOutput] begin
     using SparseArrays
     using MatrixMarket
     using LinearAlgebra
@@ -13,10 +13,19 @@
         B = Tensor(Dense(SparseList(Element(0.0))), m, m)
 
         if !seen
-            check_output("kernels/innerprod.jl", @finch_code (B .= 0; for j=_, i=_, k=_; B[i, j] += A[k, i] * A[k, j] end))
+            check_output(
+                "kernels/innerprod.jl",
+                @finch_code (B .= 0;
+                for j in _, i in _, k in _
+                    B[i, j] += A[k, i] * A[k, j]
+                end)
+            )
             seen = true
         end
-        @finch (B .= 0; for j=_, i=_, k=_; B[i, j] += A[k, i] * A[k, j] end)
+        @finch (B .= 0;
+        for j in _, i in _, k in _
+            B[i, j] += A[k, i] * A[k, j]
+        end)
         @test B == B_ref
     end
 
@@ -28,15 +37,24 @@
             A = Tensor(A_ref)
             B = Finch.Scalar{0.0}()
             if !seen
-                check_output("kernels/triangle.jl", @finch_code (B .= 0; for i=_, j=_, k=_; B[] += A[k, i] * A[j, i] * A[k, j] end))
+                check_output(
+                    "kernels/triangle.jl",
+                    @finch_code (B .= 0;
+                    for i in _, j in _, k in _
+                        B[] += A[k, i] * A[j, i] * A[k, j]
+                    end)
+                )
                 seen = true
             end
-            @finch (B .= 0; for i=_, j=_, k=_; B[] += A[k, i] * A[j, i] * A[k, j] end)
+            @finch (B .= 0;
+            for i in _, j in _, k in _
+                B[] += A[k, i] * A[j, i] * A[k, j]
+            end)
             @test B() ≈ sum(A_ref .* (A_ref * transpose(A_ref)))
         end
     end
 
-    for trial = 1:10
+    for trial in 1:10
         n = 100
         p = q = 0.1
 
@@ -52,7 +70,7 @@
         @finch begin
             C .= 0
             d .= 0
-            for i = _
+            for i in _
                 a .= 0
                 b .= 0
                 a[] = A[i]
@@ -78,10 +96,14 @@
             if !seen
                 code = @finch_code begin
                     B .= 0
-                    for j=_
+                    for j in _
                         w .= 0
-                        for k=_, i=_; w[i] += A[i, k] * A[k, j] end
-                        for i=_ B[i, j] = w[i] end
+                        for k in _, i in _
+                            w[i] += A[i, k] * A[k, j]
+                        end
+                        for i in _
+                            B[i, j] = w[i]
+                        end
                     end
                 end
                 check_output("kernels/gustavsons.jl", code)
@@ -89,10 +111,14 @@
             end
             @finch begin
                 B .= 0
-                for j=_
+                for j in _
                     w .= 0
-                    for k=_, i=_ w[i] += A[i, k] * A[k, j] end
-                    for i=_ B[i, j] = w[i] end
+                    for k in _, i in _
+                        w[i] += A[i, k] * A[k, j]
+                    end
+                    for i in _
+                        B[i, j] = w[i]
+                    end
                 end
             end
             B_ref = A_ref * A_ref

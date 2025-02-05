@@ -17,7 +17,7 @@ julia> tensor_tree(Tensor(Dense(Element(0.0)), [1, 2, 3]))
    └─ [3]: 3.0
 ```
 """
-struct ElementLevel{Vf, Tv, Tp, Val} <: AbstractLevel
+struct ElementLevel{Vf,Tv,Tp,Val} <: AbstractLevel
     val::Val
 end
 const Element = ElementLevel
@@ -26,34 +26,38 @@ function ElementLevel(d, args...)
     isbits(d) || throw(ArgumentError("Finch currently only supports isbits defaults"))
     ElementLevel{d}(args...)
 end
-ElementLevel{Vf}() where {Vf} = ElementLevel{Vf, typeof(Vf)}()
-ElementLevel{Vf}(val::Val) where {Vf, Val} = ElementLevel{Vf, eltype(Val)}(val)
-ElementLevel{Vf, Tv}(args...) where {Vf, Tv} = ElementLevel{Vf, Tv, Int}(args...)
-ElementLevel{Vf, Tv, Tp}() where {Vf, Tv, Tp} = ElementLevel{Vf, Tv, Tp}(Tv[])
+ElementLevel{Vf}() where {Vf} = ElementLevel{Vf,typeof(Vf)}()
+ElementLevel{Vf}(val::Val) where {Vf,Val} = ElementLevel{Vf,eltype(Val)}(val)
+ElementLevel{Vf,Tv}(args...) where {Vf,Tv} = ElementLevel{Vf,Tv,Int}(args...)
+ElementLevel{Vf,Tv,Tp}() where {Vf,Tv,Tp} = ElementLevel{Vf,Tv,Tp}(Tv[])
 
-ElementLevel{Vf, Tv, Tp}(val::Val) where {Vf, Tv, Tp, Val} = ElementLevel{Vf, Tv, Tp, Val}(val)
+ElementLevel{Vf,Tv,Tp}(val::Val) where {Vf,Tv,Tp,Val} = ElementLevel{Vf,Tv,Tp,Val}(val)
 
 Base.summary(::Element{Vf}) where {Vf} = "Element($(Vf))"
 
-similar_level(::ElementLevel{Vf, Tv, Tp}, fill_value, eltype::Type, ::Vararg) where {Vf, Tv, Tp} =
-    ElementLevel{fill_value, eltype, Tp}()
-
-postype(::Type{<:ElementLevel{Vf, Tv, Tp}}) where {Vf, Tv, Tp} = Tp
-
-function moveto(lvl::ElementLevel{Vf, Tv, Tp}, device) where {Vf, Tv, Tp}
-    return ElementLevel{Vf, Tv, Tp}(moveto(lvl.val, device))
+function similar_level(
+    ::ElementLevel{Vf,Tv,Tp}, fill_value, eltype::Type, ::Vararg
+) where {Vf,Tv,Tp}
+    ElementLevel{fill_value,eltype,Tp}()
 end
 
-pattern!(lvl::ElementLevel{Vf, Tv, Tp}) where  {Vf, Tv, Tp} =
+postype(::Type{<:ElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
+
+function moveto(lvl::ElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
+    return ElementLevel{Vf,Tv,Tp}(moveto(lvl.val, device))
+end
+
+pattern!(lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
     Pattern{Tp}()
-set_fill_value!(lvl::ElementLevel{Vf, Tv, Tp}, init) where {Vf, Tv, Tp} =
-    ElementLevel{init, Tv, Tp}(lvl.val)
+function set_fill_value!(lvl::ElementLevel{Vf,Tv,Tp}, init) where {Vf,Tv,Tp}
+    ElementLevel{init,Tv,Tp}(lvl.val)
+end
 Base.resize!(lvl::ElementLevel) = lvl
 
-isstructequal(a::T, b::T) where {T <: Element} =
+isstructequal(a::T, b::T) where {T<:Element} =
     a.val == b.val
 
-function Base.show(io::IO, lvl::ElementLevel{Vf, Tv, Tp, Val}) where {Vf, Tv, Tp, Val}
+function Base.show(io::IO, lvl::ElementLevel{Vf,Tv,Tp,Val}) where {Vf,Tv,Tp,Val}
     print(io, "Element{")
     show(io, Vf)
     print(io, ", $Tv, $Tp}(")
@@ -71,9 +75,9 @@ labelled_show(io::IO, fbr::SubFiber{<:ElementLevel}) =
 @inline level_ndims(::Type{<:ElementLevel}) = 0
 @inline level_size(::ElementLevel) = ()
 @inline level_axes(::ElementLevel) = ()
-@inline level_eltype(::Type{<:ElementLevel{Vf, Tv}}) where {Vf, Tv} = Tv
+@inline level_eltype(::Type{<:ElementLevel{Vf,Tv}}) where {Vf,Tv} = Tv
 @inline level_fill_value(::Type{<:ElementLevel{Vf}}) where {Vf} = Vf
-data_rep_level(::Type{<:ElementLevel{Vf, Tv}}) where {Vf, Tv} = ElementData(Vf, Tv)
+data_rep_level(::Type{<:ElementLevel{Vf,Tv}}) where {Vf,Tv} = ElementData(Vf, Tv)
 
 (fbr::Tensor{<:ElementLevel})() = SubFiber(fbr.lvl, 1)()
 function (fbr::SubFiber{<:ElementLevel})()
@@ -99,13 +103,18 @@ end
 
 lower(ctx::AbstractCompiler, lvl::VirtualElementLevel, ::DefaultStyle) = lvl.ex
 
-function virtualize(ctx, ex, ::Type{ElementLevel{Vf, Tv, Tp, Val}}, tag=:lvl) where {Vf, Tv, Tp, Val}
+function virtualize(
+    ctx, ex, ::Type{ElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl
+) where {Vf,Tv,Tp,Val}
     sym = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
-    push_preamble!(ctx, quote
-        $sym = $ex
-        $val = $ex.val
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+            $val = $ex.val
+        end,
+    )
     VirtualElementLevel(sym, Vf, Tv, Tp, val)
 end
 
@@ -120,14 +129,21 @@ virtual_level_fill_value(lvl::VirtualElementLevel) = lvl.Vf
 postype(lvl::VirtualElementLevel) = lvl.Tp
 
 function declare_level!(ctx, lvl::VirtualElementLevel, pos, init)
-    init == literal(lvl.Vf) || throw(FinchProtocolError("Cannot initialize Element Levels to non-fill values (have $init expected $(lvl.Vf))"))
+    init == literal(lvl.Vf) || throw(
+        FinchProtocolError(
+            "Cannot initialize Element Levels to non-fill values (have $init expected $(lvl.Vf))"
+        ),
+    )
     lvl
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
-    push_preamble!(ctx, quote
-        resize!($(lvl.val), $(ctx(pos)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            resize!($(lvl.val), $(ctx(pos)))
+        end,
+    )
     return lvl
 end
 
@@ -146,32 +162,41 @@ supports_reassembly(::VirtualElementLevel) = true
 function reassemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
-    push_preamble!(ctx, quote
-        Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+        end,
+    )
     lvl
 end
 
 function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualElementLevel, arch)
     val_2 = freshen(ctx, :val)
-    push_preamble!(ctx, quote
-        $val_2 = $(lvl.val)
-        $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
-    end)
-    push_epilogue!(ctx, quote
-        $(lvl.val) = $val_2
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $val_2 = $(lvl.val)
+            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+        end,
+    )
+    push_epilogue!(
+        ctx,
+        quote
+            $(lvl.val) = $val_2
+        end,
+    )
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
         val = freshen(ctx, lvl.ex, :_val)
-        return Thunk(
-            preamble = quote
+        return Thunk(;
+            preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]
             end,
-            body = (ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val)
+            body=(ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
         )
     else
         VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]))
@@ -181,15 +206,31 @@ end
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     @assert mode.kind === updater
-    VirtualSparseScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty)
+    VirtualSparseScalar(
+        nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+    )
 end
 
 function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualElementLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    lower_assign(ctx, VirtualSparseScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty), mode, op, rhs)
+    lower_assign(
+        ctx,
+        VirtualSparseScalar(
+            nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+        ),
+        mode,
+        op,
+        rhs,
+    )
 end
 
 function lower_assign(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    lower_assign(ctx, VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))])), mode, op, rhs)
+    lower_assign(
+        ctx,
+        VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))])),
+        mode,
+        op,
+        rhs,
+    )
 end

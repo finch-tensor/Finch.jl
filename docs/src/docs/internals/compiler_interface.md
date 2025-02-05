@@ -9,6 +9,7 @@ Finch has several compiler modules with separate interfaces.
 ## SymbolicContexts
 
 SymbolicContexts are used to represent the symbolic information of a program. They are used to reason about the bounds of loops and the symbolic information of the program, and are defined on an algebra
+
 ```@docs
 StaticHash
 SymbolicContext

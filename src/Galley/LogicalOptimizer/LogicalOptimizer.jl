@@ -4,14 +4,17 @@ include("pruned-optimizer.jl")
 include("query-splitter.jl")
 
 function one_step_distribute(q::PlanNode)
-    distribution_triangles= []
+    distribution_triangles = []
     for root in PreOrderDFS(q)
         if root.kind == MapJoin
             for child2 in root.args
                 if child2.kind == MapJoin && isdistributive(root.op.val, child2.op.val)
                     for child1 in root.args
                         if child1.node_id != child2.node_id
-                            push!(distribution_triangles, (root.node_id, child1.node_id, child2.node_id))
+                            push!(
+                                distribution_triangles,
+                                (root.node_id, child1.node_id, child2.node_id),
+                            )
                         end
                     end
                 end
@@ -42,7 +45,9 @@ function one_step_distribute(q::PlanNode)
             end
         end
         root.args = [n for n in root.args if n.node_id != c1]
-        child2.args = [n.kind == Value ? n : MapJoin(root.op, child1, n) for n in child2.args]
+        child2.args = [
+            n.kind == Value ? n : MapJoin(root.op, child1, n) for n in child2.args
+        ]
         new_plan = canonicalize(new_plan, false)
         push!(plans, new_plan)
     end
@@ -71,10 +76,19 @@ function enumerate_distributed_plans(q::PlanNode, visited_plans, alias_hash, max
     end
     return plans
 end
-function high_level_optimize(faq_optimizer::FAQ_OPTIMIZERS, input_plan::PlanNode, ST, alias_stats::Dict{IndexExpr, TensorStats}, alias_hash::Dict{IndexExpr, UInt}, verbose)
+function high_level_optimize(
+    faq_optimizer::FAQ_OPTIMIZERS,
+    input_plan::PlanNode,
+    ST,
+    alias_stats::Dict{IndexExpr,TensorStats},
+    alias_hash::Dict{IndexExpr,UInt},
+    verbose,
+)
     logical_plan = PlanNode[]
     for input_query in input_plan.queries
-        logical_queries = high_level_optimize_query(faq_optimizer, input_query, ST, alias_stats, alias_hash, verbose)
+        logical_queries = high_level_optimize_query(
+            faq_optimizer, input_query, ST, alias_stats, alias_hash, verbose
+        )
         for query in logical_queries
             alias_hash[query.name.name] = cannonical_hash(query.expr, alias_hash)
             alias_stats[query.name.name] = query.expr.stats
@@ -84,8 +98,15 @@ function high_level_optimize(faq_optimizer::FAQ_OPTIMIZERS, input_plan::PlanNode
     return Plan(logical_plan...)
 end
 
-function high_level_optimize_query(faq_optimizer::FAQ_OPTIMIZERS, q::PlanNode, ST, alias_stats::Dict{IndexExpr, TensorStats}, alias_hash::Dict{IndexExpr, UInt}, verbose)
-    insert_statistics!(ST, q; bindings = alias_stats)
+function high_level_optimize_query(
+    faq_optimizer::FAQ_OPTIMIZERS,
+    q::PlanNode,
+    ST,
+    alias_stats::Dict{IndexExpr,TensorStats},
+    alias_hash::Dict{IndexExpr,UInt},
+    verbose,
+)
+    insert_statistics!(ST, q; bindings=alias_stats)
     if faq_optimizer === naive
         insert_node_ids!(q)
         return PlanNode[q]
@@ -96,7 +117,9 @@ function high_level_optimize_query(faq_optimizer::FAQ_OPTIMIZERS, q::PlanNode, S
     check_dnf = !allequal([n.op.val for n in PostOrderDFS(q) if n.kind === MapJoin])
     q_non_dnf = canonicalize(plan_copy(q), false)
     input_aq = AnnotatedQuery(q_non_dnf, ST)
-    logical_queries, cnf_cost, cost_cache = high_level_optimize_annotated_query(faq_optimizer, input_aq, alias_hash, Dict{UInt, Float64}(), verbose)
+    logical_queries, cnf_cost, cost_cache = high_level_optimize_annotated_query(
+        faq_optimizer, input_aq, alias_hash, Dict{UInt,Float64}(), verbose
+    )
     if check_dnf
         min_cost = cnf_cost
         min_query = canonicalize(plan_copy(q), false)
@@ -104,9 +127,12 @@ function high_level_optimize_query(faq_optimizer::FAQ_OPTIMIZERS, q::PlanNode, S
         finished = false
         while !finished
             finished = true
-            for query in enumerate_distributed_plans(min_query, visited_queries, alias_hash, 1)
+            for query in
+                enumerate_distributed_plans(min_query, visited_queries, alias_hash, 1)
                 input_aq = AnnotatedQuery(query, ST)
-                queries, cost, cost_cache = high_level_optimize_annotated_query(faq_optimizer, input_aq, alias_hash, cost_cache, verbose)
+                queries, cost, cost_cache = high_level_optimize_annotated_query(
+                    faq_optimizer, input_aq, alias_hash, cost_cache, verbose
+                )
                 if cost < min_cost
                     logical_queries = queries
                     min_cost = cost
@@ -119,8 +145,10 @@ function high_level_optimize_query(faq_optimizer::FAQ_OPTIMIZERS, q::PlanNode, S
         # We check the fully distributed option too just to see
         q_dnf = canonicalize(q, true)
         if cannonical_hash(q_dnf, alias_hash) ∉ visited_queries
-            dnf_aq = AnnotatedQuery(q_dnf , ST)
-            dnf_queries, dnf_cost, cost_cache = high_level_optimize_annotated_query(faq_optimizer, dnf_aq, alias_hash, cost_cache, verbose)
+            dnf_aq = AnnotatedQuery(q_dnf, ST)
+            dnf_queries, dnf_cost, cost_cache = high_level_optimize_annotated_query(
+                faq_optimizer, dnf_aq, alias_hash, cost_cache, verbose
+            )
             if dnf_cost < min_cost
                 verbose >= 1 && println("USED FULL DNF")
                 logical_queries = dnf_queries
@@ -133,7 +161,13 @@ function high_level_optimize_query(faq_optimizer::FAQ_OPTIMIZERS, q::PlanNode, S
     return logical_queries
 end
 
-function high_level_optimize_annotated_query(faq_optimizer::FAQ_OPTIMIZERS, aq::AnnotatedQuery, alias_hash::Dict{IndexExpr, UInt}, cost_cache::Dict{UInt, Float64}, verbose)
+function high_level_optimize_annotated_query(
+    faq_optimizer::FAQ_OPTIMIZERS,
+    aq::AnnotatedQuery,
+    alias_hash::Dict{IndexExpr,UInt},
+    cost_cache::Dict{UInt,Float64},
+    verbose,
+)
     if faq_optimizer == greedy
         return pruned_query_to_plan(aq, cost_cache, alias_hash; use_greedy=true)
     elseif faq_optimizer == exact

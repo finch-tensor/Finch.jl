@@ -12,13 +12,15 @@ function tricount(edges)
     L = Tensor(Dense(SparseList(Element(0))), n, n)
     @finch begin
         L .= 0
-        for j=_, i=_
-            L[i,j] = lotrimask[i,j+1] * edges[i,j]
+        for j in _, i in _
+            L[i, j] = lotrimask[i, j + 1] * edges[i, j]
         end
     end
 
     triangles = Scalar(0)
-    @finch for j=_, k=_, i=_; triangles[] += L[i, k] * L[k, j] * L[i, j] end
+    @finch for j in _, k in _, i in _
+        triangles[] += L[i, k] * L[k, j] * L[i, j]
+    end
 
     return triangles[]
 end

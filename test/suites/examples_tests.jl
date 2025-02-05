@@ -17,7 +17,7 @@
         finch_input = pattern!(Tensor(input))
 
         expected = Graphs.pagerank(graphs_input, 0.85, 20)
-        output = pagerank(finch_input; nsteps=20, damp = 0.85)
+        output = pagerank(finch_input; nsteps=20, damp=0.85)
 
         tol = 1e-6
 

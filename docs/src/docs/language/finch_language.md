@@ -15,21 +15,21 @@ where statements can modify the state of the program but expressions cannot.
 
 The core Finch expressions are:
 
-- [`literal`](@ref) e.g. `1`, `1.0`, `nothing`
-- [`value`](@ref) e.g. `x`, `y`
-- [`index`](@ref) e.g. `i`, inside of `for i = _; ... end`
-- [`variable`](@ref) e.g. `x`, inside of `(x = y; ...)`
-- [`call`](@ref) e.g. `op(args...)`
-- [`access`](@ref) e.g. `tns[idxs...]`
+  - [`literal`](@ref) e.g. `1`, `1.0`, `nothing`
+  - [`value`](@ref) e.g. `x`, `y`
+  - [`index`](@ref) e.g. `i`, inside of `for i = _; ... end`
+  - [`variable`](@ref) e.g. `x`, inside of `(x = y; ...)`
+  - [`call`](@ref) e.g. `op(args...)`
+  - [`access`](@ref) e.g. `tns[idxs...]`
 
 And the core Finch statements are:
 
-- [`declare`](@ref) e.g. `tns .= init`
-- [`assign`](@ref) e.g. `lhs[idxs...] <<op>>= rhs`
-- [`loop`](@ref) e.g. `for i = _; ... end`
-- [`define`](@ref) e.g. `let var = val; ... end`
-- [`sieve`](@ref) e.g. `if cond; ... end`
-- [`block`](@ref) e.g. `begin ... end`
+  - [`declare`](@ref) e.g. `tns .= init`
+  - [`assign`](@ref) e.g. `lhs[idxs...] <<op>>= rhs`
+  - [`loop`](@ref) e.g. `for i = _; ... end`
+  - [`define`](@ref) e.g. `let var = val; ... end`
+  - [`sieve`](@ref) e.g. `if cond; ... end`
+  - [`block`](@ref) e.g. `begin ... end`
 
 ```@docs
 literal
@@ -79,6 +79,7 @@ Tensors must enter and exit scope in read mode. Finch inserts
 `freeze` and `thaw` statements to ensure that tensors are in the correct mode. Freezing a tensor prevents further updates and allows reads. Thawing a tensor allows further updates and prevents reads.
 
 Tensor lifecycle statements consist of:
+
 ```@docs
 reader
 updater

@@ -2,16 +2,18 @@
 if abspath(PROGRAM_FILE) == @__FILE__
     using Pkg
     Pkg.activate(@__DIR__)
-    Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+    Pkg.develop(PackageSpec(; path=joinpath(@__DIR__, "..")))
     Pkg.instantiate()
 end
 
 using Test
 using ArgParse
 
-s = ArgParseSettings("Run Finch.jl tests. By default, all tests are run unless --include or --exclude options are provided. 
+s = ArgParseSettings(
+    "Run Finch.jl tests. By default, all tests are run unless --include or --exclude options are provided. 
 Finch compares to reference output which depends on the system word size (currently $(Sys.WORD_SIZE)-bit).To overwrite $(Sys.WORD_SIZE==32 ? 64 : 32)-bit output, run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.
-If the environment variable FINCH_TEST_ARGS is set, it will override the given arguments.")
+If the environment variable FINCH_TEST_ARGS is set, it will override the given arguments.",
+)
 
 @add_arg_table! s begin
     "--overwrite", "-w"
@@ -45,7 +47,7 @@ function test_filter(name)
     global parsed_args
     inc = parsed_args["include"]
     exc = parsed_args["exclude"]
-    return (isempty(inc) || name in inc) && !(name in exc) 
+    return (isempty(inc) || name in inc) && !(name in exc)
 end
 
 using Finch
@@ -66,15 +68,17 @@ if parsed_args["nprocs"] == 0
         _source = QuoteNode(__source__)
         if length(exs) > 1
             kw_seen = Set{Symbol}()
-            for ex in exs[1:end-1]
-                ex.head == :(=) || error("`@testitem` options must be passed as keyword arguments")
+            for ex in exs[1:(end - 1)]
+                ex.head == :(=) ||
+                    error("`@testitem` options must be passed as keyword arguments")
                 kw = ex.args[1]
                 kw in kw_seen && error("`@testitem` has duplicate keyword `$kw`")
                 push!(kw_seen, kw)
                 if kw == :tags
                     tags = ex.args[2]
                     @assert(
-                        tags isa Expr && all(t -> t isa QuoteNode && t.value isa Symbol, tags.args),
+                        tags isa Expr &&
+                            all(t -> t isa QuoteNode && t.value isa Symbol, tags.args),
                         "`tags` keyword must be passed a collection of `Symbol`s"
                     )
                 elseif kw == :default_imports
@@ -120,30 +124,35 @@ if parsed_args["nprocs"] == 0
         if isempty(exs) || !(exs[end] isa Expr && exs[end].head == :block)
             error("expected `@testitem` to have a body")
         end
-        esc(quote
-            if test_filter($nm)
-                if $skip
-                    @testset $nm begin
-                        @test true skip=true
-                    end
-                else
-                    @testset $nm failfast = $failfast begin
-                        @info "Running test item: $($nm)"
-                        $(exs[end])
+        esc(
+            quote
+                if test_filter($nm)
+                    if $skip
+                        @testset $nm begin
+                            @test true skip = true
+                        end
+                    else
+                        @testset $nm failfast = $failfast begin
+                            @info "Running test item: $($nm)"
+                            $(exs[end])
+                        end
                     end
                 end
-            end
-        end)
+            end,
+        )
     end
 
     macro testsetup(mod)
-        (mod isa Expr && mod.head == :module) || error("`@testsetup` expects a `module ... end` argument")
+        (mod isa Expr && mod.head == :module) ||
+            error("`@testsetup` expects a `module ... end` argument")
         _, name, code = mod.args
         name isa Symbol || error("`@testsetup module` expects a valid module name")
-        esc(quote
-            @eval $mod
-            using .$(name)
-        end)
+        esc(
+            quote
+                @eval $mod
+                using .$(name)
+            end,
+        )
     end
 
     @testset "Finch" begin
@@ -164,6 +173,7 @@ if parsed_args["nprocs"] == 0
         include("suites/representation_tests.jl")
         include("suites/scheduler_tests.jl")
         include("suites/simple_tests.jl")
+        include("suites/style_tests.jl")
         include("suites/typical_tests.jl")
     end
 
@@ -172,12 +182,12 @@ else
 
     runtests(
         (ti) -> test_filter(ti.name),
-        Finch,
+        Finch;
         nworkers=parsed_args["nprocs"],
         nworker_threads=parsed_args["nthreads"],
         worker_init_expr=quote
             using Finch
             using SparseArrays
-            parsed_args=$parsed_args
+            parsed_args = $parsed_args
         end)
 end

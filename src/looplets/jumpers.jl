@@ -11,7 +11,7 @@ end
 
 Base.show(io::IO, ex::Jumper) = Base.show(io, MIME"text/plain"(), ex)
 function Base.show(io::IO, mime::MIME"text/plain", ex::Jumper)
-	print(io, "Jumper(...)")
+    print(io, "Jumper(...)")
 end
 
 FinchNotation.finch_leaf(x::Jumper) = virtual(x)
@@ -50,8 +50,6 @@ function jumper_range(ctx, node::Jumper, ext)
     bound_measure_below!(ext_2, get_smallest_measure(ext))
 end
 
-
-
 jumper_body(ctx, node, ext, ext_2) = truncate(ctx, node, ext, ext_2)
 
 function jumper_body(ctx, node::FinchNode, ext, ext_2)
@@ -62,22 +60,26 @@ function jumper_body(ctx, node::FinchNode, ext, ext_2)
     end
 end
 
-
 function jumper_body(ctx, node::Jumper, ext, ext_2)
     next = node.next(ctx, ext_2)
     if next !== nothing
         Switch([
-            value(:($(ctx(node.stop(ctx, ext))) == $(ctx(getstop(ext_2))))) => Thunk(
-                body = (ctx) -> truncate(ctx, node.chunk, ext, similar_extent(ext, getstart(ext_2), getstop(ext))),
-                epilogue = next
+            value(:($(ctx(node.stop(ctx, ext))) == $(ctx(getstop(ext_2))))) => Thunk(;
+                body=(ctx) -> truncate(
+                    ctx,
+                    node.chunk,
+                    ext,
+                    similar_extent(ext, getstart(ext_2), getstop(ext)),
+                ),
+                epilogue=next,
             ),
-            literal(true) => Stepper(
-                preamble = node.preamble,
-                stop = node.stop,
-                chunk = node.chunk,
-                next = node.next,
-                seek = node.seek
-            )
+            literal(true) => Stepper(;
+                preamble=node.preamble,
+                stop=node.stop,
+                chunk=node.chunk,
+                next=node.next,
+                seek=node.seek,
+            ),
         ])
     else
         node.body(ctx, ext_2)
@@ -89,9 +91,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::JumperStyle)
 
     i = getname(root.idx)
     i0 = freshen(ctx, i, :_start)
-    push_preamble!(ctx, quote
-        $i = $(ctx(getstart(root.ext)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $i = $(ctx(getstart(root.ext)))
+        end,
+    )
 
     guard = :($i <= $(ctx(getstop(root.ext))))
 
@@ -103,17 +108,26 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::JumperStyle)
         push_preamble!(ctx_2, :($i0 = $i))
         i1 = freshen(ctx_2, i)
 
-        ext_1 = bound_measure_below!(similar_extent(root.ext, value(i0), getstop(root.ext)), get_smallest_measure(root.ext))
-        ext_2 = mapreduce((node)->jumper_range(ctx_2, node, ext_1), (a, b) -> virtual_union(ctx_2, a, b), PostOrderDFS(root.body))
+        ext_1 = bound_measure_below!(
+            similar_extent(root.ext, value(i0), getstop(root.ext)),
+            get_smallest_measure(root.ext),
+        )
+        ext_2 = mapreduce(
+            (node) -> jumper_range(ctx_2, node, ext_1),
+            (a, b) -> virtual_union(ctx_2, a, b),
+            PostOrderDFS(root.body),
+        )
         ext_3 = virtual_intersect(ctx_2, ext_1, ext_2)
         ext_4 = cache_dim!(ctx_2, :phase, ext_3)
 
-        body = Rewrite(Postwalk(node->jumper_body(ctx_2, node, ext_1, ext_4)))(root.body)
+        body = Rewrite(Postwalk(node -> jumper_body(ctx_2, node, ext_1, ext_4)))(root.body)
         body = quote
             $i1 = $i
-            $(contain(ctx_2) do ctx_3
-                ctx_3(loop(root.idx, ext_4, body))
-            end)
+            $(
+                contain(ctx_2) do ctx_3
+                    ctx_3(loop(root.idx, ext_4, body))
+                end
+            )
 
             $i = $(ctx_2(getstop(ext_4))) + $(ctx_2(getunit(ext_4)))
         end
@@ -127,7 +141,6 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::JumperStyle)
                 end
             end
         end
-
     end
 
     @assert isvirtual(root.ext)
@@ -142,5 +155,3 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::JumperStyle)
         end
     end
 end
-
-

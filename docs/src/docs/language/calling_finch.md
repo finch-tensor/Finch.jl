@@ -10,27 +10,28 @@ conditionals, multiple outputs, and even user-defined types and functions.
 
 ### Supported Syntax and Structures
 
-| Feature/Structure | Example Usage |
-|-------------------|---------------|
-| Major Sparse Formats and Structured Arrays |  `A = Tensor(Dense(SparseList(Element(0.0)), 3, 4)`|
-| Background Values Other Than Zero |  `B = Tensor(SparseList(Element(1.0)), 9)`|
-| Broadcasts and Reductions |  `sum(A .* B)`|
-| User-Defined Functions |  `x[] <<min>>= y[i] + z[i]`|
-| Multiple Outputs |  `x[] <<min>>= y[i]; z[] <<max>>= y[i]`|
-| Multicore Parallelism |  `for i = parallel(1:100)`|
-| Conditionals |  `if dist[] < best_dist[]`|
-| Affine Indexing (e.g. Convolution) |  `A[i + j]`|
+| Feature/Structure                          | Example Usage                                      |
+|:------------------------------------------ |:-------------------------------------------------- |
+| Major Sparse Formats and Structured Arrays | `A = Tensor(Dense(SparseList(Element(0.0)), 3, 4)` |
+| Background Values Other Than Zero          | `B = Tensor(SparseList(Element(1.0)), 9)`          |
+| Broadcasts and Reductions                  | `sum(A .* B)`                                      |
+| User-Defined Functions                     | `x[] <<min>>= y[i] + z[i]`                         |
+| Multiple Outputs                           | `x[] <<min>>= y[i]; z[] <<max>>= y[i]`             |
+| Multicore Parallelism                      | `for i = parallel(1:100)`                          |
+| Conditionals                               | `if dist[] < best_dist[]`                          |
+| Affine Indexing (e.g. Convolution)         | `A[i + j]`                                         |
 
 ## Quick Start: Examples
 
 To begin, the following program sums the rows of a sparse matrix:
+
 ```julia
 using Finch
 A = sprand(5, 5, 0.5)
 y = zeros(5)
 @finch begin
     y .= 0
-    for i=_, j=_
+    for i in _, j in _
         y[i] += A[i, j]
     end
 end
@@ -44,13 +45,14 @@ like `x * 0 => 0` during compilation to make the code more efficient.
 You can call [`@finch`](@ref) on any loop program, but it will only generate sparse code
 if the arguments are sparse. For example, the following program calculates the
 sum of the elements of a dense matrix:
+
 ```julia
 using Finch
 A = rand(5, 5)
 s = Scalar(0.0)
 @finch begin
     s .= 0
-    for i=_, j=_
+    for i in _, j in _
         s[] += A[i, j]
     end
 end
@@ -58,8 +60,11 @@ end
 
 You can call [`@finch_code`](@ref) to see the generated code (since `A` is dense, the
 code is dense):
+
 ```jldoctest example1; setup=:(using Finch; A = rand(5, 5); s = Scalar(0))
-julia> @finch_code for i=_, j=_ ; s[] += A[i, j] end
+julia> @finch_code for i in _, j in _
+           s[] += A[i, j]
+       end
 quote
     s = (ex.bodies[1]).body.body.lhs.tns.bind
     s_val = s.val
@@ -94,10 +99,10 @@ x_sum = Scalar(0.0)
 x_var = Scalar(0.0)
 
 @finch begin
-    for i = _
+    for i in _
         let x = X[i]
-            x_min[] <<min>>= x
-            x_max[] <<max>>= x
+            x_min[] << min >>= x
+            x_max[] << max >>= x
             x_sum[] += x
             x_var[] += x * x
         end
@@ -116,7 +121,7 @@ y = Tensor(Dense(Element(0.0)));
 
 @finch begin
     y .= 0
-    for j=_, i=_
+    for j in _, i in _
         y[i] += A[i, j] * x[j]
     end
 end
@@ -152,9 +157,9 @@ function definition ahead-of-time, which can be evaluated and then called later.
 
 There are several reasons one might want to do this:
 
-1. If we want to make tweaks to the Finch implementation, we can directly modify the source code of the resulting function.
-2. When benchmarking Finch functions, we can easily and reliably ensure the benchmarked code is [inferrable](https://docs.julialang.org/en/v1/devdocs/inference/).
-3. If we want to use Finch to generate code but don't want to include Finch as a dependency in our project, we can use [`@finch_kernel`](@ref) to generate the functions ahead of time and copy and paste the generated code into our project.  Consider automating this workflow to keep the kernels up to date!
+ 1. If we want to make tweaks to the Finch implementation, we can directly modify the source code of the resulting function.
+ 2. When benchmarking Finch functions, we can easily and reliably ensure the benchmarked code is [inferrable](https://docs.julialang.org/en/v1/devdocs/inference/).
+ 3. If we want to use Finch to generate code but don't want to include Finch as a dependency in our project, we can use [`@finch_kernel`](@ref) to generate the functions ahead of time and copy and paste the generated code into our project.  Consider automating this workflow to keep the kernels up to date!
 
 ```@docs
     @finch_kernel
@@ -170,7 +175,7 @@ let
     y = Tensor(Dense(Element(0.0)))
     def = @finch_kernel function spmv(y, A, x)
         y .= 0.0
-        for j = _, i = _
+        for j in _, i in _
             y[i] += A[i, j] * x[j]
         end
         return y
@@ -179,7 +184,7 @@ let
 end
 
 function main()
-    for i = 1:10
+    for i in 1:10
         A2 = Tensor(Dense(SparseList(Element(0.0))), fsprand(10, 10, 0.1))
         x2 = Tensor(Dense(Element(0.0)), rand(10))
         y2 = Tensor(Dense(Element(0.0)))

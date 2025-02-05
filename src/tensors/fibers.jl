@@ -31,8 +31,12 @@ it must correspond to the number of dimensions in `lvl`.
 """
 Tensor(lvl::AbstractLevel, dims::Number...) = Tensor(lvl, undef, dims...)
 Tensor(lvl::AbstractLevel, dims::Tuple) = Tensor(lvl, undef, dims...)
-Tensor(lvl::AbstractLevel, init::UndefInitializer, dims...) = Tensor(assemble!(resize!(lvl, dims...)))
-Tensor(lvl::AbstractLevel, init::UndefInitializer, dims::Tuple) = Tensor(assemble!(resize!(lvl, dims...)))
+function Tensor(lvl::AbstractLevel, init::UndefInitializer, dims...)
+    Tensor(assemble!(resize!(lvl, dims...)))
+end
+function Tensor(lvl::AbstractLevel, init::UndefInitializer, dims::Tuple)
+    Tensor(assemble!(resize!(lvl, dims...)))
+end
 Tensor(lvl::AbstractLevel, init::UndefInitializer) = Tensor(assemble!(lvl))
 """
     Tensor(lvl, arr)
@@ -60,7 +64,7 @@ julia> println(summary(Tensor(ones(3, 2, 4))))
 3×2×4 Tensor(Dense(Dense(Dense(Element(0.0)))))
 ```
 """
-function Tensor(arr::AbstractArray{Tv, N}, fill_value::Tv=zero(eltype(arr))) where {Tv, N}
+function Tensor(arr::AbstractArray{Tv,N}, fill_value::Tv=zero(eltype(arr))) where {Tv,N}
     Base.copyto!(Tensor((DenseLevel^(ndims(arr)))(Element{zero(eltype(arr))}())), arr)
 end
 
@@ -85,7 +89,7 @@ FinchNotation.finch_leaf(x::VirtualFiber) = virtual(x)
 
 `SubFiber` represents a tensor at position `pos` within `lvl`.
 """
-struct SubFiber{Lvl, Pos} <: AbstractFiber{Lvl}
+struct SubFiber{Lvl,Pos} <: AbstractFiber{Lvl}
     lvl::Lvl
     pos::Pos
 end
@@ -94,12 +98,16 @@ mutable struct VirtualSubFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
     pos
 end
-function virtualize(ctx, ex, ::Type{<:SubFiber{Lvl, Pos}}, tag=freshen(ctx, :tns)) where {Lvl, Pos}
+function virtualize(
+    ctx, ex, ::Type{<:SubFiber{Lvl,Pos}}, tag=freshen(ctx, :tns)
+) where {Lvl,Pos}
     lvl = virtualize(ctx, :($ex.lvl), Lvl, Symbol(tag, :_lvl))
     pos = virtualize(ctx, :($ex.pos), Pos)
     VirtualSubFiber(lvl, pos)
 end
-lower(ctx::AbstractCompiler, fbr::VirtualSubFiber, ::DefaultStyle) = :(SubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos))))
+function lower(ctx::AbstractCompiler, fbr::VirtualSubFiber, ::DefaultStyle)
+    :(SubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos))))
+end
 FinchNotation.finch_leaf(x::VirtualSubFiber) = virtual(x)
 
 @inline Base.ndims(::AbstractFiber{Lvl}) where {Lvl} = level_ndims(Lvl)
@@ -127,8 +135,9 @@ function declare!(ctx::AbstractCompiler, fbr::VirtualFiber, init)
     fbr = VirtualFiber(lvl)
 end
 
-unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto) =
+function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(arr.lvl, literal(1)), ext, mode, proto)
+end
 
 function virtual_moveto(ctx::AbstractCompiler, fbr::VirtualFiber, arch)
     virtual_moveto_level(ctx, fbr.lvl, arch)
@@ -138,7 +147,7 @@ function virtual_moveto(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch)
     virtual_moveto_level(ctx, fbr.lvl, arch)
 end
 
-struct HollowSubFiber{Lvl, Pos, Dirty} <: AbstractFiber{Lvl}
+struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}
     lvl::Lvl
     pos::Pos
     dirty::Dirty
@@ -149,24 +158,32 @@ mutable struct VirtualHollowSubFiber{Lvl}
     pos
     dirty
 end
-function virtualize(ctx, ex, ::Type{<:HollowSubFiber{Lvl, Pos, Dirty}}, tag=freshen(ctx, :tns)) where {Lvl, Pos, Dirty}
+function virtualize(
+    ctx, ex, ::Type{<:HollowSubFiber{Lvl,Pos,Dirty}}, tag=freshen(ctx, :tns)
+) where {Lvl,Pos,Dirty}
     lvl = virtualize(ctx, :($ex.lvl), Lvl, Symbol(tag, :_lvl))
     pos = virtualize(ctx, :($ex.pos), Pos)
     dirty = virtualize(ctx, :($ex.dirty), Dirty)
     VirtualHollowSubFiber(lvl, pos, dirty)
 end
-lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle) = :(HollowSubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos)), $(ctx(fbr.dirty))))
+function lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle)
+    :(HollowSubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos)), $(ctx(fbr.dirty))))
+end
 FinchNotation.finch_leaf(x::VirtualHollowSubFiber) = virtual(x)
 
 function virtual_moveto(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch)
-    return VirtualHollowSubFiber(virtual_moveto_level(ctx, fbr.lvl, arch), fbr.pos, fbr.dirty)
+    return VirtualHollowSubFiber(
+        virtual_moveto_level(ctx, fbr.lvl, arch), fbr.pos, fbr.dirty
+    )
 end
 
-instantiate(ctx, fbr::VirtualFiber, mode) = 
+function instantiate(ctx, fbr::VirtualFiber, mode)
     instantiate(ctx, VirtualSubFiber(fbr.lvl, literal(1)), mode)
+end
 
-unfurl(ctx, fbr::VirtualFiber, ext, mode, proto) =
+function unfurl(ctx, fbr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(fbr.lvl, literal(1)), ext, mode, proto)
+end
 
 """
     set_fill_value!(fbr, init)
@@ -220,7 +237,13 @@ function freeze!(ctx::AbstractCompiler, fbr::VirtualFiber)
     return VirtualFiber(freeze_level!(ctx, fbr.lvl, literal(1)))
 end
 
-thaw_level!(ctx, lvl, pos) = throw(FinchProtocolError("cannot modify $(typeof(lvl)) in place (forgot to declare with .= ?)"))
+function thaw_level!(ctx, lvl, pos)
+    throw(
+        FinchProtocolError(
+            "cannot modify $(typeof(lvl)) in place (forgot to declare with .= ?)"
+        ),
+    )
+end
 function thaw!(ctx::AbstractCompiler, fbr::VirtualFiber)
     return VirtualFiber(thaw_level!(ctx, fbr.lvl, literal(1)))
 end
@@ -252,7 +275,9 @@ function Base.show(io::IO, fbr::SubFiber)
     print(io, "SubFiber(", fbr.lvl, ", ", fbr.pos, ")")
 end
 
-Base.summary(io::IO, fbr::SubFiber) = println(io, "SubFiber($(summary(fbr.lvl)), $(fbr.pos))")
+function Base.summary(io::IO, fbr::SubFiber)
+    println(io, "SubFiber($(summary(fbr.lvl)), $(fbr.pos))")
+end
 
 function Base.show(io::IO, mime::MIME"text/plain", fbr::VirtualSubFiber)
     if get(io, :compact, false)
@@ -292,25 +317,36 @@ Base.summary(fbr::Tensor) = "$(join(size(fbr), "×")) Tensor($(summary(fbr.lvl))
 Base.summary(fbr::SubFiber) = "$(join(size(fbr), "×")) SubFiber($(summary(fbr.lvl)))"
 
 Base.similar(fbr::AbstractFiber) = similar(fbr, fill_value(fbr), eltype(fbr), size(fbr))
-Base.similar(fbr::AbstractFiber, eltype::Type) = similar(fbr, convert(eltype, fill_value(fbr)), eltype, size(fbr))
-Base.similar(fbr::AbstractFiber, fill_value, eltype::Type) = similar(fbr, fill_value, eltype, size(fbr))
-Base.similar(fbr::AbstractFiber, dims::Tuple) = similar(fbr, fill_value(fbr), eltype(fbr), dims)
-Base.similar(fbr::AbstractFiber, eltype::Type, dims::Tuple) = similar(fbr, convert(eltype, fill_value(fbr)), eltype, dims)
-Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple) = Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
+function Base.similar(fbr::AbstractFiber, eltype::Type)
+    similar(fbr, convert(eltype, fill_value(fbr)), eltype, size(fbr))
+end
+function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type)
+    similar(fbr, fill_value, eltype, size(fbr))
+end
+function Base.similar(fbr::AbstractFiber, dims::Tuple)
+    similar(fbr, fill_value(fbr), eltype(fbr), dims)
+end
+function Base.similar(fbr::AbstractFiber, eltype::Type, dims::Tuple)
+    similar(fbr, convert(eltype, fill_value(fbr)), eltype, dims)
+end
+function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple)
+    Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
+end
 
 moveto(tns::Tensor, device) = Tensor(moveto(tns.lvl, device))
 
 struct Structure
     t
 end
-    
+
 Base.:(==)(a::Structure, b::Structure) = isstructequal(a.t, b.t)
 
 isstructequal(a, b) = a === b
 
-isstructequal(a::T, b::T) where {T <: Tensor} =
+isstructequal(a::T, b::T) where {T<:Tensor} =
     isstructequal(a.lvl, b.lvl)
 
-isstructequal(a::T, b::T) where {T <: Finch.SubFiber} =
+function isstructequal(a::T, b::T) where {T<:Finch.SubFiber}
     isstructequal(a.lvl, b.lvl) &&
-    isstructequal(a.ptr, b.ptr)
+        isstructequal(a.ptr, b.ptr)
+end

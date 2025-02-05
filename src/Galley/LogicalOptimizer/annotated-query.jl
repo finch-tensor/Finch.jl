@@ -1,45 +1,45 @@
 mutable struct AnnotatedQuery
     ST::Type
     output_name::Symbol
-    output_order::Union{Nothing, Vector{IndexExpr}}
-    output_format::Union{Nothing, Vector{LevelFormat}}
+    output_order::Union{Nothing,Vector{IndexExpr}}
+    output_format::Union{Nothing,Vector{LevelFormat}}
     reduce_idxs::Vector{IndexExpr}
     point_expr::PlanNode
-    idx_lowest_root::Dict{IndexExpr, Int}
-    idx_op::Dict{IndexExpr, Any}
-    idx_init::Dict{IndexExpr, Any}
-    id_to_node::Dict{Int, PlanNode}
-    parent_idxs::Dict{IndexExpr, Vector{IndexExpr}} # Index orders that must be respected
-    original_idx::Dict{IndexExpr, IndexExpr} # When an index is split into many, we track their relationship.
+    idx_lowest_root::Dict{IndexExpr,Int}
+    idx_op::Dict{IndexExpr,Any}
+    idx_init::Dict{IndexExpr,Any}
+    id_to_node::Dict{Int,PlanNode}
+    parent_idxs::Dict{IndexExpr,Vector{IndexExpr}} # Index orders that must be respected
+    original_idx::Dict{IndexExpr,IndexExpr} # When an index is split into many, we track their relationship.
     connected_components::Vector{Vector{IndexExpr}}
-    connected_idxs::Dict{IndexExpr, Set{IndexExpr}}
+    connected_idxs::Dict{IndexExpr,Set{IndexExpr}}
 end
 
 function copy_aq(aq::AnnotatedQuery)
     new_point_expr = plan_copy(aq.point_expr)
-    id_to_node = Dict{Int, PlanNode}()
+    id_to_node = Dict{Int,PlanNode}()
     for node in PreOrderDFS(new_point_expr)
         id_to_node[node.node_id] = node
     end
     return AnnotatedQuery(aq.ST,
-                          aq.output_name,
-                          copy(aq.output_order),
-                          copy(aq.output_format),
-                          copy(aq.reduce_idxs),
-                          new_point_expr,
-                          copy(aq.idx_lowest_root),
-                          copy(aq.idx_op),
-                          copy(aq.idx_init),
-                          id_to_node,
-                          copy(aq.parent_idxs),
-                          copy(aq.original_idx),
-                          copy(aq.connected_components),
-                          copy(aq.connected_idxs)
-                          )
+        aq.output_name,
+        copy(aq.output_order),
+        copy(aq.output_format),
+        copy(aq.reduce_idxs),
+        new_point_expr,
+        copy(aq.idx_lowest_root),
+        copy(aq.idx_op),
+        copy(aq.idx_init),
+        id_to_node,
+        copy(aq.parent_idxs),
+        copy(aq.original_idx),
+        copy(aq.connected_components),
+        copy(aq.connected_idxs),
+    )
 end
 
 function get_idx_connected_components(parent_idxs, connected_idxs)
-    component_ids = Dict(x=>i for (i,x) in enumerate(keys(connected_idxs)))
+    component_ids = Dict(x => i for (i, x) in enumerate(keys(connected_idxs)))
     finished = false
     while !finished
         finished = true
@@ -67,7 +67,7 @@ function get_idx_connected_components(parent_idxs, connected_idxs)
         push!(components, idx_in_component)
     end
     finished = false
-    component_order = Dict(c=>i for (i,c) in enumerate(components))
+    component_order = Dict(c => i for (i, c) in enumerate(components))
     while !finished
         finished = true
         for component1 in components
@@ -82,20 +82,20 @@ function get_idx_connected_components(parent_idxs, connected_idxs)
                     end
                     is_parent_of_1 && break
                 end
-                if is_parent_of_1 && component_order[component2] > component_order[component1]
-                    max_pos = max(component_order[component1],component_order[component2])
-                    min_pos = min(component_order[component1],component_order[component2])
+                if is_parent_of_1 &&
+                    component_order[component2] > component_order[component1]
+                    max_pos = max(component_order[component1], component_order[component2])
+                    min_pos = min(component_order[component1], component_order[component2])
                     component_order[component1] = max_pos
                     component_order[component2] = min_pos
-                    finished=false
+                    finished = false
                 end
             end
         end
     end
-    sort!(components, by=(c)->component_order[c])
+    sort!(components; by=(c) -> component_order[c])
     return components
 end
-
 
 function _fastintree(n1, n2)
     for n in PreOrderDFS(n2)
@@ -119,7 +119,11 @@ end
 #      - or of the form Query(name, agg_map_expr)
 function AnnotatedQuery(q::PlanNode, ST)
     if !(@capture q Query(~name, ~expr))
-        throw(ErrorException("Annotated Queries can only be built from queries of the form: Query(name, Materialize(formats, index_order, agg_map_expr)) or Query(name, agg_map_expr)"))
+        throw(
+            ErrorException(
+                "Annotated Queries can only be built from queries of the form: Query(name, Materialize(formats, index_order, agg_map_expr)) or Query(name, agg_map_expr)"
+            ),
+        )
     end
     insert_node_ids!(q)
     insert_statistics!(ST, q)
@@ -135,40 +139,46 @@ function AnnotatedQuery(q::PlanNode, ST)
         expr = q.expr
     end
     starting_reduce_idxs = IndexExpr[]
-    idx_starting_root = Dict{IndexExpr, Int}()
+    idx_starting_root = Dict{IndexExpr,Int}()
     # This dictionary captures the original topological ordering of the aggregates.
-    idx_top_order = Dict{IndexExpr, Int}()
+    idx_top_order = Dict{IndexExpr,Int}()
     top_counter = 1
-    idx_op = Dict{IndexExpr, Any}()
-    idx_init = Dict{IndexExpr, Any}()
-    point_expr = Rewrite(Postwalk(Chain([
-        (@rule Aggregate(~f::isvalue, ~init::isvalue, ~idxs..., ~a) => begin
-        for idx in idxs
-            idx_starting_root[idx.name] = a.node_id
-            idx_top_order[idx.name] = top_counter
-            top_counter += 1
-            if isnothing(f.val)
-                idx_op[idx.name] = initwrite(get_default_value(a.stats))
-                idx_init[idx.name] = get_default_value(a.stats)
-            else
-                idx_op[idx.name] = f.val
-                idx_init[idx.name] = init.val
-            end
-        end
-        append!(starting_reduce_idxs, [idx.name for idx in idxs])
-        a
-        end),
-    ])))(expr)
+    idx_op = Dict{IndexExpr,Any}()
+    idx_init = Dict{IndexExpr,Any}()
+    point_expr = Rewrite(
+        Postwalk(
+            Chain([
+                (@rule Aggregate(~f::isvalue, ~init::isvalue, ~idxs..., ~a) => begin
+                    for idx in idxs
+                        idx_starting_root[idx.name] = a.node_id
+                        idx_top_order[idx.name] = top_counter
+                        top_counter += 1
+                        if isnothing(f.val)
+                            idx_op[idx.name] = initwrite(get_default_value(a.stats))
+                            idx_init[idx.name] = get_default_value(a.stats)
+                        else
+                            idx_op[idx.name] = f.val
+                            idx_init[idx.name] = init.val
+                        end
+                    end
+                    append!(starting_reduce_idxs, [idx.name for idx in idxs])
+                    a
+                end),
+            ]),
+        ),
+    )(
+        expr
+    )
     point_expr = plan_copy(point_expr) # Need to sanitize
     insert_statistics!(ST, point_expr)
-    id_to_node = Dict{Int, PlanNode}()
+    id_to_node = Dict{Int,PlanNode}()
     for node in PreOrderDFS(point_expr)
         id_to_node[node.node_id] = node
     end
 
     reduce_idxs = IndexExpr[]
     original_idx = Dict(idx => idx for idx in get_index_set(q.expr.stats))
-    idx_lowest_root = Dict{IndexExpr, Int}()
+    idx_lowest_root = Dict{IndexExpr,Int}()
     for idx in starting_reduce_idxs
         agg_op = idx_op[idx]
         idx_dim_size = get_dim_size(point_expr.stats, idx)
@@ -198,7 +208,9 @@ function AnnotatedQuery(q::PlanNode, ST)
                         new_node.node_id = node.node_id
                         new_node.node_id = maximum(keys(id_to_node)) + 1
                         id_to_node[new_node.node_id] = new_node
-                        point_expr = replace_and_remove_nodes!(point_expr, node.node_id, new_node, [])
+                        point_expr = replace_and_remove_nodes!(
+                            point_expr, node.node_id, new_node, []
+                        )
                         continue
                     end
                 end
@@ -208,7 +220,7 @@ function AnnotatedQuery(q::PlanNode, ST)
                 idx_lowest_root[new_idx] = lowest_roots[i]
                 #TODO: This forces us to push down aggressively which is an assumption
                 # about what plans will be most efficiently. It also makes things more efficient.
-#                idx_starting_root[new_idx] = lowest_roots[i]
+                #                idx_starting_root[new_idx] = lowest_roots[i]
                 idx_starting_root[new_idx] = idx_starting_root[idx]
                 original_idx[new_idx] = idx
                 push!(reduce_idxs, new_idx)
@@ -216,8 +228,8 @@ function AnnotatedQuery(q::PlanNode, ST)
         end
     end
 
-    parent_idxs = Dict(i=>[] for i in reduce_idxs)
-    connected_idxs = Dict(i=>Set{IndexExpr}() for i in reduce_idxs)
+    parent_idxs = Dict(i => [] for i in reduce_idxs)
+    connected_idxs = Dict(i => Set{IndexExpr}() for i in reduce_idxs)
     for idx1 in reduce_idxs
         idx1_op = idx_op[idx1]
         idx1_bottom_root = id_to_node[idx_lowest_root[idx1]]
@@ -229,14 +241,18 @@ function AnnotatedQuery(q::PlanNode, ST)
                 push!(connected_idxs[idx1], idx2)
             end
 
-            mergeable_agg_op = (idx1_op == idx2_op && isassociative(idx1_op) && iscommutative(idx1_op))
+            mergeable_agg_op = (
+                idx1_op == idx2_op && isassociative(idx1_op) && iscommutative(idx1_op)
+            )
             # If idx1 isn't a parent of idx2, then idx2 can't restrict the summation of idx1
             if isdescendant(idx2_top_root, idx1_bottom_root)
                 push!(parent_idxs[idx1], idx2)
-            # If they can both be pushed past each other, then we check whether they
-            # commute. If not, we check which one was lower in the topological order.
-            elseif (!(mergeable_agg_op) &&
-                        idx_top_order[original_idx[idx2]] < idx_top_order[original_idx[idx1]])
+                # If they can both be pushed past each other, then we check whether they
+                # commute. If not, we check which one was lower in the topological order.
+            elseif (
+                !(mergeable_agg_op) &&
+                idx_top_order[original_idx[idx2]] < idx_top_order[original_idx[idx1]]
+            )
                 push!(parent_idxs[idx1], idx2)
             end
         end
@@ -246,19 +262,19 @@ function AnnotatedQuery(q::PlanNode, ST)
     # be co-optimized.
     connected_components = get_idx_connected_components(parent_idxs, connected_idxs)
     return AnnotatedQuery(ST,
-                            output_name,
-                            output_index_order,
-                            output_formats,
-                            reduce_idxs,
-                            point_expr,
-                            idx_lowest_root,
-                            idx_op,
-                            idx_init,
-                            id_to_node,
-                            parent_idxs,
-                            original_idx,
-                            connected_components,
-                            connected_idxs)
+        output_name,
+        output_index_order,
+        output_formats,
+        reduce_idxs,
+        point_expr,
+        idx_lowest_root,
+        idx_op,
+        idx_init,
+        id_to_node,
+        parent_idxs,
+        original_idx,
+        connected_components,
+        connected_idxs)
 end
 
 function get_reduce_query(reduce_idx, aq)
@@ -274,9 +290,13 @@ function get_reduce_query(reduce_idx, aq)
     if root_node.kind === MapJoin && isdistributive(root_node.op.val, reduce_op)
         # If you're already reducing one index, then it may make sense to reduce others as well.
         # E.g. when you reduce one vertex of a triangle, you should do the other two as well.
-        args_with_reduce_idx = [arg for arg in root_node.args if original_idx in get_index_set(arg.stats)]
+        args_with_reduce_idx = [
+            arg for arg in root_node.args if original_idx in get_index_set(arg.stats)
+        ]
         kernel_idxs = union([get_index_set(arg.stats) for arg in args_with_reduce_idx]...)
-        relevant_args = [arg for arg in root_node.args if get_index_set(arg.stats) ⊆ kernel_idxs]
+        relevant_args = [
+            arg for arg in root_node.args if get_index_set(arg.stats) ⊆ kernel_idxs
+        ]
         if length(relevant_args) == length(root_node.args)
             node_to_replace = root_node.node_id
             for node in PreOrderDFS(root_node)
@@ -293,12 +313,17 @@ function get_reduce_query(reduce_idx, aq)
             end
         end
         query_expr = MapJoin(root_node.op, relevant_args...)
-        query_expr.stats = merge_tensor_stats(root_node.op, [arg.stats for arg in relevant_args]...)
+        query_expr.stats = merge_tensor_stats(
+            root_node.op, [arg.stats for arg in relevant_args]...
+        )
         for idx in reducible_idxs
             if aq.idx_op[idx] != aq.idx_op[reduce_idx]
                 continue
             end
-            args_with_idx = [arg for arg in root_node.args if aq.original_idx[idx] in get_index_set(arg.stats)]
+            args_with_idx = [
+                arg for
+                arg in root_node.args if aq.original_idx[idx] in get_index_set(arg.stats)
+            ]
             if (idx ∈ aq.connected_idxs[reduce_idx]) && (relevant_args ⊇ args_with_idx)
                 push!(idxs_to_be_reduced, idx)
             end
@@ -318,12 +343,24 @@ function get_reduce_query(reduce_idx, aq)
             end
         end
     end
-    final_idxs_to_be_reduced = Set(Index(aq.original_idx[idx]) for idx in idxs_to_be_reduced)
+    final_idxs_to_be_reduced = Set(
+        Index(aq.original_idx[idx]) for idx in idxs_to_be_reduced
+    )
     reduced_idxs = idxs_to_be_reduced
-    query_expr = Aggregate(aq.idx_op[aq.original_idx[reduce_idx]], aq.idx_init[aq.original_idx[reduce_idx]], final_idxs_to_be_reduced..., query_expr)
-    query_expr.stats = reduce_tensor_stats(query_expr.op.val, query_expr.init.val, Set([idx for idx in final_idxs_to_be_reduced]), query_expr.arg.stats)
+    query_expr = Aggregate(
+        aq.idx_op[aq.original_idx[reduce_idx]],
+        aq.idx_init[aq.original_idx[reduce_idx]],
+        final_idxs_to_be_reduced...,
+        query_expr,
+    )
+    query_expr.stats = reduce_tensor_stats(
+        query_expr.op.val,
+        query_expr.init.val,
+        Set([idx for idx in final_idxs_to_be_reduced]),
+        query_expr.arg.stats,
+    )
     query = Query(Alias(galley_gensym("A")), query_expr)
-#    @assert length(∩([idx.name for idx in query_expr.idxs], get_index_set(query_expr.stats))) == 0
+    #    @assert length(∩([idx.name for idx in query_expr.idxs], get_index_set(query_expr.stats))) == 0
     return query, node_to_replace, nodes_to_remove, reduced_idxs
 end
 
@@ -333,13 +370,16 @@ function get_forced_transpose_cost(n)
     if length(inputs) == 0
         return 0
     end
-    vertices = union([get_index_set(input.stats) for input in inputs]..., [get_index_set(alias.stats) for alias in aliases]...)
+    vertices = union(
+        [get_index_set(input.stats) for input in inputs]...,
+        [get_index_set(alias.stats) for alias in aliases]...,
+    )
     vertex_graph = Dict(v => [] for v in vertices)
     for input in inputs
         idx_order = get_index_order(input.stats)
         for i in eachindex(idx_order)
-            i+1 > length(idx_order) && continue
-            for j in (i+1):length(idx_order)
+            i + 1 > length(idx_order) && continue
+            for j in (i + 1):length(idx_order)
                 push!(vertex_graph[idx_order[i]], idx_order[j])
             end
         end
@@ -357,7 +397,10 @@ function get_forced_transpose_cost(n)
 
     sinks = [v for v in vertices if length(vertex_graph[v]) == 0]
     if length(sinks) > 1
-        return maximum([estimate_nnz(input.stats) for input in inputs if length(input.idxs) > 1]; init=0) * AllocateCost
+        return maximum(
+            [estimate_nnz(input.stats) for input in inputs if length(input.idxs) > 1];
+            init=0,
+        ) * AllocateCost
     else
         return 0
     end
@@ -365,18 +408,23 @@ end
 
 function is_dense(mat_stats, mat_size)
     sparsity = mat_size / get_dim_space_size(mat_stats, get_index_set(mat_stats))
-    return sparsity > .5
+    return sparsity > 0.5
 end
 
 # Returns the cost of reducing out an index
-function cost_of_reduce(reduce_idx, aq, cache::Dict{UInt, Float64}=Dict{UInt, Float64}(), alias_hash=Dict{IndexExpr, UInt}())
-    query, _, _,reduced_idxs = get_reduce_query(reduce_idx, aq)
+function cost_of_reduce(
+    reduce_idx,
+    aq,
+    cache::Dict{UInt,Float64}=Dict{UInt,Float64}(),
+    alias_hash=Dict{IndexExpr,UInt}(),
+)
+    query, _, _, reduced_idxs = get_reduce_query(reduce_idx, aq)
     cache_key = cannonical_hash(query.expr, alias_hash)
     if !haskey(cache, cache_key)
         comp_stats = query.expr.arg.stats
         mat_stats = query.expr.stats
         mat_size = estimate_nnz(mat_stats)
-        mat_factor = is_dense(mat_stats, mat_size)  ? DenseAllocateCost : SparseAllocateCost
+        mat_factor = is_dense(mat_stats, mat_size) ? DenseAllocateCost : SparseAllocateCost
         comp_factor = length(get_index_set(comp_stats)) * ComputeCost
         cost = estimate_nnz(comp_stats) * comp_factor + mat_size * mat_factor
         forced_transpose_cost = get_forced_transpose_cost(query.expr)
@@ -399,9 +447,16 @@ function replace_and_remove_nodes!(expr, node_id_to_replace, new_node, nodes_to_
     end
     for node in PostOrderDFS(expr)
         if node.kind == Plan || node.kind == Query || node.kind == Aggregate
-            throw(ErrorException("There should be no $(node.kind) nodes in a pointwise expression."))
+            throw(
+                ErrorException(
+                    "There should be no $(node.kind) nodes in a pointwise expression."
+                ),
+            )
         end
-        if node.kind == MapJoin && any([arg.node_id == node_id_to_replace || arg.node_id in nodes_to_remove for arg in node.args])
+        if node.kind == MapJoin && any([
+            arg.node_id == node_id_to_replace || arg.node_id in nodes_to_remove for
+            arg in node.args
+        ])
             new_args = [arg for arg in node.args if !(arg.node_id in nodes_to_remove)]
             node.children = vcat([node.op], new_args)
             for i in eachindex(node.args)
@@ -425,17 +480,19 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
     alias_expr = Alias(query.name.name)
     alias_expr.node_id = node_to_replace
     alias_expr.stats = copy_stats(query.expr.stats)
-    new_point_expr = replace_and_remove_nodes!(aq.point_expr, node_to_replace, alias_expr, nodes_to_remove)
-    new_id_to_node = Dict{Int, PlanNode}()
+    new_point_expr = replace_and_remove_nodes!(
+        aq.point_expr, node_to_replace, alias_expr, nodes_to_remove
+    )
+    new_id_to_node = Dict{Int,PlanNode}()
     for node in PreOrderDFS(new_point_expr)
         new_id_to_node[node.node_id] = node
     end
     new_reduce_idxs = filter((x) -> !(x in reduced_idxs), aq.reduce_idxs)
-    new_idx_lowest_root = Dict{IndexExpr, Int}()
-    new_idx_op = Dict{IndexExpr, Any}()
-    new_idx_init = Dict{IndexExpr, Any}()
-    new_parent_idxs = Dict{IndexExpr, Vector{IndexExpr}}()
-    new_connected_idxs = Dict{IndexExpr, Set{IndexExpr}}()
+    new_idx_lowest_root = Dict{IndexExpr,Int}()
+    new_idx_op = Dict{IndexExpr,Any}()
+    new_idx_init = Dict{IndexExpr,Any}()
+    new_parent_idxs = Dict{IndexExpr,Vector{IndexExpr}}()
+    new_connected_idxs = Dict{IndexExpr,Set{IndexExpr}}()
     for idx in keys(aq.idx_lowest_root)
         if idx in reduced_idxs
             continue
@@ -449,8 +506,10 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
         new_idx_init[idx] = aq.idx_init[idx]
         new_idx_op[aq.original_idx[idx]] = aq.idx_op[idx]
         new_idx_init[aq.original_idx[idx]] = aq.idx_init[idx]
-        new_parent_idxs[idx] = filter((x)->!(x in reduced_idxs), aq.parent_idxs[idx])
-        new_connected_idxs[idx] = filter((x)->!(x in reduced_idxs), aq.connected_idxs[idx])
+        new_parent_idxs[idx] = filter((x) -> !(x in reduced_idxs), aq.parent_idxs[idx])
+        new_connected_idxs[idx] = filter(
+            (x) -> !(x in reduced_idxs), aq.connected_idxs[idx]
+        )
     end
 
     for idx in keys(new_idx_lowest_root)
@@ -475,12 +534,11 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
         end
     end
 
-
-#    insert_statistics!(aq.ST, new_point_expr, reduce_idx = aq.original_idx[reduce_idx])
-#    @assert all([idx ∉ get_index_set(new_point_expr.stats) for idx in reduced_idx_exprs])
-#    @assert length(unique(aq.reduce_idxs)) == length(aq.reduce_idxs)
-#    @assert length(unique(new_reduce_idxs)) == length(new_reduce_idxs)
-#    @assert all([haskey(new_id_to_node, new_idx_lowest_root[idx]) for idx in new_reduce_idxs])
+    #    insert_statistics!(aq.ST, new_point_expr, reduce_idx = aq.original_idx[reduce_idx])
+    #    @assert all([idx ∉ get_index_set(new_point_expr.stats) for idx in reduced_idx_exprs])
+    #    @assert length(unique(aq.reduce_idxs)) == length(aq.reduce_idxs)
+    #    @assert length(unique(new_reduce_idxs)) == length(new_reduce_idxs)
+    #    @assert all([haskey(new_id_to_node, new_idx_lowest_root[idx]) for idx in new_reduce_idxs])
     aq.reduce_idxs = new_reduce_idxs
     aq.point_expr = new_point_expr
     aq.idx_lowest_root = new_idx_lowest_root
@@ -532,7 +590,8 @@ function find_lowest_roots(op, idx, root)
             return find_lowest_roots(op, idx, only(args_with_idx))
         elseif cansplitpush(f.val, op)
             return [[arg.node_id for arg in args_without_idx]...,
-                    reduce(vcat, [find_lowest_roots(op, idx, arg) for arg in args_with_idx])...]
+                reduce(vcat, [find_lowest_roots(op, idx, arg) for arg in args_with_idx])...,
+            ]
         else
             return [root.node_id]
         end
@@ -541,6 +600,10 @@ function find_lowest_roots(op, idx, root)
     elseif root.kind === Input
         return [root.node_id]
     else
-        throw(ErrorException("There shouldn't be nodes of kind $(root.kind) during root pushdown."))
+        throw(
+            ErrorException(
+                "There shouldn't be nodes of kind $(root.kind) during root pushdown."
+            ),
+        )
     end
 end

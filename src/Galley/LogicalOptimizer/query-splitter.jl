@@ -24,7 +24,17 @@ function get_connected_subsets(nodes, max_kernel_size)
             end
             is_cross_prod = false
             for n in s
-                if isempty(∩(get_index_set(n.stats), union([get_index_set(n2.stats) for n2 in s if n2.node_id != n.node_id]...)))
+                if isempty(
+                    ∩(
+                        get_index_set(n.stats),
+                        union(
+                            [
+                                get_index_set(n2.stats) for
+                                n2 in s if n2.node_id != n.node_id
+                            ]...,
+                        ),
+                    ),
+                )
                     is_cross_prod = true
                     break
                 end
@@ -37,13 +47,14 @@ function get_connected_subsets(nodes, max_kernel_size)
     return ss
 end
 
-
 # This function takes in queries of the form:
 #   Query(name, Aggregate(agg_op, idxs..., map_expr))
 #   Query(name, Materialize(formats.., idxs..., Aggregate(agg_op, idxs..., map_expr)))
 # It outputs a set of queries where the final one binds `name` and each
 # query has less than `MAX_INDEX_OCCURENCES` index occurences.
-function split_plan_to_kernel_limit(logical_plan::PlanNode, ST, max_kernel_size, alias_stats, verbose)
+function split_plan_to_kernel_limit(
+    logical_plan::PlanNode, ST, max_kernel_size, alias_stats, verbose
+)
     split_queries = PlanNode[]
     for l_query in logical_plan.queries
         s_queries = split_query(l_query, ST, max_kernel_size, alias_stats, verbose)
@@ -61,7 +72,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     insert_node_ids!(q)
     aq = AnnotatedQuery(q, ST)
     pe = aq.point_expr
-    insert_statistics!(ST, pe, bindings=alias_stats)
+    insert_statistics!(ST, pe; bindings=alias_stats)
     has_agg = length(aq.reduce_idxs) > 0
     agg_op = has_agg ? aq.idx_op[first(aq.reduce_idxs)] : nothing
     agg_init = has_agg ? aq.idx_init[first(aq.reduce_idxs)] : nothing
@@ -70,7 +81,9 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     cost_cache = Dict()
     cur_occurences = count_index_occurences([pe])
     if verbose > 2 && cur_occurences > max_kernel_size
-        println("Splitting the following query (cur_occurences = $cur_occurences) (max_kernel_size = $max_kernel_size): ")
+        println(
+            "Splitting the following query (cur_occurences = $cur_occurences) (max_kernel_size = $max_kernel_size): "
+        )
         println(q)
     end
     while cur_occurences > max_kernel_size
@@ -79,22 +92,31 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
         new_agg_idxs = Set()
         min_cost = Inf
         for node in PostOrderDFS(pe)
-            if node.kind in (Value, Input, Alias, Index) || count_index_occurences([node]) == 0
+            if node.kind in (Value, Input, Alias, Index) ||
+                count_index_occurences([node]) == 0
                 continue
             end
             cache_key = [node.node_id]
             if !haskey(cost_cache, cache_key)
                 n_reduce_idxs = get_reducible_idxs(aq, node)
                 should_reduce = has_agg && (length(n_reduce_idxs) > 0)
-                n_mat_stats = should_reduce ? reduce_tensor_stats(agg_op, agg_init, n_reduce_idxs, node.stats) : node.stats
+                n_mat_stats = if should_reduce
+                    reduce_tensor_stats(agg_op, agg_init, n_reduce_idxs, node.stats)
+                else
+                    node.stats
+                end
                 cost_cache[cache_key] = (n_reduce_idxs,
-                                        n_mat_stats,
-                                        estimate_nnz(n_mat_stats))
+                    n_mat_stats,
+                    estimate_nnz(n_mat_stats))
             end
             n_reduce_idxs, n_mat_stats, n_cost = cost_cache[cache_key]
             if n_cost < min_cost && count_index_occurences([node]) < max_kernel_size
                 nodes_to_remove = [node.node_id]
-                new_expr = (has_agg && !isempty(n_reduce_idxs)) ? Aggregate(agg_op, n_reduce_idxs..., node) : node
+                new_expr = if (has_agg && !isempty(n_reduce_idxs))
+                    Aggregate(agg_op, n_reduce_idxs..., node)
+                else
+                    node
+                end
                 new_expr.stats = n_mat_stats
                 new_query = Query(Alias(galley_gensym("A")), new_expr)
                 new_agg_idxs = n_reduce_idxs
@@ -107,21 +129,31 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
                         s_stat = merge_tensor_stats(node.op.val, [n.stats for n in s]...)
                         s_reduce_idxs = Set{IndexExpr}()
                         for idx in n_reduce_idxs
-                            if !any([idx ∈ get_index_set(n.stats) for n in setdiff(node.args, s)])
+                            if !any([
+                                idx ∈ get_index_set(n.stats) for n in setdiff(node.args, s)
+                            ])
                                 push!(s_reduce_idxs, idx)
                             end
                         end
                         should_reduce = has_agg && (length(s_reduce_idxs) > 0)
-                        s_mat_stats = should_reduce ? reduce_tensor_stats(agg_op, agg_init, s_reduce_idxs, s_stat) : s_stat
-                        s_cost = estimate_nnz(s_mat_stats) * AllocateCost + get_forced_transpose_cost(MapJoin(node.op.val, s...))
+                        s_mat_stats = if should_reduce
+                            reduce_tensor_stats(agg_op, agg_init, s_reduce_idxs, s_stat)
+                        else
+                            s_stat
+                        end
+                        s_cost =
+                            estimate_nnz(s_mat_stats) * AllocateCost +
+                            get_forced_transpose_cost(MapJoin(node.op.val, s...))
                         cost_cache[cache_key] = (s_reduce_idxs, s_mat_stats, s_cost)
                     end
                     s_reduce_idxs, s_mat_stats, s_cost = cost_cache[cache_key]
                     if s_cost < min_cost
                         nodes_to_remove = [n.node_id for n in s]
-                        new_expr = (has_agg && !isempty(s_reduce_idxs)) ?
-                                                Aggregate(agg_op, s_reduce_idxs..., MapJoin(node.op, s...)) :
-                                                MapJoin(node.op, s...)
+                        new_expr = if (has_agg && !isempty(s_reduce_idxs))
+                            Aggregate(agg_op, s_reduce_idxs..., MapJoin(node.op, s...))
+                        else
+                            MapJoin(node.op, s...)
+                        end
                         new_expr.stats = s_mat_stats
                         new_query = Query(Alias(galley_gensym("A")), new_expr)
                         new_agg_idxs = s_reduce_idxs
@@ -148,10 +180,12 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     end
     remainder_expr = has_agg ? Aggregate(agg_op, agg_init, aq.reduce_idxs..., pe) : pe
     if !isnothing(aq.output_order)
-        remainder_expr = Materialize(aq.output_format..., aq.output_order..., remainder_expr)
+        remainder_expr = Materialize(
+            aq.output_format..., aq.output_order..., remainder_expr
+        )
     end
     final_query = Query(q.name, remainder_expr)
-    push!(queries,  final_query)
+    push!(queries, final_query)
     for query in queries
         insert_statistics!(ST, query)
         insert_node_ids!(query)

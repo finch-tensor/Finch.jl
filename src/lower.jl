@@ -8,7 +8,7 @@ The core compiler for Finch, lowering canonicalized Finch IR to Julia code.
     algebra = DefaultAlgebra()
     mode = :fast
     result = freshen(code, :result)
-    symbolic = SymbolicContext(algebra = algebra)
+    symbolic = SymbolicContext(; algebra=algebra)
     scope = ScopeContext()
 end
 
@@ -61,11 +61,14 @@ end
 function cache!(ctx::AbstractCompiler, var, val)
     val = finch_leaf(val)
     isconstant(val) && return val
-    var = freshen(ctx,var)
+    var = freshen(ctx, var)
     val = simplify(ctx, val)
-    push_preamble!(ctx, quote
-        $var = $(contain(ctx_2 -> ctx_2(val), ctx))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $var = $(contain(ctx_2 -> ctx_2(val), ctx))
+        end,
+    )
     return cached(value(var, Any), literal(val))
 end
 
@@ -82,7 +85,7 @@ function resolve(ctx::AbstractCompiler, node::FinchNode)
     end
 end
 
-(ctx::AbstractCompiler)(root::Union{Symbol, Expr}, ::DefaultStyle) = root
+(ctx::AbstractCompiler)(root::Union{Symbol,Expr}, ::DefaultStyle) = root
 
 """
     get_style(ctx, root)
@@ -92,7 +95,7 @@ determine which pass should be used to lower a given node. The default
 implementation returns `DefaultStyle()`. Overload the three argument form
 of this method, `get_style(ctx, node, root)` and specialize on `node`.
 """
-get_style(ctx, root)  = get_style(ctx, root, root)
+get_style(ctx, root) = get_style(ctx, root, root)
 
 get_style(ctx, node, root) = DefaultStyle()
 
@@ -100,7 +103,12 @@ function get_style(ctx, node::FinchNode, root)
     if node.kind === virtual
         return get_style(ctx, node.val, root)
     elseif istree(node)
-        return mapreduce(arg -> get_style(ctx, arg, root), result_style, arguments(node); init=DefaultStyle())
+        return mapreduce(
+            arg -> get_style(ctx, arg, root),
+            result_style,
+            arguments(node);
+            init=DefaultStyle(),
+        )
     else
         return DefaultStyle()
     end
@@ -121,8 +129,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         return ctx(get_binding(ctx, root)) #This unwraps indices that are virtuals. Arguably these virtuals should be precomputed, but whatevs.
     elseif root.kind === literal
         if typeof(root.val) === Symbol ||
-          typeof(root.val) === Expr ||
-          typeof(root.val) === Missing
+            typeof(root.val) === Expr ||
+            typeof(root.val) === Missing
             return QuoteNode(root.val)
         else
             return root.val
@@ -158,9 +166,11 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
 
             quote
                 $preamble
-                $(contain(ctx) do ctx_2
-                    (ctx_2)(body)
-                end)
+                $(
+                    contain(ctx) do ctx_2
+                        (ctx_2)(body)
+                    end
+                )
             end
         end
     elseif root.kind === define
@@ -201,9 +211,9 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
             else
                 :($(ctx(root.op))($(map(ctx, root.args)...)))
             end
-         else
-           return ctx(root)
-         end
+        else
+            return ctx(root)
+        end
     elseif root.kind === cached
         return ctx(root.arg)
     elseif root.kind === loop
@@ -211,16 +221,18 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         @assert root.ext.kind === virtual
         lower_loop(ctx, root, root.ext.val)
     elseif root.kind === sieve
-        cond = freshen(ctx,:cond)
+        cond = freshen(ctx, :cond)
         push_preamble!(ctx, :($cond = $(ctx(root.cond))))
 
         return quote
             if $cond
-                $(contain(ctx) do ctx_2
-                    open_scope(ctx_2) do ctx_3
-                        ctx_3(root.body)
+                $(
+                    contain(ctx) do ctx_2
+                        open_scope(ctx_2) do ctx_3
+                            ctx_3(root.body)
+                        end
                     end
-                end)
+                )
             end
         end
     elseif root.kind === virtual
@@ -242,7 +254,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
                 $(get_result(ctx)) = (; $(map(root.args) do tns
                     name = getroot(tns).name
                     Expr(:kw, name, ctx_2(tns))
-                end...), )
+                end...),)
             end
         end
     else
@@ -274,23 +286,36 @@ dimension of virtual tensor `tns`. `ext` is the extent of the looplet. `proto`
 is the protocol that should be used for this index, but one doesn't need to
 unfurl all the indices at once.
 """
-unfurl(ctx, tns, ext, mode, proto) = 
+unfurl(ctx, tns, ext, mode, proto) =
     throw(FinchProtocolError("$tns does not support $mode with protocol $proto"))
 
 function lower_loop(ctx, root, ext)
     contain(ctx) do ctx_2
-        root_2 = Rewrite(Postwalk(@rule access(~tns, ~mode, ~idxs...) => begin
-            if !isempty(idxs) && root.idx == idxs[end]
-                tns_2 = unfurl(ctx_2, tns, root.ext.val, mode, (mode.kind === reader ? defaultread : defaultupdate))
-                access(Unfurled(resolve(ctx_2, tns), tns_2), mode, idxs...)
-            end
-        end))(root)
+        root_2 = Rewrite(
+            Postwalk(
+                @rule access(~tns, ~mode, ~idxs...) => begin
+                    if !isempty(idxs) && root.idx == idxs[end]
+                        tns_2 = unfurl(
+                            ctx_2,
+                            tns,
+                            root.ext.val,
+                            mode,
+                            (mode.kind === reader ? defaultread : defaultupdate),
+                        )
+                        access(Unfurled(resolve(ctx_2, tns), tns_2), mode, idxs...)
+                    end
+                end
+            ),
+        )(
+            root
+        )
         return ctx_2(root_2, result_style(LookupStyle(), get_style(ctx_2, root_2)))
     end
 end
 
-lower_loop(ctx, root, ext::ParallelDimension) =
+function lower_loop(ctx, root, ext::ParallelDimension)
     lower_parallel_loop(ctx, root, ext, ext.device)
+end
 function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualCPU)
     root = ensure_concurrent(root, ctx)
 
@@ -300,11 +325,16 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
         end
     end, PostOrderDFS(root.body))))
 
-    used_in_scope = unique(filter(!isnothing, map(node-> begin
-        if @capture(node, access(~tns, ~mode, ~idxs...))
-            getroot(tns)
-        end
-    end, PostOrderDFS(root.body))))
+    used_in_scope = unique(
+        filter(
+            !isnothing,
+            map(node -> begin
+                    if @capture(node, access(~tns, ~mode, ~idxs...))
+                        getroot(tns)
+                    end
+                end, PostOrderDFS(root.body)),
+        ),
+    )
 
     for tns in setdiff(used_in_scope, decl_in_scope)
         virtual_moveto(ctx, resolve(ctx, tns), device)

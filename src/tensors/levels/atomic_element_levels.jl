@@ -12,7 +12,7 @@ julia> tensor_tree(Tensor(Dense(AtomicElement(0.0)), [1, 2, 3]))
    └─ [3]: 3.0
 ```
 """
-struct AtomicElementLevel{Vf, Tv, Tp, Val} <: AbstractLevel
+struct AtomicElementLevel{Vf,Tv,Tp,Val} <: AbstractLevel
     val::Val
 end
 const AtomicElement = AtomicElementLevel
@@ -21,31 +21,37 @@ function AtomicElementLevel(d, args...)
     isbits(d) || throw(ArgumentError("Finch currently only supports isbits defaults"))
     AtomicElementLevel{d}(args...)
 end
-AtomicElementLevel{Vf}() where {Vf} = AtomicElementLevel{Vf, typeof(Vf)}()
-AtomicElementLevel{Vf}(val::Val) where {Vf, Val} = AtomicElementLevel{Vf, eltype(Val)}(val)
-AtomicElementLevel{Vf, Tv}(args...) where {Vf, Tv} = AtomicElementLevel{Vf, Tv, Int}(args...)
-AtomicElementLevel{Vf, Tv, Tp}() where {Vf, Tv, Tp} = AtomicElementLevel{Vf, Tv, Tp}(Tv[])
+AtomicElementLevel{Vf}() where {Vf} = AtomicElementLevel{Vf,typeof(Vf)}()
+AtomicElementLevel{Vf}(val::Val) where {Vf,Val} = AtomicElementLevel{Vf,eltype(Val)}(val)
+AtomicElementLevel{Vf,Tv}(args...) where {Vf,Tv} = AtomicElementLevel{Vf,Tv,Int}(args...)
+AtomicElementLevel{Vf,Tv,Tp}() where {Vf,Tv,Tp} = AtomicElementLevel{Vf,Tv,Tp}(Tv[])
 
-AtomicElementLevel{Vf, Tv, Tp}(val::Val) where {Vf, Tv, Tp, Val} = AtomicElementLevel{Vf, Tv, Tp, Val}(val)
+function AtomicElementLevel{Vf,Tv,Tp}(val::Val) where {Vf,Tv,Tp,Val}
+    AtomicElementLevel{Vf,Tv,Tp,Val}(val)
+end
 
 Base.summary(::AtomicElement{Vf}) where {Vf} = "AtomicElement($(Vf))"
 
-similar_level(::AtomicElementLevel{Vf, Tv, Tp}, fill_value, eltype::Type, ::Vararg) where {Vf, Tv, Tp} =
-    AtomicElementLevel{fill_value, eltype, Tp}()
-
-postype(::Type{<:AtomicElementLevel{Vf, Tv, Tp}}) where {Vf, Tv, Tp} = Tp
-
-function moveto(lvl::AtomicElementLevel{Vf, Tv, Tp}, device) where {Vf, Tv, Tp}
-    return AtomicElementLevel{Vf, Tv, Tp}(moveto(lvl.val, device))
+function similar_level(
+    ::AtomicElementLevel{Vf,Tv,Tp}, fill_value, eltype::Type, ::Vararg
+) where {Vf,Tv,Tp}
+    AtomicElementLevel{fill_value,eltype,Tp}()
 end
 
-pattern!(lvl::AtomicElementLevel{Vf, Tv, Tp}) where  {Vf, Tv, Tp} =
+postype(::Type{<:AtomicElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
+
+function moveto(lvl::AtomicElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
+    return AtomicElementLevel{Vf,Tv,Tp}(moveto(lvl.val, device))
+end
+
+pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
     Pattern{Tp}()
-set_fill_value!(lvl::AtomicElementLevel{Vf, Tv, Tp}, init) where {Vf, Tv, Tp} =
-    AtomicElementLevel{init, Tv, Tp}(lvl.val)
+function set_fill_value!(lvl::AtomicElementLevel{Vf,Tv,Tp}, init) where {Vf,Tv,Tp}
+    AtomicElementLevel{init,Tv,Tp}(lvl.val)
+end
 Base.resize!(lvl::AtomicElementLevel) = lvl
 
-function Base.show(io::IO, lvl::AtomicElementLevel{Vf, Tv, Tp, Val}) where {Vf, Tv, Tp, Val}
+function Base.show(io::IO, lvl::AtomicElementLevel{Vf,Tv,Tp,Val}) where {Vf,Tv,Tp,Val}
     print(io, "AtomicElement{")
     show(io, Vf)
     print(io, ", $Tv, $Tp}(")
@@ -63,9 +69,9 @@ labelled_show(io::IO, fbr::SubFiber{<:AtomicElementLevel}) =
 @inline level_ndims(::Type{<:AtomicElementLevel}) = 0
 @inline level_size(::AtomicElementLevel) = ()
 @inline level_axes(::AtomicElementLevel) = ()
-@inline level_eltype(::Type{<:AtomicElementLevel{Vf, Tv}}) where {Vf, Tv} = Tv
+@inline level_eltype(::Type{<:AtomicElementLevel{Vf,Tv}}) where {Vf,Tv} = Tv
 @inline level_fill_value(::Type{<:AtomicElementLevel{Vf}}) where {Vf} = Vf
-data_rep_level(::Type{<:AtomicElementLevel{Vf, Tv}}) where {Vf, Tv} = ElementData(Vf, Tv)
+data_rep_level(::Type{<:AtomicElementLevel{Vf,Tv}}) where {Vf,Tv} = ElementData(Vf, Tv)
 
 (fbr::Tensor{<:AtomicElementLevel})() = SubFiber(fbr.lvl, 1)()
 function (fbr::SubFiber{<:AtomicElementLevel})()
@@ -91,13 +97,18 @@ end
 
 lower(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, ::DefaultStyle) = lvl.ex
 
-function virtualize(ctx, ex, ::Type{AtomicElementLevel{Vf, Tv, Tp, Val}}, tag=:lvl) where {Vf, Tv, Tp, Val}
+function virtualize(
+    ctx, ex, ::Type{AtomicElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl
+) where {Vf,Tv,Tp,Val}
     sym = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
-    push_preamble!(ctx, quote
-        $sym = $ex
-        $val = $ex.val
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+            $val = $ex.val
+        end,
+    )
     VirtualAtomicElementLevel(sym, Vf, Tv, Tp, val)
 end
 
@@ -112,14 +123,21 @@ virtual_level_fill_value(lvl::VirtualAtomicElementLevel) = lvl.Vf
 postype(lvl::VirtualAtomicElementLevel) = lvl.Tp
 
 function declare_level!(ctx, lvl::VirtualAtomicElementLevel, pos, init)
-    init == literal(lvl.Vf) || throw(FinchProtocolError("Cannot initialize AtomicElement Levels to non-fill values (have $init expected $(lvl.Vf))"))
+    init == literal(lvl.Vf) || throw(
+        FinchProtocolError(
+            "Cannot initialize AtomicElement Levels to non-fill values (have $init expected $(lvl.Vf))"
+        ),
+    )
     lvl
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, pos)
-    push_preamble!(ctx, quote
-        resize!($(lvl.val), $(ctx(pos)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            resize!($(lvl.val), $(ctx(pos)))
+        end,
+    )
     return lvl
 end
 
@@ -138,32 +156,41 @@ supports_reassembly(::VirtualAtomicElementLevel) = true
 function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
-    push_preamble!(ctx, quote
-        Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+        end,
+    )
     lvl
 end
 
 function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch)
     val_2 = freshen(ctx, :val)
-    push_preamble!(ctx, quote
-        $val_2 = $(lvl.val)
-        $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
-    end)
-    push_epilogue!(ctx, quote
-        $(lvl.val) = $val_2
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $val_2 = $(lvl.val)
+            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+        end,
+    )
+    push_epilogue!(
+        ctx,
+        quote
+            $(lvl.val) = $val_2
+        end,
+    )
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
         val = freshen(ctx.code, lvl.ex, :_val)
-        return Thunk(
-            preamble = quote
+        return Thunk(;
+            preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]
             end,
-            body = (ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val)
+            body=(ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
         )
     else
         return fbr
@@ -182,11 +209,16 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode
     :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end
 
-function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode, op, rhs)
+function lower_assign(
+    ctx, fbr::VirtualHollowSubFiber{VirtualAtomicElementLevel}, mode, op, rhs
+)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    push_preamble!(ctx, quote
-        $(fbr.dirty) = true
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $(fbr.dirty) = true
+        end,
+    )
     op = ctx(op)
     rhs = ctx(rhs)
     device = ctx(get_device(get_task(ctx)))

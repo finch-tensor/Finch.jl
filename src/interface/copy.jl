@@ -1,14 +1,20 @@
 @staged function copyto_helper!(dst, src)
-    ndims(dst) > ndims(src) && throw(DimensionMismatch("more dimensions in destination than source"))
-    ndims(dst) < ndims(src) && throw(DimensionMismatch("less dimensions in destination than source"))
-    idxs = [Symbol(:i_, n) for n = 1:ndims(dst)]
+    ndims(dst) > ndims(src) &&
+        throw(DimensionMismatch("more dimensions in destination than source"))
+    ndims(dst) < ndims(src) &&
+        throw(DimensionMismatch("less dimensions in destination than source"))
+    idxs = [Symbol(:i_, n) for n in 1:ndims(dst)]
     exts = Expr(:block, (:($idx = _) for idx in reverse(idxs))...)
     return quote
-        @finch mode=:fast begin
+        @finch mode = :fast begin
             dst .= $(fill_value(dst))
-            $(Expr(:for, exts, quote
-                dst[$(idxs...)] = src[$(idxs...)]
-            end))
+            $(Expr(
+                :for,
+                exts,
+                quote
+                    dst[$(idxs...)] = src[$(idxs...)]
+                end,
+            ))
         end
         return dst
     end
@@ -33,20 +39,25 @@ function copyto_swizzled!(dst, src, perm)
     end
 end
 
-Base.copyto!(dst::AbstractArray, src::SwizzleArray{dims}) where {dims} =
+function Base.copyto!(dst::AbstractArray, src::SwizzleArray{dims}) where {dims}
     copyto_swizzled!(dst, src.body, dims)
+end
 
-Base.copyto!(dst::AbstractTensor, src::SwizzleArray{dims}) where {dims} =
+function Base.copyto!(dst::AbstractTensor, src::SwizzleArray{dims}) where {dims}
     copyto_swizzled!(dst, src.body, dims)
+end
 
-Base.copyto!(dst::SwizzleArray{dims}, src::SwizzleArray{dims2}) where {dims, dims2} =
+function Base.copyto!(dst::SwizzleArray{dims}, src::SwizzleArray{dims2}) where {dims,dims2}
     swizzle(copyto!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end
 
-Base.copyto!(dst::SwizzleArray{dims}, src::AbstractTensor) where {dims} =
+function Base.copyto!(dst::SwizzleArray{dims}, src::AbstractTensor) where {dims}
     swizzle(copyto!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end
 
-Base.copyto!(dst::SwizzleArray{dims}, src::AbstractArray) where {dims} =
+function Base.copyto!(dst::SwizzleArray{dims}, src::AbstractArray) where {dims}
     swizzle(copyto!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end
 
 function Base.permutedims(src::AbstractTensor)
     @assert ndims(src) == 2
@@ -67,22 +78,28 @@ format.
 dropfills(src) = dropfills!(similar(src), src)
 
 @staged function dropfills_helper!(dst, src)
-    ndims(dst) > ndims(src) && throw(DimensionMismatch("more dimensions in destination than source"))
-    ndims(dst) < ndims(src) && throw(DimensionMismatch("less dimensions in destination than source"))
-    idxs = [Symbol(:i_, n) for n = 1:ndims(dst)]
+    ndims(dst) > ndims(src) &&
+        throw(DimensionMismatch("more dimensions in destination than source"))
+    ndims(dst) < ndims(src) &&
+        throw(DimensionMismatch("less dimensions in destination than source"))
+    idxs = [Symbol(:i_, n) for n in 1:ndims(dst)]
     exts = Expr(:block, (:($idx = _) for idx in reverse(idxs))...)
     T = eltype(dst)
     d = fill_value(dst)
     return quote
-        @finch mode=:fast begin
+        @finch mode = :fast begin
             dst .= $(fill_value(dst))
-            $(Expr(:for, exts, quote
-                let tmp = src[$(idxs...)]
-                    if !isequal(tmp, $d)
-                        dst[$(idxs...)] = tmp
+            $(Expr(
+                :for,
+                exts,
+                quote
+                    let tmp = src[$(idxs...)]
+                        if !isequal(tmp, $d)
+                            dst[$(idxs...)] = tmp
+                        end
                     end
-                end
-            end))
+                end,
+            ))
         end
         return dst
     end
@@ -112,17 +129,22 @@ function dropfills_swizzled!(dst, src, perm)
     end
 end
 
-dropfills!(dst::AbstractArray, src::SwizzleArray{dims}) where {dims} =
+function dropfills!(dst::AbstractArray, src::SwizzleArray{dims}) where {dims}
     dropfills_swizzled!(dst, src.body, dims)
+end
 
-dropfills!(dst::AbstractTensor, src::SwizzleArray{dims}) where {dims} =
+function dropfills!(dst::AbstractTensor, src::SwizzleArray{dims}) where {dims}
     dropfills_swizzled!(dst, src.body, dims)
+end
 
-dropfills!(dst::SwizzleArray{dims}, src::SwizzleArray{dims2}) where {dims, dims2} =
+function dropfills!(dst::SwizzleArray{dims}, src::SwizzleArray{dims2}) where {dims,dims2}
     swizzle(dropfills!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end
 
-dropfills!(dst::SwizzleArray{dims}, src::AbstractTensor) where {dims} =
+function dropfills!(dst::SwizzleArray{dims}, src::AbstractTensor) where {dims}
     swizzle(dropfills!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end
 
-dropfills!(dst::SwizzleArray{dims}, src::AbstractArray) where {dims} =
+function dropfills!(dst::SwizzleArray{dims}, src::AbstractArray) where {dims}
     swizzle(dropfills!(dst.body, swizzle(src, invperm(dims)...)), dims...)
+end

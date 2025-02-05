@@ -32,7 +32,11 @@ function freeze! end
 Thaw the read-only virtual tensor `tns` in the context `ctx` and return it. Afterwards,
 the tensor is update-only.
 """
-thaw!(ctx, tns) = throw(FinchProtocolError("cannot modify $(typeof(tns)) in place (forgot to declare with .= ?)"))
+thaw!(ctx, tns) = throw(
+    FinchProtocolError(
+        "cannot modify $(typeof(tns)) in place (forgot to declare with .= ?)"
+    ),
+)
 
 """
     fill_value(arr)
@@ -59,10 +63,15 @@ function virtual_eltype end
 function virtual_resize!(ctx, tns, dims...)
     for (dim, ref) in zip(dims, virtual_size(ctx, tns))
         if dim !== auto && ref !== auto #TODO this should be a function like checkdim or something haha
-            push_preamble!(ctx, quote
-                $(ctx(getstart(dim))) == $(ctx(getstart(ref))) || throw(DimensionMismatch("mismatched dimension start"))
-                $(ctx(getstop(dim))) == $(ctx(getstop(ref))) || throw(DimensionMismatch("mismatched dimension stop"))
-            end)
+            push_preamble!(
+                ctx,
+                quote
+                    $(ctx(getstart(dim))) == $(ctx(getstart(ref))) ||
+                        throw(DimensionMismatch("mismatched dimension start"))
+                    $(ctx(getstop(dim))) == $(ctx(getstop(ref))) ||
+                        throw(DimensionMismatch("mismatched dimension stop"))
+                end,
+            )
         end
     end
     tns
@@ -136,22 +145,23 @@ struct TruncatedTree
     nmax
 end
 
-TruncatedTree(node; nmax = 2) = TruncatedTree(node, nmax)
+TruncatedTree(node; nmax=2) = TruncatedTree(node, nmax)
 
 function Base.show(io::IO, node::TruncatedTree)
     show(io, node.node)
 end
-
 
 struct EllipsisNode end
 Base.show(io::IO, key::EllipsisNode) = print(io, "⋮")
 
 function AbstractTrees.children(node::TruncatedTree)
     clds = collect(children(node.node))
-    if length(clds) > 2*node.nmax
-        clds = vcat(clds[1:node.nmax, end], [EllipsisNode()], clds[end - node.nmax + 1:end])
+    if length(clds) > 2 * node.nmax
+        clds = vcat(
+            clds[1:(node.nmax), end], [EllipsisNode()], clds[(end - node.nmax + 1):end]
+        )
     end
-    clds = map(cld -> TruncatedTree(cld, nmax=node.nmax), clds)
+    clds = map(cld -> TruncatedTree(cld; nmax=node.nmax), clds)
 end
 
 struct CartesianLabel
@@ -171,7 +181,7 @@ struct RangeLabel
     stop
 end
 
-range_label(start = nothing, stop = nothing) = RangeLabel(start, stop)
+range_label(start=nothing, stop=nothing) = RangeLabel(start, stop)
 
 """
     tensor_tree(tns; nmax = 2)
@@ -187,8 +197,8 @@ tensor_tree(tns::AbstractTensor; kwargs...) = tensor_tree(stdout, tns; kwargs...
 Print a tree representation of the tensor `tns` to `io`.
 `nmax` is half the maximum number of children to show before truncating.
 """
-function tensor_tree(io::IO, tns::AbstractTensor; nmax = 2)
-    print_tree(io, TruncatedTree(LabelledTree(tns), nmax = nmax))
+function tensor_tree(io::IO, tns::AbstractTensor; nmax=2)
+    print_tree(io, TruncatedTree(LabelledTree(tns); nmax=nmax))
 end
 
 function Base.show(io::IO, key::RangeLabel)

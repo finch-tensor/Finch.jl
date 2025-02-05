@@ -64,19 +64,31 @@ end
 function stepper_body(ctx, node::Stepper, ext, ext_2)
     next = node.next(ctx, ext_2)
     if next !== nothing
-        full_chunk = Thunk(
-            body = (ctx) -> truncate(ctx, node.chunk, ext, similar_extent(ext, getstart(ext_2), getstop(ext))),
-            epilogue = next
+        full_chunk = Thunk(;
+            body=(ctx) -> truncate(
+                ctx, node.chunk, ext, similar_extent(ext, getstart(ext_2), getstop(ext))
+            ),
+            epilogue=next,
         )
-        truncated_chunk = truncate(ctx, node.chunk, ext, similar_extent(ext, getstart(ext_2), bound_above!(getstop(ext_2), call(-, getstop(ext), getunit(ext)))))
+        truncated_chunk = truncate(
+            ctx,
+            node.chunk,
+            ext,
+            similar_extent(
+                ext,
+                getstart(ext_2),
+                bound_above!(getstop(ext_2), call(-, getstop(ext), getunit(ext))),
+            ),
+        )
         if prove(ctx, call(<=, node.stop(ctx, ext), getstop(ext_2)))
             full_chunk
         elseif prove(ctx, call(>=, node.stop(ctx, ext), getstop(ext_2)))
             truncated_chunk
         else
             Switch([
-                value(:($(ctx(node.stop(ctx, ext))) == $(ctx(getstop(ext_2))))) => full_chunk,
-                literal(true) => truncated_chunk
+                value(:($(ctx(node.stop(ctx, ext))) == $(ctx(getstop(ext_2))))) =>
+                    full_chunk,
+                literal(true) => truncated_chunk,
             ])
         end
     else
@@ -89,9 +101,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
 
     i = getname(root.idx)
     i0 = freshen(ctx, i, :_start)
-    push_preamble!(ctx, quote
-        $i = $(ctx(getstart(root.ext)))
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $i = $(ctx(getstart(root.ext)))
+        end,
+    )
 
     guard = :($i <= $(ctx(getstop(root.ext))))
 
@@ -99,34 +114,52 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
         push_preamble!(ctx, stepper_seek(ctx, node.val, root.ext))
     end
 
-    if style.count == 1 && !prove(ctx, call(==, measure(root.ext.val), get_smallest_measure(root.ext.val)))
+    if style.count == 1 &&
+        !prove(ctx, call(==, measure(root.ext.val), get_smallest_measure(root.ext.val)))
         body_2 = contain(ctx) do ctx_2
             push_preamble!(ctx_2, :($i0 = $i))
             i1 = freshen(ctx_2, i)
 
-            ext_1 = bound_measure_below!(similar_extent(root.ext, value(i0), getstop(root.ext)), get_smallest_measure(root.ext))
-            ext_2 = mapreduce((node)->stepper_range(ctx_2, node, ext_1), (a, b) -> virtual_intersect(ctx_2, a, b), PostOrderDFS(root.body))
+            ext_1 = bound_measure_below!(
+                similar_extent(root.ext, value(i0), getstop(root.ext)),
+                get_smallest_measure(root.ext),
+            )
+            ext_2 = mapreduce(
+                (node) -> stepper_range(ctx_2, node, ext_1),
+                (a, b) -> virtual_intersect(ctx_2, a, b),
+                PostOrderDFS(root.body),
+            )
             ext_3 = virtual_intersect(ctx_2, ext_1, ext_2)
             ext_5 = cache_dim!(ctx_2, :phase, ext_2)
 
-            full_body = Rewrite(Postwalk(node->stepper_body(ctx_2, node, ext_1, ext_2)))(root.body)
+            full_body = Rewrite(Postwalk(node -> stepper_body(ctx_2, node, ext_1, ext_2)))(
+                root.body
+            )
             full_body = quote
                 $i1 = $i
-                $(contain(ctx_2) do ctx_3
-                    ctx_3(loop(root.idx, ext_5, full_body))
-                end)
+                $(
+                    contain(ctx_2) do ctx_3
+                        ctx_3(loop(root.idx, ext_5, full_body))
+                    end
+                )
 
                 $i = $(ctx_2(getstop(ext_5))) + $(ctx_2(getunit(ext_5)))
             end
 
             truncated_body = contain(ctx_2) do ctx_3
                 ext_4 = cache_dim!(ctx_3, :phase, ext_3)
-                truncated_body = Rewrite(Postwalk(node->stepper_body(ctx_3, node, ext_1, ext_4)))(root.body)
+                truncated_body = Rewrite(
+                    Postwalk(node -> stepper_body(ctx_3, node, ext_1, ext_4))
+                )(
+                    root.body
+                )
                 truncated_body = quote
                     $i1 = $i
-                    $(contain(ctx_3) do ctx_4
-                        ctx_4(loop(root.idx, ext_4, truncated_body))
-                    end)
+                    $(
+                        contain(ctx_3) do ctx_4
+                            ctx_4(loop(root.idx, ext_4, truncated_body))
+                        end
+                    )
 
                     $i = $(ctx_3(getstop(ext_4))) + $(ctx_3(getunit(ext_4)))
                 end
@@ -155,16 +188,24 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
         @assert isvirtual(root.ext)
 
         cases = quote end
-        for (guard, root_2) = ShortCircuitVisitor(ctx)(root)
-            push!(cases.args, quote
-                if $guard
-                    $(contain(ctx) do ctx_2
-                        ext_1 = bound_measure_below!(similar_extent(root.ext, value(i), getstop(root.ext)), get_smallest_measure(root.ext))
-                        ctx_2(loop(root.idx, ext_1, root_2))
-                    end)
-                    break
-                end
-            end)
+        for (guard, root_2) in ShortCircuitVisitor(ctx)(root)
+            push!(
+                cases.args,
+                quote
+                    if $guard
+                        $(
+                            contain(ctx) do ctx_2
+                                ext_1 = bound_measure_below!(
+                                    similar_extent(root.ext, value(i), getstop(root.ext)),
+                                    get_smallest_measure(root.ext),
+                                )
+                                ctx_2(loop(root.idx, ext_1, root_2))
+                            end
+                        )
+                        break
+                    end
+                end,
+            )
         end
 
         if prove(ctx, call(==, measure(root.ext.val), get_smallest_measure(root.ext.val)))
@@ -179,22 +220,32 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
         end
 
     else
-
         body_2 = contain(ctx) do ctx_2
             push_preamble!(ctx_2, :($i0 = $i))
             i1 = freshen(ctx_2, i)
 
-            ext_1 = bound_measure_below!(similar_extent(root.ext, value(i0), getstop(root.ext)), get_smallest_measure(root.ext))
-            ext_2 = mapreduce((node)->stepper_range(ctx_2, node, ext_1), (a, b) -> virtual_intersect(ctx_2, a, b), PostOrderDFS(root.body))
+            ext_1 = bound_measure_below!(
+                similar_extent(root.ext, value(i0), getstop(root.ext)),
+                get_smallest_measure(root.ext),
+            )
+            ext_2 = mapreduce(
+                (node) -> stepper_range(ctx_2, node, ext_1),
+                (a, b) -> virtual_intersect(ctx_2, a, b),
+                PostOrderDFS(root.body),
+            )
             ext_3 = virtual_intersect(ctx_2, ext_1, ext_2)
             ext_4 = cache_dim!(ctx_2, :phase, ext_3)
 
-            body = Rewrite(Postwalk(node->stepper_body(ctx_2, node, ext_1, ext_4)))(root.body)
+            body = Rewrite(Postwalk(node -> stepper_body(ctx_2, node, ext_1, ext_4)))(
+                root.body
+            )
             body = quote
                 $i1 = $i
-                $(contain(ctx_2) do ctx_3
-                    ctx_3(loop(root.idx, ext_4, body))
-                end)
+                $(
+                    contain(ctx_2) do ctx_3
+                        ctx_3(loop(root.idx, ext_4, body))
+                    end
+                )
 
                 $i = $(ctx_2(getstop(ext_4))) + $(ctx_2(getunit(ext_4)))
             end
@@ -208,22 +259,29 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                     end
                 end
             end
-
         end
 
         @assert isvirtual(root.ext)
 
         cases = quote end
-        for (guard, root_2) = ShortCircuitVisitor(ctx)(root)
-            push!(cases.args, quote
-                if $guard
-                    $(contain(ctx) do ctx_2
-                        ext_1 = bound_measure_below!(similar_extent(root.ext, value(i), getstop(root.ext)), get_smallest_measure(root.ext))
-                        ctx_2(loop(root.idx, ext_1, root_2))
-                    end)
-                    break
-                end
-            end)
+        for (guard, root_2) in ShortCircuitVisitor(ctx)(root)
+            push!(
+                cases.args,
+                quote
+                    if $guard
+                        $(
+                            contain(ctx) do ctx_2
+                                ext_1 = bound_measure_below!(
+                                    similar_extent(root.ext, value(i), getstop(root.ext)),
+                                    get_smallest_measure(root.ext),
+                                )
+                                ctx_2(loop(root.idx, ext_1, root_2))
+                            end
+                        )
+                        break
+                    end
+                end,
+            )
         end
 
         if prove(ctx, call(==, measure(root.ext.val), get_smallest_measure(root.ext.val)))
@@ -238,4 +296,3 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
         end
     end
 end
-

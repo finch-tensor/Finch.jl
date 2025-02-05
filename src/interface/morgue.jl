@@ -1,28 +1,49 @@
 
 function push_labels(root)
-    root = Rewrite(Postwalk(Chain([
-        (@rule relabel(~arg, ~idxs...) => reorder(relabel(~arg, ~idxs...), idxs...)),
-        #TODO: This statement sets the loop order, which should probably be done with more forethought as a separate step before concordization.
-        (@rule mapjoin(~args...) => reorder(mapjoin(args...), getfields(mapjoin(args...))...))
-    ])))(root)
+    root = Rewrite(
+        Postwalk(
+            Chain([
+                (@rule relabel(~arg, ~idxs...) =>
+                    reorder(relabel(~arg, ~idxs...), idxs...)),
+                #TODO: This statement sets the loop order, which should probably be done with more forethought as a separate step before concordization.
+                (@rule mapjoin(~args...) =>
+                    reorder(mapjoin(args...), getfields(mapjoin(args...))...)),
+            ]),
+        ),
+    )(
+        root
+    )
 
-    root = Rewrite(Fixpoint(Prewalk(Chain([
-        (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
-            mapjoin(op, map(arg -> reorder(arg, ~idxs...), args)...)),
-        (@rule relabel(mapjoin(~op, ~args...), ~idxs...) => begin
-            idxs_2 = getfields(mapjoin(op, args...))
-            mapjoin(op, map(arg -> relabel(reorder(arg, idxs_2...), idxs...), args)...)
-        end),
-        (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
-            reorder(~arg, ~idxs_2...)),
-        (@rule relabel(relabel(~arg, ~idxs...), ~idxs_2...) =>
-            relabel(~arg, ~idxs_2...)),
-        (@rule relabel(reorder(relabel(~arg, ~idxs...), ~idxs_2...), ~idxs_3...) => begin
-            reidx = Dict(map(Pair, idxs_2, idxs_3)...)
-            idxs_4 = map(idx -> get(reidx, idx, idx), idxs)
-            reorder(relabel(arg, idxs_4...), idxs_3...)
-        end),
-    ]))))(root)
+    root = Rewrite(
+        Fixpoint(
+            Prewalk(
+                Chain([
+                    (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
+                        mapjoin(op, map(arg -> reorder(arg, ~idxs...), args)...)),
+                    (@rule relabel(mapjoin(~op, ~args...), ~idxs...) => begin
+                        idxs_2 = getfields(mapjoin(op, args...))
+                        mapjoin(
+                            op,
+                            map(arg -> relabel(reorder(arg, idxs_2...), idxs...), args)...,
+                        )
+                    end),
+                    (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
+                        reorder(~arg, ~idxs_2...)),
+                    (@rule relabel(relabel(~arg, ~idxs...), ~idxs_2...) =>
+                        relabel(~arg, ~idxs_2...)),
+                    (@rule relabel(
+                        reorder(relabel(~arg, ~idxs...), ~idxs_2...), ~idxs_3...
+                    ) => begin
+                        reidx = Dict(map(Pair, idxs_2, idxs_3)...)
+                        idxs_4 = map(idx -> get(reidx, idx, idx), idxs)
+                        reorder(relabel(arg, idxs_4...), idxs_3...)
+                    end),
+                ]),
+            ),
+        ),
+    )(
+        root
+    )
 end
 #=
     root = Rewrite(Fixpoint(Postwalk(Chain([
@@ -297,7 +318,6 @@ function update_structure_hash!(ctx, a::LogicNode, names=Dict{LogicNode,Int}())
     SHA.update!(ctx, bytes(typemax(Int)))
 end
 
-
 structure_hash(node::LogicNode) = begin
     ctx = SHA.SHA1_CTX()
     update_structure_hash!(ctx, node)
@@ -365,10 +385,7 @@ function LogicStructure(node::LogicNode)
     end
 end
 
-
-
 Base.hash(s::LogicStructure, h::UInt) = hash_structure(s.node, h)
-
 
 function hash_structure(a::LogicNode, s::UInt, names::Dict{LogicNode,Int} = Dict{LogicNode,Int}())
     #delimit each hash blob with the kind of the node

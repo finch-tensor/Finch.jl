@@ -3,11 +3,27 @@
 function sort_mapjoin_args(args)
     immediate_args = [arg for arg in args if arg.kind == Input || arg.kind == Alias]
     remainder = [arg for arg in args if !(arg.kind == Input || arg.kind == Alias)]
-    perm = sortperm([(length(get_index_order(arg.stats)), get_index_formats(arg.stats)..., get_index_protocols(arg.stats)...,get_index_order(arg.stats)) for arg in immediate_args])
+    perm = sortperm([
+        (
+            length(get_index_order(arg.stats)),
+            get_index_formats(arg.stats)...,
+            get_index_protocols(arg.stats)...,
+            get_index_order(arg.stats),
+        ) for arg in immediate_args
+    ])
     return [immediate_args[perm]..., remainder...]
 end
 
-function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, index_sym_dict; read=true, cannonicalize=true, virtual_tns=false)
+function initialize_access(
+    tensor_id::Symbol,
+    tensor,
+    index_ids,
+    protocols,
+    index_sym_dict;
+    read=true,
+    cannonicalize=true,
+    virtual_tns=false,
+)
     if !isnothing(tensor) && isbits(tensor)
         return literal_instance(tensor)
     end
@@ -16,10 +32,10 @@ function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, inde
     index_expressions = []
     for i in range(1, length(index_ids))
         index = if cannonicalize
-                    if !haskey(index_sym_dict, index_ids[i])
-                        idx_num = length(index_sym_dict)
-                        index_sym_dict[index_ids[i]] = get_index_symbol(idx_num)
-                    end
+            if !haskey(index_sym_dict, index_ids[i])
+                idx_num = length(index_sym_dict)
+                index_sym_dict[index_ids[i]] = get_index_symbol(idx_num)
+            end
             index_instance(index_sym_dict[index_ids[i]])
         else
             index_instance(index_ids[i])
@@ -47,7 +63,14 @@ function initialize_access(tensor_id::Symbol, tensor, index_ids, protocols, inde
     end
 end
 
-function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode, cannonicalize::Bool, virtual_aliases)
+function translate_rhs(
+    alias_dict,
+    tensor_counter,
+    index_sym_dict,
+    rhs::PlanNode,
+    cannonicalize::Bool,
+    virtual_aliases,
+)
     if rhs.kind == Alias
         idxs = get_index_order(rhs.stats)
         protocols = [get_index_protocol(rhs.stats, idx) for idx in idxs]
@@ -58,11 +81,30 @@ function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode
             rhs.name
         end
         if virtual_aliases
-            return initialize_access(t_name, nothing, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize, virtual_tns=virtual_aliases)
+            return initialize_access(
+                t_name,
+                nothing,
+                idxs,
+                protocols,
+                index_sym_dict;
+                read=true,
+                cannonicalize=cannonicalize,
+                virtual_tns=virtual_aliases,
+            )
         else
             tns = alias_dict[rhs.name]
-            @assert all([get_dim_size(rhs.stats, idxs[i]) == size(tns)[i] for i in eachindex(idxs)]) "$(size(tns)) $(idxs) $([(X, Int64(x)) for (X,x) in rhs.stats.def.dim_sizes])"
-            return initialize_access(t_name, tns, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize)
+            @assert all([
+                get_dim_size(rhs.stats, idxs[i]) == size(tns)[i] for i in eachindex(idxs)
+            ]) "$(size(tns)) $(idxs) $([(X, Int64(x)) for (X,x) in rhs.stats.def.dim_sizes])"
+            return initialize_access(
+                t_name,
+                tns,
+                idxs,
+                protocols,
+                index_sym_dict;
+                read=true,
+                cannonicalize=cannonicalize,
+            )
         end
 
     elseif rhs.kind === Input
@@ -74,7 +116,15 @@ function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode
         else
             rhs.id
         end
-        return initialize_access(t_name, rhs.tns.val, idxs, protocols, index_sym_dict, read=true, cannonicalize=cannonicalize)
+        return initialize_access(
+            t_name,
+            rhs.tns.val,
+            idxs,
+            protocols,
+            index_sym_dict;
+            read=true,
+            cannonicalize=cannonicalize,
+        )
     elseif rhs.kind == Value
         return literal_instance(rhs.val)
     elseif rhs.kind === MapJoin
@@ -82,17 +132,48 @@ function translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs::PlanNode
             rhs.args = sort_mapjoin_args(rhs.args)
         end
         if is_binary(rhs.op.val)
-            instance = translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs.args[1], cannonicalize, virtual_aliases)
+            instance = translate_rhs(
+                alias_dict,
+                tensor_counter,
+                index_sym_dict,
+                rhs.args[1],
+                cannonicalize,
+                virtual_aliases,
+            )
             for arg in rhs.args[2:end]
-                instance = call_instance(literal_instance(rhs.op.val), translate_rhs(alias_dict, tensor_counter, index_sym_dict, arg, cannonicalize, virtual_aliases), instance)
+                instance = call_instance(
+                    literal_instance(rhs.op.val),
+                    translate_rhs(
+                        alias_dict,
+                        tensor_counter,
+                        index_sym_dict,
+                        arg,
+                        cannonicalize,
+                        virtual_aliases,
+                    ),
+                    instance,
+                )
             end
             return instance
         else
             return call_instance(literal_instance(rhs.op.val),
-                                    [translate_rhs(alias_dict, tensor_counter, index_sym_dict, arg, cannonicalize, virtual_aliases) for arg in rhs.args]...)
+                [
+                    translate_rhs(
+                        alias_dict,
+                        tensor_counter,
+                        index_sym_dict,
+                        arg,
+                        cannonicalize,
+                        virtual_aliases,
+                    ) for arg in rhs.args
+                ]...)
         end
     else
-        throw(ErrorException("RHS expression cannot contain anything except Alias, Input, and MapJoin: $rhs"))
+        throw(
+            ErrorException(
+                "RHS expression cannot contain anything except Alias, Input, and MapJoin: $rhs"
+            ),
+        )
     end
 end
 
@@ -101,7 +182,7 @@ end
 # TODO: use loop_order to label indexes
 function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_prgm)
     tensor_counter = [0]
-    index_sym_dict = Dict{IndexExpr, IndexExpr}()
+    index_sym_dict = Dict{IndexExpr,IndexExpr}()
     name = q.name.name
     mat_expr = q.expr
     loop_order = [idx.name for idx in q.loop_order]
@@ -112,43 +193,58 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
     output_dimensions = [get_dim_size(mat_expr.stats, idx) for idx in output_idx_order]
     agg_op = agg_expr.op.val
     rhs_expr = agg_expr.arg
-    rhs_instance = translate_rhs(alias_dict, tensor_counter, index_sym_dict, rhs_expr, cannonicalize, return_prgm)
+    rhs_instance = translate_rhs(
+        alias_dict, tensor_counter, index_sym_dict, rhs_expr, cannonicalize, return_prgm
+    )
 
     output_tensor = initialize_tensor(output_formats,
-                                        output_dimensions,
-                                        output_default)
+        output_dimensions,
+        output_default)
     output_name = cannonicalize ? :output_tensor : name
     output_access = initialize_access(output_name,
-                                        output_tensor,
-                                        output_idx_order,
-                                        [t_default for _ in output_idx_order],
-                                        index_sym_dict;
-                                        read=false,
-                                        cannonicalize=cannonicalize)
+        output_tensor,
+        output_idx_order,
+        [t_default for _ in output_idx_order],
+        index_sym_dict;
+        read=false,
+        cannonicalize=cannonicalize)
     dec_instance = declare_instance(variable_instance(output_name),
-                                                 literal_instance(output_default), literal_instance(auto))
+        literal_instance(output_default), literal_instance(auto))
 
     prgm_instance = assign_instance(output_access, literal_instance(agg_op), rhs_instance)
-    loop_order = [cannonicalize ? index_instance(index_sym_dict[i]) : index_instance(i) for i in loop_order]
+    loop_order = [
+        cannonicalize ? index_instance(index_sym_dict[i]) : index_instance(i) for
+        i in loop_order
+    ]
     for index in reverse(loop_order)
         prgm_instance = loop_instance(index, Auto(), prgm_instance)
     end
     prgm_instance = block_instance(dec_instance, prgm_instance)
 
     verbose >= 4 && display(prgm_instance)
-    verbose >= 5 &&  println(Finch.execute_code(:ex, typeof(prgm_instance), mode=:fast)
-                                                                |> Finch.pretty
-                                                                |>  Finch.unresolve
-                                                                |>  Finch.dataflow
-                                                                |>  Finch.unquote_literals)
+    verbose >= 5 && println(
+        Finch.unquote_literals(
+            Finch.dataflow(
+                Finch.unresolve(
+                    Finch.pretty(
+                        Finch.execute_code(
+                            :ex, typeof(prgm_instance); mode=:fast
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
     verbose >= 2 && println("Expected Output Size: $(estimate_nnz(agg_expr.stats))")
 
     if return_prgm
-        output_tensor_init = tensor_initializer(output_formats, output_dimensions, output_default)
+        output_tensor_init = tensor_initializer(
+            output_formats, output_dimensions, output_default
+        )
         return :($output_name = $output_tensor_init), prgm_instance
     end
     start_time = time()
-    Finch.execute(prgm_instance, mode=:fast)
+    Finch.execute(prgm_instance; mode=:fast)
     verbose >= 2 && println("Kernel Execution Took: ", time() - start_time)
     verbose >= 2 && println("Stored Entries: ", count_stored(output_tensor))
     verbose >= 2 && println("Non Default Entries: ", count_non_default(output_tensor))
@@ -156,7 +252,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
 end
 
 function execute_plan(cse_plan::PlanNode, verbose)
-    alias_result = Dict{IndexExpr, Any}()
+    alias_result = Dict{IndexExpr,Any}()
     for query in cse_plan.queries
         verbose > 2 && println("--------------- Computing: $(query.name) ---------------")
         verbose > 2 && println(query)

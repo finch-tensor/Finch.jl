@@ -58,15 +58,19 @@ function Base.show(io::IO, mime::MIME"text/plain", x::Infinitesimal)
 end
 
 #Core definitions for limit type
-Base.:(+)(x::Infinitesimal, y::Infinitesimal) = tiny(min(max(x.sign + y.sign, Int8(-1)), Int8(1))) # only operation that needs to be fast
-Base.:(-)(x::Infinitesimal, y::Infinitesimal) = tiny(min(max(x.sign - y.sign, Int8(-1)), Int8(1))) # only operation that needs to be fast
+function Base.:(+)(x::Infinitesimal, y::Infinitesimal)
+    tiny(min(max(x.sign + y.sign, Int8(-1)), Int8(1)))
+end # only operation that needs to be fast
+function Base.:(-)(x::Infinitesimal, y::Infinitesimal)
+    tiny(min(max(x.sign - y.sign, Int8(-1)), Int8(1)))
+end # only operation that needs to be fast
 Base.:(*)(x::Infinitesimal, y::Infinitesimal) = tiny(x.sign * y.sign)
 Base.:(<)(x::Infinitesimal, y::Infinitesimal) = x.sign < y.sign
 Base.:(<=)(x::Infinitesimal, y::Infinitesimal) = x.sign <= y.sign
 Base.:(==)(x::Infinitesimal, y::Infinitesimal) = x.sign == y.sign
 Base.isless(x::Infinitesimal, y::Infinitesimal) = x < y
 Base.isinf(x::Infinitesimal) = false
-Base.zero(::Infinitesimal)= tiny(0)
+Base.zero(::Infinitesimal) = tiny(0)
 Base.min(x::Infinitesimal, y::Infinitesimal) = tiny(min(x.sign, y.sign))
 Base.max(x::Infinitesimal, y::Infinitesimal) = tiny(max(x.sign, y.sign))
 Base.:(+)(x::Infinitesimal) = x
@@ -76,7 +80,21 @@ Base.convert(::Type{Infinitesimal}, i::Number) = tiny(Int8(sign(i)))
 Base.convert(::Type{Infinitesimal}, i::Infinitesimal) = i
 
 #Crazy julia multiple dispatch stuff don't worry about it
-limit_types = [Int8, Int16, Int32, Int64, Int128, UInt8, UInt16, UInt32, UInt64, UInt128, BigInt, Float32, Float64]
+limit_types = [
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UInt128,
+    BigInt,
+    Float32,
+    Float64,
+]
 for S in limit_types
     @eval begin
         (::Type{$S})(i::Infinitesimal) = zero($S)
@@ -166,10 +184,25 @@ Base.:(+)(x::Limit)::Limit = x
 Base.:(-)(x::Limit)::Limit = limit(-x.val, -x.sign)
 
 #Crazy julia multiple dispatch stuff don't worry about it
-limit_types = [Int8, Int16, Int32, Int64, Int128, UInt8, UInt16, UInt32, UInt64, UInt128, BigInt, Float32, Float64]
+limit_types = [
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UInt128,
+    BigInt,
+    Float32,
+    Float64,
+]
 for S in limit_types
     @eval begin
-        @inline Base.promote_rule(::Type{Limit{T}}, ::Type{$S}) where {T} = Limit{promote_type(T, $S)}
+        @inline Base.promote_rule(::Type{Limit{T}}, ::Type{$S}) where {T} =
+            Limit{promote_type(T, $S)}
         Base.convert(::Type{Limit{T}}, i::$S) where {T} = limit(convert(T, i))
         Limit(i::$S) = Limit{$S}(i, tiny_zero())
         (::Type{$S})(i::Limit{T}) where {T} = convert($S, i.val)
@@ -193,6 +226,8 @@ for S in limit_types
     end
 end
 
-Base.promote_rule(::Type{Limit{T}}, ::Type{Limit{S}}) where {T, S} = Limit{promote_type(T, S)}
+function Base.promote_rule(::Type{Limit{T}}, ::Type{Limit{S}}) where {T,S}
+    Limit{promote_type(T, S)}
+end
 Base.convert(::Type{Limit{T}}, i::Limit) where {T} = Limit{T}(convert(T, i.val), i.sign)
 Base.hash(x::Limit, h::UInt) = hash(typeof(x), hash(x.val, hash(x.sign, h)))
