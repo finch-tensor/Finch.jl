@@ -40,7 +40,7 @@ parallel loop or is a temporary tensor declared within the parallel loop.
 If the tensor is a temporary tensor declared within the parallel loop, we call
 `bcast` to broadcast the tensor to all tasks.
 
-If the tensor is declared outside the parallel loop, we call `scatter` to 
+If the tensor is declared outside the parallel loop, we call `scatter` to
 send it to the tasks where it is needed. Note that if the tensor is in `read` mode,
 `scatter` may simply `bcast` the entire tensor to all tasks. If the device has global
 memory, `scatter` may also be a no-op. When the parallel loop is exited, we call
