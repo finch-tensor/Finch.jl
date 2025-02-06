@@ -262,7 +262,7 @@ function virtual_transfer_level(ctx, lvl::VirtualSparseIntervalLevel, arch, styl
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseIntervalLevel(
         lvl_2, lvl.ex, lvl.Ti, left_2, right_2, lvl.shape, lvl.qos_fill, lvl.qos_stop,
-        lvl.prev_pos
+        lvl.prev_pos,
     )
 end
 

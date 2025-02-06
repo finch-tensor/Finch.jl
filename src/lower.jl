@@ -342,10 +342,10 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     )
 
     for tns in setdiff(used_in_scope, decl_in_scope)
-        set_binding(ctx, tns, virtual_transfer(ctx, resolve(ctx, tns), device, bcast_send))
+        set_binding!(ctx, tns, virtual_transfer(ctx, resolve(ctx, tns), device, bcast_send))
     end
     for tns in intersect(used_in_scope, decl_in_scope)
-        set_binding(
+        set_binding!(
             ctx, tns, virtual_transfer(ctx, resolve(ctx, tns), device, scatter_send)
         )
     end
@@ -354,14 +354,14 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
         subtask = get_task(ctx_2)
         tid = get_task_num(subtask)
         for tns in setdiff(used_in_scope, decl_in_scope)
-            set_binding(
+            set_binding!(
                 ctx_2,
                 tns,
                 virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, bcast_recv),
             )
         end
         for tns in intersect(used_in_scope, decl_in_scope)
-            set_binding(
+            set_binding!(
                 ctx_2,
                 tns,
                 virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, scatter_recv),
@@ -381,7 +381,7 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
             end
         end
         for tns in intersect(used_in_scope, decl_in_scope)
-            set_binding(
+            set_binding!(
                 ctx_2,
                 tns,
                 virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, gather_send),

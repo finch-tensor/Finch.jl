@@ -140,11 +140,11 @@ function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
 end
 
 function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
-    virtual_transfer_level(ctx, fbr.lvl, arch, style)
+    VirtualFiber(virtual_transfer_level(ctx, fbr.lvl, arch, style))
 end
 
 function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
-    virtual_transfer_level(ctx, fbr.lvl, arch, style)
+    VirtualSubFiber(virtual_transfer_level(ctx, fbr.lvl, arch, style), fbr.pos)
 end
 
 struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}

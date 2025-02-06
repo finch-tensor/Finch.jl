@@ -217,7 +217,7 @@ get_task_num(task::VirtualCPUThread) = task.tid
 
 struct CPULocalArray{A}
     device::CPU
-    data::arrtor{A}
+    data::Vector{A}
 end
 
 function CPULocalArray{A}(device::CPU) where {A}
@@ -227,13 +227,13 @@ end
 Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
 Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
-function transfer(arr::A, device::CPU, style::BroadcastSend) where {A<:AbstractArray}
+function transfer(arr::A, device::CPU, style::BcastSend) where {A<:AbstractArray}
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
-function transfer(arr::CPULocalArray, device::CPU, style::BroadcastSend)
+function transfer(arr::CPULocalArray, device::CPU, style::BcastSend)
     return arr
 end
-function transfer(arr::CPULocalArray, task::CPUThread, style::BroadcastRecv)
+function transfer(arr::CPULocalArray, task::CPUThread, style::BcastRecv)
     if get_device(task) === arr.device
         temp = arr.data[task.tid]
         return temp
