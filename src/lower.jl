@@ -319,11 +319,16 @@ end
 function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualCPU)
     root = ensure_concurrent(root, ctx)
 
-    decl_in_scope = unique(filter(!isnothing, map(node-> begin
-        if @capture(node, declare(~tns, ~init, ~op))
-            tns
-        end
-    end, PostOrderDFS(root.body))))
+    decl_in_scope = unique(
+        filter(
+            !isnothing,
+            map(node -> begin
+                    if @capture(node, declare(~tns, ~init, ~op))
+                        tns
+                    end
+                end, PostOrderDFS(root.body)),
+        ),
+    )
 
     used_in_scope = unique(
         filter(
@@ -352,9 +357,9 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                 root_2 = loop(i, Extent(tid, tid),
                     loop(root.idx, ext.ext,
                         sieve(access(VirtualSplitMask(device.n), reader(), root.idx, i),
-                            root.body
-                        )
-                    )
+                            root.body,
+                        ),
+                    ),
                 )
                 ctx_4(instantiate!(ctx_4, root_2))
             end

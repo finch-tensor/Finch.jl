@@ -18,7 +18,7 @@ julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
       └─ 3.0
 ```
 """
-struct ShardLevel{Device, Lvl, Ptr, Task, Val} <: AbstractLevel
+struct ShardLevel{Device,Lvl,Ptr,Task,Val} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
@@ -27,18 +27,29 @@ struct ShardLevel{Device, Lvl, Ptr, Task, Val} <: AbstractLevel
 end
 const Shard = ShardLevel
 
-ShardLevel(device::Device, lvl::Lvl) where {Device, Lvl} =
-    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], moveto(lvl, device)) #TODO scatterto?
+function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
+    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], moveto(lvl, device))
+end #TODO scatterto?
 
-ShardLevel{Device}(device, lvl::Lvl, ptr::Ptr, task::Task, val::Val) where {Device, Lvl, Ptr, Task, Val} =
-    ShardLevel{Device, Lvl, Ptr, Task, Val}(device, lvl, ptr, task, val)
+function ShardLevel{Device}(
+    device, lvl::Lvl, ptr::Ptr, task::Task, val::Val
+) where {Device,Lvl,Ptr,Task,Val}
+    ShardLevel{Device,Lvl,Ptr,Task,Val}(device, lvl, ptr, task, val)
+end
 
-Base.summary(::Shard{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = "Shard($(Lvl))"
+function Base.summary(::Shard{Device,Lvl,Ptr,Task,Val}) where {Device,Lvl,Ptr,Task,Val}
+    "Shard($(Lvl))"
+end
 
-similar_level(lvl::Shard{Device, Lvl, Ptr, Task, Val}, fill_value, eltype::Type, dims...) where {Device, Lvl, Ptr, Task, Val} =
+function similar_level(
+    lvl::Shard{Device,Lvl,Ptr,Task,Val}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Ptr,Task,Val}
     ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...))
+end
 
-postype(::Type{<:Shard{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = postype(Lvl)
+function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Val}}) where {Device,Lvl,Ptr,Task,Val}
+    postype(Lvl)
+end
 
 function moveto(lvl::ShardLevel, device)
     lvl_2 = moveto(lvl.lvl, device)
@@ -47,11 +58,29 @@ function moveto(lvl::ShardLevel, device)
     return ShardLevel(lvl_2, ptr_2, task_2, val_2)
 end
 
-pattern!(lvl::ShardLevel) = ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, map(pattern!, lvl.val))
-set_fill_value!(lvl::ShardLevel, init) = ShardLevel(set_fill_value!(lvl.lvl, init), lvl.ptr, lvl.task, map(lvl_2 -> set_fill_value!(lvl_2, init), lvl.val))
-Base.resize!(lvl::ShardLevel, dims...) = ShardLevel(resize!(lvl.lvl, dims...), lvl.ptr, lvl.task, map(lvl_2 -> resize!(lvl_2, dims...), lvl.val))
+function pattern!(lvl::ShardLevel)
+    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, map(pattern!, lvl.val))
+end
+function set_fill_value!(lvl::ShardLevel, init)
+    ShardLevel(
+        set_fill_value!(lvl.lvl, init),
+        lvl.ptr,
+        lvl.task,
+        map(lvl_2 -> set_fill_value!(lvl_2, init), lvl.val),
+    )
+end
+function Base.resize!(lvl::ShardLevel, dims...)
+    ShardLevel(
+        resize!(lvl.lvl, dims...),
+        lvl.ptr,
+        lvl.task,
+        map(lvl_2 -> resize!(lvl_2, dims...), lvl.val),
+    )
+end
 
-function Base.show(io::IO, lvl::ShardLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val}
+function Base.show(
+    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Val}
+) where {Device,Lvl,Ptr,Task,Val}
     print(io, "Shard(")
     if get(io, :compact, false)
         print(io, "…")
@@ -79,11 +108,21 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
     [LabelledTree(SubFiber(lvl.val[lvl.task[pos]], lvl.ptr[pos]))]
 end
 
-@inline level_ndims(::Type{<:ShardLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_ndims(Lvl)
-@inline level_size(lvl::ShardLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = level_size(lvl.lvl)
-@inline level_axes(lvl::ShardLevel{Device, Lvl, Ptr, Task, Val}) where {Device, Lvl, Ptr, Task, Val} = level_axes(lvl.lvl)
-@inline level_eltype(::Type{ShardLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:ShardLevel{Device, Lvl, Ptr, Task, Val}}) where {Device, Lvl, Ptr, Task, Val} = level_fill_value(Lvl)
+@inline level_ndims(
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Val}}
+) where {Device,Lvl,Ptr,Task,Val} = level_ndims(Lvl)
+@inline level_size(
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Val}
+) where {Device,Lvl,Ptr,Task,Val} = level_size(lvl.lvl)
+@inline level_axes(
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Val}
+) where {Device,Lvl,Ptr,Task,Val} = level_axes(lvl.lvl)
+@inline level_eltype(
+    ::Type{ShardLevel{Device,Lvl,Ptr,Task,Val}}
+) where {Device,Lvl,Ptr,Task,Val} = level_eltype(Lvl)
+@inline level_fill_value(
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Val}}
+) where {Device,Lvl,Ptr,Task,Val} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardLevel})(idxs...)
     q = fbr.pos
@@ -109,7 +148,9 @@ end
 
 postype(lvl::VirtualShardLevel) = postype(lvl.lvl)
 
-is_level_injective(ctx, lvl::VirtualShardLevel) = [is_level_injective(ctx, lvl.lvl)..., true]
+function is_level_injective(ctx, lvl::VirtualShardLevel)
+    [is_level_injective(ctx, lvl.lvl)..., true]
+end
 function is_level_atomic(ctx, lvl::VirtualShardLevel)
     (below, atomic) = is_level_atomic(ctx, lvl.lvl)
     return ([below; [atomic]], atomic)
@@ -121,52 +162,82 @@ end
 
 function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
     quote
-        $ShardLevel{$(lvl.Lvl), $(lvl.Ptr), $(lvl.Task), $(lvl.Val)}($(ctx(lvl.lvl)), $(lvl.val))
+        $ShardLevel{$(lvl.Lvl),$(lvl.Ptr),$(lvl.Task),$(lvl.Val)}(
+            $(ctx(lvl.lvl)), $(lvl.val)
+        )
     end
 end
 
-function virtualize(ctx, ex, ::Type{ShardLevel{Device, Lvl, Ptr, Task, Val}}, tag=:lvl) where {Device, Lvl, Ptr, Task, Val}
+function virtualize(
+    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Val}}, tag=:lvl
+) where {Device,Lvl,Ptr,Task,Val}
     sym = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
     val = freshen(ctx, tag, :_val)
 
-    push_preamble!(ctx, quote
-              $sym = $ex
-              $ptr = $ex.ptr
-              $task = $ex.task
-              $val = $ex.val
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $sym = $ex
+            $ptr = $ex.ptr
+            $task = $ex.task
+            $val = $ex.val
+        end,
+    )
     device_2 = virtualize(ctx, :($ex.device), Device, sym)
     lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualShardLevel(device_2, lvl_2, sym, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val)
+    VirtualShardLevel(
+        device_2,
+        lvl_2,
+        sym,
+        ptr,
+        task,
+        val,
+        typeof(level_fill_value(Lvl)),
+        Device,
+        Lvl,
+        Ptr,
+        Task,
+        Val,
+    )
 end
 
 Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
 
-virtual_level_resize!(ctx, lvl::VirtualShardLevel, dims...) = (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+function virtual_level_resize!(ctx, lvl::VirtualShardLevel, dims...)
+    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+end
 virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
 function virtual_moveto_level(ctx, lvl::VirtualShardLevel, arch)
     val_2 = freshen(ctx, lvl.val)
-    push_preamble!(ctx, quote
+    push_preamble!(
+        ctx,
+        quote
             $val_2 = $(lvl.val)
             $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
-        end)
-    push_epilogue!(ctx, quote
+        end,
+    )
+    push_epilogue!(
+        ctx,
+        quote
             $(lvl.val) = $val_2
-        end)
+        end,
+    )
     virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
-    push_preamble!(ctx, 
+    push_preamble!(ctx,
         virtual_parallel_region(ctx, lvl.device) do ctx_2
-            lvl_2 = virtualize(ctx_2, :($(lvl.ex).val[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl) #TODO should this virtualize the eltype of Val?
+            lvl_2 = virtualize(
+                ctx_2, :($(lvl.ex).val[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl
+            ) #TODO should this virtualize the eltype of Val?
             declare_level!(ctx_2, lvl_2, literal(1), init)
-        end
+        end,
     )
     lvl
 end
@@ -188,11 +259,14 @@ function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
     sym = freshen(ctx, :pointer_to_lvl)
-    push_preamble!(ctx, quote
-        Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
-        Finch.resize_if_smaller!($(lvl.ptr), $(ctx(pos_stop)))
-        Finch.fill_range!($(lvl.task), $(ctx(pos_start)), $(ctx(pos_stop)), 0)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
+            Finch.resize_if_smaller!($(lvl.ptr), $(ctx(pos_stop)))
+            Finch.fill_range!($(lvl.task), $(ctx(pos_start)), $(ctx(pos_stop)), 0)
+        end,
+    )
     lvl
 end
 
@@ -217,8 +291,8 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         Vf = level_fill_value(lvl.Lvl)
         sym = freshen(ctx, :pointer_to_lvl)
         val = freshen(ctx, lvl.ex, :_val)
-        return Thunk(
-            body = (ctx) -> begin
+        return Thunk(;
+            body=(ctx) -> begin
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
                 instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode)
             end,
@@ -228,8 +302,8 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         tag = lvl.ex
         sym = freshen(ctx, :pointer_to_lvl)
 
-        return Thunk(
-            body = (ctx) -> begin
+        return Thunk(;
+            body=(ctx) -> begin
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
                 lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
                 push_preamble!(ctx, assemble_level!(ctx, lvl_2, literal(1), literal(1)))
@@ -238,10 +312,10 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
                     contain(ctx) do ctx_2
                         lvl_2 = freeze_level!(ctx_2, lvl_2, literal(1))
                         :($(lvl.val)[$(ctx_2(pos))] = $(ctx_2(lvl_2)))
-                    end
+                    end,
                 )
                 res
-            end
+            end,
         )
     end
 end
@@ -268,7 +342,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
 
     task = freshen(ctx, tag, :_task)
 
-    return Thunk(
+    return Thunk(;
         preamble = quote
             $task = $(lvl.task)[$(ctx(pos))]
             if task == 0
@@ -276,7 +350,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
                 qos = local_qos_fill
                 if $(lvl.local_qos_fill) > $(lvl.local_qos_stop)
                     $local_qos_stop = max($local_qos_stop << 1, 1)
-                    $(contain(ctx_2->assemble_level!(ctx_2, lvl.lvl, value(qos_fill, Tp), value(qos_stop, Tp)), ctx))
+                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos_fill, Tp), value(qos_stop, Tp)), ctx))
                 end
             else
                 qos = $(lvl.ptr)[$(ctx(pos))]
@@ -285,13 +359,13 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
             end
             dirty = true
         end,
-        body = (ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), dirty),
+        body     = (ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), dirty),
         epilogue = quote
             #this task will always own this position forever, even if we don't write to it. Still, we try to be conservative of memory usage of the underlying level.
             if dirty && $(lvl.ptr)[$(ctx(pos))] == 0
                 local_qos_fill += 1
                 $(lvl.ptr)[$(ctx(pos))] = $(lvl.local_qos_fill) += 1
             end
-        end
+        end,
     )
 end

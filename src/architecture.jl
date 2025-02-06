@@ -230,7 +230,7 @@ function local_memory(device::Serial)
     return device
 end
 
-struct Converter{f, T} end
+struct Converter{f,T} end
 
 (::Converter{f,T})(x) where {f,T} = T(f(x))
 
@@ -294,7 +294,6 @@ for T in [
             pointer(vec, idx), $T(Vf), x, UnsafeAtomics.seq_cst, UnsafeAtomics.seq_cst
         )
     end
-
 end
 
 function virtual_parallel_region(f, ctx, ::Serial)
@@ -306,11 +305,11 @@ function virtual_parallel_region(f, ctx, device::VirtualCPU)
 
     code = contain(ctx) do ctx_2
         subtask = VirtualCPUThread(value(tid, Int), device, ctx_2.code.task)
-        contain(f, ctx_2, task=subtask)
+        contain(f, ctx_2; task=subtask)
     end
 
     return quote
-        Threads.@threads for $tid = 1:$(ctx(device.n))
+        Threads.@threads for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin
                 @inbounds @fastmath begin
                     $code

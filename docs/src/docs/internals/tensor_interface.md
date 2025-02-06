@@ -18,8 +18,6 @@ virtual_eltype
 virtual_fill_value
 virtual_size
 virtual_resize!
-moveto
-virtual_moveto
 labelled_show
 labelled_children
 is_injective

@@ -245,10 +245,15 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
         atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
         lockVal = freshen(ctx, lvl.ex, :lockVal)
         dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
-        push_preamble!(ctx, quote
-            $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
-            $lockVal = Finch.aquire_lock!($dev, $atomicData)
-        end)
+        push_preamble!(
+            ctx,
+            quote
+                $atomicData = Finch.get_lock(
+                    $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
+                )
+                $lockVal = Finch.aquire_lock!($dev, $atomicData)
+            end,
+        )
         res = unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
         push_epilogue!(
             ctx,
@@ -267,10 +272,15 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, ext, mode, p
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
-    push_preamble!(ctx, quote
-        $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
-        $lockVal = Finch.aquire_lock!($dev, $atomicData)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $atomicData = Finch.get_lock(
+                $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
+            )
+            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+        end,
+    )
     res = unfurl(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), ext, mode, proto)
     push_epilogue!(
         ctx,
@@ -287,10 +297,15 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode, op, rh
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
-    push_preamble!(ctx, quote
-        $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
-        $lockVal = Finch.aquire_lock!($dev, $atomicData)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $atomicData = Finch.get_lock(
+                $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
+            )
+            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+        end,
+    )
     res = lower_assign(ctx, VirtualSubFiber(lvl.lvl, pos), mode, op, rhs)
     push_epilogue!(
         ctx,
@@ -307,10 +322,15 @@ function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, mode, 
     atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
     lockVal = freshen(ctx, lvl.ex, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
-    push_preamble!(ctx, quote
-        $atomicData =  Finch.get_lock($dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal)))
-        $lockVal = Finch.aquire_lock!($dev, $atomicData)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $atomicData = Finch.get_lock(
+                $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
+            )
+            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+        end,
+    )
     res = lower_assign(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), mode, op, rhs)
     push_epilogue!(
         ctx,
