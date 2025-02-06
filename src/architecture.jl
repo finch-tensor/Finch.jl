@@ -1,7 +1,44 @@
+"""
+    AbstractDevice
+
+A datatype representing a device on which tasks can be executed.
+"""
 abstract type AbstractDevice end
 abstract type AbstractVirtualDevice end
+
+"""
+    AbstractTask
+
+An individual processing unit on a device, responsible for running code.
+"""
 abstract type AbstractTask end
 abstract type AbstractVirtualTask end
+
+"""
+    get_num_tasks(dev::AbstractDevice)
+
+Return the number of tasks on the device dev.
+"""
+function get_num_tasks end
+"""
+    get_task_num(task::AbstractTask)
+
+Return the task number of `task`.
+"""
+function get_task_num end
+"""
+    get_device(task::AbstractTask)
+
+Return the device that `task` is running on.
+"""
+function get_device end
+
+"""
+    get_parent_task(task::AbstractTask)
+
+Return the task which spawned `task`.
+"""
+function get_parent_task end
 
 """
     aquire_lock!(dev::AbstractDevice, val)
