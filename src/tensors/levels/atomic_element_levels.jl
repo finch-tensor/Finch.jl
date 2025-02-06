@@ -40,8 +40,8 @@ end
 
 postype(::Type{<:AtomicElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
-function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
-    return AtomicElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device))
+function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv,Tp}
+    return AtomicElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device), style)
 end
 
 pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
@@ -165,13 +165,13 @@ function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_s
     lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, style)
     val_2 = freshen(ctx, :val)
     push_preamble!(
         ctx,
         quote
             $val_2 = $(lvl.val)
-            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)))
+            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(

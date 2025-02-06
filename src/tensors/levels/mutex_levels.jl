@@ -35,9 +35,9 @@ end
 
 postype(::Type{<:MutexLevel{AVal,Lvl}}) where {Lvl,AVal} = postype(Lvl)
 
-function transfer(lvl::MutexLevel, device)
-    lvl_2 = transfer(lvl.lvl, device)
-    locks_2 = transfer(lvl.locks, device)
+function transfer(lvl::MutexLevel, device, style)
+    lvl_2 = transfer(lvl.lvl, device, style)
+    locks_2 = transfer(lvl.locks, device, style)
     return MutexLevel(lvl_2, locks_2)
 end
 
@@ -207,7 +207,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, pos)
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
     #Add for seperation level too.
     atomics = freshen(ctx, :locksArray)
 
@@ -215,7 +215,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, a
         ctx,
         quote
             $atomics = $(lvl.locks)
-            $(lvl.locks) = $transfer($(lvl.locks), $(ctx(arch)))
+            $(lvl.locks) = $transfer($(lvl.locks), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(
@@ -224,7 +224,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, a
             $(lvl.locks) = $atomics
         end,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)

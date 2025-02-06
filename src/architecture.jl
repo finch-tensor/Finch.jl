@@ -188,7 +188,7 @@ get_task_num(task::VirtualCPUThread) = task.tid
 struct CPULocalMemory
     device::CPU
 end
-function transfer(vec::V, mem::CPULocalMemory) where {V<:Vector}
+function transfer(vec::V, mem::CPULocalMemory, style) where {V<:Vector}
     CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:(mem.device.n)])
 end
 
@@ -204,15 +204,15 @@ end
 Base.eltype(::Type{CPULocalVector{V}}) where {V} = eltype(V)
 Base.ndims(::Type{CPULocalVector{V}}) where {V} = ndims(V)
 
-function transfer(vec::Vector, device::CPU)
+function transfer(vec::Vector, device::CPU, style)
     return vec
 end
 
-function transfer(vec::Vector, task::CPUThread)
+function transfer(vec::Vector, task::CPUThread, style)
     return copy(vec)
 end
 
-function transfer(vec::CPULocalVector, task::CPUThread)
+function transfer(vec::CPULocalVector, task::CPUThread, style)
     temp = vec.data[task.tid]
     return temp
 end
@@ -321,7 +321,7 @@ function virtual_parallel_region(f, ctx, device::VirtualCPU)
 end
 
 """
-    transfer(arr, device)
+    transfer(arr, device, style)
 
 If the array is not on the given device, it creates a new version of this array on that device
 and copies the data in to it, according to the `device` trait.
@@ -329,7 +329,7 @@ and copies the data in to it, according to the `device` trait.
 function transfer end
 
 """
-    virtual_transfer(device, arr)
+    virtual_transfer(device, arr, style)
 
 If the virtual array is not on the given device, copy the array to that device. This
 function may modify underlying data arrays, but cannot change the virtual itself. This

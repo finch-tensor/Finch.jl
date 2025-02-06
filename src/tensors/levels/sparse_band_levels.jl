@@ -36,10 +36,10 @@ function postype(::Type{SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl}
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseBandLevel{Ti}, device) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device)
-    idx_2 = transfer(lvl.idx, device)
-    ofs_2 = transfer(lvl.ofs, device)
+function transfer(lvl::SparseBandLevel{Ti}, device, style) where {Ti}
+    lvl_2 = transfer(lvl.lvl, device, style)
+    idx_2 = transfer(lvl.idx, device, style)
+    ofs_2 = transfer(lvl.ofs, device, style)
     return SparseBandLevel{Ti}(lvl_2, lvl.shape, idx_2, ofs_2)
 end
 
@@ -241,7 +241,7 @@ end
 virtual_level_eltype(lvl::VirtualSparseBandLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style)
     tbl_2 = freshen(ctx, lvl.tbl)
     ofs_2 = freshen(ctx, lvl.ofs)
     push_preamble!(
@@ -249,8 +249,8 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLev
         quote
             $tbl_2 = $(lvl.tbl)
             $ofs_2 = $(lvl.ofs)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)))
-            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)))
+            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
+            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(
@@ -260,7 +260,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLev
             $(lvl.ofs) = $ofs_2
         end,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos, init)

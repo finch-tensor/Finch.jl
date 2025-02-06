@@ -554,7 +554,7 @@
             input = Tensor(Dense(Dense(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
             cpu = CPU(Threads.nthreads())
-            tmp = transfer(Tensor(Dense(Element(0))), CPULocalMemory(cpu))
+            tmp = transfer(Tensor(Dense(Element(0))), CPULocalMemory(cpu), style)
 
             check_output(
                 "parallel/parallel_blur.jl",
@@ -579,7 +579,7 @@
             input = Tensor(Dense(SparseList(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
             cpu = CPU(Threads.nthreads())
-            tmp = transfer(Tensor(Dense(Element(0))), CPULocalMemory(cpu))
+            tmp = transfer(Tensor(Dense(Element(0))), CPULocalMemory(cpu), style)
 
             check_output(
                 "parallel/parallel_blur_sparse.jl",

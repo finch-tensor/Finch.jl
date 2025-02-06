@@ -63,10 +63,10 @@ function postype(::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}) where {Ti,Left,
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm) where {Ti,Left,Right,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm)
-    left_2 = transfer(lvl.left, Tm)
-    right_2 = transfer(lvl.right, Tm)
+function transfer(lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style) where {Ti,Left,Right,Lvl}
+    lvl_2 = transfer(lvl.lvl, Tm, style)
+    left_2 = transfer(lvl.left, Tm, style)
+    right_2 = transfer(lvl.right, Tm, style)
     return SparseIntervalLevel{Ti}(lvl_2, lvl.shape, left_2, right_2)
 end
 

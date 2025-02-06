@@ -130,13 +130,13 @@ FinchNotation.finch_leaf(x::VirtualAbstractArray) = virtual(x)
 virtual_fill_value(ctx, ::VirtualAbstractArray) = 0
 virtual_eltype(ctx, tns::VirtualAbstractArray) = tns.eltype
 
-function virtual_transfer(ctx, vec::VirtualAbstractArray, device)
+function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
     ex = freshen(ctx, vec.ex)
     push_preamble!(
         ctx,
         quote
             $ex = $(vec.ex)
-            $(vec.ex) = $transfer($(vec.ex), $(ctx(device)))
+            $(vec.ex) = $transfer($(vec.ex), $(ctx(device)), style)
         end,
     )
     push_epilogue!(

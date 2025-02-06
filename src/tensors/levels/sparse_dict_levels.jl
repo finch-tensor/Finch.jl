@@ -93,12 +93,12 @@ end
 function transfer(
     lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}, Tm
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm)
-    ptr_2 = transfer(lvl.ptr, Tm)
-    idx_2 = transfer(lvl.idx, Tm)
-    val_2 = transfer(lvl.val, Tm)
-    tbl_2 = transfer(lvl.tbl, Tm)
-    pool_2 = transfer(lvl.pool, Tm)
+    lvl_2 = transfer(lvl.lvl, Tm, style)
+    ptr_2 = transfer(lvl.ptr, Tm, style)
+    idx_2 = transfer(lvl.idx, Tm, style)
+    val_2 = transfer(lvl.val, Tm, style)
+    tbl_2 = transfer(lvl.tbl, Tm, style)
+    pool_2 = transfer(lvl.pool, Tm, style)
     return SparseDictLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_2, pool_2)
 end
 
@@ -385,7 +385,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
     tbl_2 = freshen(ctx, lvl.tbl_2)
@@ -393,7 +393,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLev
         ctx,
         quote
             $tbl_2 = $(lvl.tbl)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)))
+            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(
@@ -402,7 +402,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLev
             $(lvl.tbl) = $tbl_2
         end,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function unfurl(

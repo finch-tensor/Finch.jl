@@ -139,12 +139,12 @@ function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(arr.lvl, literal(1)), ext, mode, proto)
 end
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualFiber, arch)
-    virtual_transfer_level(ctx, fbr.lvl, arch)
+function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
+    virtual_transfer_level(ctx, fbr.lvl, arch, style)
 end
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch)
-    virtual_transfer_level(ctx, fbr.lvl, arch)
+function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
+    virtual_transfer_level(ctx, fbr.lvl, arch, style)
 end
 
 struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}
@@ -171,9 +171,9 @@ function lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle
 end
 FinchNotation.finch_leaf(x::VirtualHollowSubFiber) = virtual(x)
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch)
+function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, style)
     return VirtualHollowSubFiber(
-        virtual_transfer_level(ctx, fbr.lvl, arch), fbr.pos, fbr.dirty
+        virtual_transfer_level(ctx, fbr.lvl, arch, style), fbr.pos, fbr.dirty
     )
 end
 
@@ -333,7 +333,7 @@ function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple)
     Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
 end
 
-transfer(tns::Tensor, device) = Tensor(transfer(tns.lvl, device))
+transfer(tns::Tensor, device) = Tensor(transfer(tns.lvl, device), style)
 
 struct Structure
     t
