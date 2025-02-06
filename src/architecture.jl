@@ -1,7 +1,44 @@
+"""
+    AbstractDevice
+
+A datatype representing a device on which tasks can be executed.
+"""
 abstract type AbstractDevice end
 abstract type AbstractVirtualDevice end
+
+"""
+    AbstractTask
+
+An individual processing unit on a device, responsible for running code.
+"""
 abstract type AbstractTask end
 abstract type AbstractVirtualTask end
+
+"""
+    get_num_tasks(dev::AbstractDevice)
+
+Return the number of tasks on the device dev.
+"""
+function get_num_tasks end
+"""
+    get_task_num(task::AbstractTask)
+
+Return the task number of `task`.
+"""
+function get_task_num end
+"""
+    get_device(task::AbstractTask)
+
+Return the device that `task` is running on.
+"""
+function get_device end
+
+"""
+    get_parent_task(task::AbstractTask)
+
+Return the task which spawned `task`.
+"""
+function get_parent_task end
 
 """
     aquire_lock!(dev::AbstractDevice, val)
@@ -40,6 +77,7 @@ struct CPU <: AbstractDevice
     n::Int
 end
 CPU() = CPU(Threads.nthreads())
+get_num_tasks(dev::CPU) = dev.n
 @kwdef struct VirtualCPU <: AbstractVirtualDevice
     ex
     n
@@ -57,6 +95,7 @@ end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     something(device.ex, :(CPU($(ctx(device.n)))))
 end
+get_num_tasks(::VirtualCPU) = literal(1)
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
@@ -68,13 +107,15 @@ A device that represents a serial CPU execution.
 struct Serial <: AbstractTask end
 const serial = Serial()
 get_device(::Serial) = CPU(1)
-get_task(::Serial) = nothing
+get_parent_task(::Serial) = nothing
+get_task_num(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
 virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
 lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :(Serial())
 FinchNotation.finch_leaf(device::VirtualSerial) = virtual(device)
-virtual_get_device(::VirtualSerial) = VirtualCPU(nothing, 1)
-virtual_get_task(::VirtualSerial) = nothing
+get_device(::VirtualSerial) = VirtualCPU(nothing, 1)
+get_parent_task(::VirtualSerial) = nothing
+get_task_num(::VirtualSerial) = literal(1)
 
 struct CPUThread{Parent} <: AbstractTask
     tid::Int
@@ -82,7 +123,8 @@ struct CPUThread{Parent} <: AbstractTask
     parent::Parent
 end
 get_device(task::CPUThread) = task.device
-get_task(task::CPUThread) = task.parent
+get_parent_task(task::CPUThread) = task.parent
+get_task_num(task::CPUThread) = task.tid
 
 @inline function make_lock(::Type{Threads.Atomic{T}}) where {T}
     return Threads.Atomic{T}(zero(T))
@@ -139,13 +181,14 @@ function lower(ctx::AbstractCompiler, task::VirtualCPUThread, ::DefaultStyle)
     :(CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
 end
 FinchNotation.finch_leaf(device::VirtualCPUThread) = virtual(device)
-virtual_get_device(task::VirtualCPUThread) = task.dev
-virtual_get_task(task::VirtualCPUThread) = task.parent
+get_device(task::VirtualCPUThread) = task.dev
+get_parent_task(task::VirtualCPUThread) = task.parent
+get_task_num(task::VirtualCPUThread) = task.tid
 
 struct CPULocalMemory
     device::CPU
 end
-function moveto(vec::V, mem::CPULocalMemory) where {V<:Vector}
+function transfer(vec::V, mem::CPULocalMemory, style) where {V<:Vector}
     CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:(mem.device.n)])
 end
 
@@ -161,17 +204,30 @@ end
 Base.eltype(::Type{CPULocalVector{V}}) where {V} = eltype(V)
 Base.ndims(::Type{CPULocalVector{V}}) where {V} = ndims(V)
 
-function moveto(vec::Vector, device::CPU)
+function transfer(vec::Vector, device::CPU, style)
     return vec
 end
 
-function moveto(vec::Vector, task::CPUThread)
+function transfer(vec::Vector, task::CPUThread, style)
     return copy(vec)
 end
 
-function moveto(vec::CPULocalVector, task::CPUThread)
+function transfer(vec::CPULocalVector, task::CPUThread, style)
     temp = vec.data[task.tid]
     return temp
+end
+
+"""
+    local_memory(device)
+
+Returns the local memory type for a given device.
+"""
+function local_memory(device::CPU)
+    return CPULocalMemory(device)
+end
+
+function local_memory(device::Serial)
+    return device
 end
 
 struct Converter{f,T} end
@@ -239,3 +295,44 @@ for T in [
         )
     end
 end
+
+function virtual_parallel_region(f, ctx, ::Serial)
+    contain(f, ctx)
+end
+
+function virtual_parallel_region(f, ctx, device::VirtualCPU)
+    tid = freshen(ctx, :tid)
+
+    code = contain(ctx) do ctx_2
+        subtask = VirtualCPUThread(value(tid, Int), device, ctx_2.code.task)
+        contain(f, ctx_2; task=subtask)
+    end
+
+    return quote
+        Threads.@threads for $tid in 1:($(ctx(device.n)))
+            Finch.@barrier begin
+                @inbounds @fastmath begin
+                    $code
+                end
+                nothing
+            end
+        end
+    end
+end
+
+"""
+    transfer(arr, device, style)
+
+If the array is not on the given device, it creates a new version of this array on that device
+and copies the data in to it, according to the `device` trait.
+"""
+function transfer end
+
+"""
+    virtual_transfer(device, arr, style)
+
+If the virtual array is not on the given device, copy the array to that device. This
+function may modify underlying data arrays, but cannot change the virtual itself. This
+function is used to move data to the device before a kernel is launched.
+"""
+function virtual_transfer end

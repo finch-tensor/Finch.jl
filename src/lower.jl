@@ -319,9 +319,6 @@ end
 function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualCPU)
     root = ensure_concurrent(root, ctx)
 
-    tid = index(freshen(ctx, :tid))
-    i = freshen(ctx, :i)
-
     decl_in_scope = unique(
         filter(
             !isnothing,
@@ -344,39 +341,27 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
         ),
     )
 
-    root_2 = loop(tid, Extent(value(i, Int), value(i, Int)),
-        loop(root.idx, ext.ext,
-            sieve(access(VirtualSplitMask(device.n), reader(), root.idx, tid),
-                root.body,
-            ),
-        ),
-    )
-
     for tns in setdiff(used_in_scope, decl_in_scope)
-        virtual_moveto(ctx, resolve(ctx, tns), device)
+        virtual_transfer(ctx, resolve(ctx, tns), device, style)
     end
 
-    code = contain(ctx) do ctx_2
-        subtask = VirtualCPUThread(value(i, Int), device, ctx_2.code.task)
-        contain(ctx_2; task=subtask) do ctx_3
-            for tns in intersect(used_in_scope, decl_in_scope)
-                virtual_moveto(ctx_3, resolve(ctx_3, tns), subtask)
-            end
-            contain(ctx_3) do ctx_4
-                open_scope(ctx_4) do ctx_5
-                    ctx_5(instantiate!(ctx_5, root_2))
-                end
-            end
+    virtual_parallel_region(ctx, device) do ctx_2
+        subtask = get_task(ctx_2)
+        tid = get_task_num(subtask)
+        for tns in intersect(used_in_scope, decl_in_scope)
+            virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, style)
         end
-    end
-
-    return quote
-        Threads.@threads for $i in 1:($(ctx(device.n)))
-            Finch.@barrier begin
-                @inbounds @fastmath begin
-                    $code
-                end
-                nothing
+        contain(ctx_2) do ctx_3
+            open_scope(ctx_3) do ctx_4
+                i = index(freshen(ctx, :i))
+                root_2 = loop(i, Extent(tid, tid),
+                    loop(root.idx, ext.ext,
+                        sieve(access(VirtualSplitMask(device.n), reader(), root.idx, i),
+                            root.body,
+                        ),
+                    ),
+                )
+                ctx_4(instantiate!(ctx_4, root_2))
             end
         end
     end
