@@ -5,7 +5,7 @@
 Finch uses a simple, hierarchical representation of devices and tasks to model
 different kind of parallel processing. An [`AbstractDevice`](@ref) is a physical or
 virtual device on which we can execute tasks, which may each be represented by
-an [`AbstractTask`](@ref). 
+an [`AbstractTask`](@ref).
 
 ```@docs
 AbstractTask
