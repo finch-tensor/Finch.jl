@@ -23,7 +23,7 @@ get_device
 get_parent_task
 ```
 
-## Data Movement
+## Data Transfer
 
 Before entering a parallel loop, a tensor may reside on a single task, or
 represent a single view of data distributed across multiple tasks, or represent

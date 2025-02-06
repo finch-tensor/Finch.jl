@@ -319,3 +319,20 @@ function virtual_parallel_region(f, ctx, device::VirtualCPU)
         end
     end
 end
+
+"""
+    moveto(arr, device)
+
+If the array is not on the given device, it creates a new version of this array on that device
+and copies the data in to it, according to the `device` trait.
+"""
+function moveto end
+
+"""
+    virtual_moveto(device, arr)
+
+If the virtual array is not on the given device, copy the array to that device. This
+function may modify underlying data arrays, but cannot change the virtual itself. This
+function is used to move data to the device before a kernel is launched.
+"""
+function virtual_moveto end
