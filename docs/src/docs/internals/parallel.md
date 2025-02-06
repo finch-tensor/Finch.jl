@@ -46,7 +46,7 @@ send it to the tasks where it is needed. Note that if the tensor is in `read` mo
 memory, `scatter` may also be a no-op. When the parallel loop is exited, we call
 `gather` to reconcile the data from multiple tasks back into a single tensor.
 
-Each of these operations begins with a `_send` variant on one task, and 
+Each of these operations begins with a `_send` variant on one task, and
 finishes with a `_recv` variant on the recieving task.
 
 ```@docs
