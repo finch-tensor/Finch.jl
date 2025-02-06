@@ -295,27 +295,34 @@ function virtual_level_resize!(ctx, lvl::VirtualRunListLevel, dims...)
     lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     right_2 = freshen(ctx, lvl.right)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $right_2 = $(lvl.right)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.right) = $transfer($(lvl.right), $(ctx(arch)), style)
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $right_2 = $transfer($(lvl.right), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.right) = $right_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
+    VirtualRunListLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        ptr_2,
+        right_2,
+        buf_2,
+        lvl.prev_pos,
+        lvl.i_prev,
+        lvl.merge,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    virtual_transfer_level(ctx, lvl.buf, arch, style)
 end
 
 virtual_level_eltype(lvl::VirtualRunListLevel) = virtual_level_eltype(lvl.lvl)

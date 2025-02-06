@@ -209,22 +209,16 @@ end
 
 function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
     #Add for seperation level too.
-    atomics = freshen(ctx, :locksArray)
+    locks_2 = freshen(ctx, :locks)
 
     push_preamble!(
         ctx,
         quote
-            $atomics = $(lvl.locks)
-            $(lvl.locks) = $transfer($(lvl.locks), $(ctx(arch)), style)
+            $locks_2 = $transfer($(lvl.locks), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.locks) = $atomics
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualMutexLevel(lvl_2, lvl.ex, locks_2, lvl.Tv, lvl.Val, lvl.AVal, lvl.Lvl)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)

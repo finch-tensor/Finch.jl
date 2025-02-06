@@ -63,7 +63,9 @@ function postype(::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}) where {Ti,Left,
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style) where {Ti,Left,Right,Lvl}
+function transfer(
+    lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style
+) where {Ti,Left,Right,Lvl}
     lvl_2 = transfer(lvl.lvl, Tm, style)
     left_2 = transfer(lvl.left, Tm, style)
     right_2 = transfer(lvl.right, Tm, style)
@@ -245,6 +247,23 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseIntervalLevel, dims...)
     lvl.shape = getstop(dims[end])
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl
+end
+
+function virtual_transfer_level(ctx, lvl::VirtualSparseIntervalLevel, arch, style)
+    left_2 = freshen(ctx, :left)
+    right_2 = freshen(ctx, :right)
+    push_preamble!(
+        ctx,
+        quote
+            $left_2 = transfer($lvl.left, $(ctx(arch)), $style)
+            $right_2 = transfer($lvl.right, $(ctx(arch)), $style)
+        end,
+    )
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualSparseIntervalLevel(
+        lvl_2, lvl.ex, lvl.Ti, left_2, right_2, lvl.shape, lvl.qos_fill, lvl.qos_stop,
+        lvl.prev_pos
+    )
 end
 
 virtual_level_eltype(lvl::VirtualSparseIntervalLevel) = virtual_level_eltype(lvl.lvl)

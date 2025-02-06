@@ -241,26 +241,33 @@ end
 virtual_level_eltype(lvl::VirtualSparseBandLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style
+)
     tbl_2 = freshen(ctx, lvl.tbl)
     ofs_2 = freshen(ctx, lvl.ofs)
     push_preamble!(
         ctx,
         quote
-            $tbl_2 = $(lvl.tbl)
-            $ofs_2 = $(lvl.ofs)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
-            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)), style)
+            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
+            $ofs_2 = $transfer($(lvl.ofs), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.tbl) = $tbl_2
-            $(lvl.ofs) = $ofs_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualSparseBandLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        tbl_2,
+        ofs_2,
+        lvl.prev_pos,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos, init)

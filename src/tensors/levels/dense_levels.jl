@@ -45,7 +45,7 @@ function postype(::Type{DenseLevel{Ti,Lvl}}) where {Ti,Lvl}
 end
 
 function transfer(lvl::DenseLevel{Ti}, device, style) where {Ti}
-    return DenseLevel{Ti}(transfer(lvl.lvl, device), lvl.shape, style)
+    return DenseLevel{Ti}(transfer(lvl.lvl, device, style), lvl.shape)
 end
 
 function pattern!(lvl::DenseLevel{Ti,Lvl}) where {Ti,Lvl}

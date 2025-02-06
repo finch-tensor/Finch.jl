@@ -239,30 +239,24 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultS
     end
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     tbl_2 = freshen(ctx, lvl.tbl)
     srt_2 = freshen(ctx, lvl.srt)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $tbl_2 = $(lvl.tbl)
-            $srt_2 = $(lvl.srt)
-            $(lvl.ptr) = transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.tbl) = transfer($(lvl.tbl), $(ctx(arch)), style)
-            $(lvl.srt) = transfer($(lvl.srt), $(ctx(arch)), style)
+            $ptr_2 = transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $tbl_2 = transfer($(lvl.tbl), $(ctx(arch)), $style)
+            $srt_2 = transfer($(lvl.srt), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.tbl) = $tbl_2
-            $(lvl.srt) = $srt_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualSparseByteMapLevel(
+        lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill, lvl.qos_stop
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 Base.summary(lvl::VirtualSparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"

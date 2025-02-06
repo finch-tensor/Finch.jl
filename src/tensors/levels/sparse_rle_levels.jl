@@ -303,31 +303,36 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseRunListLevel, dims...)
     lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     left_2 = freshen(ctx, lvl.left)
     right_2 = freshen(ctx, lvl.right)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $left_2 = $(lvl.left)
-            $right_2 = $(lvl.right)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.left) = $transfer($(lvl.left), $(ctx(arch)), style)
-            $(lvl.right) = $transfer($(lvl.right), $(ctx(arch)), style)
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $left_2 = $transfer($(lvl.left), $(ctx(arch)), $style)
+            $right_2 = $transfer($(lvl.right), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.left) = $left_2
-            $(lvl.right) = $right_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
+    return VirtualSparseRunListLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        ptr_2,
+        left_2,
+        right_2,
+        buf_2,
+        lvl.merge,
+        lvl.prev_pos,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    virtual_transfer_level(ctx, lvl.buf, arch, style)
 end
 
 virtual_level_eltype(lvl::VirtualSparseRunListLevel) = virtual_level_eltype(lvl.lvl)

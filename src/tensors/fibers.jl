@@ -333,7 +333,7 @@ function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple)
     Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
 end
 
-transfer(tns::Tensor, device) = Tensor(transfer(tns.lvl, device), style)
+transfer(tns::Tensor, device, style) = Tensor(transfer(tns.lvl, device, style))
 
 struct Structure
     t

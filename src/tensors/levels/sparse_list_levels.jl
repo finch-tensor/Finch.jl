@@ -313,26 +313,30 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_sto
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $idx_2 = $(lvl.idx)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.idx) = $transfer($(lvl.idx), $(ctx(arch)), style)
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $idx_2 = $transfer($(lvl.idx), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.idx) = $idx_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    return VirtualSparseListLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        ptr_2,
+        idx_2,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function unfurl(

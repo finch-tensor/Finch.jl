@@ -135,16 +135,10 @@ function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
     push_preamble!(
         ctx,
         quote
-            $ex = $(vec.ex)
-            $(vec.ex) = $transfer($(vec.ex), $(ctx(device)), style)
+            $ex = $transfer($(vec.ex), $(ctx(device)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(vec.ex) = $ex
-        end,
-    )
+    VirtualAbstractArray(ex, vec.eltype, vec.ndims, vec.shape)
 end
 
 fill_value(a::AbstractArray) = fill_value(typeof(a))

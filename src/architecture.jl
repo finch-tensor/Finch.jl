@@ -126,6 +126,36 @@ get_device(task::CPUThread) = task.device
 get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
+"""
+    transfer(arr, device, style)
+
+If the array is not on the given device, it creates a new version of this array on that device
+and copies the data in to it, according to the `device` trait.
+"""
+transfer(arr, device, style) = arr
+
+"""
+    virtual_transfer(ctx, arr, device, style)
+
+If the virtual array is not on the given device, copy the array to that device. This
+function may modify underlying data arrays, but cannot change the virtual itself. This
+function is used to move data to the device before a kernel is launched.
+"""
+virtual_transfer(ctx, arr, device, style) = arr
+
+struct ScatterSend end
+const scatter_send = ScatterSend()
+struct ScatterRecv end
+const scatter_recv = ScatterRecv()
+struct GatherSend end
+const gather_send = GatherSend()
+struct GatherRecv end
+const gather_recv = GatherRecv()
+struct BcastSend end
+const bcast_send = BcastSend()
+struct BcastRecv end
+const bcast_recv = BcastRecv()
+
 @inline function make_lock(::Type{Threads.Atomic{T}}) where {T}
     return Threads.Atomic{T}(zero(T))
 end
@@ -185,49 +215,31 @@ get_device(task::VirtualCPUThread) = task.dev
 get_parent_task(task::VirtualCPUThread) = task.parent
 get_task_num(task::VirtualCPUThread) = task.tid
 
-struct CPULocalMemory
+struct CPULocalArray{A}
     device::CPU
-end
-function transfer(vec::V, mem::CPULocalMemory, style) where {V<:Vector}
-    CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:(mem.device.n)])
+    data::arrtor{A}
 end
 
-struct CPULocalVector{V}
-    device::CPU
-    data::Vector{V}
+function CPULocalArray{A}(device::CPU) where {A}
+    CPULocalArray{A}(device, [A([]) for _ in 1:(device.n)])
 end
 
-function CPULocalVector{V}(device::CPU) where {V}
-    CPULocalVector{V}(device, [V([]) for _ in 1:(device.n)])
+Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
+Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
+
+function transfer(arr::A, device::CPU, style::BroadcastSend) where {A<:AbstractArray}
+    CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
-
-Base.eltype(::Type{CPULocalVector{V}}) where {V} = eltype(V)
-Base.ndims(::Type{CPULocalVector{V}}) where {V} = ndims(V)
-
-function transfer(vec::Vector, device::CPU, style)
-    return vec
+function transfer(arr::CPULocalArray, device::CPU, style::BroadcastSend)
+    return arr
 end
-
-function transfer(vec::Vector, task::CPUThread, style)
-    return copy(vec)
-end
-
-function transfer(vec::CPULocalVector, task::CPUThread, style)
-    temp = vec.data[task.tid]
-    return temp
-end
-
-"""
-    local_memory(device)
-
-Returns the local memory type for a given device.
-"""
-function local_memory(device::CPU)
-    return CPULocalMemory(device)
-end
-
-function local_memory(device::Serial)
-    return device
+function transfer(arr::CPULocalArray, task::CPUThread, style::BroadcastRecv)
+    if get_device(task) === arr.device
+        temp = arr.data[task.tid]
+        return temp
+    else
+        return arr
+    end
 end
 
 struct Converter{f,T} end
@@ -319,20 +331,3 @@ function virtual_parallel_region(f, ctx, device::VirtualCPU)
         end
     end
 end
-
-"""
-    transfer(arr, device, style)
-
-If the array is not on the given device, it creates a new version of this array on that device
-and copies the data in to it, according to the `device` trait.
-"""
-function transfer end
-
-"""
-    virtual_transfer(device, arr, style)
-
-If the virtual array is not on the given device, copy the array to that device. This
-function may modify underlying data arrays, but cannot change the virtual itself. This
-function is used to move data to the device before a kernel is launched.
-"""
-function virtual_transfer end

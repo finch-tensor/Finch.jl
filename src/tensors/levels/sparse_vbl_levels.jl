@@ -289,30 +289,36 @@ function virtual_level_fill_value(lvl::VirtualSparseBlockListLevel)
     virtual_level_fill_value(lvl.lvl)
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     tbl_2 = freshen(ctx, lvl.tbl)
     ofs_2 = freshen(ctx, lvl.ofs)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $tbl_2 = $(lvl.tbl)
-            $ofs_2 = $(lvl.ofs)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
-            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)), style)
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
+            $ofs_2 = $transfer($(lvl.ofs), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.tbl) = $tbl_2
-            $(lvl.ofs) = $ofs_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualSparseBlockListLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        ptr_2,
+        tbl_2,
+        ofs_2,
+        lvl.prev_pos,
     )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, pos, init)

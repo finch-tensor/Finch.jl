@@ -88,7 +88,7 @@ end
 function transfer(lvl::SparseCOOLevel{N,TI}, device, style) where {N,TI}
     lvl_2 = transfer(lvl.lvl, device, style)
     ptr_2 = transfer(lvl.ptr, device, style)
-    tbl_2 = ntuple(n -> transfer(lvl.tbl[n], device), N, style)
+    tbl_2 = ntuple(n -> transfer(lvl.tbl[n], device, style), N)
     return SparseCOOLevel{N,TI}(lvl_2, lvl.shape, ptr_2, tbl_2)
 end
 
@@ -344,19 +344,14 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
         end,
     )
     tbl_2 = map(lvl.tbl) do idx
@@ -364,19 +359,17 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLeve
         push_preamble!(
             ctx,
             quote
-                $idx_2 = $idx
-                $idx = $transfer($idx, $(ctx(arch)), style)
-            end,
-        )
-        push_epilogue!(
-            ctx,
-            quote
-                $idx = $idx_2
+                $idx_2 = $transfer($idx, $(ctx(arch)), $style)
             end,
         )
         idx_2
     end
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    return VirtualSparseCOOLevel(
+        lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape, lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
 end
 
 struct SparseCOOWalkTraversal

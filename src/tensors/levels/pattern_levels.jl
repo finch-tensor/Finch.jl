@@ -93,7 +93,9 @@ struct VirtualPatternLevel <: AbstractVirtualLevel
     Tp
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, style)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, style
+)
 end
 
 is_level_injective(ctx, ::VirtualPatternLevel) = []

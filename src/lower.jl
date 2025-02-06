@@ -342,14 +342,30 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     )
 
     for tns in setdiff(used_in_scope, decl_in_scope)
-        virtual_transfer(ctx, resolve(ctx, tns), device, style)
+        set_binding(ctx, tns, virtual_transfer(ctx, resolve(ctx, tns), device, bcast_send))
+    end
+    for tns in intersect(used_in_scope, decl_in_scope)
+        set_binding(
+            ctx, tns, virtual_transfer(ctx, resolve(ctx, tns), device, scatter_send)
+        )
     end
 
     virtual_parallel_region(ctx, device) do ctx_2
         subtask = get_task(ctx_2)
         tid = get_task_num(subtask)
+        for tns in setdiff(used_in_scope, decl_in_scope)
+            set_binding(
+                ctx_2,
+                tns,
+                virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, bcast_recv),
+            )
+        end
         for tns in intersect(used_in_scope, decl_in_scope)
-            virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, style)
+            set_binding(
+                ctx_2,
+                tns,
+                virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, scatter_recv),
+            )
         end
         contain(ctx_2) do ctx_3
             open_scope(ctx_3) do ctx_4
@@ -364,5 +380,17 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                 ctx_4(instantiate!(ctx_4, root_2))
             end
         end
+        for tns in intersect(used_in_scope, decl_in_scope)
+            set_binding(
+                ctx_2,
+                tns,
+                virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, gather_send),
+            )
+        end
+    end
+    for tns in intersect(used_in_scope, decl_in_scope)
+        set_binding(
+            ctx_2, tns, virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, gather_recv)
+        )
     end
 end
