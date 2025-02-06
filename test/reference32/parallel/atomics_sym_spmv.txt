@@ -23,15 +23,15 @@ begin
         end
     Finch.resize_if_smaller!(y_lvl_2_val, x_lvl.shape)
     Finch.fill_range!(y_lvl_2_val, 0.0, 1, x_lvl.shape)
-    x_lvl_val = (Finch).moveto(x_lvl_val, CPU(Threads.nthreads()))
-    A_lvl_ptr = (Finch).moveto(A_lvl_ptr, CPU(Threads.nthreads()))
-    A_lvl_idx = (Finch).moveto(A_lvl_idx, CPU(Threads.nthreads()))
-    A_lvl_2_val = (Finch).moveto(A_lvl_2_val, CPU(Threads.nthreads()))
+    x_lvl_val = (Finch).transfer(x_lvl_val, CPU(Threads.nthreads()))
+    A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()))
+    A_lvl_idx = (Finch).transfer(A_lvl_idx, CPU(Threads.nthreads()))
+    A_lvl_2_val = (Finch).transfer(A_lvl_2_val, CPU(Threads.nthreads()))
     locksArray = y_lvl_locks
-    y_lvl_locks = (Finch).moveto(y_lvl_locks, CPU(Threads.nthreads()))
+    y_lvl_locks = (Finch).transfer(y_lvl_locks, CPU(Threads.nthreads()))
     val_3 = y_lvl_2_val
-    y_lvl_2_val = (Finch).moveto(y_lvl_2_val, CPU(Threads.nthreads()))
-    diag_lvl_val = (Finch).moveto(diag_lvl_val, CPU(Threads.nthreads()))
+    y_lvl_2_val = (Finch).transfer(y_lvl_2_val, CPU(Threads.nthreads()))
+    diag_lvl_val = (Finch).transfer(diag_lvl_val, CPU(Threads.nthreads()))
     Threads.@threads for i_5 = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin

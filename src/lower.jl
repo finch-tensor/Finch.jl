@@ -342,14 +342,14 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     )
 
     for tns in setdiff(used_in_scope, decl_in_scope)
-        virtual_moveto(ctx, resolve(ctx, tns), device)
+        virtual_transfer(ctx, resolve(ctx, tns), device)
     end
 
     virtual_parallel_region(ctx, device) do ctx_2
         subtask = get_task(ctx_2)
         tid = get_task_num(subtask)
         for tns in intersect(used_in_scope, decl_in_scope)
-            virtual_moveto(ctx_2, resolve(ctx_2, tns), subtask)
+            virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask)
         end
         contain(ctx_2) do ctx_3
             open_scope(ctx_3) do ctx_4

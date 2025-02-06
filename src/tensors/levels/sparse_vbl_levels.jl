@@ -54,11 +54,11 @@ function postype(
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseBlockListLevel{Ti}, device) where {Ti}
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr_2 = moveto(lvl.ptr, device)
-    idx_2 = moveto(lvl.idx, device)
-    ofs_2 = moveto(lvl.ofs, device)
+function transfer(lvl::SparseBlockListLevel{Ti}, device) where {Ti}
+    lvl_2 = transfer(lvl.lvl, device)
+    ptr_2 = transfer(lvl.ptr, device)
+    idx_2 = transfer(lvl.idx, device)
+    ofs_2 = transfer(lvl.ofs, device)
     return SparseBlockListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, ofs_2)
 end
 
@@ -289,7 +289,7 @@ function virtual_level_fill_value(lvl::VirtualSparseBlockListLevel)
     virtual_level_fill_value(lvl.lvl)
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     tbl_2 = freshen(ctx, lvl.tbl)
     ofs_2 = freshen(ctx, lvl.ofs)
@@ -299,9 +299,9 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockList
             $ptr_2 = $(lvl.ptr)
             $tbl_2 = $(lvl.tbl)
             $ofs_2 = $(lvl.ofs)
-            $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
-            $(lvl.tbl) = $moveto($(lvl.tbl), $(ctx(arch)))
-            $(lvl.ofs) = $moveto($(lvl.ofs), $(ctx(arch)))
+            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)))
+            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)))
+            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -312,7 +312,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockList
             $(lvl.ofs) = $ofs_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, pos, init)

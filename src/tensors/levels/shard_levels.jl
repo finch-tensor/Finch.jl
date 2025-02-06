@@ -28,7 +28,7 @@ end
 const Shard = ShardLevel
 
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
-    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], moveto(lvl, device))
+    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], transfer(lvl, device))
 end #TODO scatterto?
 
 function ShardLevel{Device}(
@@ -51,10 +51,10 @@ function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Val}}) where {Device,Lvl,Ptr
     postype(Lvl)
 end
 
-function moveto(lvl::ShardLevel, device)
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr_2 = moveto(lvl.ptr, device)
-    task_2 = moveto(lvl.task, device)
+function transfer(lvl::ShardLevel, device)
+    lvl_2 = transfer(lvl.lvl, device)
+    ptr_2 = transfer(lvl.ptr, device)
+    task_2 = transfer(lvl.task, device)
     return ShardLevel(lvl_2, ptr_2, task_2, val_2)
 end
 
@@ -212,13 +212,13 @@ virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lv
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_moveto_level(ctx, lvl::VirtualShardLevel, arch)
+function virtual_transfer_level(ctx, lvl::VirtualShardLevel, arch)
     val_2 = freshen(ctx, lvl.val)
     push_preamble!(
         ctx,
         quote
             $val_2 = $(lvl.val)
-            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -227,7 +227,7 @@ function virtual_moveto_level(ctx, lvl::VirtualShardLevel, arch)
             $(lvl.val) = $val_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)

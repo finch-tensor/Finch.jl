@@ -21,23 +21,23 @@ begin
     Finch.fill_range!(Ct_lvl_2_val, 0x0000000000000000, 1, pos_stop)
     for i_4 = 1:A_lvl.shape[1]
         val = Ct_lvl_2_val
-        Ct_lvl_2_val = (Finch).moveto(Ct_lvl_2_val, CPU(Threads.nthreads()))
+        Ct_lvl_2_val = (Finch).transfer(Ct_lvl_2_val, CPU(Threads.nthreads()))
         B_lvl_ptr_2 = B_lvl_ptr
-        B_lvl_ptr = (Finch).moveto(B_lvl_ptr, CPU(Threads.nthreads()))
+        B_lvl_ptr = (Finch).transfer(B_lvl_ptr, CPU(Threads.nthreads()))
         B_lvl_tbl1_2 = B_lvl_tbl1
-        B_lvl_tbl1 = (Finch).moveto(B_lvl_tbl1, CPU(Threads.nthreads()))
+        B_lvl_tbl1 = (Finch).transfer(B_lvl_tbl1, CPU(Threads.nthreads()))
         B_lvl_tbl2_2 = B_lvl_tbl2
-        B_lvl_tbl2 = (Finch).moveto(B_lvl_tbl2, CPU(Threads.nthreads()))
+        B_lvl_tbl2 = (Finch).transfer(B_lvl_tbl2, CPU(Threads.nthreads()))
         val_2 = B_lvl_val
-        B_lvl_val = (Finch).moveto(B_lvl_val, CPU(Threads.nthreads()))
+        B_lvl_val = (Finch).transfer(B_lvl_val, CPU(Threads.nthreads()))
         A_lvl_ptr_2 = A_lvl_ptr
-        A_lvl_ptr = (Finch).moveto(A_lvl_ptr, CPU(Threads.nthreads()))
+        A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()))
         A_lvl_tbl1_2 = A_lvl_tbl1
-        A_lvl_tbl1 = (Finch).moveto(A_lvl_tbl1, CPU(Threads.nthreads()))
+        A_lvl_tbl1 = (Finch).transfer(A_lvl_tbl1, CPU(Threads.nthreads()))
         A_lvl_tbl2_2 = A_lvl_tbl2
-        A_lvl_tbl2 = (Finch).moveto(A_lvl_tbl2, CPU(Threads.nthreads()))
+        A_lvl_tbl2 = (Finch).transfer(A_lvl_tbl2, CPU(Threads.nthreads()))
         val_3 = A_lvl_val
-        A_lvl_val = (Finch).moveto(A_lvl_val, CPU(Threads.nthreads()))
+        A_lvl_val = (Finch).transfer(A_lvl_val, CPU(Threads.nthreads()))
         Threads.@threads for i_5 = 1:Threads.nthreads()
                 Finch.@barrier begin
                         @inbounds @fastmath(begin

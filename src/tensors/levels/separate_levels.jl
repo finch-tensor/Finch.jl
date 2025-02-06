@@ -36,9 +36,9 @@ end
 
 postype(::Type{<:Separate{Lvl,Val}}) where {Lvl,Val} = postype(Lvl)
 
-function moveto(lvl::SeparateLevel, device)
-    lvl_2 = moveto(lvl.lvl, device)
-    val_2 = moveto(lvl.val, device)
+function transfer(lvl::SeparateLevel, device)
+    lvl_2 = transfer(lvl.lvl, device)
+    val_2 = transfer(lvl.val, device)
     return SeparateLevel(lvl_2, val_2)
 end
 
@@ -146,7 +146,7 @@ virtual_level_size(ctx, lvl::VirtualSeparateLevel) = virtual_level_size(ctx, lvl
 virtual_level_eltype(lvl::VirtualSeparateLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSeparateLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_moveto_level(ctx, lvl::VirtualSeparateLevel, arch)
+function virtual_transfer_level(ctx, lvl::VirtualSeparateLevel, arch)
 
     # Need to move each pointer...
     val_2 = freshen(ctx, lvl.val)
@@ -154,7 +154,7 @@ function virtual_moveto_level(ctx, lvl::VirtualSeparateLevel, arch)
         ctx,
         quote
             $val_2 = $(lvl.val)
-            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -163,7 +163,7 @@ function virtual_moveto_level(ctx, lvl::VirtualSeparateLevel, arch)
             $(lvl.val) = $val_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 function declare_level!(ctx, lvl::VirtualSeparateLevel, pos, init)

@@ -41,7 +41,7 @@ function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
     VirtualScalar(sym, Tv, Vf, tag, val)
 end
 
-virtual_moveto(ctx, lvl::VirtualScalar, arch) = lvl
+virtual_transfer(ctx, lvl::VirtualScalar, arch) = lvl
 
 virtual_size(ctx, ::VirtualScalar) = ()
 
@@ -147,7 +147,7 @@ virtual_size(ctx, ::VirtualSparseScalar) = ()
 virtual_fill_value(ctx, tns::VirtualSparseScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseScalar, ctx) = tns.Tv
 
-virtual_moveto(ctx, lvl::VirtualSparseScalar, arch) = lvl
+virtual_transfer(ctx, lvl::VirtualSparseScalar, arch) = lvl
 
 function declare!(ctx, tns::VirtualSparseScalar, init)
     push_preamble!(
@@ -289,7 +289,7 @@ function lower_assign(ctx, tns::VirtualShortCircuitScalar, mode, op, rhs)
     :($(tns.val) = $lhs_2)
 end
 
-virtual_moveto(ctx, lvl::VirtualShortCircuitScalar, arch) = lvl
+virtual_transfer(ctx, lvl::VirtualShortCircuitScalar, arch) = lvl
 
 function short_circuit_cases(ctx, tns::VirtualShortCircuitScalar, op)
     [
@@ -359,7 +359,7 @@ virtual_size(ctx, ::VirtualSparseShortCircuitScalar) = ()
 virtual_fill_value(ctx, tns::VirtualSparseShortCircuitScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseShortCircuitScalar, ctx) = tns.Tv
 
-virtual_moveto(ctx, lvl::VirtualSparseShortCircuitScalar, arch) = lvl
+virtual_transfer(ctx, lvl::VirtualSparseShortCircuitScalar, arch) = lvl
 
 function declare!(ctx, tns::VirtualSparseShortCircuitScalar, init)
     push_preamble!(

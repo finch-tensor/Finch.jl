@@ -19,15 +19,15 @@ begin
     Finch.resize_if_smaller!(Ct_lvl_2_val, pos_stop)
     Finch.fill_range!(Ct_lvl_2_val, 0x0000000000000000, 1, pos_stop)
     val = Ct_lvl_2_val
-    Ct_lvl_2_val = (Finch).moveto(Ct_lvl_2_val, CPU(Threads.nthreads()))
-    B_lvl_ptr = (Finch).moveto(B_lvl_ptr, CPU(Threads.nthreads()))
-    B_lvl_tbl1 = (Finch).moveto(B_lvl_tbl1, CPU(Threads.nthreads()))
-    B_lvl_tbl2 = (Finch).moveto(B_lvl_tbl2, CPU(Threads.nthreads()))
-    B_lvl_val = (Finch).moveto(B_lvl_val, CPU(Threads.nthreads()))
-    A_lvl_ptr = (Finch).moveto(A_lvl_ptr, CPU(Threads.nthreads()))
-    A_lvl_tbl1 = (Finch).moveto(A_lvl_tbl1, CPU(Threads.nthreads()))
-    A_lvl_tbl2 = (Finch).moveto(A_lvl_tbl2, CPU(Threads.nthreads()))
-    A_lvl_val = (Finch).moveto(A_lvl_val, CPU(Threads.nthreads()))
+    Ct_lvl_2_val = (Finch).transfer(Ct_lvl_2_val, CPU(Threads.nthreads()))
+    B_lvl_ptr = (Finch).transfer(B_lvl_ptr, CPU(Threads.nthreads()))
+    B_lvl_tbl1 = (Finch).transfer(B_lvl_tbl1, CPU(Threads.nthreads()))
+    B_lvl_tbl2 = (Finch).transfer(B_lvl_tbl2, CPU(Threads.nthreads()))
+    B_lvl_val = (Finch).transfer(B_lvl_val, CPU(Threads.nthreads()))
+    A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()))
+    A_lvl_tbl1 = (Finch).transfer(A_lvl_tbl1, CPU(Threads.nthreads()))
+    A_lvl_tbl2 = (Finch).transfer(A_lvl_tbl2, CPU(Threads.nthreads()))
+    A_lvl_val = (Finch).transfer(A_lvl_val, CPU(Threads.nthreads()))
     Threads.@threads for i_4 = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin
@@ -68,21 +68,21 @@ begin
                                             end
                                             Ct_lvl_q = (1 - 1) * B_lvl.shape[2] + B_lvl_i
                                             val_4 = Ct_lvl_2_val
-                                            Ct_lvl_2_val = (Finch).moveto(Ct_lvl_2_val, CPU(Threads.nthreads()))
+                                            Ct_lvl_2_val = (Finch).transfer(Ct_lvl_2_val, CPU(Threads.nthreads()))
                                             A_lvl_ptr_3 = A_lvl_ptr
-                                            A_lvl_ptr = (Finch).moveto(A_lvl_ptr, CPU(Threads.nthreads()))
+                                            A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()))
                                             A_lvl_tbl1_3 = A_lvl_tbl1
-                                            A_lvl_tbl1 = (Finch).moveto(A_lvl_tbl1, CPU(Threads.nthreads()))
+                                            A_lvl_tbl1 = (Finch).transfer(A_lvl_tbl1, CPU(Threads.nthreads()))
                                             A_lvl_tbl2_3 = A_lvl_tbl2
-                                            A_lvl_tbl2 = (Finch).moveto(A_lvl_tbl2, CPU(Threads.nthreads()))
+                                            A_lvl_tbl2 = (Finch).transfer(A_lvl_tbl2, CPU(Threads.nthreads()))
                                             val_5 = A_lvl_val
-                                            A_lvl_val = (Finch).moveto(A_lvl_val, CPU(Threads.nthreads()))
+                                            A_lvl_val = (Finch).transfer(A_lvl_val, CPU(Threads.nthreads()))
                                             B_lvl_ptr_3 = B_lvl_ptr
                                             B_lvl_tbl1_3 = B_lvl_tbl1
-                                            B_lvl_tbl1 = (Finch).moveto(B_lvl_tbl1, CPU(Threads.nthreads()))
+                                            B_lvl_tbl1 = (Finch).transfer(B_lvl_tbl1, CPU(Threads.nthreads()))
                                             B_lvl_tbl2_3 = B_lvl_tbl2
                                             val_6 = B_lvl_val
-                                            B_lvl_val = (Finch).moveto(B_lvl_val, CPU(Threads.nthreads()))
+                                            B_lvl_val = (Finch).transfer(B_lvl_val, CPU(Threads.nthreads()))
                                             Threads.@threads for i_10 = 1:Threads.nthreads()
                                                     Finch.@barrier begin
                                                             @inbounds @fastmath(begin
@@ -202,21 +202,21 @@ begin
                                                 end
                                                 Ct_lvl_q = (1 - 1) * B_lvl.shape[2] + phase_stop_19
                                                 val_7 = Ct_lvl_2_val
-                                                Ct_lvl_2_val = (Finch).moveto(Ct_lvl_2_val, CPU(Threads.nthreads()))
+                                                Ct_lvl_2_val = (Finch).transfer(Ct_lvl_2_val, CPU(Threads.nthreads()))
                                                 A_lvl_ptr_4 = A_lvl_ptr
-                                                A_lvl_ptr = (Finch).moveto(A_lvl_ptr, CPU(Threads.nthreads()))
+                                                A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()))
                                                 A_lvl_tbl1_4 = A_lvl_tbl1
-                                                A_lvl_tbl1 = (Finch).moveto(A_lvl_tbl1, CPU(Threads.nthreads()))
+                                                A_lvl_tbl1 = (Finch).transfer(A_lvl_tbl1, CPU(Threads.nthreads()))
                                                 A_lvl_tbl2_4 = A_lvl_tbl2
-                                                A_lvl_tbl2 = (Finch).moveto(A_lvl_tbl2, CPU(Threads.nthreads()))
+                                                A_lvl_tbl2 = (Finch).transfer(A_lvl_tbl2, CPU(Threads.nthreads()))
                                                 val_8 = A_lvl_val
-                                                A_lvl_val = (Finch).moveto(A_lvl_val, CPU(Threads.nthreads()))
+                                                A_lvl_val = (Finch).transfer(A_lvl_val, CPU(Threads.nthreads()))
                                                 B_lvl_ptr_4 = B_lvl_ptr
                                                 B_lvl_tbl1_4 = B_lvl_tbl1
-                                                B_lvl_tbl1 = (Finch).moveto(B_lvl_tbl1, CPU(Threads.nthreads()))
+                                                B_lvl_tbl1 = (Finch).transfer(B_lvl_tbl1, CPU(Threads.nthreads()))
                                                 B_lvl_tbl2_4 = B_lvl_tbl2
                                                 val_9 = B_lvl_val
-                                                B_lvl_val = (Finch).moveto(B_lvl_val, CPU(Threads.nthreads()))
+                                                B_lvl_val = (Finch).transfer(B_lvl_val, CPU(Threads.nthreads()))
                                                 Threads.@threads for i_20 = 1:Threads.nthreads()
                                                         Finch.@barrier begin
                                                                 @inbounds @fastmath(begin

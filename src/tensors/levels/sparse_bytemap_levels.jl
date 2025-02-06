@@ -61,11 +61,11 @@ function postype(::Type{SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}) where {Ti,Ptr,T
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseByteMapLevel{Ti}, device) where {Ti}
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr_2 = moveto(lvl.ptr, device)
-    tbl_2 = moveto(lvl.tbl, device)
-    srt_2 = moveto(lvl.srt, device)
+function transfer(lvl::SparseByteMapLevel{Ti}, device) where {Ti}
+    lvl_2 = transfer(lvl.lvl, device)
+    ptr_2 = transfer(lvl.ptr, device)
+    tbl_2 = transfer(lvl.tbl, device)
+    srt_2 = transfer(lvl.srt, device)
     return SparseByteMapLevel{Ti}(lvl_2, lvl.shape, ptr_2, tbl_2, srt_2)
 end
 
@@ -239,7 +239,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultS
     end
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     tbl_2 = freshen(ctx, lvl.tbl)
     srt_2 = freshen(ctx, lvl.srt)
@@ -249,9 +249,9 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLe
             $ptr_2 = $(lvl.ptr)
             $tbl_2 = $(lvl.tbl)
             $srt_2 = $(lvl.srt)
-            $(lvl.ptr) = moveto($(lvl.ptr), $(ctx(arch)))
-            $(lvl.tbl) = moveto($(lvl.tbl), $(ctx(arch)))
-            $(lvl.srt) = moveto($(lvl.srt), $(ctx(arch)))
+            $(lvl.ptr) = transfer($(lvl.ptr), $(ctx(arch)))
+            $(lvl.tbl) = transfer($(lvl.tbl), $(ctx(arch)))
+            $(lvl.srt) = transfer($(lvl.srt), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -262,7 +262,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLe
             $(lvl.srt) = $srt_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 Base.summary(lvl::VirtualSparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"

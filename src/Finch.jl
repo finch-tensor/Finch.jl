@@ -260,7 +260,7 @@ export fsparse, fsparse!, fsprand, fspzeros, ffindnz, fread, fwrite, countstored
 export bspread, bspwrite
 export ftnsread, ftnswrite, fttread, fttwrite
 
-export moveto, postype
+export transfer, postype
 
 include("FinchLogic/FinchLogic.jl")
 using .FinchLogic

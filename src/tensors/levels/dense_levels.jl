@@ -44,8 +44,8 @@ function postype(::Type{DenseLevel{Ti,Lvl}}) where {Ti,Lvl}
     return postype(Lvl)
 end
 
-function moveto(lvl::DenseLevel{Ti}, device) where {Ti}
-    return DenseLevel{Ti}(moveto(lvl.lvl, device), lvl.shape)
+function transfer(lvl::DenseLevel{Ti}, device) where {Ti}
+    return DenseLevel{Ti}(transfer(lvl.lvl, device), lvl.shape)
 end
 
 function pattern!(lvl::DenseLevel{Ti,Lvl}) where {Ti,Lvl}
@@ -201,8 +201,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, pos)
     return lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch)
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 struct DenseTraversal

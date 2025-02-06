@@ -49,6 +49,9 @@ memory, `scatter` may also be a no-op. When the parallel loop is exited, we call
 Each of these operations begins with a `_send` variant on one task, and
 finishes with a `_recv` variant on the recieving task.
 
+All transfers are accomplished with the functions `transfer` and `virtual_transfer`, with
+different `style` objects signaling the type of transfer.
+
 ```@docs
 bcast
 bcast_send

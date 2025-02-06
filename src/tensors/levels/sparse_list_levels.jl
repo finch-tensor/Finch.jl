@@ -61,10 +61,10 @@ function postype(::Type{SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl}
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}, Tm) where {Ti,Ptr,Idx,Lvl}
-    lvl_2 = moveto(lvl.lvl, Tm)
-    ptr_2 = moveto(lvl.ptr, Tm)
-    idx_2 = moveto(lvl.idx, Tm)
+function transfer(lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}, Tm) where {Ti,Ptr,Idx,Lvl}
+    lvl_2 = transfer(lvl.lvl, Tm)
+    ptr_2 = transfer(lvl.ptr, Tm)
+    idx_2 = transfer(lvl.idx, Tm)
     return SparseListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2)
 end
 
@@ -313,7 +313,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_sto
     return lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
     push_preamble!(
@@ -321,8 +321,8 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseListLevel
         quote
             $ptr_2 = $(lvl.ptr)
             $idx_2 = $(lvl.idx)
-            $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
-            $(lvl.idx) = $moveto($(lvl.idx), $(ctx(arch)))
+            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)))
+            $(lvl.idx) = $transfer($(lvl.idx), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -332,7 +332,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseListLevel
             $(lvl.idx) = $idx_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 function unfurl(

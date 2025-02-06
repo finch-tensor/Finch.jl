@@ -47,7 +47,7 @@ isstructequal(a::T, b::T) where {T<:Pattern} = true
 
 postype(::Type{<:PatternLevel{Tp}}) where {Tp} = Tp
 
-function moveto(lvl::PatternLevel{Tp}, device) where {Tp}
+function transfer(lvl::PatternLevel{Tp}, device) where {Tp}
     return PatternLevel{Tp}()
 end
 
@@ -93,7 +93,7 @@ struct VirtualPatternLevel <: AbstractVirtualLevel
     Tp
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch)
 end
 
 is_level_injective(ctx, ::VirtualPatternLevel) = []

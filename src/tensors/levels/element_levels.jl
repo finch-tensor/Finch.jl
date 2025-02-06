@@ -43,8 +43,8 @@ end
 
 postype(::Type{<:ElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
-function moveto(lvl::ElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
-    return ElementLevel{Vf,Tv,Tp}(moveto(lvl.val, device))
+function transfer(lvl::ElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
+    return ElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device))
 end
 
 pattern!(lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
@@ -171,13 +171,13 @@ function reassemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
     lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualElementLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualElementLevel, arch)
     val_2 = freshen(ctx, :val)
     push_preamble!(
         ctx,
         quote
             $val_2 = $(lvl.val)
-            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)))
         end,
     )
     push_epilogue!(

@@ -31,8 +31,8 @@ Base.size(vec::PlusOneVector{T}) where {T} = size(vec.data)
 Base.axes(vec::PlusOneVector{T}) where {T} = axes(vec.data)
 Base.resize!(vec::PlusOneVector{T}, dim) where {T} = resize!(vec.data, dim)
 
-function moveto(vec::PlusOneVector{T}, device) where {T}
-    data = moveto(vec.data, device)
+function transfer(vec::PlusOneVector{T}, device) where {T}
+    data = transfer(vec.data, device)
     return PlusOneVector{T}(data)
 end
 
@@ -77,8 +77,8 @@ Base.size(vec::MinusEpsVector{T}) where {T} = size(vec.data)
 Base.axes(vec::MinusEpsVector{T}) where {T} = axes(vec.data)
 Base.resize!(vec::MinusEpsVector{T}, dim) where {T} = resize!(vec.data, dim)
 
-function moveto(vec::MinusEpsVector{T}, device) where {T}
-    data = moveto(vec.data, device)
+function transfer(vec::MinusEpsVector{T}, device) where {T}
+    data = transfer(vec.data, device)
     return MinusEpsVector{T}(data)
 end
 
@@ -123,7 +123,7 @@ Base.size(vec::PlusEpsVector{T}) where {T} = size(vec.data)
 Base.axes(vec::PlusEpsVector{T}) where {T} = axes(vec.data)
 Base.resize!(vec::PlusEpsVector{T}, dim) where {T} = resize!(vec.data, dim)
 
-function moveto(vec::PlusEpsVector{T}, device) where {T}
-    data = moveto(vec.data, device)
+function transfer(vec::PlusEpsVector{T}, device) where {T}
+    data = transfer(vec.data, device)
     return PlusEpsVector{T}(data)
 end

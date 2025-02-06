@@ -85,10 +85,10 @@ function postype(::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,L
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseCOOLevel{N,TI}, device) where {N,TI}
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr_2 = moveto(lvl.ptr, device)
-    tbl_2 = ntuple(n -> moveto(lvl.tbl[n], device), N)
+function transfer(lvl::SparseCOOLevel{N,TI}, device) where {N,TI}
+    lvl_2 = transfer(lvl.lvl, device)
+    ptr_2 = transfer(lvl.ptr, device)
+    tbl_2 = ntuple(n -> transfer(lvl.tbl[n], device), N)
     return SparseCOOLevel{N,TI}(lvl_2, lvl.shape, ptr_2, tbl_2)
 end
 
@@ -344,13 +344,13 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
     return lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch)
     ptr_2 = freshen(ctx, lvl.ptr)
     push_preamble!(
         ctx,
         quote
             $ptr_2 = $(lvl.ptr)
-            $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
+            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)))
         end,
     )
     push_epilogue!(
@@ -365,7 +365,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel,
             ctx,
             quote
                 $idx_2 = $idx
-                $idx = $moveto($idx, $(ctx(arch)))
+                $idx = $transfer($idx, $(ctx(arch)))
             end,
         )
         push_epilogue!(
@@ -376,7 +376,7 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel,
         )
         idx_2
     end
-    virtual_moveto_level(ctx, lvl.lvl, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch)
 end
 
 struct SparseCOOWalkTraversal

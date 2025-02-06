@@ -188,7 +188,7 @@ get_task_num(task::VirtualCPUThread) = task.tid
 struct CPULocalMemory
     device::CPU
 end
-function moveto(vec::V, mem::CPULocalMemory) where {V<:Vector}
+function transfer(vec::V, mem::CPULocalMemory) where {V<:Vector}
     CPULocalVector{V}(mem.device, [copy(vec) for _ in 1:(mem.device.n)])
 end
 
@@ -204,15 +204,15 @@ end
 Base.eltype(::Type{CPULocalVector{V}}) where {V} = eltype(V)
 Base.ndims(::Type{CPULocalVector{V}}) where {V} = ndims(V)
 
-function moveto(vec::Vector, device::CPU)
+function transfer(vec::Vector, device::CPU)
     return vec
 end
 
-function moveto(vec::Vector, task::CPUThread)
+function transfer(vec::Vector, task::CPUThread)
     return copy(vec)
 end
 
-function moveto(vec::CPULocalVector, task::CPUThread)
+function transfer(vec::CPULocalVector, task::CPUThread)
     temp = vec.data[task.tid]
     return temp
 end
@@ -321,18 +321,18 @@ function virtual_parallel_region(f, ctx, device::VirtualCPU)
 end
 
 """
-    moveto(arr, device)
+    transfer(arr, device)
 
 If the array is not on the given device, it creates a new version of this array on that device
 and copies the data in to it, according to the `device` trait.
 """
-function moveto end
+function transfer end
 
 """
-    virtual_moveto(device, arr)
+    virtual_transfer(device, arr)
 
 If the virtual array is not on the given device, copy the array to that device. This
 function may modify underlying data arrays, but cannot change the virtual itself. This
 function is used to move data to the device before a kernel is launched.
 """
-function virtual_moveto end
+function virtual_transfer end
