@@ -353,22 +353,22 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     res = virtual_parallel_region(ctx, device) do ctx_2
         subtask = get_task(ctx_2)
         tid = get_task_num(subtask)
-        for tns in intersect(used_in_scope, decl_in_scope)
-            set_binding!(
-                ctx_2,
-                tns,
-                virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, bcast_recv),
-            )
-        end
-        for tns in setdiff(used_in_scope, decl_in_scope)
-            set_binding!(
-                ctx_2,
-                tns,
-                virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, scatter_recv),
-            )
-        end
-        body = contain(ctx_2) do ctx_3
-            open_scope(ctx_3) do ctx_4
+        open_scope(ctx_2) do ctx_3
+            for tns in intersect(used_in_scope, decl_in_scope)
+                set_binding!(
+                    ctx_3,
+                    tns,
+                    virtual_transfer(ctx_3, resolve(ctx_3, tns), subtask, bcast_recv),
+                )
+            end
+            for tns in setdiff(used_in_scope, decl_in_scope)
+                set_binding!(
+                    ctx_3,
+                    tns,
+                    virtual_transfer(ctx_3, resolve(ctx_3, tns), subtask, scatter_recv),
+                )
+            end
+            body = contain(ctx_3) do ctx_4
                 i = index(freshen(ctx, :i))
                 root_2 = loop(i, Extent(tid, tid),
                     loop(root.idx, ext.ext,
@@ -380,16 +380,16 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                 )
                 ctx_4(instantiate!(ctx_4, root_2))
             end
-        end
-        return quote
-            $body
-            $(
-                contain(ctx_2) do ctx_3
-                    for tns in setdiff(used_in_scope, decl_in_scope)
-                        virtual_transfer(ctx_3, resolve(ctx_3, tns), subtask, gather_send)
+            return quote
+                $body
+                $(
+                    contain(ctx_3) do ctx_4
+                        for tns in setdiff(used_in_scope, decl_in_scope)
+                            virtual_transfer(ctx_4, resolve(ctx_4, tns), subtask, gather_send)
+                        end
                     end
-                end
-            )
+                )
+            end
         end
     end
     return quote
@@ -400,7 +400,7 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                     set_binding!(
                         ctx,
                         tns,
-                        virtual_transfer(ctx_2, resolve(ctx_2, tns), device, gather_recv),
+                        virtual_transfer(ctx_2, resolve(ctx, tns), device, gather_recv),
                     )
                 end
             end
