@@ -101,7 +101,9 @@ function is_level_concurrent(ctx, lvl::VirtualElementLevel)
     return ([], true)
 end
 
-lower(ctx::AbstractCompiler, lvl::VirtualElementLevel, ::DefaultStyle) = lvl.ex
+function lower(ctx::AbstractCompiler, lvl::VirtualElementLevel, ::DefaultStyle)
+    :(ElementLevel{$(lvl.Vf),$(lvl.Tv),$(lvl.Tp)}($(lvl.val)))
+end
 
 function virtualize(
     ctx, ex, ::Type{ElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl

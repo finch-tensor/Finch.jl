@@ -202,7 +202,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, pos)
 end
 
 function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    VirtualDenseLevel(lvl_2, lvl.ex, lvl.Ti, lvl.shape)
 end
 
 struct DenseTraversal
