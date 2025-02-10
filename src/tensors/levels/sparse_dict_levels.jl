@@ -90,15 +90,15 @@ function Base.resize!(lvl::SparseDictLevel{Ti}, dims...) where {Ti}
     )
 end
 
-function moveto(
+function transfer(
     lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}, Tm
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    lvl_2 = moveto(lvl.lvl, Tm)
-    ptr_2 = moveto(lvl.ptr, Tm)
-    idx_2 = moveto(lvl.idx, Tm)
-    val_2 = moveto(lvl.val, Tm)
-    tbl_2 = moveto(lvl.tbl, Tm)
-    pool_2 = moveto(lvl.pool, Tm)
+    lvl_2 = transfer(lvl.lvl, Tm, style)
+    ptr_2 = transfer(lvl.ptr, Tm, style)
+    idx_2 = transfer(lvl.idx, Tm, style)
+    val_2 = transfer(lvl.val, Tm, style)
+    tbl_2 = transfer(lvl.tbl, Tm, style)
+    pool_2 = transfer(lvl.pool, Tm, style)
     return SparseDictLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_2, pool_2)
 end
 
@@ -385,24 +385,31 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     return lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     idx_2 = freshen(ctx, lvl.idx)
     tbl_2 = freshen(ctx, lvl.tbl_2)
     push_preamble!(
         ctx,
         quote
-            $tbl_2 = $(lvl.tbl)
-            $(lvl.tbl) = $moveto($(lvl.tbl), $(ctx(arch)))
+            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.tbl) = $tbl_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    return VirtualSparseDictLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        ptr_2,
+        idx_2,
+        lvl.val,
+        tbl_2,
+        lvl.pool,
+        lvl.shape,
+        lvl.qos_stop,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
 end
 
 function unfurl(

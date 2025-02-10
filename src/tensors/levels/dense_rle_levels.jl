@@ -64,11 +64,11 @@ function postype(
     return postype(Lvl)
 end
 
-function moveto(lvl::RunListLevel{Ti}, device) where {Ti}
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr = moveto(lvl.ptr, device)
-    right = moveto(lvl.right, device)
-    buf = moveto(lvl.buf, device)
+function transfer(lvl::RunListLevel{Ti}, device, style) where {Ti}
+    lvl_2 = transfer(lvl.lvl, device, style)
+    ptr = transfer(lvl.ptr, device, style)
+    right = transfer(lvl.right, device, style)
+    buf = transfer(lvl.buf, device, style)
     return RunListLevel{Ti}(
         lvl_2, lvl.shape, lvl.ptr, lvl.right, lvl.buf; merge=getmerge(lvl)
     )
@@ -295,27 +295,34 @@ function virtual_level_resize!(ctx, lvl::VirtualRunListLevel, dims...)
     lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch)
+function virtual_transfer_level(
+    ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style
+)
     ptr_2 = freshen(ctx, lvl.ptr)
     right_2 = freshen(ctx, lvl.right)
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $(lvl.ptr)
-            $right_2 = $(lvl.right)
-            $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
-            $(lvl.right) = $moveto($(lvl.right), $(ctx(arch)))
+            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $right_2 = $transfer($(lvl.right), $(ctx(arch)), $style)
         end,
     )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.right) = $right_2
-        end,
+    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
+    VirtualRunListLevel(
+        lvl_2,
+        lvl.ex,
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        ptr_2,
+        right_2,
+        buf_2,
+        lvl.prev_pos,
+        lvl.i_prev,
+        lvl.merge,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
-    virtual_moveto_level(ctx, lvl.buf, arch)
 end
 
 virtual_level_eltype(lvl::VirtualRunListLevel) = virtual_level_eltype(lvl.lvl)
