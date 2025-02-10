@@ -38,7 +38,7 @@ not up to date.
 │   │   │   └── ...
 │   │   ├── combinators        # tensor combinators which modify tensor behavior
 │   │   │   └── ...
-│   │   ├── fibers.jl          # fibers combine levels to form tensors
+│   │   ├── tensors.jl         # defines the tensor level format interface and tensor wrapper
 │   │   ├── scalars.jl         # a nice scalar type
 │   │   └── masks.jl           # mask tensors (e.g. upper-triangular mask)
 │   ├── transformations        # global program transformations
