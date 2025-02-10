@@ -52,6 +52,15 @@ finishes with a `_recv` variant on the recieving task.
 All transfers are accomplished with the functions `transfer` and `virtual_transfer`, with
 different `style` objects signaling the type of transfer.
 
+Note: After transferring a tensor, we must also update any in-progress
+traversals over the tensor that may appear throughout the program. This is done
+with the `reroot` function. Tensors are responsible for defining their own
+reroot behavior, but it should be guaranteed that `reroot(tns,
+transfer(wrap(tns))) = reroot(tns, transfer(tns))`. In general, this means that
+any nested structure in the tensor should be preserved through transfers. Most
+subtensors will store a list of property names describing how to reach the
+subtensor from the root tensor.
+
 ```@docs
 bcast
 bcast_send
