@@ -28,7 +28,7 @@ end
 
 function unfurl(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange, ext, mode, proto)
     if mode.kind === reader
-        Unfurled(;
+        Provenance(;
             arr=arr,
             body=Lookup(;
                 body=(ctx, i) -> FillLeaf(value(:($(arr.ex)[$(ctx(i))])))

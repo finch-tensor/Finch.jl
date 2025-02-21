@@ -385,7 +385,7 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode, pro
     start = value(:($(lvl.ptr)[$(ctx(pos))]), Tp)
     stop = value(:($(lvl.ptr)[$(ctx(pos)) + 1]), Tp)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=unfurl(ctx, SparseCOOWalkTraversal(lvl, lvl.N, start, stop), ext, mode, proto),
     )

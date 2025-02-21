@@ -2,7 +2,7 @@ module SparseArraysExt
 
 using Finch
 using Finch: AbstractCompiler, DefaultStyle, Extent
-using Finch: Unfurled, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
+using Finch: Provenance, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
     Thunk, Spike
 using Finch: virtual_size, virtual_fill_value, getstart, getstop, freshen, push_preamble!,
     push_epilogue!, SwizzleArray
@@ -289,7 +289,7 @@ function Finch.unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     tag = arr.ex
-    Unfurled(;
+    Provenance(;
         arr=arr,
         body=Lookup(;
             body=(ctx, j) -> VirtualSparseMatrixCSCColumn(arr, j)
@@ -305,7 +305,7 @@ function Finch.unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     tag = arr.ex
-    Unfurled(;
+    Provenance(;
         arr=arr,
         body=Lookup(;
             body=(ctx, j) -> VirtualSparseMatrixCSCColumn(arr, j)
@@ -502,7 +502,7 @@ function Finch.unfurl(
     my_i1 = freshen(ctx, tag, :_i1)
     my_val = freshen(ctx, tag, :_val)
 
-    Unfurled(;
+    Provenance(;
         arr=arr,
         body=Thunk(;
             preamble=quote
@@ -559,7 +559,7 @@ function Finch.unfurl(
     qos_stop = arr.qos_stop
     dirty = freshen(ctx, tag, :dirty)
 
-    Unfurled(;
+    Provenance(;
         arr=arr,
         body=Thunk(;
             preamble = quote

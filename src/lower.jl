@@ -302,7 +302,7 @@ function lower_loop(ctx, root, ext)
                             mode,
                             (mode.kind === reader ? defaultread : defaultupdate),
                         )
-                        access(Unfurled(resolve(ctx_2, tns), tns_2), mode, idxs...)
+                        access(Provenance(resolve(ctx_2, tns), tns_2), mode, idxs...)
                     end
                 end
             ),

@@ -9,7 +9,7 @@ function instantiate(ctx::AbstractCompiler, tns::FinchNode, mode)
     if tns.kind === virtual
         return instantiate(ctx, tns.val, mode)
     elseif tns.kind === variable
-        return Unfurled(tns, instantiate(ctx, resolve(ctx, tns), mode))
+        return Provenance(tns, instantiate(ctx, resolve(ctx, tns), mode))
     else
         return tns
     end

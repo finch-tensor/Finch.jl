@@ -404,7 +404,7 @@ function unfurl(
     my_r_stop = freshen(ctx, tag, :_r_stop)
     my_i_stop = freshen(ctx, tag, :_i_stop)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
@@ -461,7 +461,7 @@ function unfurl(
     my_i_stop = freshen(ctx, tag, :_i_stop)
     my_j = freshen(ctx, tag, :_j)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
@@ -513,7 +513,7 @@ function unfurl(
     q = pos
     Ti = lvl.Ti
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Lookup(;
             body=(ctx, i) -> Thunk(;
@@ -555,7 +555,7 @@ function unfurl(
     my_q = freshen(ctx, tag, :_q)
     dirty = freshen(ctx, :dirty)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Lookup(;
             body=(ctx, idx) -> Thunk(;

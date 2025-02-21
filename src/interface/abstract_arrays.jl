@@ -118,7 +118,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
             )
         end
     else
-        Unfurled(;
+        Provenance(;
             arr=arr,
             body=VirtualAbstractArraySlice(arr, ()),
         )

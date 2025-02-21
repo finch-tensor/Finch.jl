@@ -182,7 +182,7 @@ getroot(tns::VirtualToeplitzArray) = getroot(tns.body)
 
 function unfurl(ctx, tns::VirtualToeplitzArray, ext, mode, proto)
     if length(virtual_size(ctx, tns)) == tns.dim + 1
-        Unfurled(tns,
+        Provenance(tns,
             Lookup(;
                 body=(ctx, idx) -> VirtualPermissiveArray(
                     VirtualOffsetArray(

@@ -345,7 +345,7 @@ function unfurl(
     my_q_ofs = freshen(ctx, tag, :_q_ofs)
     my_i1 = freshen(ctx, tag, :_i1)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
@@ -412,7 +412,7 @@ function unfurl(
     dirty = freshen(ctx, tag, :dirty)
     qos_2 = freshen(ctx, tag, :_qos_2)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble = quote

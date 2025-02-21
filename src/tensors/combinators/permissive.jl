@@ -179,7 +179,7 @@ function unfurl(ctx, tns::VirtualPermissiveArray, ext, mode, proto)
     garb = (mode.kind === reader) ? FillLeaf(literal(missing)) : FillLeaf(Null())
     if tns.dims[end] && dims[end] != auto
         VirtualPermissiveArray(
-            Unfurled(
+            Provenance(
                 tns,
                 Sequence([
                     Phase(;

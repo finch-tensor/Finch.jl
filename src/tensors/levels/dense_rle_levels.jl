@@ -593,7 +593,7 @@ function unfurl(
     my_q_stop = freshen(ctx, tag, :_q_stop)
     my_i1 = freshen(ctx, tag, :_i1)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble=(
@@ -674,7 +674,7 @@ function unfurl(
     qos_3 = freshen(ctx, tag, :_qos_3)
     local_i_prev = freshen(ctx, tag, :_i_prev)
 
-    Unfurled(;
+    Provenance(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
