@@ -40,8 +40,8 @@ end
 
 postype(::Type{<:AtomicElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
-function moveto(lvl::AtomicElementLevel{Vf,Tv,Tp}, device) where {Vf,Tv,Tp}
-    return AtomicElementLevel{Vf,Tv,Tp}(moveto(lvl.val, device))
+function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv,Tp}
+    return AtomicElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device), style)
 end
 
 pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
@@ -165,13 +165,13 @@ function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_s
     lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, style)
     val_2 = freshen(ctx, :val)
     push_preamble!(
         ctx,
         quote
             $val_2 = $(lvl.val)
-            $(lvl.val) = $moveto($(lvl.val), $(ctx(arch)))
+            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(
@@ -205,7 +205,7 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode
     (lvl, pos) = (fbr.lvl, fbr.pos)
     op = ctx(op)
     rhs = ctx(rhs)
-    device = ctx(virtual_get_device(get_task(ctx)))
+    device = ctx(get_device(get_task(ctx)))
     :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end
 
@@ -221,6 +221,6 @@ function lower_assign(
     )
     op = ctx(op)
     rhs = ctx(rhs)
-    device = ctx(virtual_get_device(get_task(ctx)))
+    device = ctx(get_device(get_task(ctx)))
     :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end
