@@ -224,7 +224,10 @@ end
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
+        Provenance(
+            path = SubLevelOf(),
+            body = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
+        )
     else
         fbr
     end
@@ -233,7 +236,10 @@ end
 function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        return unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
+        return Provenance(;
+            path = SubLevelOf(),
+            body = unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
+        )
     else
         sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
         atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)

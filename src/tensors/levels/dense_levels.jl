@@ -212,15 +212,21 @@ struct DenseTraversal
 end
 
 function unfurl(ctx, fbr::VirtualSubFiber{VirtualDenseLevel}, ext, mode, proto)
-    unfurl(ctx, DenseTraversal(fbr, VirtualSubFiber), ext, mode, proto)
+    Provenance(;
+        path = Parent(),
+        body = unfurl(ctx, DenseTraversal(fbr, VirtualSubFiber), ext, mode, proto),
+    )
 end
 function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualDenseLevel}, ext, mode, proto)
-    unfurl(
-        ctx,
-        DenseTraversal(fbr, (lvl, pos) -> VirtualHollowSubFiber(lvl, pos, fbr.dirty)),
-        ext,
-        mode,
-        proto,
+    Provenance(;
+        path = Parent(),
+        body = unfurl(
+            ctx,
+            DenseTraversal(fbr, (lvl, pos) -> VirtualHollowSubFiber(lvl, pos, fbr.dirty)),
+            ext,
+            mode,
+            proto,
+        ),
     )
 end
 
@@ -248,8 +254,10 @@ function unfurl(
             preamble=quote
                 $q = ($(ctx(pos)) - $(Ti(1))) * $(ctx(lvl.shape)) + $(ctx(i))
             end,
-            body=(ctx) ->
-                instantiate(ctx, trv.subfiber_ctr(lvl.lvl, value(q, lvl.Ti)), mode),
+            body=(ctx) -> Provenance(;
+                path=SubFiberOf(value(q, lvl.Ti)),
+                body = instantiate(ctx, trv.subfiber_ctr(lvl.lvl, value(q, lvl.Ti)), mode),
+            )
         ),
     )
 end

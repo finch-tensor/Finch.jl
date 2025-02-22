@@ -593,43 +593,43 @@ function unfurl(
     my_q_stop = freshen(ctx, tag, :_q_stop)
     my_i1 = freshen(ctx, tag, :_i1)
 
-    Provenance(;
-        arr=fbr,
-        body=Thunk(;
-            preamble=(
-                quote
-                    $my_q = $(lvl.ptr)[$(ctx(pos))]
-                    $my_q_stop = $(lvl.ptr)[$(ctx(pos)) + $(Tp(1))]
-                    #TODO I think this if is only ever true
-                    if $my_q < $my_q_stop
-                        $my_i = $(lvl.right)[$my_q]
-                        $my_i1 = $(lvl.right)[$my_q_stop - $(Tp(1))]
-                    else
-                        $my_i = $(Ti(1))
-                        $my_i1 = $(Ti(0))
-                    end
+    Thunk(;
+        preamble=(
+            quote
+                $my_q = $(lvl.ptr)[$(ctx(pos))]
+                $my_q_stop = $(lvl.ptr)[$(ctx(pos)) + $(Tp(1))]
+                #TODO I think this if is only ever true
+                if $my_q < $my_q_stop
+                    $my_i = $(lvl.right)[$my_q]
+                    $my_i1 = $(lvl.right)[$my_q_stop - $(Tp(1))]
+                else
+                    $my_i = $(Ti(1))
+                    $my_i1 = $(Ti(0))
                 end
-            ),
-            body=(ctx) -> Stepper(;
-                seek=(ctx, ext) -> quote
-                    if $(lvl.right)[$my_q] < $(ctx(getstart(ext)))
-                        $my_q = Finch.scansearch(
-                            $(lvl.right),
-                            $(ctx(getstart(ext))),
-                            $my_q,
-                            $my_q_stop - 1,
-                        )
-                    end
-                end,
-                preamble=:($my_i = $(lvl.right)[$my_q]),
-                stop=(ctx, ext) -> value(my_i),
-                chunk=Run(;
-                    body=Simplify(
-                        instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q)), mode)
-                    ),
+            end
+        ),
+        body=(ctx) -> Stepper(;
+            seek=(ctx, ext) -> quote
+                if $(lvl.right)[$my_q] < $(ctx(getstart(ext)))
+                    $my_q = Finch.scansearch(
+                        $(lvl.right),
+                        $(ctx(getstart(ext))),
+                        $my_q,
+                        $my_q_stop - 1,
+                    )
+                end
+            end,
+            preamble=:($my_i = $(lvl.right)[$my_q]),
+            stop=(ctx, ext) -> value(my_i),
+            chunk=Run(;
+                body=Simplify(
+                    Provenance(
+                        path = SubFiberOf(value(my_q)),
+                        body = instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q)), mode)
+                    )
                 ),
-                next=(ctx, ext) -> :($my_q += $(Tp(1))),
             ),
+            next=(ctx, ext) -> :($my_q += $(Tp(1))),
         ),
     )
 end
@@ -641,9 +641,12 @@ function unfurl(
     mode,
     proto::Union{typeof(defaultupdate),typeof(extrude)},
 )
-    unfurl(
-        ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
-    )
+    Provenance(;
+        path=Parent(),
+        unfurl(
+            ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
+        )
+    );
 end
 
 #Invariants of the level (Write Mode):
@@ -674,68 +677,68 @@ function unfurl(
     qos_3 = freshen(ctx, tag, :_qos_3)
     local_i_prev = freshen(ctx, tag, :_i_prev)
 
-    Provenance(;
-        arr=fbr,
-        body=Thunk(;
-            preamble=quote
-                $qos = $qos_fill + 1
-                $(
-                    if issafe(get_mode_flag(ctx))
-                        quote
-                            $(lvl.prev_pos) <= $(ctx(pos)) || throw(
-                                FinchProtocolError(
-                                    "RunListLevels cannot be updated multiple times"
-                                ),
-                            )
-                        end
+    Thunk(;
+        preamble=quote
+            $qos = $qos_fill + 1
+            $(
+                if issafe(get_mode_flag(ctx))
+                    quote
+                        $(lvl.prev_pos) <= $(ctx(pos)) || throw(
+                            FinchProtocolError(
+                                "RunListLevels cannot be updated multiple times"
+                            ),
+                        )
                     end
-                )
-                $local_i_prev = $(lvl.i_prev)
-                #if the previous position is not the same as the current position, we will eventually need to fill in the gap
-                if $(lvl.prev_pos) < $(ctx(pos))
-                    $qos += $(ctx(pos)) - $(lvl.prev_pos) - 1
-                    #only if we did not write something to finish out the last run do we eventually need to fill that in too
-                    $qos += $(lvl.i_prev) < $(ctx(lvl.shape))
-                    $local_i_prev = $(Ti(1)) - $unit
                 end
-                $qos_set = $qos
-            end,
-            body=(ctx) -> AcceptRun(;
-                body=(ctx, ext) -> Thunk(;
-                    preamble = quote
-                        $qos_3 = $qos + ($(local_i_prev) < ($(ctx(getstart(ext))) - $unit))
-                        if $qos_3 > $qos_stop
-                            $qos_2 = $qos_stop + 1
-                            while $qos_3 > $qos_stop
-                                $qos_stop = max($qos_stop << 1, 1)
-                            end
-                            Finch.resize_if_smaller!($(lvl.right), $qos_stop)
-                            Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop)
-                            $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_stop, Tp)), ctx))
+            )
+            $local_i_prev = $(lvl.i_prev)
+            #if the previous position is not the same as the current position, we will eventually need to fill in the gap
+            if $(lvl.prev_pos) < $(ctx(pos))
+                $qos += $(ctx(pos)) - $(lvl.prev_pos) - 1
+                #only if we did not write something to finish out the last run do we eventually need to fill that in too
+                $qos += $(lvl.i_prev) < $(ctx(lvl.shape))
+                $local_i_prev = $(Ti(1)) - $unit
+            end
+            $qos_set = $qos
+        end,
+        body=(ctx) -> AcceptRun(;
+            body=(ctx, ext) -> Thunk(;
+                preamble = quote
+                    $qos_3 = $qos + ($(local_i_prev) < ($(ctx(getstart(ext))) - $unit))
+                    if $qos_3 > $qos_stop
+                        $qos_2 = $qos_stop + 1
+                        while $qos_3 > $qos_stop
+                            $qos_stop = max($qos_stop << 1, 1)
                         end
-                        $dirty = false
-                    end,
-                    body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty), mode),
-                    epilogue = quote
-                        if $dirty
-                            $(lvl.right)[$qos] = $(ctx(getstart(ext))) - $unit
-                            $(lvl.right)[$qos_3] = $(ctx(getstop(ext)))
-                            $(qos) = $qos_3 + $(Tp(1))
-                            $(local_i_prev) = $(ctx(getstop(ext)))
-                        end
-                    end,
+                        Finch.resize_if_smaller!($(lvl.right), $qos_stop)
+                        Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop)
+                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_stop, Tp)), ctx))
+                    end
+                    $dirty = false
+                end,
+                body = (ctx) -> Provenance(;
+                    path = SubFiberOf(value(qos_3, Tp)),
+                    body = instantiate(ctx, VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty), mode),
                 ),
+                epilogue = quote
+                    if $dirty
+                        $(lvl.right)[$qos] = $(ctx(getstart(ext))) - $unit
+                        $(lvl.right)[$qos_3] = $(ctx(getstop(ext)))
+                        $(qos) = $qos_3 + $(Tp(1))
+                        $(local_i_prev) = $(ctx(getstop(ext)))
+                    end
+                end,
             ),
-            epilogue=quote
-                if $qos - $qos_set > 0
-                    $(fbr.dirty) = true
-                    $(lvl.ptr)[$(ctx(pos)) + 1] +=
-                        $qos - $qos_set - ($(local_i_prev) == $(ctx(lvl.shape))) #the last run is accounted for already because ptr starts out at 1
-                    $(lvl.prev_pos) = $(ctx(pos))
-                    $(lvl.i_prev) = $(local_i_prev)
-                    $qos_fill = $qos - 1
-                end
-            end,
         ),
+        epilogue=quote
+            if $qos - $qos_set > 0
+                $(fbr.dirty) = true
+                $(lvl.ptr)[$(ctx(pos)) + 1] +=
+                    $qos - $qos_set - ($(local_i_prev) == $(ctx(lvl.shape))) #the last run is accounted for already because ptr starts out at 1
+                $(lvl.prev_pos) = $(ctx(pos))
+                $(lvl.i_prev) = $(local_i_prev)
+                $qos_fill = $qos - 1
+            end
+        end,
     )
 end
