@@ -59,31 +59,39 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                         preamble=quote
                             $val = $(arr.ex)[$(map(ctx, idx_2)...)]
                         end,
-                        body=(ctx) -> instantiate(
-                            ctx,
-                            VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
-                            mode,
-                        ), #=We don't know what init is, but it won't be used here =#
+                        body=(ctx) -> Provenance(;
+                            path = SubSliceOf(arr, i),
+                            body = instantiate(
+                                ctx,
+                                VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
+                                mode,
+                            ), #=We don't know what init is, but it won't be used here =#
+                        )
                     )
                 else
                     Thunk(;
-                        body=(ctx,) -> instantiate(
-                            ctx,
-                            VirtualScalar(
-                                nothing,
-                                arr.eltype,
-                                nothing,
-                                gensym(),
-                                :($(arr.ex)[$(map(ctx, idx_2)...)]),
-                            ),
-                            mode,
-                        ), #=We don't know what init is, but it won't be used here=#
+                        body=(ctx,) -> Provenance(;
+                            path = SubSliceOf(arr, i),
+                            instantiate(
+                                ctx,
+                                VirtualScalar(
+                                    nothing,
+                                    arr.eltype,
+                                    nothing,
+                                    gensym(),
+                                    :($(arr.ex)[$(map(ctx, idx_2)...)]),
+                                ),
+                                mode,
+                            ), #=We don't know what init is, but it won't be used here=#
+                        )
                     )
                 end
             else
                 Thunk(;
-                    body=(ctx,) ->
-                        instantiate(ctx, VirtualAbstractArraySlice(arr, idx_2), mode),
+                    body=(ctx,) -> Provenance(;
+                        path = SubSliceOf(arr, i),
+                        body = instantiate(ctx, VirtualAbstractArraySlice(arr, idx_2), mode),
+                    )
                 )
             end
         end,
@@ -119,7 +127,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
         end
     else
         Provenance(;
-            arr=arr,
+            arr=Parent(),
             body=VirtualAbstractArraySlice(arr, ()),
         )
     end

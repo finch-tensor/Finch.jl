@@ -177,16 +177,17 @@ getroot(tns::VirtualProductArray) = getroot(tns.body)
 
 function unfurl(ctx, tns::VirtualProductArray, ext, mode, proto)
     if length(virtual_size(ctx, tns)) == tns.dim + 1
-        Provenance(tns,
-            Lookup(;
-                body=(ctx, idx) -> VirtualPermissiveArray(
-                    VirtualScaleArray(
-                        tns.body, ([literal(1) for _ in 1:(tns.dim - 1)]..., idx)
-                    ),
-                    ([false for _ in 1:(tns.dim - 1)]..., true),
+        Lookup(;
+            body=(ctx, idx) -> VirtualPermissiveArray(
+                VirtualScaleArray(
+                    Provenance(;
+                        path = SubTensorOf(Parent()),
+                        body = tns.body
+                    ), ([literal(1) for _ in 1:(tns.dim - 1)]..., idx)
                 ),
+                ([false for _ in 1:(tns.dim - 1)]..., true),
             ),
-        )
+        ),
     else
         VirtualProductArray(unfurl(ctx, tns.body, ext, mode, proto), tns.dim)
     end

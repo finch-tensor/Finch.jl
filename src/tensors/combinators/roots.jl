@@ -22,6 +22,7 @@ thaw!(ctx::AbstractCompiler, tns::FinchNode) = thaw!(ctx, resolve(ctx, tns))
 freeze!(ctx::AbstractCompiler, tns::FinchNode) = freeze!(ctx, resolve(ctx, tns))
 
 function unfurl(ctx, tns::FinchNode, ext, mode, proto)
+    @assert tns.kind !== variable
     unfurl(ctx, resolve(ctx, tns), ext, mode, proto)
 end
 

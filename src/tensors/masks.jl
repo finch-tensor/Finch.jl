@@ -26,10 +26,10 @@ end
 FinchNotation.finch_leaf(x::VirtualDiagMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualDiagMask, ext, mode, proto::typeof(defaultread))
-    Provenance(;
-        arr=arr,
-        body=Lookup(;
-            body=(ctx, j) -> VirtualDiagMaskColumn(j)
+    Lookup(;
+        body=(ctx, j) -> Provenance(
+            path = SubSliceOf(j),
+            body = VirtualDiagMaskColumn(j)
         ),
     )
 end
@@ -77,10 +77,10 @@ end
 FinchNotation.finch_leaf(x::VirtualUpTriMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualUpTriMask, ext, mode, proto::typeof(defaultread))
-    Provenance(;
-        arr=arr,
-        body=Lookup(;
-            body=(ctx, j) -> VirtualUpTriMaskColumn(j)
+    body=Lookup(;
+        body=(ctx, j) -> Provenance(;
+            path=SubSliceOf(j),
+            body=VirtualUpTriMaskColumn(j)
         ),
     )
 end
@@ -126,10 +126,10 @@ end
 FinchNotation.finch_leaf(x::VirtualLoTriMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualLoTriMask, ext, mode, proto::typeof(defaultread))
-    Provenance(;
-        arr=arr,
-        body=Lookup(;
-            body=(ctx, j) -> VirtualLoTriMaskColumn(j)
+    Lookup(;
+        body=(ctx, j) -> Provenance(;
+            path=SubSliceOf(j),
+            body=VirtualLoTriMaskColumn(j)
         ),
     )
 end
@@ -185,14 +185,20 @@ function unfurl(ctx, arr::VirtualBandMask, ext, mode, proto::typeof(defaultread)
     Provenance(;
         arr=arr,
         body=Lookup(;
-            body=(ctx, j_lo) -> VirtualBandMaskSlice(j_lo)
+            body=(ctx, j_lo) -> Provenance(;
+                path = SubSliceOf(j_lo),
+                body = VirtualBandMaskSlice(j_lo)
+            )
         ),
     )
 end
 
 function unfurl(ctx, arr::VirtualBandMaskSlice, ext, mode, proto::typeof(defaultread))
     Lookup(;
-        body=(ctx, j_hi) -> VirtualBandMaskColumn(arr.j_lo, j_hi)
+        body=(ctx, j_hi) -> Provenance(;
+            path = SubSliceOf(j_hi),
+            body = VirtualBandMaskColumn(arr.j_lo, j_hi)
+        )
     )
 end
 
@@ -240,10 +246,10 @@ end
 FinchNotation.finch_leaf(x::VirtualSplitMaskColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualSplitMask, ext, mode, proto::typeof(defaultread))
-    Provenance(;
-        arr=arr,
-        body=Lookup(;
-            body=(ctx, j) -> VirtualSplitMaskColumn(arr.P, j)
+    Lookup(;
+        body=(ctx, j) -> Provenance(
+            path = SubSliceOf(j),
+            body = VirtualSplitMaskColumn(arr.P, j)
         ),
     )
 end
@@ -318,18 +324,22 @@ FinchNotation.finch_leaf(x::VirtualChunkMaskColumn) = virtual(x)
 FinchNotation.finch_leaf(x::VirtualChunkMaskCleanupColumn) = virtual(x)
 
 function unfurl(ctx, arr::VirtualChunkMask, ext, mode, proto::typeof(defaultread))
-    Provenance(;
-        arr=arr,
         body=Sequence([
             Phase(;
                 stop = (ctx, ext) -> call(cld, measure(arr.dim), arr.b),
                 body = (ctx, ext) -> Lookup(;
-                body=(ctx, j) -> VirtualChunkMaskColumn(arr, j)
+                body=(ctx, j) -> Provenance(;
+                    path=SubSliceOf(j),
+                    VirtualChunkMaskColumn(arr, j),
+                )
             ),
             ),
             Phase(;
                 body=(ctx, ext) -> Run(;
-                    body=VirtualChunkMaskCleanupColumn(arr)
+                    body=Provenance(;
+                        path=SubSliceOf(j),
+                        body = VirtualChunkMaskCleanupColumn(arr)
+                    )
                 ),
             ),
         ]),
