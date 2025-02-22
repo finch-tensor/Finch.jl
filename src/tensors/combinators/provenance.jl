@@ -14,13 +14,17 @@ struct Parent end
 struct SubLevelOf
     parent
 end
-struct SubTensorOf
+struct SubSliceOf
+    parent
+end
+struct SubFiberOf
     parent
 end
 
 repath(parent, child::Parent) = parent
 repath(parent, child::SubLevelOf) = SubLevelOf(repath(parent, child.parent))
-repath(parent, child::SubTensorOf) = SubTensorOf(repath(parent, child.parent))
+repath(parent, child::SubSliceOf) = SubSliceOf(repath(parent, child.parent))
+repath(parent, child::SubFiberOf) = SubFiberOf(repath(parent, child.parent))
 
 Base.show(io::IO, ex::Provenance) = Base.show(io, MIME"text/plain"(), ex)
 

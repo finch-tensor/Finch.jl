@@ -603,7 +603,7 @@ function Finch.unfurl(
                     $dirty = false
                 end,
                 body=(ctx) -> Provenance(;
-                    path=SubFiberOf(Parent());
+                    path=SubFiberOf(Parent()),
                     body=Finch.instantiate(
                         ctx,
                         Finch.VirtualSparseScalar(
