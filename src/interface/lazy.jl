@@ -367,9 +367,19 @@ Base.:*(
 
 Base.:-(x::LazyTensor) = map(-, x)
 
-Base.:-(x::LazyTensor, y::Union{LazyTensor,AbstractTensor,Base.AbstractArrayOrBroadcasted,Number}) = map(-, x, y)
-Base.:-(x::Union{LazyTensor,AbstractTensor,Base.AbstractArrayOrBroadcasted,Number}, y::LazyTensor) = map(-, x, y)
-Base.:-(x::LazyTensor, y::LazyTensor)                                                              = map(-, x, y)
+function Base.:-(
+    x::LazyTensor,
+    y::Union{LazyTensor,AbstractTensor,Base.AbstractArrayOrBroadcasted,Number},
+)
+    map(-, x, y)
+end
+function Base.:-(
+    x::Union{LazyTensor,AbstractTensor,Base.AbstractArrayOrBroadcasted,Number},
+    y::LazyTensor,
+)
+    map(-, x, y)
+end
+Base.:-(x::LazyTensor, y::LazyTensor) = map(-, x, y)
 
 Base.:/(x::LazyTensor, y::Number) = map(/, x, y)
 Base.:/(x::Number, y::LazyTensor) = map(\, y, x)

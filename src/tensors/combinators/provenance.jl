@@ -38,7 +38,9 @@ end
 
 FinchNotation.finch_leaf(x::Provenance) = virtual(x)
 
-virtual_size(ctx, tns::Provenance) = (error();virtual_size(ctx, tns.path)[1:(end - tns.ndims)])
+function virtual_size(ctx, tns::Provenance)
+    (error(); virtual_size(ctx, tns.path)[1:(end - tns.ndims)])
+end
 virtual_resize!(ctx, tns::Provenance, dims...) = virtual_resize!(ctx, tns.path, dims...) # TODO SHOULD NOT HAPPEN BREAKS LIFECYCLES
 virtual_fill_value(ctx, tns::Provenance) = virtual_fill_value(ctx, tns.path)
 

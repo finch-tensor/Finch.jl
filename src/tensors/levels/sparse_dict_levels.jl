@@ -443,25 +443,39 @@ function unfurl(
         end,
         body=(ctx) -> Sequence([
             Phase(;
-                stop = (ctx, ext) -> value(my_i1),
-                body = (ctx, ext) -> Stepper(;
-                seek=(ctx, ext) -> quote
-                    if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
-                        $my_q = Finch.scansearch($(lvl.idx), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
+                stop=(ctx, ext) -> value(my_i1),
+                body=(ctx, ext) -> Stepper(;
+                    seek=(ctx, ext) -> quote
+                        if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
+                            $my_q = Finch.scansearch(
+                                $(lvl.idx),
+                                $(ctx(getstart(ext))),
+                                $my_q,
+                                $my_q_stop - 1,
+                            )
+                            $my_i = $(lvl.idx)[$my_q]
+                        end
+                    end,
+                    preamble=quote
                         $my_i = $(lvl.idx)[$my_q]
-                    end
-                end,
-                preamble=quote
-                    $my_i = $(lvl.idx)[$my_q]
-                    $my_v = $(lvl.val)[$my_q]
-                end,
-                stop=(ctx, ext) -> value(my_i),
-                chunk=Spike(;
-                body = FillLeaf(virtual_level_fill_value(lvl)),
-                tail = Simplify(instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_v, Ti)), mode))
-            ),
-                next=(ctx, ext) -> :($my_q += $(Tp(1)))
-            ),
+                        $my_v = $(lvl.val)[$my_q]
+                    end,
+                    stop=(ctx, ext) -> value(my_i),
+                    chunk=Spike(;
+                        body=FillLeaf(virtual_level_fill_value(lvl)),
+                        tail=Simplify(
+                            Provenance(;
+                                path=SubFiberOf(Parent()),
+                                body=instantiate(
+                                    ctx,
+                                    VirtualSubFiber(lvl.lvl, value(my_v, Ti)),
+                                    mode,
+                                ),
+                            ),
+                        ),
+                        next=(ctx, ext) -> :($my_q += $(Tp(1))),
+                    ),
+                ),
             ),
             Phase(;
                 body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
@@ -485,9 +499,12 @@ function unfurl(
             end,
             body=(ctx) -> Switch(
                 [
-                    value(:($my_q != 0)) => instantiate(
-                        ctx, VirtualSubFiber(lvl.lvl, value(my_q, Tp)), mode
-                    )
+                    value(:($my_q != 0)) => Provenance(;
+                        path=SubFiberOf(Parent()),
+                        body=instantiate(
+                            ctx, VirtualSubFiber(lvl.lvl, value(my_q, Tp)), mode
+                        ),
+                    );
                     literal(true) => FillLeaf(virtual_level_fill_value(lvl))
                 ],
             ),
@@ -523,7 +540,7 @@ function unfurl(
     Thunk(;
         body=(ctx) -> Lookup(;
             body=(ctx, idx) -> Thunk(;
-                preamble = quote
+                preamble=quote
                     $qos = get($(lvl.tbl), ($(ctx(pos)), $(ctx(idx))), 0)
                     if $qos == 0
                         #If the qos is not in the table, we need to add it.
@@ -535,7 +552,15 @@ function unfurl(
                             $qos = length($(lvl.tbl)) + 1
                             if $qos > $qos_stop
                                 $qos_stop = max($qos_stop << 1, 1)
-                                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)), ctx))
+                                $(contain(
+                                    ctx_2 -> assemble_level!(
+                                        ctx_2,
+                                        lvl.lvl,
+                                        value(qos, Tp),
+                                        value(qos_stop, Tp),
+                                    ),
+                                    ctx,
+                                ))
                                 Finch.resize_if_smaller!($(lvl.val), $qos_stop)
                                 Finch.fill_range!($(lvl.val), 0, $qos, $qos_stop)
                             end
@@ -544,8 +569,15 @@ function unfurl(
                     end
                     $dirty = false
                 end,
-                body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty), mode),
-                epilogue = quote
+                body=(ctx) -> Provenance(;
+                    path=SubFiberOf(Parent()),
+                    body=instantiate(
+                        ctx,
+                        VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty),
+                        mode,
+                    ),
+                ),
+                epilogue=quote
                     if $dirty
                         $(lvl.val)[$qos] = $qos
                         $(fbr.dirty) = true

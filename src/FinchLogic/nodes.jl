@@ -4,19 +4,19 @@ const ID = 4
 
 @enum LogicNodeKind begin
     immediate = 0ID
-    deferred  = 1ID
-    field     = 2ID
-    alias     = 3ID
-    table     = 4ID | IS_TREE
-    mapjoin   = 5ID | IS_TREE
+    deferred = 1ID
+    field = 2ID
+    alias = 3ID
+    table = 4ID | IS_TREE
+    mapjoin = 5ID | IS_TREE
     aggregate = 6ID | IS_TREE
-    reorder   = 7ID | IS_TREE
-    relabel   = 8ID | IS_TREE
-    reformat  = 9ID | IS_TREE
-    subquery  = 10ID | IS_TREE
-    query     = 11ID | IS_TREE | IS_STATEFUL
-    produces  = 12ID | IS_TREE | IS_STATEFUL
-    plan      = 13ID | IS_TREE | IS_STATEFUL
+    reorder = 7ID | IS_TREE
+    relabel = 8ID | IS_TREE
+    reformat = 9ID | IS_TREE
+    subquery = 10ID | IS_TREE
+    query = 11ID | IS_TREE | IS_STATEFUL
+    produces = 12ID | IS_TREE | IS_STATEFUL
+    plan = 13ID | IS_TREE | IS_STATEFUL
 end
 
 """

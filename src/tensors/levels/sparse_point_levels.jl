@@ -294,16 +294,19 @@ function unfurl(
                 body=(ctx, ext) -> truncate(
                     ctx,
                     Spike(;
-                        body = FillLeaf(virtual_level_fill_value(lvl)),
-                        tail = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
+                        body=FillLeaf(virtual_level_fill_value(lvl)),
+                        tail=Provenance(;
+                            path=SubFiberOf(Parent()),
+                            body=instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
+                        ),
                     ),
                     similar_extent(ext, getstart(ext), value(my_i)),
                     ext,
                 ),
             ),
             Phase(;
-                stop = (ctx, ext) -> lvl.shape,
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+                stop=(ctx, ext) -> lvl.shape,
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
             ),
         ]),
     )
@@ -335,15 +338,19 @@ function unfurl(
 
     Lookup(;
         body=(ctx, idx) -> Thunk(;
-            preamble = quote
+            preamble=quote
                 $dirty = false
             end,
-            body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
-            epilogue = quote
+            body=(ctx) -> Provenance(;
+                path=SubFiberOf(Parent()),
+                body=instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
+            ),
+            epilogue=quote
                 if $dirty
                     $(fbr.dirty) = true
                     if $(issafe(get_mode_flag(ctx)))
-                        @assert $(lvl.idx)[$(ctx(pos))] == 0 || $(lvl.idx)[$(ctx(pos))] == $(ctx(idx))
+                        @assert $(lvl.idx)[$(ctx(pos))] == 0 ||
+                            $(lvl.idx)[$(ctx(pos))] == $(ctx(idx))
                     end
                     $(lvl.idx)[$(ctx(pos))] = $(ctx(idx))
                 end

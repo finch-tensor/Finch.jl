@@ -224,10 +224,7 @@ end
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        Provenance(
-            path = SubLevelOf(),
-            body = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
-        )
+        instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
     else
         fbr
     end
@@ -237,8 +234,8 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
         return Provenance(;
-            path = SubLevelOf(),
-            body = unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
+            path=SubLevelOf(Parent()),
+            body=unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto),
         )
     else
         sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
@@ -254,7 +251,10 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
                 $lockVal = Finch.aquire_lock!($dev, $atomicData)
             end,
         )
-        res = unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
+        res = Provenance(;
+            path=SubLevelOf(Parent()),
+            body=unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto),
+        )
         push_epilogue!(
             ctx,
             quote
@@ -281,7 +281,10 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, ext, mode, p
             $lockVal = Finch.aquire_lock!($dev, $atomicData)
         end,
     )
-    res = unfurl(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), ext, mode, proto)
+    res = Provenance(;
+        path=SubLevelOf(Parent()),
+        body=unfurl(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), ext, mode, proto),
+    )
     push_epilogue!(
         ctx,
         quote

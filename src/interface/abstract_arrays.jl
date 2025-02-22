@@ -60,19 +60,19 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                             $val = $(arr.ex)[$(map(ctx, idx_2)...)]
                         end,
                         body=(ctx) -> Provenance(;
-                            path = SubSliceOf(arr, i),
-                            body = instantiate(
+                            path=SubSliceOf(Parent()),
+                            body=instantiate(
                                 ctx,
                                 VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
                                 mode,
                             ), #=We don't know what init is, but it won't be used here =#
-                        )
+                        ),
                     )
                 else
                     Thunk(;
                         body=(ctx,) -> Provenance(;
-                            path = SubSliceOf(arr, i),
-                            instantiate(
+                            path=SubSliceOf(Parent()),
+                            body=instantiate(
                                 ctx,
                                 VirtualScalar(
                                     nothing,
@@ -83,15 +83,15 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                                 ),
                                 mode,
                             ), #=We don't know what init is, but it won't be used here=#
-                        )
+                        ),
                     )
                 end
             else
                 Thunk(;
                     body=(ctx,) -> Provenance(;
-                        path = SubSliceOf(arr, i),
-                        body = instantiate(ctx, VirtualAbstractArraySlice(arr, idx_2), mode),
-                    )
+                        path=SubSliceOf(Parent()),
+                        body=instantiate(ctx, VirtualAbstractArraySlice(arr, idx_2), mode),
+                    ),
                 )
             end
         end,
@@ -126,10 +126,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
             )
         end
     else
-        Provenance(;
-            arr=Parent(),
-            body=VirtualAbstractArraySlice(arr, ()),
-        )
+        VirtualAbstractArraySlice(arr, ())
     end
 end
 
@@ -180,9 +177,9 @@ function Base.summary(io::IO, arr::AsArray)
     #summary(io, arr.fbr)
 end
 
-Base.size(arr::AsArray)                                            = size(arr.fbr)
-Base.getindex(arr::AsArray{T,N}, i::Vararg{Int,N}) where {T,N}     = arr.fbr[i...]
-Base.getindex(arr::AsArray{T,N}, i::Vararg{Any,N}) where {T,N}     = arr.fbr[i...]
+Base.size(arr::AsArray) = size(arr.fbr)
+Base.getindex(arr::AsArray{T,N}, i::Vararg{Int,N}) where {T,N} = arr.fbr[i...]
+Base.getindex(arr::AsArray{T,N}, i::Vararg{Any,N}) where {T,N} = arr.fbr[i...]
 Base.setindex!(arr::AsArray{T,N}, v, i::Vararg{Int,N}) where {T,N} = arr.fbr[i...] = v
 Base.setindex!(arr::AsArray{T,N}, v, i::Vararg{Any,N}) where {T,N} = arr.fbr[i...] = v
 

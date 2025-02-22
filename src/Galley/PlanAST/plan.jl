@@ -6,16 +6,16 @@ const IS_STATEFUL = 2
 const ID = 4
 
 @enum PlanNodeKind begin
-    Value       = 1ID             #  Value(x::Any)
-    Index       = 2ID             #  Index(x::Union{String, Symbol})
-    Alias       = 3ID             #  Alias(x::Union{String, Symbol})
-    Input       = 4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
-    MapJoin     = 5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
-    Aggregate   = 6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
+    Value = 1ID             #  Value(x::Any)
+    Index = 2ID             #  Index(x::Union{String, Symbol})
+    Alias = 3ID             #  Alias(x::Union{String, Symbol})
+    Input = 4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
+    MapJoin = 5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
+    Aggregate = 6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
     Materialize = 7ID | IS_TREE   #  Materialize(formats::Vector{Formats}, idx_order::Vector{TI}, arg:PlanNode)
-    Query       = 8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
-    Outputs     = 9ID | IS_TREE   #  Outputs(args...::TI)
-    Plan        = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
+    Query = 8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
+    Outputs = 9ID | IS_TREE   #  Outputs(args...::TI)
+    Plan = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
 end
 Mat = Materialize
 Agg = Aggregate

@@ -404,46 +404,54 @@ function unfurl(
     my_r_stop = freshen(ctx, tag, :_r_stop)
     my_i_stop = freshen(ctx, tag, :_i_stop)
 
-    Provenance(;
-        arr=fbr,
-        body=Thunk(;
-            preamble=quote
-                $my_r = $(lvl.ptr)[$(ctx(pos))]
-                $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
-                if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = last($(lvl.srt)[$my_r])
-                    $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
-                else
-                    $my_i = $(Ti(1))
-                    $my_i_stop = $(Ti(0))
-                end
-            end,
-            body=(ctx) -> Sequence([
-                Phase(;
-                    stop = (ctx, ext) -> value(my_i_stop),
-                    body = (ctx, ext) -> Stepper(;
+    Thunk(;
+        preamble=quote
+            $my_r = $(lvl.ptr)[$(ctx(pos))]
+            $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
+            if $my_r != 0 && $my_r < $my_r_stop
+                $my_i = last($(lvl.srt)[$my_r])
+                $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
+            else
+                $my_i = $(Ti(1))
+                $my_i_stop = $(Ti(0))
+            end
+        end,
+        body=(ctx) -> Sequence([
+            Phase(;
+                stop=(ctx, ext) -> value(my_i_stop),
+                body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
-                        while $my_r + $(Tp(1)) < $my_r_stop && last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
+                        while $my_r + $(Tp(1)) < $my_r_stop &&
+                            last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
                             $my_r += $(Tp(1))
                         end
                     end,
                     preamble=:($my_i = last($(lvl.srt)[$my_r])),
                     stop=(ctx, ext) -> value(my_i),
                     chunk=Spike(;
-                    body = FillLeaf(virtual_level_fill_value(lvl)),
-                    tail = Thunk(;
-                    preamble=:($my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i),
-                    body=(ctx) -> instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)), mode)
-                )
+                        body=FillLeaf(virtual_level_fill_value(lvl)),
+                        tail=Thunk(;
+                            preamble=:(
+                                $my_q =
+                                    ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i
+                            ),
+                            body=(ctx) -> Provenance(;
+                                path=SubFiberOf(Parent()),
+                                body=instantiate(
+                                    ctx,
+                                    VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)),
+                                    mode,
+                                ),
+                            ),
+                        ),
+                    ),
+                    next=(ctx, ext) -> :($my_r += $(Tp(1))),
                 ),
-                    next=(ctx, ext) -> :($my_r += $(Tp(1)))
-                ),
-                ),
-                Phase(;
-                    body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
-                ),
-            ]),
-        ),
+            ),
+            Phase(;
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
+            ),
+        ]),
     )
 end
 
@@ -461,46 +469,54 @@ function unfurl(
     my_i_stop = freshen(ctx, tag, :_i_stop)
     my_j = freshen(ctx, tag, :_j)
 
-    Provenance(;
-        arr=fbr,
-        body=Thunk(;
-            preamble=quote
-                $my_r = $(lvl.ptr)[$(ctx(pos))]
-                $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
-                if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = last($(lvl.srt)[$my_r])
-                    $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
-                else
-                    $my_i = $(Tp(1))
-                    $my_i_stop = $(Tp(0))
-                end
-            end,
-            body=(ctx) -> Sequence([
-                Phase(;
-                    stop = (ctx, ext) -> value(my_i_stop),
-                    body = (ctx, ext) -> Jumper(;
+    Thunk(;
+        preamble=quote
+            $my_r = $(lvl.ptr)[$(ctx(pos))]
+            $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
+            if $my_r != 0 && $my_r < $my_r_stop
+                $my_i = last($(lvl.srt)[$my_r])
+                $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
+            else
+                $my_i = $(Tp(1))
+                $my_i_stop = $(Tp(0))
+            end
+        end,
+        body=(ctx) -> Sequence([
+            Phase(;
+                stop=(ctx, ext) -> value(my_i_stop),
+                body=(ctx, ext) -> Jumper(;
                     seek=(ctx, ext) -> quote
-                        while $my_r + $(Tp(1)) < $my_r_stop && last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
+                        while $my_r + $(Tp(1)) < $my_r_stop &&
+                            last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
                             $my_r += $(Tp(1))
                         end
                     end,
                     preamble=:($my_i = last($(lvl.srt)[$my_r])),
                     stop=(ctx, ext) -> value(my_i),
                     chunk=Spike(;
-                    body = FillLeaf(virtual_level_fill_value(lvl)),
-                    tail = Thunk(;
-                    preamble=:($my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i),
-                    body=(ctx) -> instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)), mode)
-                )
+                        body=FillLeaf(virtual_level_fill_value(lvl)),
+                        tail=Thunk(;
+                            preamble=:(
+                                $my_q =
+                                    ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i
+                            ),
+                            body=(ctx) -> Provenance(;
+                                path=SubFiberOf(Parent()),
+                                body=instantiate(
+                                    ctx,
+                                    VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)),
+                                    mode,
+                                ),
+                            ),
+                        ),
+                    ),
+                    next=(ctx, ext) -> :($my_r += $(Tp(1))),
                 ),
-                    next=(ctx, ext) -> :($my_r += $(Tp(1)))
-                ),
-                ),
-                Phase(;
-                    body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
-                ),
-            ]),
-        ),
+            ),
+            Phase(;
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
+            ),
+        ]),
     )
 end
 
@@ -513,20 +529,20 @@ function unfurl(
     q = pos
     Ti = lvl.Ti
 
-    Provenance(;
-        arr=fbr,
-        body=Lookup(;
-            body=(ctx, i) -> Thunk(;
-                preamble=quote
-                    $my_q = ($(ctx(q)) - $(Ti(1))) * $(ctx(lvl.shape)) + $(ctx(i))
-                end,
-                body=(ctx) -> Switch([
-                    value(:($(lvl.tbl)[$my_q])) => instantiate(
+    Lookup(;
+        body=(ctx, i) -> Thunk(;
+            preamble=quote
+                $my_q = ($(ctx(q)) - $(Ti(1))) * $(ctx(lvl.shape)) + $(ctx(i))
+            end,
+            body=(ctx) -> Switch([
+                value(:($(lvl.tbl)[$my_q])) => Provenance(;
+                    path=SubFiberOf(Parent()),
+                    body=instantiate(
                         ctx, VirtualSubFiber(lvl.lvl, value(my_q)), mode
                     ),
-                    literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
-                ]),
-            ),
+                ),
+                literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
+            ]),
         ),
     )
 end
@@ -538,7 +554,7 @@ function unfurl(
     mode,
     proto::Union{typeof(defaultupdate),typeof(extrude),typeof(laminate)},
 )
-    unfurl(
+    body = unfurl(
         ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
     )
 end
@@ -555,30 +571,34 @@ function unfurl(
     my_q = freshen(ctx, tag, :_q)
     dirty = freshen(ctx, :dirty)
 
-    Provenance(;
-        arr=fbr,
-        body=Lookup(;
-            body=(ctx, idx) -> Thunk(;
-                preamble = quote
-                    $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
-                    $dirty = false
-                end,
-                body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, value(my_q, lvl.Ti), dirty), mode),
-                epilogue = quote
-                    if $dirty
-                        $(fbr.dirty) = true
-                        if !$(lvl.tbl)[$my_q]
-                            $(lvl.tbl)[$my_q] = true
-                            $(lvl.qos_fill) += 1
-                            if $(lvl.qos_fill) > $(lvl.qos_stop)
-                                $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
-                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
-                            end
-                            $(lvl.srt)[$(lvl.qos_fill)] = ($(ctx(pos)), $(ctx(idx)))
-                        end
-                    end
-                end,
+    Lookup(;
+        body=(ctx, idx) -> Thunk(;
+            preamble=quote
+                $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
+                $dirty = false
+            end,
+            body=(ctx) -> Provenance(;
+                path=SubFiberOf(),
+                body=instantiate(
+                    ctx,
+                    VirtualHollowSubFiber(lvl.lvl, value(my_q, lvl.Ti), dirty),
+                    mode,
+                ),
             ),
+            epilogue=quote
+                if $dirty
+                    $(fbr.dirty) = true
+                    if !$(lvl.tbl)[$my_q]
+                        $(lvl.tbl)[$my_q] = true
+                        $(lvl.qos_fill) += 1
+                        if $(lvl.qos_fill) > $(lvl.qos_stop)
+                            $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
+                            Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
+                        end
+                        $(lvl.srt)[$(lvl.qos_fill)] = ($(ctx(pos)), $(ctx(idx)))
+                    end
+                end
+            end,
         ),
     )
 end

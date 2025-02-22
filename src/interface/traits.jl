@@ -465,13 +465,29 @@ rep_construct_hollow(fbr::RepeatData, protos) = Tensor(construct_level_rep(fbr, 
 rep_construct_hollow(fbr::SparseData, protos) = Tensor(construct_level_rep(fbr, protos...))
 rep_construct(fbr, protos) = Tensor(construct_level_rep(fbr, protos...))
 
-construct_level_rep(fbr::SparseData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...) = SparseDict(construct_level_rep(fbr.lvl, protos...))
-construct_level_rep(fbr::SparseData, proto::Union{typeof(laminate)}, protos...)                     = SparseDict(construct_level_rep(fbr.lvl, protos...))
-construct_level_rep(fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...) = SparseRunList(construct_level_rep(fbr.lvl, protos...))
-construct_level_rep(fbr::RepeatData, proto::Union{typeof(laminate)}, protos...)                     = SparseDict(construct_level_rep(fbr.lvl, protos...))
-construct_level_rep(fbr::DenseData, proto, protos...)                                               = Dense(construct_level_rep(fbr.lvl, protos...))
-construct_level_rep(fbr::ExtrudeData, proto, protos...)                                             = Dense(construct_level_rep(fbr.lvl, protos...), 1)
-construct_level_rep(fbr::ElementData)                                                               = Element{fbr.fill_value,fbr.eltype}()
+function construct_level_rep(
+    fbr::SparseData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...
+)
+    SparseDict(construct_level_rep(fbr.lvl, protos...))
+end
+function construct_level_rep(fbr::SparseData, proto::Union{typeof(laminate)}, protos...)
+    SparseDict(construct_level_rep(fbr.lvl, protos...))
+end
+function construct_level_rep(
+    fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...
+)
+    SparseRunList(construct_level_rep(fbr.lvl, protos...))
+end
+function construct_level_rep(fbr::RepeatData, proto::Union{typeof(laminate)}, protos...)
+    SparseDict(construct_level_rep(fbr.lvl, protos...))
+end
+function construct_level_rep(fbr::DenseData, proto, protos...)
+    Dense(construct_level_rep(fbr.lvl, protos...))
+end
+function construct_level_rep(fbr::ExtrudeData, proto, protos...)
+    Dense(construct_level_rep(fbr.lvl, protos...), 1)
+end
+construct_level_rep(fbr::ElementData) = Element{fbr.fill_value,fbr.eltype}()
 
 """
     fiber_ctr(tns, protos...)
@@ -492,12 +508,30 @@ fiber_ctr_hollow(fbr::SparseData, protos) = :(Tensor($(level_ctr(fbr, protos...)
 fiber_ctr_hollow(fbr::RepeatData, protos) = :(Tensor($(level_ctr(fbr, protos...))))
 fiber_ctr(fbr, protos) = :(Tensor($(level_ctr(fbr, protos...))))
 
-level_ctr(fbr::SparseData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...) = :(SparseDict($(level_ctr(fbr.lvl, protos...))))
-level_ctr(fbr::SparseData, proto::Union{typeof(laminate)}, protos...)                     = :(SparseDict($(level_ctr(fbr.lvl, protos...))))
-level_ctr(fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...) = :(SparseRunList($(level_ctr(fbr.lvl, protos...))))
-level_ctr(fbr::RepeatData, proto::Union{typeof(laminate)}, protos...)                     = :(SparseDict($(level_ctr(fbr.lvl, protos...))))
-level_ctr(fbr::DenseData, proto, protos...)                                               = :(Dense($(level_ctr(fbr.lvl, protos...))))
-level_ctr(fbr::ExtrudeData, proto, protos...)                                             = :(Dense($(level_ctr(fbr.lvl, protos...)), 1))
-level_ctr(fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)})            = :(Repeat{$(fbr.fill_value),$(fbr.eltype)}())
-level_ctr(fbr::RepeatData, proto::Union{typeof(laminate)})                                = level_ctr(DenseData(ElementData(fbr.fill_value, fbr.eltype)), proto)
-level_ctr(fbr::ElementData)                                                               = :(Element{$(fbr.fill_value),$(fbr.eltype)}())
+function level_ctr(
+    fbr::SparseData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...
+)
+    :(SparseDict($(level_ctr(fbr.lvl, protos...))))
+end
+function level_ctr(fbr::SparseData, proto::Union{typeof(laminate)}, protos...)
+    :(SparseDict($(level_ctr(fbr.lvl, protos...))))
+end
+function level_ctr(
+    fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)}, protos...
+)
+    :(SparseRunList($(level_ctr(fbr.lvl, protos...))))
+end
+function level_ctr(fbr::RepeatData, proto::Union{typeof(laminate)}, protos...)
+    :(SparseDict($(level_ctr(fbr.lvl, protos...))))
+end
+level_ctr(fbr::DenseData, proto, protos...) = :(Dense($(level_ctr(fbr.lvl, protos...))))
+function level_ctr(fbr::ExtrudeData, proto, protos...)
+    :(Dense($(level_ctr(fbr.lvl, protos...)), 1))
+end
+function level_ctr(fbr::RepeatData, proto::Union{Nothing,typeof(walk),typeof(extrude)})
+    :(Repeat{$(fbr.fill_value),$(fbr.eltype)}())
+end
+function level_ctr(fbr::RepeatData, proto::Union{typeof(laminate)})
+    level_ctr(DenseData(ElementData(fbr.fill_value, fbr.eltype)), proto)
+end
+level_ctr(fbr::ElementData) = :(Element{$(fbr.fill_value),$(fbr.eltype)}())

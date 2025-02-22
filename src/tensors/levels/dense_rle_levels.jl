@@ -623,10 +623,10 @@ function unfurl(
             stop=(ctx, ext) -> value(my_i),
             chunk=Run(;
                 body=Simplify(
-                    Provenance(
-                        path = SubFiberOf(value(my_q)),
-                        body = instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q)), mode)
-                    )
+                    Provenance(;
+                        path=SubFiberOf(Parent()),
+                        body=instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q)), mode),
+                    ),
                 ),
             ),
             next=(ctx, ext) -> :($my_q += $(Tp(1))),
@@ -641,12 +641,9 @@ function unfurl(
     mode,
     proto::Union{typeof(defaultupdate),typeof(extrude)},
 )
-    Provenance(;
-        path=Parent(),
-        unfurl(
-            ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
-        )
-    );
+    unfurl(
+        ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
+    )
 end
 
 #Invariants of the level (Write Mode):
@@ -703,7 +700,7 @@ function unfurl(
         end,
         body=(ctx) -> AcceptRun(;
             body=(ctx, ext) -> Thunk(;
-                preamble = quote
+                preamble=quote
                     $qos_3 = $qos + ($(local_i_prev) < ($(ctx(getstart(ext))) - $unit))
                     if $qos_3 > $qos_stop
                         $qos_2 = $qos_stop + 1
@@ -711,16 +708,30 @@ function unfurl(
                             $qos_stop = max($qos_stop << 1, 1)
                         end
                         Finch.resize_if_smaller!($(lvl.right), $qos_stop)
-                        Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop)
-                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_stop, Tp)), ctx))
+                        Finch.fill_range!(
+                            $(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop
+                        )
+                        $(contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2,
+                                lvl.buf,
+                                value(qos_2, Tp),
+                                value(qos_stop, Tp),
+                            ),
+                            ctx,
+                        ))
                     end
                     $dirty = false
                 end,
-                body = (ctx) -> Provenance(;
-                    path = SubFiberOf(value(qos_3, Tp)),
-                    body = instantiate(ctx, VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty), mode),
+                body=(ctx) -> Provenance(;
+                    path=SubFiberOf(Parent()),
+                    body=instantiate(
+                        ctx,
+                        VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty),
+                        mode,
+                    ),
                 ),
-                epilogue = quote
+                epilogue=quote
                     if $dirty
                         $(lvl.right)[$qos] = $(ctx(getstart(ext))) - $unit
                         $(lvl.right)[$qos_3] = $(ctx(getstop(ext)))

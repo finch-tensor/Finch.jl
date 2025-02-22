@@ -181,12 +181,12 @@ function unfurl(ctx, tns::VirtualPermissiveArray, ext, mode, proto)
         VirtualPermissiveArray(
             Sequence([
                 Phase(;
-                    stop = (ctx, ext_2) -> call(-, getstart(dims[end]), 1),
-                    body = (ctx, ext) -> Run(garb),
+                    stop=(ctx, ext_2) -> call(-, getstart(dims[end]), 1),
+                    body=(ctx, ext) -> Run(garb),
                 ),
                 Phase(;
-                    stop = (ctx, ext_2) -> getstop(dims[end]),
-                    body = (ctx, ext_2) -> truncate(ctx, tns_2, dims[end], ext_2),
+                    stop=(ctx, ext_2) -> getstop(dims[end]),
+                    body=(ctx, ext_2) -> truncate(ctx, tns_2, dims[end], ext_2),
                 ),
                 Phase(;
                     body=(ctx, ext_2) -> Run(garb)
