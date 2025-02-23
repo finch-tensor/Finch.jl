@@ -25,7 +25,6 @@ julia> @finch_code begin
     end
 quote
     y_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
-    y_lvl_2 = y_lvl.lvl
     y_lvl_val = y_lvl.lvl.val
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
@@ -74,7 +73,7 @@ quote
         end
     end
     resize!(y_lvl_val, A_lvl_2.shape)
-    (y = Tensor((DenseLevel){Int64}(y_lvl_2, A_lvl_2.shape)),)
+    (y = Tensor((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(y_lvl_val), A_lvl_2.shape)),)
 end
 julia> @finch begin
         y .= 0

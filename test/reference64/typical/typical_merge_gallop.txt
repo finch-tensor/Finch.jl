@@ -8,7 +8,6 @@ quote
     z_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
     z_lvl_ptr = z_lvl.ptr
     z_lvl_idx = z_lvl.idx
-    z_lvl_2 = z_lvl.lvl
     z_lvl_val = z_lvl.lvl.val
     x_lvl = (((ex.bodies[1]).bodies[2]).body.rhs.args[1]).tns.bind.lvl
     x_lvl_ptr = x_lvl.ptr
@@ -411,7 +410,7 @@ quote
     qos_stop = z_lvl_ptr[1 + 1] - 1
     resize!(z_lvl_idx, qos_stop)
     resize!(z_lvl_val, qos_stop)
-    (z = Tensor((SparseListLevel){Int64}(z_lvl_2, y_lvl.shape, z_lvl_ptr, z_lvl_idx)),)
+    (z = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(z_lvl_val), y_lvl.shape, z_lvl_ptr, z_lvl_idx)),)
 end
 julia> @finch begin
         z .= 0

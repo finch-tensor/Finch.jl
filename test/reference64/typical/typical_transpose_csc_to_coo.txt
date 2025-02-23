@@ -27,7 +27,6 @@ quote
     B_lvl_val_2 = B_lvl_2.val
     B_lvl_tbl_2 = B_lvl_2.tbl
     B_lvl_pool_2 = B_lvl_2.pool
-    B_lvl_3 = B_lvl_2.lvl
     B_lvl_2_val = B_lvl_2.lvl.val
     A_lvl = ((ex.bodies[1]).bodies[2]).body.body.rhs.tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
@@ -217,7 +216,7 @@ quote
     end
     qos_stop_2 = B_lvl_ptr_2[qos_stop + 1] - 1
     resize!(B_lvl_2_val, qos_stop_2)
-    (B = Tensor((SparseDictLevel){Int64}((SparseDictLevel){Int64}(B_lvl_3, A_lvl.shape, B_lvl_ptr_2, B_lvl_idx_2, B_lvl_val_2, B_lvl_tbl_2, B_lvl_pool_2), A_lvl_2.shape, B_lvl_ptr, B_lvl_idx, B_lvl_val, B_lvl_tbl, B_lvl_pool)),)
+    (B = Tensor((SparseDictLevel){Int64}((SparseDictLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_2_val), A_lvl.shape, B_lvl_ptr_2, B_lvl_idx_2, B_lvl_val_2, B_lvl_tbl_2, B_lvl_pool_2), A_lvl_2.shape, B_lvl_ptr, B_lvl_idx, B_lvl_val, B_lvl_tbl, B_lvl_pool)),)
 end
 julia> @finch mode = :fast begin
         B .= 0

@@ -1,6 +1,5 @@
 begin
     P_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
-    P_lvl_2 = P_lvl.lvl
     P_lvl_val = P_lvl.lvl.val
     p = (((ex.bodies[1]).bodies[2]).body.bodies[1]).tns.bind
     A_lvl = (((((ex.bodies[1]).bodies[2]).body.bodies[2]).body.rhs.args[1]).args[1]).tns.bind.lvl
@@ -67,5 +66,5 @@ begin
         P_lvl_val[P_lvl_q] = p_val
     end
     resize!(P_lvl_val, A_lvl.shape)
-    (P = Tensor((DenseLevel){Int64}(P_lvl_2, A_lvl.shape)),)
+    (P = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(P_lvl_val), A_lvl.shape)),)
 end

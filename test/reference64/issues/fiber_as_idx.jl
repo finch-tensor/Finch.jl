@@ -1,6 +1,5 @@
 begin
     B_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
-    B_lvl_2 = B_lvl.lvl
     B_lvl_val = B_lvl.lvl.val
     A_lvl = ((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
@@ -58,5 +57,5 @@ begin
         end
     end
     resize!(B_lvl_val, A_lvl.shape)
-    (B = Tensor((DenseLevel){Int64}(B_lvl_2, A_lvl.shape)),)
+    (B = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(B_lvl_val), A_lvl.shape)),)
 end

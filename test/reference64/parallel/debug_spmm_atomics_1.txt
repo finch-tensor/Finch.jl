@@ -1,7 +1,6 @@
 begin
     CR_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
     CR_lvl_2 = CR_lvl.lvl
-    CR_lvl_3 = CR_lvl_2.lvl
     CR_lvl_2_val = CR_lvl_2.lvl.val
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl
     A_lvl_ptr = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.ptr
@@ -195,5 +194,5 @@ begin
         end
     end
     resize!(CR_lvl_2_val, A_lvl.shape[1] * B_lvl.shape[2])
-    (CR = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(CR_lvl_3, A_lvl.shape[1]), B_lvl.shape[2])),)
+    (CR = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(CR_lvl_2_val), A_lvl.shape[1]), B_lvl.shape[2])),)
 end

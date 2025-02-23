@@ -3,7 +3,6 @@ begin
     B_lvl_2 = B_lvl.lvl
     B_lvl_ptr = B_lvl_2.ptr
     B_lvl_idx = B_lvl_2.idx
-    B_lvl_3 = B_lvl_2.lvl
     B_lvl_2_val = B_lvl_2.lvl.val
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
@@ -88,5 +87,5 @@ begin
     qos_stop = B_lvl_ptr[A_lvl.shape + 1] - 1
     resize!(B_lvl_idx, qos_stop)
     resize!(B_lvl_2_val, qos_stop)
-    (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(B_lvl_3, A_lvl.shape, B_lvl_ptr, B_lvl_idx), A_lvl.shape)),)
+    (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_2_val), A_lvl.shape, B_lvl_ptr, B_lvl_idx), A_lvl.shape)),)
 end

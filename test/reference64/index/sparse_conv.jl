@@ -2,7 +2,6 @@ begin
     C_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
     C_lvl_ptr = C_lvl.ptr
     C_lvl_idx = C_lvl.idx
-    C_lvl_2 = C_lvl.lvl
     C_lvl_val = C_lvl.lvl.val
     A_lvl = ((((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).args[1]).tns.bind.lvl
     A_lvl_ptr = A_lvl.ptr
@@ -154,5 +153,5 @@ begin
     qos_stop = C_lvl_ptr[1 + 1] - 1
     resize!(C_lvl_idx, qos_stop)
     resize!(C_lvl_val, qos_stop)
-    (C = Tensor((SparseListLevel){Int64}(C_lvl_2, A_lvl.shape, C_lvl_ptr, C_lvl_idx)),)
+    (C = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(C_lvl_val), A_lvl.shape, C_lvl_ptr, C_lvl_idx)),)
 end
