@@ -473,8 +473,8 @@ function unfurl(
                                 ),
                             ),
                         ),
-                        next=(ctx, ext) -> :($my_q += $(Tp(1))),
                     ),
+                    next=(ctx, ext) -> :($my_q += $(Tp(1))),
                 ),
             ),
             Phase(;

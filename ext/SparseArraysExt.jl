@@ -2,7 +2,8 @@ module SparseArraysExt
 
 using Finch
 using Finch: AbstractCompiler, DefaultStyle, Extent
-using Finch: Provenance, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
+using Finch: Provenance, SubFiberOf, Parent
+using Finch: Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
     Thunk, Spike
 using Finch: virtual_size, virtual_fill_value, getstart, getstop, freshen, push_preamble!,
     push_epilogue!, SwizzleArray

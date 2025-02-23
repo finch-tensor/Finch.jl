@@ -578,7 +578,7 @@ function unfurl(
                 $dirty = false
             end,
             body=(ctx) -> Provenance(;
-                path=SubFiberOf(),
+                path=SubFiberOf(Parent()),
                 body=instantiate(
                     ctx,
                     VirtualHollowSubFiber(lvl.lvl, value(my_q, lvl.Ti), dirty),
