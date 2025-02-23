@@ -131,11 +131,17 @@ function instantiate(ctx, ::VirtualSubFiber{VirtualPatternLevel}, mode)
     else
         val = freshen(ctx, :null)
         push_preamble!(ctx, :($val = false))
-        VirtualScalar(nothing, Bool, false, gensym(), val)
+        Provenance(;
+            path=SubLevelOf(Parent()),
+            body=VirtualScalar(nothing, Bool, false, gensym(), val),
+        )
     end
 end
 
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualPatternLevel}, mode)
     @assert mode.kind === updater
-    VirtualScalar(nothing, Bool, false, gensym(), fbr.dirty)
+    Provenance(;
+        path=SubLevelOf(Parent()),
+        body=VirtualScalar(nothing, Bool, false, gensym(), fbr.dirty),
+    )
 end

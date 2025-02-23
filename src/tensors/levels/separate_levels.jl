@@ -254,7 +254,10 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualSeparateLevel}, mode)
         return Thunk(;
             body=(ctx) -> begin
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
-                instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode)
+                Provenance(;
+                    path=SubLevelOf(Parent()),
+                    body=instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode),
+                )
             end,
         )
     else
@@ -263,7 +266,10 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualSeparateLevel}, mode)
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
                 lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
                 push_preamble!(ctx, assemble_level!(ctx, lvl_2, literal(1), literal(1)))
-                res = instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode)
+                res = Provenance(;
+                    path=SubLevelOf(Parent()),
+                    body=instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode),
+                )
                 push_epilogue!(ctx,
                     contain(ctx) do ctx_2
                         lvl_2 = freeze_level!(ctx_2, lvl_2, literal(1))
@@ -287,8 +293,11 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualSeparateLevel}, mode
             lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
             lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
             push_preamble!(ctx, assemble_level!(ctx, lvl_2, literal(1), literal(1)))
-            res = instantiate(
-                ctx, VirtualHollowSubFiber(lvl_2, literal(1), fbr.dirty), mode
+            res = Provenance(;
+                path=SubLevelOf(Parent()),
+                body=instantiate(
+                    ctx, VirtualHollowSubFiber(lvl_2, literal(1), fbr.dirty), mode
+                ),
             )
             push_epilogue!(ctx,
                 contain(ctx) do ctx_2

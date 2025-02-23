@@ -181,7 +181,7 @@ function unfurl(ctx, tns::VirtualProductArray, ext, mode, proto)
             body=(ctx, idx) -> VirtualPermissiveArray(
                 VirtualScaleArray(;
                     body=tns.body,
-                    scale=([literal(1) for _ in 1:(tns.dim - 1)]..., idx)
+                    scale=([literal(1) for _ in 1:(tns.dim - 1)]..., idx),
                 ),
                 ([false for _ in 1:(tns.dim - 1)]..., true),
             ),

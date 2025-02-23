@@ -194,7 +194,10 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)
             preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]
             end,
-            body=(ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
+            body=(ctx) -> Provenance(;
+                path=SubLevelOf(Parent()),
+                body=VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
+            ),
         )
     else
         VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]))
@@ -204,8 +207,11 @@ end
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     @assert mode.kind === updater
-    VirtualSparseScalar(
-        nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+    Provenance(;
+        path=SubLevelOf(Parent()),
+        body=VirtualSparseScalar(
+            nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+        ),
     )
 end
 

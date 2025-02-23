@@ -44,10 +44,12 @@ FinchNotation.finch_leaf(x::Provenance) = virtual(x)
 
 virtual_size(ctx, tns::Provenance) = virtual_size(ctx, tns.path)
 virtual_size(ctx, path::SubLevelOf) = virtual_size(ctx, path.parent)
-virtual_size(ctx, path::SubSliceOf) = virtual_size(ctx, path.parent)[1:end-1]
-virtual_size(ctx, path::SubFiberOf) = virtual_size(ctx, path.parent)[1:end-1]
+virtual_size(ctx, path::SubSliceOf) = virtual_size(ctx, path.parent)[1:(end - 1)]
+virtual_size(ctx, path::SubFiberOf) = virtual_size(ctx, path.parent)[1:(end - 1)]
 
-virtual_resize!(ctx, tns::Provenance, dims...) = throw(LifecycleError("Cannot resize array outside of declaration"))
+function virtual_resize!(ctx, tns::Provenance, dims...)
+    throw(LifecycleError("Cannot resize array outside of declaration"))
+end
 
 virtual_fill_value(ctx, tns::Provenance) = virtual_fill_value(ctx, tns.path)
 virtual_fill_value(ctx, path::SubLevelOf) = virtual_fill_value(ctx, path.parent)

@@ -224,7 +224,10 @@ end
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode)
+        Provenance(;
+            path=SubLevelOf(Parent()),
+            body=instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
+        )
     else
         fbr
     end
