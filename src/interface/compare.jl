@@ -55,3 +55,51 @@ end
 function Base.isequal(A::AbstractArray, B::AbstractTensor)
     return helper_isequal(A, B)
 end
+
+@staged function helper_argmin(A)
+   idxs = [Symbol(:i_, n) for n in 1:ndims(A)]
+   exts = Expr(:block, (:($idx = _) for idx in reverse(idxs))...)
+   return quote
+       x = Scalar(Inf => CartesianIndex(zeros(Int, ndims(A))...))
+       @finch $(Expr(
+           :for,
+           exts,
+           quote
+               x[] <<minby>>= A[$(idxs...)] => CartesianIndex($(idxs...))
+           end,
+       ))
+       return x
+   end
+end
+
+function Base.argmin(A::AbstractTensor)
+    return helper_argmin(A)
+end
+
+function Base.argmin(A::AbstractArray)
+    return helper_argmin(A)
+end
+
+@staged function helper_argmax(A)
+   idxs = [Symbol(:i_, n) for n in 1:ndims(A)]
+   exts = Expr(:block, (:($idx = _) for idx in reverse(idxs))...)
+   return quote
+       x = Scalar(-Inf => CartesianIndex(zeros(Int, ndims(A))...))
+       @finch $(Expr(
+           :for,
+           exts,
+           quote
+               x[] <<maxby>>= A[$(idxs...)] => CartesianIndex($(idxs...))
+           end,
+       ))
+       return x
+   end
+end
+
+function Base.argmax(A::AbstractTensor)
+    return helper_argmax(A)
+end
+
+function Base.argmax(A::AbstractArray)
+    return helper_argmax(A)
+end
