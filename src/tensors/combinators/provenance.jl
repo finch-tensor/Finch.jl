@@ -26,6 +26,15 @@ repath(parent, child::SubLevelOf) = SubLevelOf(repath(parent, child.parent))
 repath(parent, child::SubSliceOf) = SubSliceOf(repath(parent, child.parent))
 repath(parent, child::SubFiberOf) = SubFiberOf(repath(parent, child.parent))
 
+reroot(ctx, tns::Provenance, root) = Provenance(tns.path, reroot_provenance(ctx, tns.body, root, tns.path))
+
+resolve_provenance(ctx, path::SubLevelOf, root) = resolve_provenance(ctx, path, root, resolve_provenance(ctx, path.parent, root))
+resolve_provenance(ctx, path::SubLevelOf, root, fbr) = SubFiber(fbr.lvl.lvl, fbr.pos)
+
+reroot(ctx, tns::Provenance, root::SubLevelOf) = reroot(ctx, tns, root.parent
+
+
+
 Base.show(io::IO, ex::Provenance) = Base.show(io, MIME"text/plain"(), ex)
 
 function Base.show(io::IO, mime::MIME"text/plain", ex::Provenance)
