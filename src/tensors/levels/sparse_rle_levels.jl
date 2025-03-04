@@ -72,12 +72,12 @@ function postype(
     return postype(Lvl)
 end
 
-function moveto(lvl::SparseRunListLevel{Ti}, device) where {Ti}
-    lvl_2 = moveto(lvl.lvl, device)
-    ptr = moveto(lvl.ptr, device)
-    left = moveto(lvl.left, device)
-    right = moveto(lvl.right, device)
-    buf = moveto(lvl.buf, device)
+function transfer(lvl::SparseRunListLevel{Ti}, device, style) where {Ti}
+    lvl_2 = transfer(lvl.lvl, device, style)
+    ptr = transfer(lvl.ptr, device, style)
+    left = transfer(lvl.left, device, style)
+    right = transfer(lvl.right, device, style)
+    buf = transfer(lvl.buf, device, style)
     return SparseRunListLevel{Ti}(
         lvl_2, lvl.shape, lvl.ptr, lvl.left, lvl.right, lvl.buf; merge=getmerge(lvl)
     )
@@ -303,7 +303,7 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseRunListLevel, dims...)
     lvl
 end
 
-function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch)
+function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style)
     ptr_2 = freshen(ctx, lvl.ptr)
     left_2 = freshen(ctx, lvl.left)
     right_2 = freshen(ctx, lvl.right)
@@ -313,9 +313,9 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLe
             $ptr_2 = $(lvl.ptr)
             $left_2 = $(lvl.left)
             $right_2 = $(lvl.right)
-            $(lvl.ptr) = $moveto($(lvl.ptr), $(ctx(arch)))
-            $(lvl.left) = $moveto($(lvl.left), $(ctx(arch)))
-            $(lvl.right) = $moveto($(lvl.right), $(ctx(arch)))
+            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
+            $(lvl.left) = $transfer($(lvl.left), $(ctx(arch)), style)
+            $(lvl.right) = $transfer($(lvl.right), $(ctx(arch)), style)
         end,
     )
     push_epilogue!(
@@ -326,8 +326,8 @@ function virtual_moveto_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLe
             $(lvl.right) = $right_2
         end,
     )
-    virtual_moveto_level(ctx, lvl.lvl, arch)
-    virtual_moveto_level(ctx, lvl.buf, arch)
+    virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    virtual_transfer_level(ctx, lvl.buf, arch, style)
 end
 
 virtual_level_eltype(lvl::VirtualSparseRunListLevel) = virtual_level_eltype(lvl.lvl)
