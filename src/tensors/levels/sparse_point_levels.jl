@@ -153,7 +153,6 @@ end
 mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     idx
     shape
@@ -175,18 +174,20 @@ end
 function virtualize(
     ctx, ex, ::Type{SparsePointLevel{Ti,Idx,Lvl}}, tag=:lvl
 ) where {Ti,Idx,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     idx = freshen(ctx, tag, :_idx)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $idx = $sym.idx
+            $tag = $ex
+            $idx = $tag.idx
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    shape = value(:($sym.shape), Int)
-    VirtualSparsePointLevel(sym, lvl_2, sym, Ti, idx, shape)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualSparsePointLevel(tag, lvl_2, Ti, idx, shape)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, ::DefaultStyle)
     quote
@@ -267,7 +268,7 @@ function virtual_transfer_level(
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    return VirtualSparsePointLevel(lvl.tag, lvl_2, lvl.ex, lvl.Ti, idx_2, lvl.shape)
+    return VirtualSparsePointLevel(lvl.tag, lvl_2, lvl.Ti, idx_2, lvl.shape)
 end
 
 function unfurl(
@@ -278,7 +279,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -329,7 +330,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     dirty = freshen(ctx, tag, :dirty)
     Tp = postype(lvl)
     pos = cache!(ctx, :pos, simplify(ctx, pos))

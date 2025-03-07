@@ -183,7 +183,6 @@ end
 mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     ptr
     tbl
@@ -208,25 +207,28 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Tbl,Srt,Lvl}
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
+    tag = freshen(ctx, tag)
+    shape = value(:($tag.shape), Int)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = freshen(ctx, tag, :_tbl)
     srt = freshen(ctx, tag, :_srt)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $ex.ptr
-            $tbl = $ex.tbl
-            $srt = $ex.srt
-            $qos_stop = $qos_fill = length($sym.srt)
+            $tag = $ex
+            $ptr = $tag.ptr
+            $tbl = $tag.tbl
+            $srt = $tag.srt
+            $qos_stop = $qos_fill = length($tag.srt)
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    VirtualSparseByteMapLevel(sym, lvl_2, sym, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualSparseByteMapLevel(tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultStyle)
     quote
@@ -256,7 +258,7 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseByteMapLevel(
-        lvl.tag, lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
+        lvl.tag, lvl_2, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
         lvl.qos_stop,
     )
 end
@@ -282,10 +284,10 @@ postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos, init)
     Ti = lvl.Ti
     Tp = postype(lvl)
-    r = freshen(ctx, lvl.ex, :_r)
-    p = freshen(ctx, lvl.ex, :_p)
-    q = freshen(ctx, lvl.ex, :_q)
-    i = freshen(ctx, lvl.ex, :_i)
+    r = freshen(ctx, lvl.tag, :_r)
+    p = freshen(ctx, lvl.tag, :_p)
+    q = freshen(ctx, lvl.tag, :_q)
+    i = freshen(ctx, lvl.tag, :_i)
     push_preamble!(
         ctx,
         quote
@@ -329,7 +331,7 @@ end
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos)
     Ti = lvl.Ti
     Tp = postype(lvl)
-    p = freshen(ctx, lvl.ex, :_p)
+    p = freshen(ctx, lvl.tag, :_p)
     lvl.lvl = thaw_level!(ctx, lvl.lvl, call(*, pos, lvl.shape))
     return lvl
 end
@@ -339,10 +341,10 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     Tp = postype(lvl)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
-    q_start = freshen(ctx, lvl.ex, :q_start)
-    q_stop = freshen(ctx, lvl.ex, :q_stop)
-    q = freshen(ctx, lvl.ex, :q)
-    old = freshen(ctx, lvl.ex, :old)
+    q_start = freshen(ctx, lvl.tag, :q_start)
+    q_stop = freshen(ctx, lvl.tag, :q_stop)
+    q = freshen(ctx, lvl.tag, :q)
+    old = freshen(ctx, lvl.tag, :old)
 
     quote
         $q_start = ($(ctx(pos_start)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(Tp(1))
@@ -359,9 +361,9 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos_stop)
-    r = freshen(ctx, lvl.ex, :_r)
-    p = freshen(ctx, lvl.ex, :_p)
-    p_prev = freshen(ctx, lvl.ex, :_p_prev)
+    r = freshen(ctx, lvl.tag, :_r)
+    p = freshen(ctx, lvl.tag, :_p)
+    p_prev = freshen(ctx, lvl.tag, :_p_prev)
     pos_stop = cache!(ctx, :pos_stop, pos_stop)
     Ti = lvl.Ti
     Tp = postype(lvl)
@@ -397,7 +399,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Ti = lvl.Ti
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
@@ -453,7 +455,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseByteMapLevel}, ext, mode, ::typeof(gallop)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Ti = lvl.Ti
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
@@ -510,7 +512,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseByteMapLevel}, ext, mode, ::typeof(follow)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     my_q = freshen(ctx, tag, :_q)
     q = pos
     Ti = lvl.Ti
@@ -552,7 +554,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude),typeof(laminate)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     my_q = freshen(ctx, tag, :_q)
     dirty = freshen(ctx, :dirty)

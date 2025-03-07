@@ -204,7 +204,6 @@ end
 mutable struct VirtualRunListLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     shape
     qos_fill
@@ -243,29 +242,31 @@ function virtualize(
     # 3. for all p in 1:prevpos-1, ptr[p] is the number of runs in that position
     # 4. qos_fill is the position of the last index written
 
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    dirty = freshen(ctx, sym, :_dirty)
+    tag = freshen(ctx, tag)
+    stop = freshen(ctx, tag, :_stop)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    dirty = freshen(ctx, tag, :_dirty)
     ptr = freshen(ctx, tag, :_ptr)
     right = freshen(ctx, tag, :_right)
     buf = freshen(ctx, tag, :_buf)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $right = $sym.right
-            $buf = $sym.buf
+            $tag = $ex
+            $ptr = $tag.ptr
+            $right = $tag.right
+            $buf = $tag.buf
+            $stop = $tag.shape
         end,
     )
+    shape = value(stop, Int)
     i_prev = freshen(ctx, tag, :_i_prev)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    buf = virtualize(ctx, :($sym.buf), Lvl, sym)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    buf = virtualize(ctx, :($tag.buf), Lvl, tag)
     VirtualRunListLevel(
-        sym, lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev,
+        tag, lvl_2, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev,
         merge,
     )
 end
@@ -314,7 +315,6 @@ function virtual_transfer_level(
     VirtualRunListLevel(
         lvl.tag,
         lvl_2,
-        lvl.ex,
         lvl.Ti,
         lvl.shape,
         lvl.qos_fill,
@@ -588,7 +588,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -663,7 +663,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     qos = freshen(ctx, tag, :_qos)

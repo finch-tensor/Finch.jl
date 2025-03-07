@@ -83,7 +83,6 @@ countstored_level(lvl::AtomicElementLevel, pos) = pos
 
 mutable struct VirtualAtomicElementLevel <: AbstractVirtualLevel
     tag
-    ex
     Vf
     Tv
     Tp
@@ -96,21 +95,23 @@ function is_level_concurrent(ctx, lvl::VirtualAtomicElementLevel)
     return ([], true)
 end
 
-lower(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, ::DefaultStyle) = lvl.ex
+function lower(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, ::DefaultStyle)
+    :(AtomicElementLevel{$(lvl.Vf),$(lvl.Tv),$(lvl.Tp)}($(lvl.val)))
+end
 
 function virtualize(
     ctx, ex, ::Type{AtomicElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl
 ) where {Vf,Tv,Tp,Val}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $ex.val
+            $tag = $ex
+            $val = $tag.val
         end,
     )
-    VirtualAtomicElementLevel(sym, sym, Vf, Tv, Tp, val)
+    VirtualAtomicElementLevel(tag, Vf, Tv, Tp, val)
 end
 
 Base.summary(lvl::VirtualAtomicElementLevel) = "AtomicElement($(lvl.Vf))"
@@ -176,13 +177,13 @@ function virtual_transfer_level(
             $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
         end,
     )
-    VirtualAtomicElementLevel(lvl.tag, lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
+    VirtualAtomicElementLevel(lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        val = freshen(ctx.code, lvl.ex, :_val)
+        val = freshen(ctx.code, lvl.tag, :_val)
         return Thunk(;
             preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]

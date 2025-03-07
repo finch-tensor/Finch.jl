@@ -208,7 +208,6 @@ end
 mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     N
     TI
     ptr
@@ -235,17 +234,17 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}, tag=:lvl
 ) where {N,TI,Ptr,Tbl,Lvl}
-    sym = freshen(ctx, tag)
-    shape = map(n -> value(:($sym.shape[$n]), Int), 1:N)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
+    tag = freshen(ctx, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = map(n -> freshen(ctx, tag, :_tbl, n), 1:N)
+    stop = map(n -> freshen(ctx, tag, :_stop, n), 1:N)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $ex.ptr
+            $tag = $ex
+            $ptr = $tag.ptr
         end,
     )
     for n in 1:N
@@ -253,14 +252,16 @@ function virtualize(
             ctx,
             quote
                 $(tbl[n]) = $ex.tbl[$n]
+                $(stop[n]) = $ex.shape[$n]
             end,
         )
     end
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    prev_coord = map(n -> freshen(ctx, sym, :_prev_coord_, n), 1:N)
+    shape = map(n -> value(stop[n], Int), 1:N)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    prev_coord = map(n -> freshen(ctx, tag, :_prev_coord_, n), 1:N)
     VirtualSparseCOOLevel(
-        sym, lvl_2, sym, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
+        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle)
@@ -367,7 +368,7 @@ function virtual_transfer_level(
     end
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseCOOLevel(
-        lvl.tag, lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
+        lvl.tag, lvl_2, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,
         lvl.prev_pos,
@@ -397,7 +398,7 @@ function unfurl(
     ctx, trv::SparseCOOWalkTraversal, ext, mode, ::Union{typeof(defaultread),typeof(walk)}
 )
     (lvl, R, start, stop) = (trv.lvl, trv.R, trv.start, trv.stop)
-    tag = lvl.ex
+    tag = lvl.tag
     TI = lvl.TI
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
@@ -499,7 +500,7 @@ function unfurl(
     proto::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     TI = lvl.TI
     Tp = postype(lvl)
     qos_fill = lvl.qos_fill

@@ -162,7 +162,6 @@ end
 mutable struct VirtualSparseListLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     ptr
     idx
@@ -187,24 +186,26 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseListLevel{Ti,Ptr,Idx,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Idx,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $idx = $sym.idx
+            $tag = $ex
+            $ptr = $tag.ptr
+            $idx = $tag.idx
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
     VirtualSparseListLevel(
-        sym, lvl_2, sym, Ti, ptr, idx, shape, qos_fill, qos_stop, prev_pos
+        tag, lvl_2, Ti, ptr, idx, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, ::DefaultStyle)
@@ -332,7 +333,6 @@ function virtual_transfer_level(
     return VirtualSparseListLevel(
         lvl.tag,
         lvl_2,
-        lvl.ex,
         lvl.Ti,
         ptr_2,
         idx_2,
@@ -351,7 +351,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -400,7 +400,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseListLevel}, ext, mode, ::typeof(follow)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     my_q = freshen(ctx, tag, :_q)
     my_q_stop = freshen(ctx, tag, :_q_stop)
@@ -430,7 +430,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseListLevel}, ext, mode, ::typeof(gallop)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -497,7 +497,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
     qos_fill = lvl.qos_fill

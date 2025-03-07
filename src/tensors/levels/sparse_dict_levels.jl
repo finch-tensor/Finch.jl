@@ -213,7 +213,6 @@ end
 mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     ptr
     idx
@@ -239,28 +238,30 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
     qos_stop = freshen(ctx, tag, :_qos_stop)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $idx = $sym.idx
-            $val = $sym.val
-            $tbl = $sym.tbl
-            $pool = $sym.pool
+            $tag = $ex
+            $ptr = $tag.ptr
+            $idx = $tag.idx
+            $val = $tag.val
+            $tbl = $tag.tbl
+            $pool = $tag.pool
             $qos_stop = length($tbl)
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    shape = value(:($sym.shape), Int)
-    VirtualSparseDictLevel(sym, lvl_2, sym, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -402,7 +403,6 @@ function virtual_transfer_level(
     return VirtualSparseDictLevel(
         lvl.tag,
         lvl_2,
-        lvl.ex,
         lvl.Ti,
         ptr_2,
         idx_2,
@@ -422,7 +422,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -476,7 +476,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode, ::typeof(follow)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     my_q = freshen(ctx, tag, :_q)
 
@@ -516,7 +516,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
     qos_stop = lvl.qos_stop

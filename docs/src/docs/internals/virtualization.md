@@ -203,7 +203,9 @@ quote
     A_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
     A_lvl_ptr = A_lvl.ptr
     A_lvl_idx = A_lvl.idx
-    A_lvl_val = A_lvl.lvl.val
+    A_lvl_stop = A_lvl.shape
+    A_lvl_2 = A_lvl.lvl
+    A_lvl_2_val = A_lvl_2.val
     A_lvl_q = A_lvl_ptr[1]
     A_lvl_q_stop = A_lvl_ptr[1 + 1]
     if A_lvl_q < A_lvl_q_stop
@@ -211,7 +213,7 @@ quote
     else
         A_lvl_i1 = 0
     end
-    phase_stop = min(A_lvl_i1, A_lvl.shape)
+    phase_stop = min(A_lvl_i1, A_lvl_stop)
     if phase_stop >= 1
         if A_lvl_idx[A_lvl_q] < 1
             A_lvl_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_q, A_lvl_q_stop - 1)
@@ -219,14 +221,14 @@ quote
         while true
             A_lvl_i = A_lvl_idx[A_lvl_q]
             if A_lvl_i < phase_stop
-                A_lvl_2_val = A_lvl_val[A_lvl_q]
-                s_val = A_lvl_2_val + s_val
+                A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
+                s_val = A_lvl_2_val_2 + s_val
                 A_lvl_q += 1
             else
                 phase_stop_3 = min(phase_stop, A_lvl_i)
                 if A_lvl_i == phase_stop_3
-                    A_lvl_2_val = A_lvl_val[A_lvl_q]
-                    s_val += A_lvl_2_val
+                    A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
+                    s_val += A_lvl_2_val_2
                     A_lvl_q += 1
                 end
                 break
@@ -247,11 +249,13 @@ quote
     s_data = (ex.bodies[1]).body.lhs.tns.bind
     s_val = s_data.val
     B_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
-    B_lvl_val = B_lvl.lvl.val
-    for i_3 = 1:B_lvl.shape
-        B_lvl_q = (1 - 1) * B_lvl.shape + i_3
-        B_lvl_2_val = B_lvl_val[B_lvl_q]
-        s_val = B_lvl_2_val + s_val
+    B_lvl_stop = B_lvl.shape
+    B_lvl_2 = B_lvl.lvl
+    B_lvl_2_val = B_lvl_2.val
+    for i_3 = 1:B_lvl_stop
+        B_lvl_q = (1 - 1) * B_lvl_stop + i_3
+        B_lvl_2_val_2 = B_lvl_2_val[B_lvl_q]
+        s_val = B_lvl_2_val_2 + s_val
     end
     result = ()
     s_data.val = s_val

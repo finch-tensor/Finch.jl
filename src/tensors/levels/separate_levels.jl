@@ -96,7 +96,6 @@ countstored_level(lvl::SeparateLevel, pos) = pos
 mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
     tag
     lvl  # stand in for the sublevel for virutal resize, etc.
-    ex
     val
     Tv
     Lvl
@@ -124,18 +123,18 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, ::DefaultStyle)
 end
 
 function virtualize(ctx, ex, ::Type{SeparateLevel{Lvl,Val}}, tag=:lvl) where {Lvl,Val}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
 
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $ex.val
+            $tag = $ex
+            $val = $tag.val
         end,
     )
-    lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualSeparateLevel(sym, lvl_2, sym, val, typeof(level_fill_value(Lvl)), Lvl, Val)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualSeparateLevel(tag, lvl_2, val, typeof(level_fill_value(Lvl)), Lvl, Val)
 end
 
 Base.summary(lvl::VirtualSeparateLevel) = "Separate($(lvl.Lvl))"
@@ -157,7 +156,7 @@ function virtual_transfer_level(ctx, lvl::VirtualSeparateLevel, arch, style)
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    VirtualSeparateLevel(lvl.tag, lvl_2, lvl.ex, val_2, lvl.Tv, lvl.Lvl, lvl.Val)
+    VirtualSeparateLevel(lvl.tag, lvl_2, val_2, lvl.Tv, lvl.Lvl, lvl.Val)
 end
 
 function declare_level!(ctx, lvl::VirtualSeparateLevel, pos, init)
@@ -176,9 +175,9 @@ function assemble_level!(ctx, lvl::VirtualSeparateLevel, pos_start, pos_stop)
             Finch.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
             for $pos in ($(ctx(pos_start))):($(ctx(pos_stop)))
                 $sym = Finch.similar_level(
-                    $(lvl.ex).lvl,
-                    Finch.level_fill_value(typeof($(lvl.ex).lvl)),
-                    Finch.level_eltype(typeof($(lvl.ex).lvl)),
+                    $(ctx(lvl.lvl)),
+                    $(ctx(virtual_level_fill_value(lvl.lvl))),
+                    $(ctx(virtual_level_eltype(lvl.lvl))),
                     $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...),
                 )
                 $(
@@ -246,12 +245,12 @@ end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualSeparateLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     sym = freshen(ctx, :pointer_to_lvl)
     if mode.kind === reader
         isnulltest = freshen(ctx, tag, :_nulltest)
         Vf = level_fill_value(lvl.Lvl)
-        val = freshen(ctx, lvl.ex, :_val)
+        val = freshen(ctx, lvl.tag, :_val)
         return Thunk(;
             body=(ctx) -> begin
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
@@ -279,7 +278,7 @@ end
 
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualSeparateLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     sym = freshen(ctx, :pointer_to_lvl)
     @assert mode.kind === updater
 

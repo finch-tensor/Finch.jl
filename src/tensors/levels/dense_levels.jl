@@ -117,7 +117,6 @@ end
 mutable struct VirtualDenseLevel <: AbstractVirtualLevel
     tag
     lvl
-    ex
     Ti
     shape
 end
@@ -135,16 +134,18 @@ function is_level_concurrent(ctx, lvl::VirtualDenseLevel)
 end
 
 function virtualize(ctx, ex, ::Type{DenseLevel{Ti,Lvl}}, tag=:lvl) where {Ti,Lvl}
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Ti)
+    tag = freshen(ctx, tag)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
+            $tag = $ex
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    VirtualDenseLevel(sym, lvl_2, sym, Ti, shape)
+    shape = value(stop, Ti)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualDenseLevel(tag, lvl_2, Ti, shape)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualDenseLevel, ::DefaultStyle)
     quote
@@ -204,7 +205,7 @@ end
 
 function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    VirtualDenseLevel(lvl.tag, lvl_2, lvl.ex, lvl.Ti, lvl.shape)
+    VirtualDenseLevel(lvl.tag, lvl_2, lvl.Ti, lvl.shape)
 end
 
 struct DenseTraversal
@@ -239,7 +240,7 @@ function unfurl(
     },
 )
     (lvl, pos) = (trv.fbr.lvl, trv.fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Ti = lvl.Ti
 
     q = freshen(ctx, tag, :_q)

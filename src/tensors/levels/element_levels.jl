@@ -89,7 +89,6 @@ countstored_level(lvl::ElementLevel, pos) = pos
 
 mutable struct VirtualElementLevel <: AbstractVirtualLevel
     tag
-    ex
     Vf
     Tv
     Tp
@@ -109,16 +108,16 @@ end
 function virtualize(
     ctx, ex, ::Type{ElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl
 ) where {Vf,Tv,Tp,Val}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $ex.val
+            $tag = $ex
+            $val = $tag.val
         end,
     )
-    VirtualElementLevel(sym, sym, Vf, Tv, Tp, val)
+    VirtualElementLevel(tag, Vf, Tv, Tp, val)
 end
 
 Base.summary(lvl::VirtualElementLevel) = "Element($(lvl.Vf))"
@@ -184,13 +183,13 @@ function virtual_transfer_level(
             $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
         end,
     )
-    VirtualElementLevel(lvl.tag, lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
+    VirtualElementLevel(lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        val = freshen(ctx, lvl.ex, :_val)
+        val = freshen(ctx, lvl.tag, :_val)
         return Thunk(;
             preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]

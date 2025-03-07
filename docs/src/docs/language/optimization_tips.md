@@ -48,35 +48,38 @@ quote
     s_data = (ex.bodies[1]).body.body.lhs.tns.bind
     s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
-    for j_3 = 1:A_lvl.shape
-        A_lvl_q = (1 - 1) * A_lvl.shape + j_3
-        A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-        A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
+    for j_3 = 1:A_lvl_stop
+        A_lvl_q = (1 - 1) * A_lvl_stop + j_3
+        A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+        A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
         if A_lvl_2_q < A_lvl_2_q_stop
-            A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+            A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
         else
             A_lvl_2_i1 = 0
         end
-        phase_stop = min(A_lvl_2_i1, A_lvl_2.shape)
+        phase_stop = min(A_lvl_2_i1, A_lvl_2_stop)
         if phase_stop >= 1
-            if A_lvl_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+            if A_lvl_2_idx[A_lvl_2_q] < 1
+                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
-                A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                 if A_lvl_2_i < phase_stop
-                    A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                    s_val = A_lvl_3_val + s_val
+                    A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                    s_val = A_lvl_3_val_2 + s_val
                     A_lvl_2_q += 1
                 else
                     phase_stop_3 = min(phase_stop, A_lvl_2_i)
                     if A_lvl_2_i == phase_stop_3
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                        s_val += A_lvl_3_val
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                        s_val += A_lvl_3_val_2
                         A_lvl_2_q += 1
                     end
                     break
@@ -111,37 +114,40 @@ quote
     s_data = (ex.bodies[1]).body.body.lhs.tns.bind
     s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
     @warn "Performance Warning: non-concordant traversal of A[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
-    for i_3 = 1:A_lvl_2.shape
-        for j_3 = 1:A_lvl.shape
-            A_lvl_q = (1 - 1) * A_lvl.shape + j_3
-            A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-            A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+    for i_3 = 1:A_lvl_2_stop
+        for j_3 = 1:A_lvl_stop
+            A_lvl_q = (1 - 1) * A_lvl_stop + j_3
+            A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+            A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
             if A_lvl_2_q < A_lvl_2_q_stop
-                A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+                A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
             else
                 A_lvl_2_i1 = 0
             end
             phase_stop = min(i_3, A_lvl_2_i1)
             if phase_stop >= i_3
-                if A_lvl_idx[A_lvl_2_q] < i_3
-                    A_lvl_2_q = Finch.scansearch(A_lvl_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                if A_lvl_2_idx[A_lvl_2_q] < i_3
+                    A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
                 end
                 while true
-                    A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                    A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                     if A_lvl_2_i < phase_stop
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                        s_val = A_lvl_3_val + s_val
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                        s_val = A_lvl_3_val_2 + s_val
                         A_lvl_2_q += 1
                     else
                         phase_stop_3 = min(phase_stop, A_lvl_2_i)
                         if A_lvl_2_i == phase_stop_3
-                            A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                            s_val += A_lvl_3_val
+                            A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                            s_val += A_lvl_3_val_2
                             A_lvl_2_q += 1
                         end
                         break
@@ -282,42 +288,45 @@ return C)
 quote
     C_data = ((ex.bodies[1]).bodies[1]).tns.bind
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
     B_data = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind
     sugar_1 = size((((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind)
     B_mode1_stop = sugar_1[1]
     B_mode2_stop = sugar_1[2]
-    B_mode1_stop == A_lvl_2.shape || throw(DimensionMismatch("mismatched dimension limits ($(B_mode1_stop) != $(A_lvl_2.shape))"))
-    B_mode2_stop == A_lvl.shape || throw(DimensionMismatch("mismatched dimension limits ($(B_mode2_stop) != $(A_lvl.shape))"))
+    B_mode1_stop == A_lvl_2_stop || throw(DimensionMismatch("mismatched dimension limits ($(B_mode1_stop) != $(A_lvl_2_stop))"))
+    B_mode2_stop == A_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(B_mode2_stop) != $(A_lvl_stop))"))
     C_val = 0
     for j_4 = 1:B_mode2_stop
-        A_lvl_q = (1 - 1) * A_lvl.shape + j_4
-        A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-        A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+        A_lvl_q = (1 - 1) * A_lvl_stop + j_4
+        A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+        A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
         if A_lvl_2_q < A_lvl_2_q_stop
-            A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+            A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
         else
             A_lvl_2_i1 = 0
         end
         phase_stop = min(B_mode1_stop, A_lvl_2_i1)
         if phase_stop >= 1
             i = 1
-            if A_lvl_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+            if A_lvl_2_idx[A_lvl_2_q] < 1
+                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
-                A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                 if A_lvl_2_i < phase_stop
                     for i_6 = i:-1 + A_lvl_2_i
                         val = B_data[i_6, j_4]
                         C_val = (Main).f(0.0, val) + C_val
                     end
-                    A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
+                    A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
                     val_2 = B_data[A_lvl_2_i, j_4]
-                    C_val += (Main).f(A_lvl_3_val, val_2)
+                    C_val += (Main).f(A_lvl_3_val_2, val_2)
                     A_lvl_2_q += 1
                     i = A_lvl_2_i + 1
                 else
@@ -327,9 +336,9 @@ quote
                             val_3 = B_data[i_8, j_4]
                             C_val += (Main).f(0.0, val_3)
                         end
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
                         val_4 = B_data[phase_stop_3, j_4]
-                        C_val += (Main).f(A_lvl_3_val, val_4)
+                        C_val += (Main).f(A_lvl_3_val_2, val_4)
                         A_lvl_2_q += 1
                     else
                         for i_10 = i:phase_stop_3
