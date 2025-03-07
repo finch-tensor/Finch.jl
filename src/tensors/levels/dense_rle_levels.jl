@@ -202,7 +202,7 @@ function (fbr::SubFiber{<:RunListLevel})(idxs...)
 end
 
 mutable struct VirtualRunListLevel <: AbstractVirtualLevel
-    id
+    tag
     lvl
     ex
     Ti
@@ -312,7 +312,7 @@ function virtual_transfer_level(
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
     VirtualRunListLevel(
-        lvl.id,
+        lvl.tag,
         lvl_2,
         lvl.ex,
         lvl.Ti,

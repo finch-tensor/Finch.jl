@@ -181,7 +181,7 @@ function (fbr::SubFiber{<:SparseByteMapLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
-    id
+    tag
     lvl
     ex
     Ti
@@ -256,7 +256,7 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseByteMapLevel(
-        lvl.id, lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
+        lvl.tag, lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
         lvl.qos_stop,
     )
 end

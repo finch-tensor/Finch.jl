@@ -82,7 +82,7 @@ end
 countstored_level(lvl::AtomicElementLevel, pos) = pos
 
 mutable struct VirtualAtomicElementLevel <: AbstractVirtualLevel
-    id
+    tag
     ex
     Vf
     Tv
@@ -176,7 +176,7 @@ function virtual_transfer_level(
             $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
         end,
     )
-    VirtualAtomicElementLevel(lvl.id, lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
+    VirtualAtomicElementLevel(lvl.tag, lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)

@@ -20,7 +20,7 @@ Base.similar(tns::Scalar{Vf,Tv}) where {Vf,Tv} = Scalar{Vf,Tv}()
 @inline Base.getindex(tns::Scalar) = tns.val
 
 struct VirtualScalar
-    id
+    tag
     ex
     Tv
     Vf
@@ -117,7 +117,7 @@ Base.similar(tns::SparseScalar{Vf,Tv}) where {Vf,Tv} = SparseScalar{Vf,Tv}()
 @inline Base.getindex(tns::SparseScalar) = tns.val
 
 struct VirtualSparseScalar
-    id
+    tag
     ex
     Tv
     Vf
@@ -227,7 +227,7 @@ Base.similar(tns::ShortCircuitScalar{Vf,Tv}) where {Vf,Tv} = ShortCircuitScalar{
 @inline Base.getindex(tns::ShortCircuitScalar) = tns.val
 
 struct VirtualShortCircuitScalar
-    id
+    tag
     ex
     Tv
     Vf
@@ -331,7 +331,7 @@ end
 @inline Base.getindex(tns::SparseShortCircuitScalar) = tns.val
 
 struct VirtualSparseShortCircuitScalar
-    id
+    tag
     ex
     Tv
     Vf

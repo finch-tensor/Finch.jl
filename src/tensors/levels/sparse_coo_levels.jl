@@ -206,7 +206,7 @@ function (fbr::SubFiber{<:SparseCOOLevel{N,TI}})(idxs...) where {N,TI}
 end
 
 mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
-    id
+    tag
     lvl
     ex
     N
@@ -367,7 +367,7 @@ function virtual_transfer_level(
     end
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseCOOLevel(
-        lvl.id, lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
+        lvl.tag, lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,
         lvl.prev_pos,

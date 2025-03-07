@@ -1,5 +1,5 @@
 @kwdef mutable struct VirtualAbstractUnitRange
-    id
+    tag
     ex
     target
     arrtype

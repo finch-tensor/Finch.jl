@@ -77,7 +77,7 @@ function SparseArrays.sparse(fbr::Union{Tensor,SwizzleArray})
 end
 
 @kwdef mutable struct VirtualSparseMatrixCSC
-    id
+    tag
     ex
     Tv
     Ti
@@ -401,7 +401,7 @@ function SparseArrays.SparseVector(
     return SparseVector{Tv,Ti}(size(arr)..., arr.lvl.idx, arr.lvl.lvl.val)
 end
 @kwdef mutable struct VirtualSparseVector
-    id
+    tag
     ex
     Tv
     Ti

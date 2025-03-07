@@ -1,5 +1,5 @@
 @kwdef mutable struct VirtualAbstractArray <: AbstractVirtualTensor
-    id
+    tag
     ex
     eltype
     ndims
@@ -146,7 +146,7 @@ function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
             $ex = $transfer($(vec.ex), $(ctx(device)), $style)
         end,
     )
-    VirtualAbstractArray(vec.id, ex, vec.eltype, vec.ndims, vec.shape)
+    VirtualAbstractArray(vec.tag, ex, vec.eltype, vec.ndims, vec.shape)
 end
 
 fill_value(a::AbstractArray) = fill_value(typeof(a))

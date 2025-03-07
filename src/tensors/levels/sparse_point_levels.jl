@@ -151,7 +151,7 @@ function (fbr::SubFiber{<:SparsePointLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
-    id
+    tag
     lvl
     ex
     Ti
@@ -267,7 +267,7 @@ function virtual_transfer_level(
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    return VirtualSparsePointLevel(lvl.id, lvl_2, lvl.ex, lvl.Ti, idx_2, lvl.shape)
+    return VirtualSparsePointLevel(lvl.tag, lvl_2, lvl.ex, lvl.Ti, idx_2, lvl.shape)
 end
 
 function unfurl(

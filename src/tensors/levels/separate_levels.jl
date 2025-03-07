@@ -94,7 +94,7 @@ end
 countstored_level(lvl::SeparateLevel, pos) = pos
 
 mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
-    id
+    tag
     lvl  # stand in for the sublevel for virutal resize, etc.
     ex
     val
@@ -157,7 +157,7 @@ function virtual_transfer_level(ctx, lvl::VirtualSeparateLevel, arch, style)
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    VirtualSeparateLevel(lvl.id, lvl_2, lvl.ex, val_2, lvl.Tv, lvl.Lvl, lvl.Val)
+    VirtualSeparateLevel(lvl.tag, lvl_2, lvl.ex, val_2, lvl.Tv, lvl.Lvl, lvl.Val)
 end
 
 function declare_level!(ctx, lvl::VirtualSeparateLevel, pos, init)
