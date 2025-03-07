@@ -202,6 +202,7 @@ function (fbr::SubFiber{<:RunListLevel})(idxs...)
 end
 
 mutable struct VirtualRunListLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -264,7 +265,8 @@ function virtualize(
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     buf = virtualize(ctx, :($sym.buf), Lvl, sym)
     VirtualRunListLevel(
-        lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev, merge
+        sym, lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev,
+        merge,
     )
 end
 
@@ -310,6 +312,7 @@ function virtual_transfer_level(
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
     VirtualRunListLevel(
+        lvl.id,
         lvl_2,
         lvl.ex,
         lvl.Ti,
@@ -464,7 +467,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
                                         ),
                                     )
                                     check = VirtualScalar(
-                                        :UNREACHABLE, Bool, false, :check, checkval
+                                        nothing, :UNREACHABLE, Bool, false, :check, checkval
                                     )
                                     exts = virtual_level_size(ctx_2, lvl.buf)
                                     inds = [

@@ -218,6 +218,7 @@ function (fbr::SubFiber{<:SparseRunListLevel})(idxs...)
 end
 
 mutable struct VirtualSparseRunListLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -272,7 +273,8 @@ function virtualize(
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     buf = virtualize(ctx, :($sym.buf), Lvl, sym)
     VirtualSparseRunListLevel(
-        lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, left, right, buf, merge, prev_pos
+        sym, lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, left, right, buf, merge,
+        prev_pos,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, ::DefaultStyle)
@@ -320,6 +322,7 @@ function virtual_transfer_level(
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
     return VirtualSparseRunListLevel(
+        lvl.id,
         lvl_2,
         lvl.ex,
         lvl.Ti,
@@ -455,7 +458,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                                         ),
                                     )
                                     check = VirtualScalar(
-                                        :UNREACHABLE, Bool, false, :check, checkval
+                                        nothing, :UNREACHABLE, Bool, false, :check, checkval
                                     )
                                     exts = virtual_level_size(ctx_2, lvl.buf)
                                     inds = [

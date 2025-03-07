@@ -151,6 +151,7 @@ function (fbr::SubFiber{<:SparsePointLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -185,7 +186,7 @@ function virtualize(
     )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     shape = value(:($sym.shape), Int)
-    VirtualSparsePointLevel(lvl_2, sym, Ti, idx, shape)
+    VirtualSparsePointLevel(sym, lvl_2, sym, Ti, idx, shape)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, ::DefaultStyle)
     quote
@@ -266,7 +267,7 @@ function virtual_transfer_level(
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    return VirtualSparsePointLevel(lvl_2, lvl.ex, lvl.Ti, idx_2, lvl.shape)
+    return VirtualSparsePointLevel(lvl.id, lvl_2, lvl.ex, lvl.Ti, idx_2, lvl.shape)
 end
 
 function unfurl(

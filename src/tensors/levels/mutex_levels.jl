@@ -93,6 +93,7 @@ end
 countstored_level(lvl::MutexLevel, pos) = countstored_level(lvl.lvl, pos)
 
 mutable struct VirtualMutexLevel <: AbstractVirtualLevel
+    id
     lvl # the level below us.
     ex
     locks
@@ -135,7 +136,7 @@ function virtualize(ctx, ex, ::Type{MutexLevel{AVal,Lvl}}, tag=:lvl) where {AVal
     )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     temp = VirtualMutexLevel(
-        lvl_2, sym, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl
+        sym, lvl_2, sym, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl
     )
     temp
 end
@@ -218,7 +219,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, a
         end,
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    VirtualMutexLevel(lvl_2, lvl.ex, locks_2, lvl.Tv, lvl.Val, lvl.AVal, lvl.Lvl)
+    VirtualMutexLevel(lvl.id, lvl_2, lvl.ex, locks_2, lvl.Tv, lvl.Val, lvl.AVal, lvl.Lvl)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)

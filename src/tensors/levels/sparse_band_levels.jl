@@ -149,6 +149,7 @@ function (fbr::SubFiber{<:SparseBandLevel})(idxs...)
 end
 
 mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -200,6 +201,7 @@ function virtualize(
     prev_pos = freshen(ctx, sym, :_prev_pos)
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     VirtualSparseBandLevel(
+        sym,
         lvl_2,
         sym,
         Ti,
@@ -255,6 +257,7 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseBandLevel(
+        lvl.id,
         lvl_2,
         lvl.ex,
         lvl.Ti,

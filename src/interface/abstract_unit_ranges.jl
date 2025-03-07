@@ -1,4 +1,5 @@
 @kwdef mutable struct VirtualAbstractUnitRange
+    id
     ex
     target
     arrtype
@@ -13,7 +14,7 @@ function virtualize(ctx, ex, arrtype::Type{<:AbstractUnitRange{T}}, tag=:tns) wh
     sym = freshen(ctx, tag)
     push_preamble!(ctx, :($sym = $ex))
     target = Extent(value(:(first($sym)), T), value(:(last($sym)), T))
-    VirtualAbstractUnitRange(sym, target, arrtype, T)
+    VirtualAbstractUnitRange(sym, sym, target, arrtype, T)
 end
 
 function virtual_size(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange)

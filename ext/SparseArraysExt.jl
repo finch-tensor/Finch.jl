@@ -77,6 +77,7 @@ function SparseArrays.sparse(fbr::Union{Tensor,SwizzleArray})
 end
 
 @kwdef mutable struct VirtualSparseMatrixCSC
+    id
     ex
     Tv
     Ti
@@ -135,7 +136,9 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) w
             $sym = $ex
         end,
     )
-    VirtualSparseMatrixCSC(sym, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos)
+    VirtualSparseMatrixCSC(
+        sym, sym, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos
+    )
 end
 
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init)
@@ -347,7 +350,7 @@ function Finch.unfurl(
             end
             $dirty = false
         end,
-        body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
+        body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
         epilogue = quote
             if $dirty
                 $(arr.idx)[$qos] = $(ctx(idx))
@@ -398,6 +401,7 @@ function SparseArrays.SparseVector(
     return SparseVector{Tv,Ti}(size(arr)..., arr.lvl.idx, arr.lvl.lvl.val)
 end
 @kwdef mutable struct VirtualSparseVector
+    id
     ex
     Tv
     Ti
@@ -443,7 +447,7 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) wher
             $sym = $ex
         end,
     )
-    VirtualSparseVector(sym, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
+    VirtualSparseVector(sym, sym, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
 end
 
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
@@ -575,7 +579,7 @@ function Finch.unfurl(
                 end
                 $dirty = false
             end,
-            body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
+            body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
             epilogue = quote
                 if $dirty
                     $(arr.idx)[$qos] = $(ctx(idx))

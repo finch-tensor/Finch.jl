@@ -1,4 +1,5 @@
 @kwdef mutable struct VirtualAbstractArray <: AbstractVirtualTensor
+    id
     ex
     eltype
     ndims
@@ -23,7 +24,9 @@ function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
             ($(dims...),) = size($ex)
         end,
     )
-    VirtualAbstractArray(sym, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N))
+    VirtualAbstractArray(
+        sym, sym, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N)
+    )
 end
 
 function declare!(ctx::AbstractCompiler, arr::VirtualAbstractArray, init)
@@ -61,7 +64,9 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                         end,
                         body=(ctx) -> instantiate(
                             ctx,
-                            VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
+                            VirtualScalar(
+                                nothing, nothing, arr.eltype, nothing, gensym(), val
+                            ),
                             mode,
                         ), #=We don't know what init is, but it won't be used here =#
                     )
@@ -70,6 +75,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                         body=(ctx,) -> instantiate(
                             ctx,
                             VirtualScalar(
+                                nothing,
                                 nothing,
                                 arr.eltype,
                                 nothing,
@@ -104,7 +110,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
-                    VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
+                    VirtualScalar(nothing, nothing, arr.eltype, nothing, gensym(), val),
                     mode,
                 ), #=We don't know what init is, but it won't be used here =#
             )
@@ -112,7 +118,9 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
             Thunk(;
                 body=(ctx,) -> instantiate(
                     ctx,
-                    VirtualScalar(nothing, arr.eltype, nothing, gensym(), :($(arr.ex)[])),
+                    VirtualScalar(
+                        nothing, nothing, arr.eltype, nothing, gensym(), :($(arr.ex)[])
+                    ),
                     mode,
                 ), #=We don't know what init is, but it won't be used here=#
             )
@@ -138,7 +146,7 @@ function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
             $ex = $transfer($(vec.ex), $(ctx(device)), $style)
         end,
     )
-    VirtualAbstractArray(ex, vec.eltype, vec.ndims, vec.shape)
+    VirtualAbstractArray(vec.id, ex, vec.eltype, vec.ndims, vec.shape)
 end
 
 fill_value(a::AbstractArray) = fill_value(typeof(a))

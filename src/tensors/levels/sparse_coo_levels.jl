@@ -206,6 +206,7 @@ function (fbr::SubFiber{<:SparseCOOLevel{N,TI}})(idxs...) where {N,TI}
 end
 
 mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     N
@@ -259,7 +260,7 @@ function virtualize(
     prev_pos = freshen(ctx, sym, :_prev_pos)
     prev_coord = map(n -> freshen(ctx, sym, :_prev_coord_, n), 1:N)
     VirtualSparseCOOLevel(
-        lvl_2, sym, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
+        sym, lvl_2, sym, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle)
@@ -366,7 +367,8 @@ function virtual_transfer_level(
     end
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseCOOLevel(
-        lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape, lvl.qos_fill,
+        lvl.id, lvl_2, lvl.ex, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
+        lvl.qos_fill,
         lvl.qos_stop,
         lvl.prev_pos,
     )

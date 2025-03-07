@@ -20,6 +20,7 @@ Base.similar(tns::Scalar{Vf,Tv}) where {Vf,Tv} = Scalar{Vf,Tv}()
 @inline Base.getindex(tns::Scalar) = tns.val
 
 struct VirtualScalar
+    id
     ex
     Tv
     Vf
@@ -38,7 +39,7 @@ function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
             $val = $sym.val
         end,
     )
-    VirtualScalar(sym, Tv, Vf, tag, val)
+    VirtualScalar(sym, sym, Tv, Vf, tag, val)
 end
 
 virtual_transfer(ctx, lvl::VirtualScalar, arch, style) = lvl
@@ -116,6 +117,7 @@ Base.similar(tns::SparseScalar{Vf,Tv}) where {Vf,Tv} = SparseScalar{Vf,Tv}()
 @inline Base.getindex(tns::SparseScalar) = tns.val
 
 struct VirtualSparseScalar
+    id
     ex
     Tv
     Vf
@@ -139,7 +141,7 @@ function virtualize(ctx, ex, ::Type{SparseScalar{Vf,Tv}}, tag) where {Vf,Tv}
             $dirty = $sym.dirty
         end,
     )
-    VirtualSparseScalar(sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseScalar(sym, sym, Tv, Vf, tag, val, dirty)
 end
 
 virtual_size(ctx, ::VirtualSparseScalar) = ()
@@ -225,6 +227,7 @@ Base.similar(tns::ShortCircuitScalar{Vf,Tv}) where {Vf,Tv} = ShortCircuitScalar{
 @inline Base.getindex(tns::ShortCircuitScalar) = tns.val
 
 struct VirtualShortCircuitScalar
+    id
     ex
     Tv
     Vf
@@ -245,7 +248,7 @@ function virtualize(ctx, ex, ::Type{ShortCircuitScalar{Vf,Tv}}, tag) where {Vf,T
             $val = $sym.val
         end,
     )
-    VirtualShortCircuitScalar(sym, Tv, Vf, tag, val)
+    VirtualShortCircuitScalar(sym, sym, Tv, Vf, tag, val)
 end
 
 virtual_size(ctx, ::VirtualShortCircuitScalar) = ()
@@ -328,6 +331,7 @@ end
 @inline Base.getindex(tns::SparseShortCircuitScalar) = tns.val
 
 struct VirtualSparseShortCircuitScalar
+    id
     ex
     Tv
     Vf
@@ -351,7 +355,7 @@ function virtualize(ctx, ex, ::Type{SparseShortCircuitScalar{Vf,Tv}}, tag) where
             $dirty = $sym.dirty
         end,
     )
-    VirtualSparseShortCircuitScalar(sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseShortCircuitScalar(sym, sym, Tv, Vf, tag, val, dirty)
 end
 
 virtual_size(ctx, ::VirtualSparseShortCircuitScalar) = ()

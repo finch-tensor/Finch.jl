@@ -179,6 +179,7 @@ function (fbr::SubFiber{<:SparseIntervalLevel})(idxs...)
 end
 
 mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -222,7 +223,7 @@ function virtualize(
     qos_stop = freshen(ctx, sym, :_qos_stop)
     prev_pos = freshen(ctx, sym, :_prev_pos)
     VirtualSparseIntervalLevel(
-        lvl_2, sym, Ti, left, right, shape, qos_fill, qos_stop, prev_pos
+        sym, lvl_2, sym, Ti, left, right, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::DefaultStyle)
@@ -261,7 +262,8 @@ function virtual_transfer_level(ctx, lvl::VirtualSparseIntervalLevel, arch, styl
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseIntervalLevel(
-        lvl_2, lvl.ex, lvl.Ti, left_2, right_2, lvl.shape, lvl.qos_fill, lvl.qos_stop,
+        lvl.id, lvl_2, lvl.ex, lvl.Ti, left_2, right_2, lvl.shape, lvl.qos_fill,
+        lvl.qos_stop,
         lvl.prev_pos,
     )
 end

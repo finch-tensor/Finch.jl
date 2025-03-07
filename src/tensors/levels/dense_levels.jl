@@ -115,6 +115,7 @@ function labelled_children(fbr::SubFiber{<:DenseLevel})
 end
 
 mutable struct VirtualDenseLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -143,7 +144,7 @@ function virtualize(ctx, ex, ::Type{DenseLevel{Ti,Lvl}}, tag=:lvl) where {Ti,Lvl
         end,
     )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    VirtualDenseLevel(lvl_2, sym, Ti, shape)
+    VirtualDenseLevel(sym, lvl_2, sym, Ti, shape)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualDenseLevel, ::DefaultStyle)
     quote
@@ -203,7 +204,7 @@ end
 
 function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    VirtualDenseLevel(lvl_2, lvl.ex, lvl.Ti, lvl.shape)
+    VirtualDenseLevel(lvl.id, lvl_2, lvl.ex, lvl.Ti, lvl.shape)
 end
 
 struct DenseTraversal

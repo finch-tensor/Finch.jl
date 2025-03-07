@@ -88,6 +88,7 @@ end
 countstored_level(lvl::ElementLevel, pos) = pos
 
 mutable struct VirtualElementLevel <: AbstractVirtualLevel
+    id
     ex
     Vf
     Tv
@@ -117,7 +118,7 @@ function virtualize(
             $val = $ex.val
         end,
     )
-    VirtualElementLevel(sym, Vf, Tv, Tp, val)
+    VirtualElementLevel(sym, sym, Vf, Tv, Tp, val)
 end
 
 Base.summary(lvl::VirtualElementLevel) = "Element($(lvl.Vf))"
@@ -183,7 +184,7 @@ function virtual_transfer_level(
             $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
         end,
     )
-    VirtualElementLevel(lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
+    VirtualElementLevel(lvl.id, lvl.ex, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)
@@ -194,10 +195,12 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)
             preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]
             end,
-            body=(ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
+            body=(ctx) -> VirtualScalar(nothing, nothing, lvl.Tv, lvl.Vf, gensym(), val),
         )
     else
-        VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]))
+        VirtualScalar(
+            nothing, nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))])
+        )
     end
 end
 
@@ -205,7 +208,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     @assert mode.kind === updater
     VirtualSparseScalar(
-        nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+        nothing, nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
     )
 end
 
@@ -214,7 +217,8 @@ function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualElementLevel}, mode
     lower_assign(
         ctx,
         VirtualSparseScalar(
-            nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]), fbr.dirty
+            nothing, nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))]),
+            fbr.dirty,
         ),
         mode,
         op,
@@ -226,7 +230,9 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode, op, 
     (lvl, pos) = (fbr.lvl, fbr.pos)
     lower_assign(
         ctx,
-        VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))])),
+        VirtualScalar(
+            nothing, nothing, lvl.Tv, lvl.Vf, gensym(), :($(lvl.val)[$(ctx(pos))])
+        ),
         mode,
         op,
         rhs,

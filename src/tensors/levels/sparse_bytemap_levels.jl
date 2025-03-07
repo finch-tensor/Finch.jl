@@ -181,6 +181,7 @@ function (fbr::SubFiber{<:SparseByteMapLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -225,7 +226,7 @@ function virtualize(
         end,
     )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    VirtualSparseByteMapLevel(lvl_2, sym, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop)
+    VirtualSparseByteMapLevel(sym, lvl_2, sym, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultStyle)
     quote
@@ -255,7 +256,8 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     VirtualSparseByteMapLevel(
-        lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill, lvl.qos_stop
+        lvl.id, lvl_2, lvl.ex, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
+        lvl.qos_stop,
     )
 end
 

@@ -211,6 +211,7 @@ function (fbr::SubFiber{<:SparseDictLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -259,7 +260,7 @@ function virtualize(
     )
     lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
     shape = value(:($sym.shape), Int)
-    VirtualSparseDictLevel(lvl_2, sym, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
+    VirtualSparseDictLevel(sym, lvl_2, sym, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -399,6 +400,7 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseDictLevel(
+        lvl.id,
         lvl_2,
         lvl.ex,
         lvl.Ti,

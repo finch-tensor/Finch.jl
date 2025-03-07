@@ -160,6 +160,7 @@ function (fbr::SubFiber{<:SparseListLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparseListLevel <: AbstractVirtualLevel
+    id
     lvl
     ex
     Ti
@@ -202,7 +203,9 @@ function virtualize(
     qos_fill = freshen(ctx, sym, :_qos_fill)
     qos_stop = freshen(ctx, sym, :_qos_stop)
     prev_pos = freshen(ctx, sym, :_prev_pos)
-    VirtualSparseListLevel(lvl_2, sym, Ti, ptr, idx, shape, qos_fill, qos_stop, prev_pos)
+    VirtualSparseListLevel(
+        sym, lvl_2, sym, Ti, ptr, idx, shape, qos_fill, qos_stop, prev_pos
+    )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, ::DefaultStyle)
     quote
@@ -327,6 +330,7 @@ function virtual_transfer_level(
     )
     lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseListLevel(
+        lvl.id,
         lvl_2,
         lvl.ex,
         lvl.Ti,
