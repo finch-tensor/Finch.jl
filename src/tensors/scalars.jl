@@ -21,25 +21,26 @@ Base.similar(tns::Scalar{Vf,Tv}) where {Vf,Tv} = Scalar{Vf,Tv}()
 
 struct VirtualScalar
     tag
-    ex
+    data
     Tv
     Vf
     name
     val
 end
 
-lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.ex
+lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.data
 function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
+            $data = $ex
+            $val = $data.val
         end,
     )
-    VirtualScalar(sym, sym, Tv, Vf, tag, val)
+    VirtualScalar(tag, data, Tv, Vf, tag, val)
 end
 
 virtual_transfer(ctx, lvl::VirtualScalar, arch, style) = lvl
@@ -69,7 +70,7 @@ function freeze!(ctx, tns::VirtualScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -118,7 +119,7 @@ Base.similar(tns::SparseScalar{Vf,Tv}) where {Vf,Tv} = SparseScalar{Vf,Tv}()
 
 struct VirtualSparseScalar
     tag
-    ex
+    data
     Tv
     Vf
     name
@@ -130,18 +131,19 @@ function lower(ctx::AbstractCompiler, tns::VirtualSparseScalar, ::DefaultStyle)
     :($SparseScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
 function virtualize(ctx, ex, ::Type{SparseScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
-    dirty = Symbol(tag, :_dirty) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
+    dirty = Symbol(tag, :_dirty)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
-            $dirty = $sym.dirty
+            $data = $ex
+            $val = $data.val
+            $dirty = $data.dirty
         end,
     )
-    VirtualSparseScalar(sym, sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseScalar(tag, data, Tv, Vf, tag, val, dirty)
 end
 
 virtual_size(ctx, ::VirtualSparseScalar) = ()
@@ -170,7 +172,7 @@ function freeze!(ctx, tns::VirtualSparseScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -228,7 +230,7 @@ Base.similar(tns::ShortCircuitScalar{Vf,Tv}) where {Vf,Tv} = ShortCircuitScalar{
 
 struct VirtualShortCircuitScalar
     tag
-    ex
+    data
     Tv
     Vf
     name
@@ -239,16 +241,17 @@ function lower(ctx::AbstractCompiler, tns::VirtualShortCircuitScalar, ::DefaultS
     :($ShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val)))
 end
 function virtualize(ctx, ex, ::Type{ShortCircuitScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
+            $data = $ex
+            $val = $data.val
         end,
     )
-    VirtualShortCircuitScalar(sym, sym, Tv, Vf, tag, val)
+    VirtualShortCircuitScalar(tag, data, Tv, Vf, tag, val)
 end
 
 virtual_size(ctx, ::VirtualShortCircuitScalar) = ()
@@ -276,7 +279,7 @@ function freeze!(ctx, tns::VirtualShortCircuitScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -332,7 +335,7 @@ end
 
 struct VirtualSparseShortCircuitScalar
     tag
-    ex
+    data
     Tv
     Vf
     name
@@ -344,18 +347,19 @@ function lower(ctx::AbstractCompiler, tns::VirtualSparseShortCircuitScalar, ::De
     :($SparseShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
 function virtualize(ctx, ex, ::Type{SparseShortCircuitScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
-    dirty = Symbol(tag, :_dirty) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
+    dirty = Symbol(tag, :_dirty)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
-            $dirty = $sym.dirty
+            $data = $ex
+            $val = $data.val
+            $dirty = $data.dirty
         end,
     )
-    VirtualSparseShortCircuitScalar(sym, sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseShortCircuitScalar(tag, data, Tv, Vf, tag, val, dirty)
 end
 
 virtual_size(ctx, ::VirtualSparseShortCircuitScalar) = ()
@@ -384,7 +388,7 @@ function freeze!(ctx, tns::VirtualSparseShortCircuitScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns

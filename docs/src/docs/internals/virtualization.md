@@ -198,8 +198,8 @@ julia> @finch_code begin
            end
        end
 quote
-    s = (ex.bodies[1]).body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.lhs.tns.bind
+    s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
     A_lvl_ptr = A_lvl.ptr
     A_lvl_idx = A_lvl.idx
@@ -234,7 +234,7 @@ quote
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end
 
@@ -244,8 +244,8 @@ julia> @finch_code begin
            end
        end
 quote
-    s = (ex.bodies[1]).body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.lhs.tns.bind
+    s_val = s_data.val
     B_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
     B_lvl_val = B_lvl.lvl.val
     for i_3 = 1:B_lvl.shape
@@ -254,7 +254,7 @@ quote
         s_val = B_lvl_2_val + s_val
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end
 ```

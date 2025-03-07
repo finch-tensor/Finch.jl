@@ -45,8 +45,8 @@ end
 # output
 
 quote
-    s = (ex.bodies[1]).body.body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.body.lhs.tns.bind
+    s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
     A_lvl_ptr = A_lvl_2.ptr
@@ -85,7 +85,7 @@ quote
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end
 ```
@@ -108,8 +108,8 @@ end # DISCORDANT, DO NOT DO THIS
 # output
 
 quote
-    s = (ex.bodies[1]).body.body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.body.lhs.tns.bind
+    s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
     A_lvl_ptr = A_lvl_2.ptr
@@ -151,7 +151,7 @@ quote
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end
 ```
@@ -280,7 +280,7 @@ return C)
 # output
 
 quote
-    C = ((ex.bodies[1]).bodies[1]).tns.bind
+    C_data = ((ex.bodies[1]).bodies[1]).tns.bind
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.lvl
     A_lvl_2 = A_lvl.lvl
     A_lvl_ptr = A_lvl_2.ptr
@@ -350,8 +350,8 @@ quote
             end
         end
     end
-    C.val = C_val
-    (C = C,)
+    C_data.val = C_val
+    (C = C_data,)
 end
 
 ```
