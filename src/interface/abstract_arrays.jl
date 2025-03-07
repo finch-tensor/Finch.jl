@@ -1,6 +1,6 @@
 @kwdef mutable struct VirtualAbstractArray <: AbstractVirtualTensor
     tag
-    ex
+    data
     eltype
     ndims
     shape
@@ -11,21 +11,22 @@ function virtual_size(ctx::AbstractCompiler, arr::VirtualAbstractArray)
 end
 
 function lower(ctx::AbstractCompiler, arr::VirtualAbstractArray, ::DefaultStyle)
-    return arr.ex
+    return arr.data
 end
 
 function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
-    sym = freshen(ctx, tag)
-    dims = map(i -> Symbol(sym, :_mode, i, :_stop), 1:N)
+    tag = freshen(ctx, tag)
+    dims = map(i -> Symbol(tag, :_mode, i, :_stop), 1:N)
+    data = freshen(ctx, tag, :_data)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
+            $data = $ex
             ($(dims...),) = size($ex)
         end,
     )
     VirtualAbstractArray(
-        sym, sym, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N)
+        tag, data, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N)
     )
 end
 
@@ -33,7 +34,7 @@ function declare!(ctx::AbstractCompiler, arr::VirtualAbstractArray, init)
     push_preamble!(
         ctx,
         quote
-            fill!($(arr.ex), $(ctx(init)))
+            fill!($(arr.data), $(ctx(init)))
         end,
     )
     arr
@@ -60,7 +61,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                 if mode.kind === reader
                     Thunk(;
                         preamble=quote
-                            $val = $(arr.ex)[$(map(ctx, idx_2)...)]
+                            $val = $(arr.data)[$(map(ctx, idx_2)...)]
                         end,
                         body=(ctx) -> instantiate(
                             ctx,
@@ -80,7 +81,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                                 arr.eltype,
                                 nothing,
                                 gensym(),
-                                :($(arr.ex)[$(map(ctx, idx_2)...)]),
+                                :($(arr.data)[$(map(ctx, idx_2)...)]),
                             ),
                             mode,
                         ), #=We don't know what init is, but it won't be used here=#
@@ -106,7 +107,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
         if mode.kind === reader
             Thunk(;
                 preamble=quote
-                    $val = $(arr.ex)[]
+                    $val = $(arr.data)[]
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
@@ -119,7 +120,8 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
                 body=(ctx,) -> instantiate(
                     ctx,
                     VirtualScalar(
-                        nothing, nothing, arr.eltype, nothing, gensym(), :($(arr.ex)[])
+                        nothing, nothing, arr.eltype, nothing, gensym(),
+                        :($(arr.data)[]),
                     ),
                     mode,
                 ), #=We don't know what init is, but it won't be used here=#
@@ -138,15 +140,15 @@ FinchNotation.finch_leaf(x::VirtualAbstractArray) = virtual(x)
 virtual_fill_value(ctx, ::VirtualAbstractArray) = 0
 virtual_eltype(ctx, tns::VirtualAbstractArray) = tns.eltype
 
-function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
-    ex = freshen(ctx, vec.ex)
+function virtual_transfer(ctx, arr::VirtualAbstractArray, device, style)
+    data = freshen(ctx, arr.data)
     push_preamble!(
         ctx,
         quote
-            $ex = $transfer($(vec.ex), $(ctx(device)), $style)
+            $data = $transfer($(arr.data), $(ctx(device)), $style)
         end,
     )
-    VirtualAbstractArray(vec.tag, ex, vec.eltype, vec.ndims, vec.shape)
+    VirtualAbstractArray(arr.tag, data, arr.eltype, arr.ndims, arr.shape)
 end
 
 fill_value(a::AbstractArray) = fill_value(typeof(a))
