@@ -4,10 +4,12 @@
     using Graphs, SimpleWeightedGraphs
 
     include(joinpath(@__DIR__, "../../docs/examples/bfs.jl"))
+    include(joinpath(@__DIR__, "../../docs/examples/dfs.jl"))
     include(joinpath(@__DIR__, "../../docs/examples/pagerank.jl"))
     include(joinpath(@__DIR__, "../../docs/examples/shortest_paths.jl"))
     include(joinpath(@__DIR__, "../../docs/examples/spgemm.jl"))
     include(joinpath(@__DIR__, "../../docs/examples/triangle_counting.jl"))
+    include(joinpath(@__DIR__, "../../docs/examples/degree_centrality.jl"))
 
     @testset "pagerank" begin
         size, sparsity = 30, 0.5
@@ -36,6 +38,34 @@
 
         expected = Graphs.bfs_parents(graphs_input, source)
         output = bfs(finch_input, source)
+
+        @test output == expected
+    end
+
+    @testset "dfs" begin
+        size, sparsity = 50, 0.5
+        source = rand(1:size)
+        input = sprand(size, size, sparsity)
+
+        graphs_input = Graphs.SimpleDiGraph(transpose(input))
+        finch_input = Tensor(Dense(SparseList(Element(0.0))), input)
+
+        expected = Graphs.dfs_parents(graphs_input, source)
+        output = dfs(finch_input, source)
+
+        @test output == expected
+    end
+
+    @testset "degree_centrality" begin
+        size, sparsity = 50, 0.5
+        source = rand(1:size)
+        input = sprand(size, size, sparsity)
+
+        graphs_input = Graphs.SimpleDiGraph(transpose(input))
+        finch_input = Tensor(Dense(SparseList(Element(0.0))), input)
+
+        expected = Graphs.degree_centrality(graphs_input)
+        output = degree_centrality(finch_input)
 
         @test output == expected
     end
