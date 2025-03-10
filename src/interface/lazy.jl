@@ -421,7 +421,7 @@ function Base.convert(T::Type{<:Number}, x::Square)
     return convert(T, root(x))
 end
 
-@inline function Base.:+(x::T, y::T) where {T<:Square}
+@inline function Base.:+(x::Square, y::Square)
     if x.scale < y.scale
         (x, y) = (y, x)
     end
