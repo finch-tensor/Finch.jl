@@ -441,6 +441,15 @@ end
                 end
 
                 let
+                    A_ref = [1 2 0 4 0; 0 -2 1 0 1]
+                    A = swizzle(Tensor(Dense(SparseList(Element(0))), A_ref), 1, 2)
+
+                    @test norm(A, 1) == norm(A_ref, 1)
+                    @test norm(A, 2) == norm(A_ref, 2)
+                    @test norm(A, 3) == norm(A_ref, 3)
+                end
+
+                let
                     A = Tensor(
                         Dense(SparseList(Element(0.0))),
                         [0.0 0.0 4.4; 1.1 0.0 0.0; 2.2 0.0 5.5; 3.3 0.0 0.0],
