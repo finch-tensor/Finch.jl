@@ -46,3 +46,31 @@ function getroot(node::FinchNode)
         error("could not get root of $(node)")
     end
 end
+
+"""
+reroot_set!(ctx, node, diff)
+
+    When the root node changes, several derivative nodes may need to be updated.
+The `reroot_set` function traverses `tns` and stores each derivative object in the
+`diff` dictionary.
+"""
+reroot_set!(ctx, node, diff) = nothing
+
+"""
+reroot_get(ctx, node, diff)
+
+    When the root node changes, several derivative nodes may need to be updated.
+The `reroot_get` function traverses `tns` and updates it based on the updated
+objects in the `diff` dictionary.
+"""
+reroot_get(ctx, node, diff) = node
+
+function reroot_get(ctx::AbstractCompiler, node::FinchNode, diff)
+    if node.kind === virtual
+        virtual(reroot_get(ctx, node.val, root))
+    elseif istree(node)
+        similarterm(node, map(x -> reroot_get(ctx, x, diff), node))
+    else
+        node
+    end
+end

@@ -30,6 +30,14 @@ function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
     )
 end
 
+function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
+    diff[arr.tag] = arr
+end
+
+function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
+    get(diff, arr.tag, arr)
+end
+
 function declare!(ctx::AbstractCompiler, arr::VirtualAbstractArray, init)
     push_preamble!(
         ctx,
@@ -47,6 +55,12 @@ thaw!(ctx::AbstractCompiler, arr::VirtualAbstractArray) = arr
     arr::VirtualAbstractArray
     idx
 end
+
+Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff) = 
+    Finch.reroot_set!(ctx, arr.mtx, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff) =
+    VirtualAbstractArraySlice(Finch.reroot_get(ctx, arr.mtx, diff), arr.idx)
 
 FinchNotation.finch_leaf(x::VirtualAbstractArraySlice) = virtual(x)
 

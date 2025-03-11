@@ -138,6 +138,14 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) w
     )
 end
 
+function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
+    diff[arr.tag] = arr
+end
+
+function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
+    get(diff, arr.tag, arr)
+end
+
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init)
     #TODO check that init == fill_value
     Tp = Ti = arr.Ti
@@ -214,6 +222,12 @@ end
     mtx::VirtualSparseMatrixCSC
     j
 end
+
+Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff) = 
+    Finch.reroot_set!(ctx, arr.mtx, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff) =
+    VirtualSparseMatrixCSCColumn(Finch.reroot_get(ctx, arr.mtx, diff), arr.j)
 
 FinchNotation.finch_leaf(x::VirtualSparseMatrixCSCColumn) = virtual(x)
 
@@ -438,6 +452,14 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) wher
     qos_fill = freshen(ctx, tag, :_qos_fill)
     qos_stop = freshen(ctx, tag, :_qos_stop)
     VirtualSparseVector(tag, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
+end
+
+function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
+    diff[arr.tag] = arr
+end
+
+function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
+    get(diff, arr.tag, arr)
 end
 
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
