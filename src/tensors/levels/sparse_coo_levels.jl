@@ -219,6 +219,25 @@ mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     prev_pos
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) =
+    get(diff, lvl.tag, VirtualSparseCOOLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.N,
+        lvl.TI,
+        lvl.ptr,
+        lvl.tbl,
+        lvl.Lvl,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos
+    ))
+
 function is_level_injective(ctx, lvl::VirtualSparseCOOLevel)
     [is_level_injective(ctx, lvl.lvl)..., (true for _ in 1:(lvl.N))...]
 end

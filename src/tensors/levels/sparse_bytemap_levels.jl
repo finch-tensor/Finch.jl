@@ -192,6 +192,23 @@ mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     qos_stop
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff) =
+    get(diff, lvl.tag, VirtualSparseByteMapLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.Ti,
+        lvl.ptr,
+        lvl.tbl,
+        lvl.srt,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop
+    ))
+
 function is_level_injective(ctx, lvl::VirtualSparseByteMapLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end

@@ -216,6 +216,27 @@ mutable struct VirtualRunListLevel <: AbstractVirtualLevel
     merge
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    Finch.reroot_set!(ctx, lvl.buf, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff) =
+    get(diff, lvl.tag, VirtualRunListLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ptr,
+        lvl.right,
+        Finch.reroot_get(ctx, lvl.buf, diff),
+        lvl.prev_pos,
+        lvl.i_prev,
+        lvl.merge
+    ))
+
 function is_level_injective(ctx, lvl::VirtualRunListLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]
 end

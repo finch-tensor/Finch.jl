@@ -95,6 +95,12 @@ mutable struct VirtualElementLevel <: AbstractVirtualLevel
     val
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) = 
+    diff[lvl.tag] = lvl
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
+    get(diff, lvl.tag, lvl)
+
 is_level_injective(ctx, ::VirtualElementLevel) = []
 is_level_atomic(ctx, lvl::VirtualElementLevel) = ([], false)
 function is_level_concurrent(ctx, lvl::VirtualElementLevel)

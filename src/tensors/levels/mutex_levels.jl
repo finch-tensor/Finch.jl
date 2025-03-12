@@ -101,6 +101,22 @@ mutable struct VirtualMutexLevel <: AbstractVirtualLevel
     AVal
     Lvl
 end
+
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) =
+    get(diff, lvl.tag, VirtualMutexLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.locks,
+        lvl.Tv,
+        lvl.Val,
+        lvl.AVal,
+        lvl.Lvl,
+    ))
+
 postype(lvl::MutexLevel) = postype(lvl.lvl)
 
 postype(lvl::VirtualMutexLevel) = postype(lvl.lvl)

@@ -121,6 +121,13 @@ mutable struct VirtualDenseLevel <: AbstractVirtualLevel
     shape
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff) =
+    get(diff, lvl.tag, VirtualDenseLevel(lvl.tag, Finch.reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape))
+
 function is_level_injective(ctx, lvl::VirtualDenseLevel)
     [is_level_injective(ctx, lvl.lvl)..., true]
 end

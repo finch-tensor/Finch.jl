@@ -51,7 +51,7 @@ end
 reroot_set!(ctx, node, diff)
 
     When the root node changes, several derivative nodes may need to be updated.
-The `reroot_set` function traverses `tns` and stores each derivative object in the
+The `reroot_set!` function traverses `tns` and stores each derivative object in the
 `diff` dictionary.
 """
 reroot_set!(ctx, node, diff) = nothing

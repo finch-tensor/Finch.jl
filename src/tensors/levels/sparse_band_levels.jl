@@ -163,6 +163,26 @@ mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
     prev_pos
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff) =
+    get(diff, lvl.tag, VirtualSparseBandLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        lvl.idx,
+        lvl.ofs,
+        lvl.prev_pos
+    ))
+
 function is_level_injective(ctx, lvl::VirtualSparseBandLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end

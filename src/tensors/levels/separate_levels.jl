@@ -102,6 +102,21 @@ mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
     Val
 end
 
+Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff) = 
+    diff[lvl.tag] = lvl
+    Finch.reroot_set!(ctx, lvl.lvl, diff)
+
+Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff) =
+    get(diff, lvl.tag, VirtualSeparateLevel(
+        lvl.tag,
+        Finch.reroot_get(ctx, lvl.lvl, diff),
+        lvl.locks,
+        lvl.val,
+        lvl.Tv,
+        lvl.Lvl,
+        lvl.Val
+    ))
+
 postype(lvl::VirtualSeparateLevel) = postype(lvl.lvl)
 
 function is_level_injective(ctx, lvl::VirtualSeparateLevel)
