@@ -93,9 +93,9 @@ struct VirtualPatternLevel <: AbstractVirtualLevel
     Tp
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = nothing
+reroot_set!(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = nothing
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
+reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
 
 function virtual_transfer_level(
     ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, style

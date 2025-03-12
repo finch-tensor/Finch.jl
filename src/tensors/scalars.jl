@@ -28,11 +28,11 @@ struct VirtualScalar
     val
 end
 
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualScalar, diff)
+function reroot_set!(ctx::AbstractCompiler, arr::VirtualScalar, diff)
     diff[arr.tag] = arr
 end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
+reroot_get(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
     get(diff, arr.tag, arr)
 
 lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.data
@@ -134,11 +134,11 @@ struct VirtualSparseScalar
     dirty
 end
 
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff)
+function reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff)
     diff[arr.tag] = arr
 end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
+reroot_get(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
     get(diff, arr.tag, arr)
 
 function lower(ctx::AbstractCompiler, tns::VirtualSparseScalar, ::DefaultStyle)
@@ -251,11 +251,11 @@ struct VirtualShortCircuitScalar
     val
 end
 
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
+function reroot_set!(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
     diff[arr.tag] = arr
 end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff) =
+reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff) =
     get(diff, arr.tag, arr)
 
 function lower(ctx::AbstractCompiler, tns::VirtualShortCircuitScalar, ::DefaultStyle)
@@ -364,11 +364,11 @@ struct VirtualSparseShortCircuitScalar
     dirty
 end
 
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
+function reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
     diff[arr.tag] = arr
 end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff) =
+reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff) =
     get(diff, arr.tag, arr)
 
 function lower(ctx::AbstractCompiler, tns::VirtualSparseShortCircuitScalar, ::DefaultStyle)

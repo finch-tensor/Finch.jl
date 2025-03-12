@@ -190,14 +190,15 @@ mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff) =
     get(diff, lvl.tag, VirtualSparseIntervalLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.Ti,
         lvl.left,
         lvl.right,

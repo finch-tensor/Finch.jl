@@ -158,14 +158,15 @@ mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
     shape
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff) =
     get(diff, lvl.tag, VirtualSparsePointLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.Ti,
         lvl.idx,
         lvl.shape,

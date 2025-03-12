@@ -206,14 +206,15 @@ mutable struct VirtualSparseBlockListLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff) =
     get(diff, lvl.tag, VirtualSparseBlockListLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.Ti,
         lvl.qos_fill,
         lvl.qos_stop,

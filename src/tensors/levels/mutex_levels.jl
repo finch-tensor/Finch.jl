@@ -102,14 +102,15 @@ mutable struct VirtualMutexLevel <: AbstractVirtualLevel
     Lvl
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) =
     get(diff, lvl.tag, VirtualMutexLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.locks,
         lvl.Tv,
         lvl.Val,

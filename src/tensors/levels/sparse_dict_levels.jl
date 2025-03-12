@@ -223,14 +223,15 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     qos_stop
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff) =
     get(diff, lvl.tag, VirtualSparseDictLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.Ti,
         lvl.ptr,
         lvl.idx,

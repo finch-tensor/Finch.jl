@@ -95,10 +95,10 @@ mutable struct VirtualElementLevel <: AbstractVirtualLevel
     val
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) = 
+reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) = 
     diff[lvl.tag] = lvl
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
     get(diff, lvl.tag, lvl)
 
 is_level_injective(ctx, ::VirtualElementLevel) = []

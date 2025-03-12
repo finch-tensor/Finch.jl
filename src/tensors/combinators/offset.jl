@@ -5,6 +5,11 @@ end
 
 Base.show(io::IO, ex::OffsetArray) = print(io, "OffsetArray($(ex.body), $(ex.delta)")
 
+function transfer(tns::OffsetArray{Ti}, device, style) where {Ti}
+    body_2 = transfer(tns.body, device, style)
+    return OffsetArray{Ti}(body_2, tns.delta)
+end
+
 function labelled_show(io::IO, ::OffsetArray)
     print(io, "OffsetArray [$(join(map(d -> ":+$d", ex.delta), ", "))]")
 end
@@ -19,6 +24,7 @@ end
 is_injective(ctx, lvl::VirtualOffsetArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualOffsetArray) = is_atomic(ctx, lvl.body)
 is_concurrent(ctx, lvl::VirtualOffsetArray) = is_concurrent(ctx, lvl.body)
+
 
 Base.show(io::IO, ex::VirtualOffsetArray) = Base.show(io, MIME"text/plain"(), ex)
 function Base.show(io::IO, mime::MIME"text/plain", ex::VirtualOffsetArray)

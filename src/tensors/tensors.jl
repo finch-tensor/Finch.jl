@@ -72,11 +72,11 @@ mutable struct VirtualFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, fbr::VirtualFiber, diff) = 
-    Finch.reroot_set!(ctx, fbr.lvl, diff)
+reroot_set!(ctx::AbstractCompiler, fbr::VirtualFiber, diff) = 
+    reroot_set!(ctx, fbr.lvl, diff)
 
-Finch.reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff) =
-    VirtualFiber(Finch.reroot_get(ctx, fbr.lvl, diff))
+reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff) =
+    VirtualFiber(reroot_get(ctx, fbr.lvl, diff))
 
 is_injective(ctx, tns::VirtualFiber) = is_level_injective(ctx, tns.lvl)
 is_concurrent(ctx, tns::VirtualFiber) = is_level_concurrent(ctx, tns.lvl)[1]
@@ -105,11 +105,11 @@ mutable struct VirtualSubFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     pos
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) = 
-    Finch.reroot_set!(ctx, fbr.lvl, diff)
+reroot_set!(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) = 
+    reroot_set!(ctx, fbr.lvl, diff)
 
-Finch.reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) =
-    VirtualSubFiber(Finch.reroot_get(ctx, fbr.lvl, diff), fbr.pos)
+reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) =
+    VirtualSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos)
 
 function virtualize(
     ctx, ex, ::Type{<:SubFiber{Lvl,Pos}}, tag=freshen(ctx, :tns)
@@ -172,11 +172,11 @@ mutable struct VirtualHollowSubFiber{Lvl}
     dirty
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) = 
-    Finch.reroot_set!(ctx, fbr.lvl, diff)
+reroot_set!(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) = 
+    reroot_set!(ctx, fbr.lvl, diff)
 
-Finch.reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) =
-    VirtualHollowSubFiber(Finch.reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
+reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) =
+    VirtualHollowSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
 
 function virtualize(
     ctx, ex, ::Type{<:HollowSubFiber{Lvl,Pos,Dirty}}, tag=freshen(ctx, :tns)

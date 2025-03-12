@@ -219,14 +219,15 @@ mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
     diff[lvl.tag] = lvl
-    Finch.reroot_set!(ctx, lvl.lvl, diff)
+    reroot_set!(ctx, lvl.lvl, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) =
+reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) =
     get(diff, lvl.tag, VirtualSparseCOOLevel(
         lvl.tag,
-        Finch.reroot_get(ctx, lvl.lvl, diff),
+        reroot_get(ctx, lvl.lvl, diff),
         lvl.N,
         lvl.TI,
         lvl.ptr,
