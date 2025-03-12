@@ -11,6 +11,23 @@
     Unfurled(arr, body) = Unfurled(arr, 0, body)
 end
 
+function virtual_transfer(
+    ctx::AbstractCompiler, tns::Unfurled, arch, style
+)
+    Unfurled(tns.arr, tns.ndims, virtual_transfer(ctx, tns.body, arch, style))
+end
+
+function reroot_set!(ctx::AbstractCompiler, tns::Unfurled, diff)
+    reroot_set!(ctx, tns.body, diff)
+end
+
+reroot_get(ctx::AbstractCompiler, tns::Unfurled, diff) =
+    Unfurled(
+        tns.arr,
+        tns.ndims,
+        reroot_get(ctx, tns.body, diff),
+    )
+
 Base.show(io::IO, ex::Unfurled) = Base.show(io, MIME"text/plain"(), ex)
 
 function Base.show(io::IO, mime::MIME"text/plain", ex::Unfurled)

@@ -21,6 +21,22 @@ struct VirtualOffsetArray <: AbstractVirtualCombinator
     delta
 end
 
+function virtual_transfer(
+    ctx::AbstractCompiler, tns::VirtualOffsetArray, arch, style
+)
+    VirtualOffsetArray(virtual_transfer(ctx, tns.body, arch, style), tns.delta)
+end
+
+function reroot_set!(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
+    reroot_set!(ctx, tns.body, diff)
+end
+
+reroot_get(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff) =
+    VirtualOffsetArray(
+        reroot_get(ctx, tns.body, diff),
+        tns.delta,
+    )
+
 is_injective(ctx, lvl::VirtualOffsetArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualOffsetArray) = is_atomic(ctx, lvl.body)
 is_concurrent(ctx, lvl::VirtualOffsetArray) = is_concurrent(ctx, lvl.body)

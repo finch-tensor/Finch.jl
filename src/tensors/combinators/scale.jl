@@ -17,6 +17,22 @@ struct VirtualScaleArray <: AbstractVirtualCombinator
     scale
 end
 
+function virtual_transfer(
+    ctx::AbstractCompiler, tns::VirtualScaleArray, arch, style
+)
+    VirtualScaleArray(virtual_transfer(ctx, tns.body, arch, style), tns.scale)
+end
+
+function reroot_set!(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)
+    reroot_set!(ctx, tns.body, diff)
+end
+
+reroot_get(ctx::AbstractCompiler, tns::VirtualScaleArray, diff) =
+    VirtualScaleArray(
+        reroot_get(ctx, tns.body, diff),
+        tns.scale,
+    )
+
 is_injective(ctx, lvl::VirtualScaleArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualScaleArray) = is_atomic(ctx, lvl.body)
 is_concurrent(ctx, lvl::VirtualScaleArray) = is_concurrent(ctx, lvl.body)

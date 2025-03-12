@@ -29,6 +29,22 @@ struct VirtualToeplitzArray <: AbstractVirtualCombinator
     end
 end
 
+function virtual_transfer(
+    ctx::AbstractCompiler, tns::VirtualToeplitzArray, arch, style
+)
+    VirtualToeplitzArray(virtual_transfer(ctx, tns.body, arch, style), tns.dim)
+end
+
+function reroot_set!(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
+    reroot_set!(ctx, tns.body, diff)
+end
+
+reroot_get(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff) =
+    VirtualToeplitzArray(
+        reroot_get(ctx, tns.body, diff),
+        tns.dim,
+    )
+
 function is_injective(ctx, lvl::VirtualToeplitzArray)
     sub = is_injective(ctx, lvl.body)
     return [sub[1:(lvl.dim)]..., false, sub[(lvl.dim + 1):end]...]
