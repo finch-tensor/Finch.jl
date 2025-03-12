@@ -33,15 +33,17 @@ quote
     X_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
     X_lvl_ptr = X_lvl.ptr
     X_lvl_idx = X_lvl.idx
-    X_lvl_val = X_lvl.lvl.val
-    x_min = ((ex.bodies[1]).body.body.bodies[1]).lhs.tns.bind
-    x_min_val = x_min.val
-    x_max = ((ex.bodies[1]).body.body.bodies[2]).lhs.tns.bind
-    x_max_val = x_max.val
-    x_sum = ((ex.bodies[1]).body.body.bodies[3]).lhs.tns.bind
-    x_sum_val = x_sum.val
-    x_var = ((ex.bodies[1]).body.body.bodies[4]).lhs.tns.bind
-    x_var_val = x_var.val
+    X_lvl_stop = X_lvl.shape
+    X_lvl_2 = X_lvl.lvl
+    X_lvl_2_val = X_lvl_2.val
+    x_min_data = ((ex.bodies[1]).body.body.bodies[1]).lhs.tns.bind
+    x_min_val = x_min_data.val
+    x_max_data = ((ex.bodies[1]).body.body.bodies[2]).lhs.tns.bind
+    x_max_val = x_max_data.val
+    x_sum_data = ((ex.bodies[1]).body.body.bodies[3]).lhs.tns.bind
+    x_sum_val = x_sum_data.val
+    x_var_data = ((ex.bodies[1]).body.body.bodies[4]).lhs.tns.bind
+    x_var_val = x_var_data.val
     X_lvl_q = X_lvl_ptr[1]
     X_lvl_q_stop = X_lvl_ptr[1 + 1]
     if X_lvl_q < X_lvl_q_stop
@@ -49,7 +51,7 @@ quote
     else
         X_lvl_i1 = 0
     end
-    phase_stop = min(X_lvl_i1, X_lvl.shape)
+    phase_stop = min(X_lvl_i1, X_lvl_stop)
     if phase_stop >= 1
         i = 1
         if X_lvl_idx[X_lvl_q] < 1
@@ -63,11 +65,11 @@ quote
                     x_min_val = min(0.0, x_min_val)
                     x_max_val = max(0.0, x_max_val)
                 end
-                X_lvl_2_val = X_lvl_val[X_lvl_q]
-                x_min_val = min(X_lvl_2_val, x_min_val)
-                x_max_val = max(X_lvl_2_val, x_max_val)
-                x_sum_val = X_lvl_2_val + x_sum_val
-                x_var_val = X_lvl_2_val * X_lvl_2_val + x_var_val
+                X_lvl_2_val_2 = X_lvl_2_val[X_lvl_q]
+                x_min_val = min(X_lvl_2_val_2, x_min_val)
+                x_max_val = max(X_lvl_2_val_2, x_max_val)
+                x_sum_val = X_lvl_2_val_2 + x_sum_val
+                x_var_val = X_lvl_2_val_2 * X_lvl_2_val_2 + x_var_val
                 X_lvl_q += 1
                 i = X_lvl_i + 1
             else
@@ -78,11 +80,11 @@ quote
                         x_min_val = min(0.0, x_min_val)
                         x_max_val = max(0.0, x_max_val)
                     end
-                    X_lvl_2_val = X_lvl_val[X_lvl_q]
-                    x_min_val = min(X_lvl_2_val, x_min_val)
-                    x_max_val = max(X_lvl_2_val, x_max_val)
-                    x_sum_val = X_lvl_2_val + x_sum_val
-                    x_var_val = X_lvl_2_val * X_lvl_2_val + x_var_val
+                    X_lvl_2_val_2 = X_lvl_2_val[X_lvl_q]
+                    x_min_val = min(X_lvl_2_val_2, x_min_val)
+                    x_max_val = max(X_lvl_2_val_2, x_max_val)
+                    x_sum_val = X_lvl_2_val_2 + x_sum_val
+                    x_var_val = X_lvl_2_val_2 * X_lvl_2_val_2 + x_var_val
                     X_lvl_q += 1
                 else
                     cond_3 = 1 <= 1 + -i + phase_stop_3
@@ -97,19 +99,18 @@ quote
         end
     end
     phase_start_3 = max(1, 1 + X_lvl_i1)
-    phase_stop_4 = X_lvl.shape
-    if phase_stop_4 >= phase_start_3
-        cond_4 = 1 <= 1 + -phase_start_3 + phase_stop_4
+    if X_lvl_stop >= phase_start_3
+        cond_4 = 1 <= 1 + -phase_start_3 + X_lvl_stop
         if cond_4
             x_min_val = min(0.0, x_min_val)
             x_max_val = max(0.0, x_max_val)
         end
     end
     result = ()
-    x_var.val = x_var_val
-    x_sum.val = x_sum_val
-    x_max.val = x_max_val
-    x_min.val = x_min_val
+    x_var_data.val = x_var_val
+    x_sum_data.val = x_sum_val
+    x_max_data.val = x_max_val
+    x_min_data.val = x_min_val
     result
 end
 

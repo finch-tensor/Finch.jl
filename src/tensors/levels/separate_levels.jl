@@ -107,16 +107,21 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff) =
-    get(diff, lvl.tag, VirtualSeparateLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.locks,
-        lvl.val,
-        lvl.Tv,
-        lvl.Lvl,
-        lvl.Val
-    ))
+        VirtualSeparateLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.locks,
+            lvl.val,
+            lvl.Tv,
+            lvl.Lvl,
+            lvl.Val,
+        ),
+    )
+end
 
 postype(lvl::VirtualSeparateLevel) = postype(lvl.lvl)
 

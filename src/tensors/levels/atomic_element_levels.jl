@@ -89,11 +89,13 @@ mutable struct VirtualAtomicElementLevel <: AbstractVirtualLevel
     val
 end
 
-reroot_set!(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff) = 
+function reroot_set!(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
     diff[lvl.tag] = lvl
+end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff) =
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
     get(diff, lvl.tag, lvl)
+end
 
 is_level_injective(ctx, ::VirtualAtomicElementLevel) = []
 is_level_atomic(ctx, lvl::VirtualAtomicElementLevel) = ([], false)

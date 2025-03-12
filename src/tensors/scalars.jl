@@ -255,8 +255,9 @@ function reroot_set!(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff
     diff[arr.tag] = arr
 end
 
-reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff) =
+function reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
     get(diff, arr.tag, arr)
+end
 
 function lower(ctx::AbstractCompiler, tns::VirtualShortCircuitScalar, ::DefaultStyle)
     :($ShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val)))
@@ -368,8 +369,9 @@ function reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar
     diff[arr.tag] = arr
 end
 
-reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff) =
+function reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
     get(diff, arr.tag, arr)
+end
 
 function lower(ctx::AbstractCompiler, tns::VirtualSparseShortCircuitScalar, ::DefaultStyle)
     :($SparseShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))

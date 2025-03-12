@@ -31,16 +31,16 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
     VirtualOffsetArray(
         reroot_get(ctx, tns.body, diff),
         tns.delta,
     )
+end
 
 is_injective(ctx, lvl::VirtualOffsetArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualOffsetArray) = is_atomic(ctx, lvl.body)
 is_concurrent(ctx, lvl::VirtualOffsetArray) = is_concurrent(ctx, lvl.body)
-
 
 Base.show(io::IO, ex::VirtualOffsetArray) = Base.show(io, MIME"text/plain"(), ex)
 function Base.show(io::IO, mime::MIME"text/plain", ex::VirtualOffsetArray)

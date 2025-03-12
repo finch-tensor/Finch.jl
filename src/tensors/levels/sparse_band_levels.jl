@@ -168,21 +168,26 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseBandLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.ros_fill,
-        lvl.ros_stop,
-        lvl.dirty,
-        lvl.idx,
-        lvl.ofs,
-        lvl.prev_pos
-    ))
+        VirtualSparseBandLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseBandLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]

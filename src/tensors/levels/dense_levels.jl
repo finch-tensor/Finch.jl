@@ -126,8 +126,13 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff) =
-    get(diff, lvl.tag, VirtualDenseLevel(lvl.tag, reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape))
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualDenseLevel(lvl.tag, reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualDenseLevel)
     [is_level_injective(ctx, lvl.lvl)..., true]

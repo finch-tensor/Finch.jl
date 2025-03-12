@@ -56,11 +56,13 @@ thaw!(ctx::AbstractCompiler, arr::VirtualAbstractArray) = arr
     idx
 end
 
-reroot_set!(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff) = 
+function reroot_set!(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff)
     reroot_set!(ctx, arr.mtx, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff) =
+function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff)
     VirtualAbstractArraySlice(Finch.reroot_get(ctx, arr.mtx, diff), arr.idx)
+end
 
 FinchNotation.finch_leaf(x::VirtualAbstractArraySlice) = virtual(x)
 

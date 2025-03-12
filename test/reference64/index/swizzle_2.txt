@@ -1,22 +1,26 @@
 begin
-    x = (ex.bodies[1]).body.body.body.lhs.tns.bind
-    x_val = x.val
+    x_data = (ex.bodies[1]).body.body.body.lhs.tns.bind
+    x_val = x_data.val
     tns_lvl = (ex.bodies[1]).body.body.body.rhs.tns.bind.body.lvl
+    tns_lvl_stop = tns_lvl.shape
     tns_lvl_2 = tns_lvl.lvl
+    tns_lvl_2_stop = tns_lvl_2.shape
     tns_lvl_3 = tns_lvl_2.lvl
-    tns_lvl_3_val = tns_lvl_3.lvl.val
-    for i_3 = 1:tns_lvl.shape
-        tns_lvl_q = (1 - 1) * tns_lvl.shape + i_3
-        for j_3 = 1:tns_lvl_2.shape
-            tns_lvl_2_q = (tns_lvl_q - 1) * tns_lvl_2.shape + j_3
-            for k_3 = 1:tns_lvl_3.shape
-                tns_lvl_3_q = (tns_lvl_2_q - 1) * tns_lvl_3.shape + k_3
-                tns_lvl_4_val = tns_lvl_3_val[tns_lvl_3_q]
-                x_val = tns_lvl_4_val + x_val
+    tns_lvl_3_stop = tns_lvl_3.shape
+    tns_lvl_4 = tns_lvl_3.lvl
+    tns_lvl_4_val = tns_lvl_4.val
+    for i_3 = 1:tns_lvl_stop
+        tns_lvl_q = (1 - 1) * tns_lvl_stop + i_3
+        for j_3 = 1:tns_lvl_2_stop
+            tns_lvl_2_q = (tns_lvl_q - 1) * tns_lvl_2_stop + j_3
+            for k_3 = 1:tns_lvl_3_stop
+                tns_lvl_3_q = (tns_lvl_2_q - 1) * tns_lvl_3_stop + k_3
+                tns_lvl_4_val_2 = tns_lvl_4_val[tns_lvl_3_q]
+                x_val = tns_lvl_4_val_2 + x_val
             end
         end
     end
     result = ()
-    x.val = x_val
+    x_data.val = x_val
     result
 end

@@ -107,16 +107,21 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff) =
-    get(diff, lvl.tag, VirtualMutexLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.locks,
-        lvl.Tv,
-        lvl.Val,
-        lvl.AVal,
-        lvl.Lvl,
-    ))
+        VirtualMutexLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.locks,
+            lvl.Tv,
+            lvl.Val,
+            lvl.AVal,
+            lvl.Lvl,
+        ),
+    )
+end
 
 postype(lvl::MutexLevel) = postype(lvl.lvl)
 

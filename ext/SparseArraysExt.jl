@@ -223,11 +223,13 @@ end
     j
 end
 
-Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff) = 
+function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
     Finch.reroot_set!(ctx, arr.mtx, diff)
+end
 
-Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff) =
+function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
     VirtualSparseMatrixCSCColumn(Finch.reroot_get(ctx, arr.mtx, diff), arr.j)
+end
 
 FinchNotation.finch_leaf(x::VirtualSparseMatrixCSCColumn) = virtual(x)
 

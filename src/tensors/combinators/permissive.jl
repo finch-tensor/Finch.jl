@@ -30,11 +30,12 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)
     VirtualPermissiveArray(
         reroot_get(ctx, tns.body, diff),
         tns.dims,
     )
+end
 
 is_injective(ctx, lvl::VirtualPermissiveArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualPermissiveArray) = is_atomic(ctx, lvl.body)

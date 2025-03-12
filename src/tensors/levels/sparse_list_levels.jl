@@ -176,18 +176,23 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseListLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.ptr,
-        lvl.idx,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos
-    ))
+        VirtualSparseListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.idx,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseListLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]

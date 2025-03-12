@@ -197,18 +197,23 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseByteMapLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.ptr,
-        lvl.tbl,
-        lvl.srt,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop
-    ))
+        VirtualSparseByteMapLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.tbl,
+            lvl.srt,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseByteMapLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]

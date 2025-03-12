@@ -163,14 +163,19 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff) =
-    get(diff, lvl.tag, VirtualSparsePointLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.idx,
-        lvl.shape,
-    ))
+        VirtualSparsePointLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.idx,
+            lvl.shape,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparsePointLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]

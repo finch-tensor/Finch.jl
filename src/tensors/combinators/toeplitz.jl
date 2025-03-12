@@ -39,11 +39,12 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
     VirtualToeplitzArray(
         reroot_get(ctx, tns.body, diff),
         tns.dim,
     )
+end
 
 function is_injective(ctx, lvl::VirtualToeplitzArray)
     sub = is_injective(ctx, lvl.body)

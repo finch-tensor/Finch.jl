@@ -21,12 +21,13 @@ function reroot_set!(ctx::AbstractCompiler, tns::Unfurled, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::Unfurled, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::Unfurled, diff)
     Unfurled(
         tns.arr,
         tns.ndims,
         reroot_get(ctx, tns.body, diff),
     )
+end
 
 Base.show(io::IO, ex::Unfurled) = Base.show(io, MIME"text/plain"(), ex)
 

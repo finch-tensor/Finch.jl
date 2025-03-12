@@ -95,7 +95,7 @@ mutable struct VirtualElementLevel <: AbstractVirtualLevel
     val
 end
 
-reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) = 
+reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
     diff[lvl.tag] = lvl
 
 reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =

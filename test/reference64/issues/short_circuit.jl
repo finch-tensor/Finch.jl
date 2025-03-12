@@ -1,15 +1,19 @@
 begin
-    s = (ex.bodies[1]).body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.lhs.tns.bind
+    s_val = s_data.val
     x_lvl = ((ex.bodies[1]).body.rhs.args[1]).tns.bind.lvl
     x_lvl_ptr = x_lvl.ptr
     x_lvl_idx = x_lvl.idx
-    x_lvl_val = x_lvl.lvl.val
+    x_lvl_stop = x_lvl.shape
+    x_lvl_2 = x_lvl.lvl
+    x_lvl_2_val = x_lvl_2.val
     y_lvl = ((ex.bodies[1]).body.rhs.args[2]).tns.bind.lvl
     y_lvl_ptr = y_lvl.ptr
     y_lvl_idx = y_lvl.idx
-    y_lvl_val = y_lvl.lvl.val
-    y_lvl.shape == x_lvl.shape || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl.shape) != $(x_lvl.shape))"))
+    y_lvl_stop = y_lvl.shape
+    y_lvl_2 = y_lvl.lvl
+    y_lvl_2_val = y_lvl_2.val
+    y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
     y_lvl_q = y_lvl_ptr[1]
     y_lvl_q_stop = y_lvl_ptr[1 + 1]
     if y_lvl_q < y_lvl_q_stop
@@ -24,7 +28,7 @@ begin
     else
         x_lvl_i1 = 0
     end
-    phase_stop = min(y_lvl.shape, y_lvl_i1, x_lvl_i1)
+    phase_stop = min(y_lvl_stop, y_lvl_i1, x_lvl_i1)
     if phase_stop >= 1
         i = 1
         if y_lvl_idx[y_lvl_q] < 1
@@ -41,9 +45,9 @@ begin
             x_lvl_i = x_lvl_idx[x_lvl_q]
             phase_stop_2 = min(x_lvl_i, phase_stop, y_lvl_i)
             if y_lvl_i == phase_stop_2 && x_lvl_i == phase_stop_2
-                x_lvl_2_val = x_lvl_val[x_lvl_q]
-                y_lvl_2_val = y_lvl_val[y_lvl_q]
-                s_val = (y_lvl_2_val && x_lvl_2_val) | s_val
+                x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
+                y_lvl_2_val_2 = y_lvl_2_val[y_lvl_q]
+                s_val = (y_lvl_2_val_2 && x_lvl_2_val_2) | s_val
                 y_lvl_q += 1
                 x_lvl_q += 1
             elseif x_lvl_i == phase_stop_2
@@ -55,6 +59,6 @@ begin
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end

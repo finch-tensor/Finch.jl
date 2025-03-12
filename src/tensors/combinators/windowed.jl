@@ -27,12 +27,12 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
     VirtualWindowedArray(
         reroot_get(ctx, tns.body, diff),
         tns.dims,
     )
-
+end
 
 is_injective(ctx, lvl::VirtualWindowedArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualWindowedArray) = is_atomic(ctx, lvl.body)

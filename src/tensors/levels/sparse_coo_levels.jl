@@ -224,20 +224,25 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseCOOLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.N,
-        lvl.TI,
-        lvl.ptr,
-        lvl.tbl,
-        lvl.Lvl,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos
-    ))
+        VirtualSparseCOOLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.N,
+            lvl.TI,
+            lvl.ptr,
+            lvl.tbl,
+            lvl.Lvl,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseCOOLevel)
     [is_level_injective(ctx, lvl.lvl)..., (true for _ in 1:(lvl.N))...]

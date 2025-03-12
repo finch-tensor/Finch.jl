@@ -211,21 +211,26 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, di
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseBlockListLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.ros_fill,
-        lvl.ros_stop,
-        lvl.dirty,
-        lvl.ptr,
-        lvl.idx,
-        lvl.ofs,
-        lvl.prev_pos
-    ))
+        VirtualSparseBlockListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.ptr,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseBlockListLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]

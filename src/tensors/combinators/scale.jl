@@ -27,11 +27,12 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualScaleArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)
     VirtualScaleArray(
         reroot_get(ctx, tns.body, diff),
         tns.scale,
     )
+end
 
 is_injective(ctx, lvl::VirtualScaleArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualScaleArray) = is_atomic(ctx, lvl.body)

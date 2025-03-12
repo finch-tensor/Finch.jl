@@ -195,18 +195,23 @@ function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, dif
     reroot_set!(ctx, lvl.lvl, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff) =
-    get(diff, lvl.tag, VirtualSparseIntervalLevel(
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
+    get(
+        diff,
         lvl.tag,
-        reroot_get(ctx, lvl.lvl, diff),
-        lvl.Ti,
-        lvl.left,
-        lvl.right,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
-    ))
+        VirtualSparseIntervalLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.left,
+            lvl.right,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
+end
 
 function is_level_injective(ctx, lvl::VirtualSparseIntervalLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]

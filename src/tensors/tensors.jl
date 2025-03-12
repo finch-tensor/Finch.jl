@@ -72,11 +72,13 @@ mutable struct VirtualFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
 end
 
-reroot_set!(ctx::AbstractCompiler, fbr::VirtualFiber, diff) = 
+function reroot_set!(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
     reroot_set!(ctx, fbr.lvl, diff)
+end
 
-reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff) =
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
     VirtualFiber(reroot_get(ctx, fbr.lvl, diff))
+end
 
 is_injective(ctx, tns::VirtualFiber) = is_level_injective(ctx, tns.lvl)
 is_concurrent(ctx, tns::VirtualFiber) = is_level_concurrent(ctx, tns.lvl)[1]
@@ -105,11 +107,13 @@ mutable struct VirtualSubFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     pos
 end
 
-reroot_set!(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) = 
+function reroot_set!(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
     reroot_set!(ctx, fbr.lvl, diff)
+end
 
-reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff) =
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
     VirtualSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos)
+end
 
 function virtualize(
     ctx, ex, ::Type{<:SubFiber{Lvl,Pos}}, tag=freshen(ctx, :tns)
@@ -172,11 +176,13 @@ mutable struct VirtualHollowSubFiber{Lvl}
     dirty
 end
 
-reroot_set!(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) = 
+function reroot_set!(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
     reroot_set!(ctx, fbr.lvl, diff)
+end
 
-reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff) =
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
     VirtualHollowSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
+end
 
 function virtualize(
     ctx, ex, ::Type{<:HollowSubFiber{Lvl,Pos,Dirty}}, tag=freshen(ctx, :tns)

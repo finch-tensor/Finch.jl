@@ -24,42 +24,47 @@ julia> @finch_code begin
         end
     end
 quote
-    y = ((ex.bodies[1]).bodies[1]).tns.bind
+    y_data = ((ex.bodies[1]).bodies[1]).tns.bind
     sugar_1 = size(((ex.bodies[1]).bodies[1]).tns.bind)
     y_mode1_stop = sugar_1[1]
     A = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind
-    x = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind
+    A_m = A.m
+    A_n = A.n
+    A_ptr = A.colptr
+    A_idx = A.rowval
+    A_val = A.nzval
+    x_data = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind
     sugar_3 = size((((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind)
     x_mode1_stop = sugar_3[1]
-    x_mode1_stop == (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.n || throw(DimensionMismatch("mismatched dimension limits ($(x_mode1_stop) != $((((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.n))"))
+    x_mode1_stop == A_n || throw(DimensionMismatch("mismatched dimension limits ($(x_mode1_stop) != $(A_n))"))
     1 == 1 || throw(DimensionMismatch("mismatched dimension start"))
-    (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.m == y_mode1_stop || throw(DimensionMismatch("mismatched dimension stop"))
-    fill!(y, 0)
+    A_m == y_mode1_stop || throw(DimensionMismatch("mismatched dimension stop"))
+    fill!(y_data, 0)
     for j_4 = 1:x_mode1_stop
-        val = x[j_4]
-        A_q = A.colptr[j_4]
-        A_q_stop = A.colptr[j_4 + 1]
+        val = x_data[j_4]
+        A_q = A_ptr[j_4]
+        A_q_stop = A_ptr[j_4 + 1]
         if A_q < A_q_stop
-            A_i1 = A.rowval[A_q_stop - 1]
+            A_i1 = A_idx[A_q_stop - 1]
         else
             A_i1 = 0
         end
-        phase_stop = min(A_i1, (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.m)
+        phase_stop = min(A_i1, A_m)
         if phase_stop >= 1
-            if A.rowval[A_q] < 1
-                A_q = Finch.scansearch(A.rowval, 1, A_q, A_q_stop - 1)
+            if A_idx[A_q] < 1
+                A_q = Finch.scansearch(A_idx, 1, A_q, A_q_stop - 1)
             end
             while true
-                A_i = A.rowval[A_q]
+                A_i = A_idx[A_q]
                 if A_i < phase_stop
-                    A_val_2 = A.nzval[A_q]
-                    y[A_i] = val * A_val_2 + y[A_i]
+                    A_val_2 = A_val[A_q]
+                    y_data[A_i] = val * A_val_2 + y_data[A_i]
                     A_q += 1
                 else
                     phase_stop_3 = min(phase_stop, A_i)
                     if A_i == phase_stop_3
-                        A_val_2 = A.nzval[A_q]
-                        y[phase_stop_3] = val * A_val_2 + y[phase_stop_3]
+                        A_val_2 = A_val[A_q]
+                        y_data[phase_stop_3] = val * A_val_2 + y_data[phase_stop_3]
                         A_q += 1
                     end
                     break
@@ -67,7 +72,7 @@ quote
             end
         end
     end
-    (y = y,)
+    (y = y_data,)
 end
 julia> @finch begin
         y .= 0

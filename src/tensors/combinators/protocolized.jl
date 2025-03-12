@@ -31,11 +31,12 @@ function reroot_set!(ctx::AbstractCompiler, tns::VirtualProtocolizedArray, diff)
     reroot_set!(ctx, tns.body, diff)
 end
 
-reroot_get(ctx::AbstractCompiler, tns::VirtualProtocolizedArray, diff) =
+function reroot_get(ctx::AbstractCompiler, tns::VirtualProtocolizedArray, diff)
     VirtualProtocolizedArray(
         reroot_get(ctx, tns.body, diff),
         tns.protos,
     )
+end
 
 is_injective(ctx, lvl::VirtualProtocolizedArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualProtocolizedArray) = is_atomic(ctx, lvl.body)

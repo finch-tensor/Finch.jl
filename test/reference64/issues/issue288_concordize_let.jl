@@ -1,14 +1,14 @@
 begin
-    X = (ex.bodies[1]).body.body.body.rhs.tns.bind
+    X_data = (ex.bodies[1]).body.body.body.rhs.tns.bind
     sugar_1 = size((ex.bodies[1]).body.body.body.rhs.tns.bind)
     X_mode1_stop = sugar_1[1]
     X_mode2_stop = sugar_1[2]
-    A = (ex.bodies[1]).body.body.body.body.body.rhs.tns.bind
+    A_data = (ex.bodies[1]).body.body.body.body.body.rhs.tns.bind
     sugar_2 = size((ex.bodies[1]).body.body.body.body.body.rhs.tns.bind)
     A_mode1_stop = sugar_2[1]
     A_mode2_stop = sugar_2[2]
     A_mode3_stop = sugar_2[3]
-    C = (ex.bodies[1]).body.body.body.body.body.body.body.lhs.tns.bind
+    C_data = (ex.bodies[1]).body.body.body.body.body.body.body.lhs.tns.bind
     sugar_3 = size((ex.bodies[1]).body.body.body.body.body.body.body.lhs.tns.bind)
     C_mode1_stop = sugar_3[1]
     C_mode2_stop = sugar_3[2]
@@ -20,13 +20,13 @@ begin
     for k_4 = 1:C_mode3_stop
         for j_4 = 1:C_mode2_stop
             for i_6 = 1:A_mode1_stop
-                val = X[i_6, j_4]
+                val = X_data[i_6, j_4]
                 for l_4 = 1:A_mode2_stop
-                    val_3 = A[i_6, l_4, k_4]
+                    val_3 = A_data[i_6, l_4, k_4]
                     phase_stop = min(i_6, l_4 + -1)
                     if phase_stop >= i_6
                         for s_5 = i_6:phase_stop
-                            C[i_6, j_4, k_4] = val_3 * val + C[i_6, j_4, k_4]
+                            C_data[i_6, j_4, k_4] = val_3 * val + C_data[i_6, j_4, k_4]
                         end
                     end
                 end
