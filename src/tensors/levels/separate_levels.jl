@@ -167,7 +167,7 @@ virtual_level_size(ctx, lvl::VirtualSeparateLevel) = virtual_level_size(ctx, lvl
 virtual_level_eltype(lvl::VirtualSeparateLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSeparateLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_transfer_level(ctx, lvl::VirtualSeparateLevel, arch, style)
+function distribute_level(ctx, lvl::VirtualSeparateLevel, arch, style)
     # Need to move each pointer...
     val_2 = freshen(ctx, lvl.val)
     push_preamble!(
@@ -176,7 +176,7 @@ function virtual_transfer_level(ctx, lvl::VirtualSeparateLevel, arch, style)
             $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSeparateLevel(lvl.tag, lvl_2, val_2, lvl.Tv, lvl.Lvl, lvl.Val)
 end
 

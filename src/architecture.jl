@@ -135,26 +135,26 @@ and copies the data in to it, according to the `device` trait.
 transfer(arr, device, style) = arr
 
 """
-    virtual_transfer(ctx, arr, device, style)
+    distribute(ctx, arr, device, style)
 
 If the virtual array is not on the given device, copy the array to that device. This
 function may modify underlying data arrays, but cannot change the virtual itself. This
 function is used to move data to the device before a kernel is launched.
 """
-virtual_transfer(ctx, arr, device, style) = arr
+distribute(ctx, arr, device, style) = arr
 
-struct ScatterSend end
-const scatter_send = ScatterSend()
-struct ScatterRecv end
-const scatter_recv = ScatterRecv()
-struct GatherSend end
-const gather_send = GatherSend()
-struct GatherRecv end
-const gather_recv = GatherRecv()
-struct BcastSend end
-const bcast_send = BcastSend()
-struct BcastRecv end
-const bcast_recv = BcastRecv()
+struct HostLocal end
+const host_local = HostLocal()
+struct DeviceLocal end
+const device_local = DeviceLocal()
+struct HostShared end
+const host_shared = HostShared()
+struct DeviceShared end
+const device_shared = DeviceShared()
+struct HostGlobal end
+const host_global = HostGlobal()
+struct DeviceGlobal end
+const device_global = DeviceGlobal()
 
 @inline function make_lock(::Type{Threads.Atomic{T}}) where {T}
     return Threads.Atomic{T}(zero(T))
@@ -227,13 +227,13 @@ end
 Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
 Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
-function transfer(arr::A, device::CPU, style::BcastSend) where {A<:AbstractArray}
+function transfer(arr::A, device::CPU, style::HostLocal) where {A<:AbstractArray}
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
-function transfer(arr::CPULocalArray, device::CPU, style::BcastSend)
+function transfer(arr::CPULocalArray, device::CPU, style::HostLocal)
     return arr
 end
-function transfer(arr::CPULocalArray, task::CPUThread, style::BcastRecv)
+function transfer(arr::CPULocalArray, task::CPUThread, style::DeviceLocal)
     if get_device(task) === arr.device
         temp = arr.data[task.tid]
         return temp

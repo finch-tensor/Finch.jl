@@ -24,10 +24,10 @@ struct VirtualProductArray <: AbstractVirtualCombinator
     dim
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualProductArray, arch, style
 )
-    VirtualProductArray(virtual_transfer(ctx, tns.body, arch, style), tns.dim)
+    VirtualProductArray(distribute(ctx, tns.body, arch, style), tns.dim)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualProductArray, diff)

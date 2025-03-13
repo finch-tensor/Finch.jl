@@ -17,7 +17,7 @@ begin
     A_lvl_2_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_2_stop) != $(x_lvl_stop))"))
     Finch.resize_if_smaller!(y_lvl_2_val, A_lvl_stop)
     Finch.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_stop)
-    val = (Finch).transfer(y_lvl_2_val, CPU(Threads.nthreads()), Finch.ScatterSend())
+    val = (Finch).transfer(y_lvl_2_val, CPU(Threads.nthreads()), Finch.HostShared())
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin

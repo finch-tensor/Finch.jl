@@ -21,10 +21,10 @@ struct VirtualProtocolizedArray <: AbstractVirtualCombinator
     protos
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualProtocolizedArray, arch, style
 )
-    VirtualProtocolizedArray(virtual_transfer(ctx, tns.body, arch, style), tns.protos)
+    VirtualProtocolizedArray(distribute(ctx, tns.body, arch, style), tns.protos)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualProtocolizedArray, diff)

@@ -229,7 +229,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, pos)
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
+function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
     #Add for seperation level too.
     locks_2 = freshen(ctx, :locks)
 
@@ -239,7 +239,7 @@ function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, a
             $locks_2 = $transfer($(lvl.locks), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualMutexLevel(lvl.tag, lvl_2, locks_2, lvl.Tv, lvl.Val, lvl.AVal, lvl.Lvl)
 end
 

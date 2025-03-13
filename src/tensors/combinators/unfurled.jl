@@ -11,10 +11,10 @@
     Unfurled(arr, body) = Unfurled(arr, 0, body)
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::Unfurled, arch, style
 )
-    Unfurled(tns.arr, tns.ndims, virtual_transfer(ctx, tns.body, arch, style))
+    Unfurled(tns.arr, tns.ndims, distribute(ctx, tns.body, arch, style))
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::Unfurled, diff)

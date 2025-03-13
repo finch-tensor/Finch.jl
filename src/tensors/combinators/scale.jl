@@ -17,10 +17,10 @@ struct VirtualScaleArray <: AbstractVirtualCombinator
     scale
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualScaleArray, arch, style
 )
-    VirtualScaleArray(virtual_transfer(ctx, tns.body, arch, style), tns.scale)
+    VirtualScaleArray(distribute(ctx, tns.body, arch, style), tns.scale)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)

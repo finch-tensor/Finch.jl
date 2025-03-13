@@ -20,10 +20,10 @@ struct VirtualPermissiveArray <: AbstractVirtualCombinator
     dims
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualPermissiveArray, arch, style
 )
-    VirtualPermissiveArray(virtual_transfer(ctx, tns.body, arch, style), tns.dims)
+    VirtualPermissiveArray(distribute(ctx, tns.body, arch, style), tns.dims)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)

@@ -265,7 +265,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultS
     end
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -279,7 +279,7 @@ function virtual_transfer_level(
             $srt_2 = transfer($(lvl.srt), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseByteMapLevel(
         lvl.tag, lvl_2, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
         lvl.qos_stop,

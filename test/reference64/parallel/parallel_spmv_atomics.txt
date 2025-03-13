@@ -31,8 +31,8 @@ quote
         end
     Finch.resize_if_smaller!(y_lvl_3_val, A_lvl_stop)
     Finch.fill_range!(y_lvl_3_val, 0, 1, A_lvl_stop)
-    locks = (Finch).transfer(y_lvl_2_locks, CPU(Threads.nthreads()), Finch.ScatterSend())
-    val = (Finch).transfer(y_lvl_3_val, CPU(Threads.nthreads()), Finch.ScatterSend())
+    locks = (Finch).transfer(y_lvl_2_locks, CPU(Threads.nthreads()), Finch.HostShared())
+    val = (Finch).transfer(y_lvl_3_val, CPU(Threads.nthreads()), Finch.HostShared())
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin

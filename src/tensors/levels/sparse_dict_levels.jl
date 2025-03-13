@@ -411,7 +411,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     return lvl
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -423,7 +423,7 @@ function virtual_transfer_level(
             $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseDictLevel(
         lvl.tag,
         lvl_2,

@@ -17,10 +17,10 @@ struct VirtualWindowedArray <: AbstractVirtualCombinator
     dims
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualWindowedArray, arch, style
 )
-    VirtualWindowedArray(virtual_transfer(ctx, tns.body, arch, style), tns.dims)
+    VirtualWindowedArray(distribute(ctx, tns.body, arch, style), tns.dims)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)

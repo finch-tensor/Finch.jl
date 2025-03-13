@@ -325,7 +325,7 @@ function virtual_level_resize!(ctx, lvl::VirtualRunListLevel, dims...)
     lvl
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -337,8 +337,8 @@ function virtual_transfer_level(
             $right_2 = $transfer($(lvl.right), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    buf_2 = virtual_transfer_level(ctx, lvl.buf, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
+    buf_2 = distribute_level(ctx, lvl.buf, arch, style)
     VirtualRunListLevel(
         lvl.tag,
         lvl_2,

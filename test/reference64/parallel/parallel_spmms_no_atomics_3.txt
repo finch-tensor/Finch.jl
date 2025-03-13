@@ -24,7 +24,7 @@ begin
     pos_stop = A_lvl_stop1 * B_lvl_stop2
     Finch.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
     Finch.fill_range!(Ct_lvl_3_val, 0x0000000000000000, 1, pos_stop)
-    val = (Finch).transfer(Ct_lvl_3_val, CPU(Threads.nthreads()), Finch.ScatterSend())
+    val = (Finch).transfer(Ct_lvl_3_val, CPU(Threads.nthreads()), Finch.HostShared())
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin

@@ -156,12 +156,12 @@ function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(arr.lvl, literal(1)), ext, mode, proto)
 end
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
-    VirtualFiber(virtual_transfer_level(ctx, fbr.lvl, arch, style))
+function distribute(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
+    VirtualFiber(distribute_level(ctx, fbr.lvl, arch, style))
 end
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
-    VirtualSubFiber(virtual_transfer_level(ctx, fbr.lvl, arch, style), fbr.pos)
+function distribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
+    VirtualSubFiber(distribute_level(ctx, fbr.lvl, arch, style), fbr.pos)
 end
 
 struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}
@@ -197,9 +197,9 @@ function lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle
 end
 FinchNotation.finch_leaf(x::VirtualHollowSubFiber) = virtual(x)
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, style)
+function distribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, style)
     return VirtualHollowSubFiber(
-        virtual_transfer_level(ctx, fbr.lvl, arch, style), fbr.pos, fbr.dirty
+        distribute_level(ctx, fbr.lvl, arch, style), fbr.pos, fbr.dirty
     )
 end
 

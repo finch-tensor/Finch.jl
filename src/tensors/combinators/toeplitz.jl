@@ -29,10 +29,10 @@ struct VirtualToeplitzArray <: AbstractVirtualCombinator
     end
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualToeplitzArray, arch, style
 )
-    VirtualToeplitzArray(virtual_transfer(ctx, tns.body, arch, style), tns.dim)
+    VirtualToeplitzArray(distribute(ctx, tns.body, arch, style), tns.dim)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)

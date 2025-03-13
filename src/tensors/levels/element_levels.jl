@@ -179,7 +179,7 @@ function reassemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
     lvl
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualElementLevel, arch, style
 )
     val_2 = freshen(ctx, :val)

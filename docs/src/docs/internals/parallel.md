@@ -49,7 +49,7 @@ memory, `scatter` may also be a no-op. When the parallel loop is exited, we call
 Each of these operations begins with a `_send` variant on one task, and
 finishes with a `_recv` variant on the recieving task.
 
-All transfers are accomplished with the functions `transfer` and `virtual_transfer`, with
+All transfers are accomplished with the functions `transfer` and `distribute`, with
 different `style` objects signaling the type of transfer.
 
 Note: After transferring a tensor, we must also update any in-progress
@@ -62,11 +62,11 @@ subtensor from the root tensor.
 
 ```@docs
 bcast
-bcast_send
-bcast_recv
+host_local
+device_local
 scatter
-scatter_send
-scatter_recv
+host_shared
+device_shared
 gather
 gather_send
 gather_recv

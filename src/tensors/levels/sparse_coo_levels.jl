@@ -371,7 +371,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
     return lvl
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -391,7 +391,7 @@ function virtual_transfer_level(
         )
         idx_2
     end
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseCOOLevel(
         lvl.tag, lvl_2, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
         lvl.qos_fill,

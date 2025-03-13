@@ -317,7 +317,7 @@ function virtual_level_fill_value(lvl::VirtualSparseBlockListLevel)
     virtual_level_fill_value(lvl.lvl)
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -331,7 +331,7 @@ function virtual_transfer_level(
             $ofs_2 = $transfer($(lvl.ofs), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseBlockListLevel(
         lvl.tag,
         lvl_2,

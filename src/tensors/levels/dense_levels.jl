@@ -216,8 +216,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, pos)
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+function distribute_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualDenseLevel(lvl.tag, lvl_2, lvl.Ti, lvl.shape)
 end
 

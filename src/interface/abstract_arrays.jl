@@ -156,7 +156,7 @@ FinchNotation.finch_leaf(x::VirtualAbstractArray) = virtual(x)
 virtual_fill_value(ctx, ::VirtualAbstractArray) = 0
 virtual_eltype(ctx, tns::VirtualAbstractArray) = tns.eltype
 
-function virtual_transfer(ctx, arr::VirtualAbstractArray, device, style)
+function distribute(ctx, arr::VirtualAbstractArray, device, style)
     data = freshen(ctx, arr.data)
     push_preamble!(
         ctx,

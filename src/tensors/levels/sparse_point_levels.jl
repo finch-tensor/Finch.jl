@@ -275,7 +275,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, pos_st
     return lvl
 end
 
-function virtual_transfer_level(
+function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, arch, style
 )
     ptr_2 = freshen(ctx, lvl.ptr)
@@ -286,7 +286,7 @@ function virtual_transfer_level(
             $idx_2 = $transfer($(lvl.idx), $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparsePointLevel(lvl.tag, lvl_2, lvl.Ti, idx_2, lvl.shape)
 end
 

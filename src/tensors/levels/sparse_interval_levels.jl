@@ -274,7 +274,7 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseIntervalLevel, dims...)
     lvl
 end
 
-function virtual_transfer_level(ctx, lvl::VirtualSparseIntervalLevel, arch, style)
+function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, style)
     left_2 = freshen(ctx, :left)
     right_2 = freshen(ctx, :right)
     push_preamble!(
@@ -284,7 +284,7 @@ function virtual_transfer_level(ctx, lvl::VirtualSparseIntervalLevel, arch, styl
             $right_2 = transfer($lvl.right, $(ctx(arch)), $style)
         end,
     )
-    lvl_2 = virtual_transfer_level(ctx, lvl.lvl, arch, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseIntervalLevel(
         lvl.tag, lvl_2, lvl.Ti, left_2, right_2, lvl.shape, lvl.qos_fill, lvl.qos_stop,
         lvl.prev_pos,

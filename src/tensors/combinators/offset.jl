@@ -21,10 +21,10 @@ struct VirtualOffsetArray <: AbstractVirtualCombinator
     delta
 end
 
-function virtual_transfer(
+function distribute(
     ctx::AbstractCompiler, tns::VirtualOffsetArray, arch, style
 )
-    VirtualOffsetArray(virtual_transfer(ctx, tns.body, arch, style), tns.delta)
+    VirtualOffsetArray(distribute(ctx, tns.body, arch, style), tns.delta)
 end
 
 function reroot_set!(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
