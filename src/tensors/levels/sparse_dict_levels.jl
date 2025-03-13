@@ -93,12 +93,12 @@ end
 function transfer(
     lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}, Tm
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    ptr_2 = transfer(lvl.ptr, Tm, style)
-    idx_2 = transfer(lvl.idx, Tm, style)
-    val_2 = transfer(lvl.val, Tm, style)
-    tbl_2 = transfer(lvl.tbl, Tm, style)
-    pool_2 = transfer(lvl.pool, Tm, style)
+    lvl_2 = transfer(Tm, lvl.lvl)
+    ptr_2 = transfer(Tm, lvl.ptr)
+    idx_2 = transfer(Tm, lvl.idx)
+    val_2 = transfer(Tm, lvl.val)
+    tbl_2 = transfer(Tm, lvl.tbl)
+    pool_2 = transfer(Tm, lvl.pool)
     return SparseDictLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_2, pool_2)
 end
 
@@ -420,7 +420,7 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
+            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

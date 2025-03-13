@@ -161,7 +161,7 @@ function distribute(ctx, arr::VirtualAbstractArray, device, style)
     push_preamble!(
         ctx,
         quote
-            $data = $transfer($(arr.data), $(ctx(device)), $style)
+            $data = $transfer($(ctx(device)), $(arr.data))
         end,
     )
     VirtualAbstractArray(arr.tag, data, arr.eltype, arr.ndims, arr.shape)

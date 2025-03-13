@@ -41,7 +41,7 @@ end
 postype(::Type{<:AtomicElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
 function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv,Tp}
-    return AtomicElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device, style))
+    return AtomicElementLevel{Vf,Tv,Tp}(transfer(device, lvl.val))
 end
 
 pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
@@ -182,7 +182,7 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
+            $val_2 = $transfer($(ctx(arch)), $(lvl.val))
         end,
     )
     VirtualAtomicElementLevel(lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, val_2)

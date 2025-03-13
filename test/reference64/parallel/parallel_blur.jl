@@ -20,9 +20,9 @@ begin
     pos_stop = input_lvl_2.shape * input_lvl.shape
     Finch.resize_if_smaller!(output_lvl_2_val, pos_stop)
     Finch.fill_range!(output_lvl_2_val, 0.0, 1, pos_stop)
-    input_lvl_2_val = (Finch).transfer(input_lvl_2_val, cpu, style)
+    input_lvl_2_val = (Finch).transfer(cpu, input_lvl_2_val)
     val_2 = output_lvl_2_val
-    output_lvl_2_val = (Finch).transfer(output_lvl_2_val, cpu, style)
+    output_lvl_2_val = (Finch).transfer(cpu, output_lvl_2_val)
     Threads.@threads for i = 1:cpu.n
             Finch.@barrier begin
                     @inbounds @fastmath(begin

@@ -56,8 +56,8 @@ function postype(::Type{SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl}
 end
 
 function transfer(lvl::SparsePointLevel{Ti,Idx,Lvl}, Tm, style) where {Ti,Idx,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    idx_2 = transfer(lvl.idx, Tm, style)
+    lvl_2 = transfer(Tm, lvl.lvl)
+    idx_2 = transfer(Tm, lvl.idx)
     return SparsePointLevel{Ti}(lvl_2, lvl.shape, idx_2)
 end
 
@@ -283,7 +283,7 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $idx_2 = $transfer($(lvl.idx), $(ctx(arch)), $style)
+            $idx_2 = $transfer($(ctx(arch)), $(lvl.idx))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

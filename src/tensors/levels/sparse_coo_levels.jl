@@ -86,9 +86,9 @@ function postype(::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,L
 end
 
 function transfer(lvl::SparseCOOLevel{N,TI}, device, style) where {N,TI}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    tbl_2 = ntuple(n -> transfer(lvl.tbl[n], device, style), N)
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    tbl_2 = ntuple(n -> transfer(device, lvl.tbl[n]), N)
     return SparseCOOLevel{N,TI}(lvl_2, lvl.shape, ptr_2, tbl_2)
 end
 
@@ -378,7 +378,7 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
+            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
         end,
     )
     tbl_2 = map(lvl.tbl) do idx
@@ -386,7 +386,7 @@ function distribute_level(
         push_preamble!(
             ctx,
             quote
-                $idx_2 = $transfer($idx, $(ctx(arch)), $style)
+                $idx_2 = $transfer($(ctx(arch)), $idx)
             end,
         )
         idx_2

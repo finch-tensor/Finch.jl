@@ -35,9 +35,9 @@ end
 
 postype(::Type{<:MutexLevel{AVal,Lvl}}) where {Lvl,AVal} = postype(Lvl)
 
-function transfer(lvl::MutexLevel, device, style)
-    lvl_2 = transfer(lvl.lvl, device, style)
-    locks_2 = transfer(lvl.locks, device, style)
+function transfer(device, lvl::MutexLevel)
+    lvl_2 = transfer(device, lvl.lvl)
+    locks_2 = transfer(device, lvl.locks)
     return MutexLevel(lvl_2, locks_2)
 end
 
@@ -236,7 +236,7 @@ function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, s
     push_preamble!(
         ctx,
         quote
-            $locks_2 = $transfer($(lvl.locks), $(ctx(arch)), $style)
+            $locks_2 = $transfer($(ctx(arch)), $(lvl.locks))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

@@ -72,12 +72,12 @@ function postype(
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseRunListLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr = transfer(lvl.ptr, device, style)
-    left = transfer(lvl.left, device, style)
-    right = transfer(lvl.right, device, style)
-    buf = transfer(lvl.buf, device, style)
+function transfer(device, lvl::SparseRunListLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr = transfer(device, lvl.ptr)
+    left = transfer(device, lvl.left)
+    right = transfer(device, lvl.right)
+    buf = transfer(device, lvl.buf)
     return SparseRunListLevel{Ti}(
         lvl_2, lvl.shape, lvl.ptr, lvl.left, lvl.right, lvl.buf; merge=getmerge(lvl)
     )
@@ -341,9 +341,9 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
-            $left_2 = $transfer($(lvl.left), $(ctx(arch)), $style)
-            $right_2 = $transfer($(lvl.right), $(ctx(arch)), $style)
+            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
+            $left_2 = $transfer($(ctx(arch)), $(lvl.left))
+            $right_2 = $transfer($(ctx(arch)), $(lvl.right))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

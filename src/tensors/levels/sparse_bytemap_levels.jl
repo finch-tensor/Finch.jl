@@ -61,11 +61,11 @@ function postype(::Type{SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}) where {Ti,Ptr,T
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseByteMapLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    tbl_2 = transfer(lvl.tbl, device, style)
-    srt_2 = transfer(lvl.srt, device, style)
+function transfer(device, lvl::SparseByteMapLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    tbl_2 = transfer(device, lvl.tbl)
+    srt_2 = transfer(device, lvl.srt)
     return SparseByteMapLevel{Ti}(lvl_2, lvl.shape, ptr_2, tbl_2, srt_2)
 end
 
@@ -274,9 +274,9 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = transfer($(lvl.ptr), $(ctx(arch)), $style)
-            $tbl_2 = transfer($(lvl.tbl), $(ctx(arch)), $style)
-            $srt_2 = transfer($(lvl.srt), $(ctx(arch)), $style)
+            $ptr_2 = transfer($(ctx(arch)), $(lvl.ptr))
+            $tbl_2 = transfer($(ctx(arch)), $(lvl.tbl))
+            $srt_2 = transfer($(ctx(arch)), $(lvl.srt))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

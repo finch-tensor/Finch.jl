@@ -36,9 +36,9 @@ end
 
 postype(::Type{<:Separate{Lvl,Val}}) where {Lvl,Val} = postype(Lvl)
 
-function transfer(lvl::SeparateLevel, device, style)
-    lvl_2 = transfer(lvl.lvl, device, style)
-    val_2 = transfer(lvl.val, device, style)
+function transfer(device, lvl::SeparateLevel)
+    lvl_2 = transfer(device, lvl.lvl)
+    val_2 = transfer(device, lvl.val)
     return SeparateLevel(lvl_2, val_2)
 end
 
@@ -173,7 +173,7 @@ function distribute_level(ctx, lvl::VirtualSeparateLevel, arch, style)
     push_preamble!(
         ctx,
         quote
-            $val_2 = $transfer($(lvl.val), $(ctx(arch)), $style)
+            $val_2 = $transfer($(ctx(arch)), $(lvl.val))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

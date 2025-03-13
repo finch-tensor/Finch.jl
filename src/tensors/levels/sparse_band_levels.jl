@@ -36,10 +36,10 @@ function postype(::Type{SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl}
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseBandLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    idx_2 = transfer(lvl.idx, device, style)
-    ofs_2 = transfer(lvl.ofs, device, style)
+function transfer(device, lvl::SparseBandLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    idx_2 = transfer(device, lvl.idx)
+    ofs_2 = transfer(device, lvl.ofs)
     return SparseBandLevel{Ti}(lvl_2, lvl.shape, idx_2, ofs_2)
 end
 
@@ -277,8 +277,8 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
-            $ofs_2 = $transfer($(lvl.ofs), $(ctx(arch)), $style)
+            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
+            $ofs_2 = $transfer($(ctx(arch)), $(lvl.ofs))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

@@ -5,8 +5,8 @@ end
 
 Base.show(io::IO, ex::OffsetArray) = print(io, "OffsetArray($(ex.body), $(ex.delta)")
 
-function transfer(tns::OffsetArray{Ti}, device, style) where {Ti}
-    body_2 = transfer(tns.body, device, style)
+function transfer(device, tns::OffsetArray{Ti}) where {Ti}
+    body_2 = transfer(device, tns.body)
     return OffsetArray{Ti}(body_2, tns.delta)
 end
 

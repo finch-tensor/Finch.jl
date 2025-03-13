@@ -47,7 +47,7 @@ isstructequal(a::T, b::T) where {T<:Pattern} = true
 
 postype(::Type{<:PatternLevel{Tp}}) where {Tp} = Tp
 
-function transfer(lvl::PatternLevel{Tp}, device, style) where {Tp}
+function transfer(device, lvl::PatternLevel{Tp}) where {Tp}
     return PatternLevel{Tp}()
 end
 

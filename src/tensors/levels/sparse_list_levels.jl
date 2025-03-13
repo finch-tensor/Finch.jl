@@ -62,9 +62,9 @@ function postype(::Type{SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl}
 end
 
 function transfer(lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}, Tm, style) where {Ti,Ptr,Idx,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    ptr_2 = transfer(lvl.ptr, Tm, style)
-    idx_2 = transfer(lvl.idx, Tm, style)
+    lvl_2 = transfer(Tm, lvl.lvl)
+    ptr_2 = transfer(Tm, lvl.ptr)
+    idx_2 = transfer(Tm, lvl.idx)
     return SparseListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2)
 end
 
@@ -348,8 +348,8 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
-            $idx_2 = $transfer($(lvl.idx), $(ctx(arch)), $style)
+            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
+            $idx_2 = $transfer($(ctx(arch)), $(lvl.idx))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

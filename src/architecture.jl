@@ -127,12 +127,12 @@ get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
 """
-    transfer(arr, device, style)
+    transfer(device, arr)
 
 If the array is not on the given device, it creates a new version of this array on that device
 and copies the data in to it, according to the `device` trait.
 """
-transfer(arr, device, style) = arr
+transfer(device, arr) = arr
 
 """
     distribute(ctx, arr, device, style)

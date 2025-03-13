@@ -66,9 +66,9 @@ end
 function transfer(
     lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style
 ) where {Ti,Left,Right,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    left_2 = transfer(lvl.left, Tm, style)
-    right_2 = transfer(lvl.right, Tm, style)
+    lvl_2 = transfer(Tm, lvl.lvl)
+    left_2 = transfer(Tm, lvl.left)
+    right_2 = transfer(Tm, lvl.right)
     return SparseIntervalLevel{Ti}(lvl_2, lvl.shape, left_2, right_2)
 end
 
@@ -280,8 +280,8 @@ function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, style)
     push_preamble!(
         ctx,
         quote
-            $left_2 = transfer($lvl.left, $(ctx(arch)), $style)
-            $right_2 = transfer($lvl.right, $(ctx(arch)), $style)
+            $left_2 = transfer($(ctx(arch)), $lvl.left)
+            $right_2 = transfer($(ctx(arch)), $lvl.right)
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)

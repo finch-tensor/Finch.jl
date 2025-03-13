@@ -13,11 +13,11 @@ begin
     Finch.resize_if_smaller!(y_lvl_val, A_lvl_2.shape)
     Finch.fill_range!(y_lvl_val, 0.0, 1, A_lvl_2.shape)
     val = y_lvl_val
-    y_lvl_val = (Finch).transfer(y_lvl_val, CPU(Threads.nthreads()), style)
-    x_lvl_val = (Finch).transfer(x_lvl_val, CPU(Threads.nthreads()), style)
-    A_lvl_ptr = (Finch).transfer(A_lvl_ptr, CPU(Threads.nthreads()), style)
-    A_lvl_idx = (Finch).transfer(A_lvl_idx, CPU(Threads.nthreads()), style)
-    A_lvl_2_val = (Finch).transfer(A_lvl_2_val, CPU(Threads.nthreads()), style)
+    y_lvl_val = (Finch).transfer(CPU(Threads.nthreads()), y_lvl_val)
+    x_lvl_val = (Finch).transfer(CPU(Threads.nthreads()), x_lvl_val)
+    A_lvl_ptr = (Finch).transfer(CPU(Threads.nthreads()), A_lvl_ptr)
+    A_lvl_idx = (Finch).transfer(CPU(Threads.nthreads()), A_lvl_idx)
+    A_lvl_2_val = (Finch).transfer(CPU(Threads.nthreads()), A_lvl_2_val)
     Threads.@threads for i_4 = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin

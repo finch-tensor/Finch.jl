@@ -54,11 +54,11 @@ function postype(
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseBlockListLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    idx_2 = transfer(lvl.idx, device, style)
-    ofs_2 = transfer(lvl.ofs, device, style)
+function transfer(device, lvl::SparseBlockListLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    idx_2 = transfer(device, lvl.idx)
+    ofs_2 = transfer(device, lvl.ofs)
     return SparseBlockListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, ofs_2)
 end
 
@@ -326,9 +326,9 @@ function distribute_level(
     push_preamble!(
         ctx,
         quote
-            $ptr_2 = $transfer($(lvl.ptr), $(ctx(arch)), $style)
-            $tbl_2 = $transfer($(lvl.tbl), $(ctx(arch)), $style)
-            $ofs_2 = $transfer($(lvl.ofs), $(ctx(arch)), $style)
+            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
+            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
+            $ofs_2 = $transfer($(ctx(arch)), $(lvl.ofs))
         end,
     )
     lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
