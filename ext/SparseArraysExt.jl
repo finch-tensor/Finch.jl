@@ -142,16 +142,16 @@ function distribute(
     ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, arch, style
 )
     return VirtualSparseMatrixCSC(
-        lvl.tag,
-        lvl.Tv,
-        lvl.Ti,
-        lvl.shape,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.idx, arch, style),
-        distribute_buffer(ctx, lvl.val, arch, style),
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos
+        arr.tag,
+        arr.Tv,
+        arr.Ti,
+        arr.shape,
+        distribute_buffer(ctx, arr.ptr, arch, style),
+        distribute_buffer(ctx, arr.idx, arch, style),
+        distribute_buffer(ctx, arr.val, arch, style),
+        arr.qos_fill,
+        arr.qos_stop,
+        arr.prev_pos
     )
 end
 
@@ -474,17 +474,17 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) wher
 end
 
 function distribute(
-    ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, arch, style
+    ctx::AbstractCompiler, arr::VirtualSparseVector, arch, style
 )
     return VirtualSparseVector(
-        lvl.tag,
-        lvl.Tv,
-        lvl.Ti,
-        lvl.shape,
-        distribute_buffer(ctx, lvl.idx, arch, style),
-        distribute_buffer(ctx, lvl.val, arch, style),
-        lvl.qos_fill,
-        lvl.qos_stop
+        arr.tag,
+        arr.Tv,
+        arr.Ti,
+        arr.shape,
+        distribute_buffer(ctx, arr.idx, arch, style),
+        distribute_buffer(ctx, arr.val, arch, style),
+        arr.qos_fill,
+        arr.qos_stop
     )
 end
 

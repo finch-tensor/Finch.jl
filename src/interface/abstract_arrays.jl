@@ -34,11 +34,11 @@ function distribute(
     ctx::AbstractCompiler, arr::VirtualAbstractArray, arch, style
 )
     return VirtualAbstractArray(
-        lvl.tag,
-        distribute_buffer(ctx, lvl.data, arch, style),
-        lvl.eltype,
-        lvl.ndims,
-        lvl.shape
+        arr.tag,
+        distribute_buffer(ctx, arr.data, arch, style),
+        arr.eltype,
+        arr.ndims,
+        arr.shape
     )
 end
 

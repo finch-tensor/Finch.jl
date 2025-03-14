@@ -88,7 +88,7 @@ get_task_num(::VirtualSerial) = literal(1)
 
 struct SerialMemory end
 struct VirtualSerialMemory end
-finch_leaf(mem::SerialMemory) = virtual(mem)
+FinchNotation.finch_leaf(mem::SerialMemory) = virtual(mem)
 virtualize(ctx, ex, ::Type{SerialMemory}) = VirtualSerialMemory()
 local_memory(::Serial) = SerialMemory()
 shared_memory(::Serial) = SerialMemory()
@@ -136,7 +136,7 @@ end
 struct VirtualCPULocalMemory
     device::VirtualCPU
 end
-finch_leaf(mem::VirtualCPULocalMemory) = virtual(mem)
+FinchNotation.finch_leaf(mem::VirtualCPULocalMemory) = virtual(mem)
 function virtualize(ctx, ex, ::Type{CPULocalMemory})
     VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
 end
@@ -150,7 +150,7 @@ end
 struct VirtualCPUSharedMemory
     device::VirtualCPU
 end
-finch_leaf(mem::VirtualCPUShareddMemory) = virtual(mem)
+FinchNotation.finch_leaf(mem::VirtualCPUSharedMemory) = virtual(mem)
 function virtualize(ctx, ex, ::Type{CPUSharedMemory})
     VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
 end
