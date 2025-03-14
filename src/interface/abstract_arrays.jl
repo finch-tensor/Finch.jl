@@ -33,7 +33,7 @@ end
 function distribute(
     ctx::AbstractCompiler, arr::VirtualAbstractArray, arch, style
 )
-    return VirtualSparseVector(
+    return VirtualAbstractArray(
         lvl.tag,
         distribute_buffer(ctx, lvl.data, arch, style),
         lvl.eltype,
