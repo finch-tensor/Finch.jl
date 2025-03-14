@@ -342,27 +342,33 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     )
 
     contain(ctx) do ctx_2
+        diff = Dict()
         for tns in intersect(used_in_scope, decl_in_scope)
             set_binding!(ctx, tns, distribute(ctx, resolve(ctx, tns), device, host_local))
+            reroot_set!(ctx, get_binding(ctx, tns), diff)
         end
         for tns in setdiff(used_in_scope, decl_in_scope)
             style = get_tensor_mode(ctx, tns).kind === reader ? host_global : host_shared
             set_binding!(
                 ctx, tns, distribute(ctx, resolve(ctx, tns), device, style)
             )
+            reroot_set!(ctx, get_binding(ctx, tns), diff)
         end
+        body = reroot_get(ctx, root.body, diff)
 
         virtual_parallel_region(ctx_2, device) do ctx_3
             subtask = get_task(ctx_3)
             tid = get_task_num(subtask)
             open_scope(ctx_3) do ctx_4
                 contain(ctx_4) do ctx_5
+                    diff = Dict()
                     for tns in intersect(used_in_scope, decl_in_scope)
                         set_binding!(
                             ctx_5,
                             tns,
                             distribute(ctx_5, resolve(ctx_5, tns), subtask, device_local),
                         )
+                        reroot_set!(ctx_5, get_binding(ctx_5, tns), diff)
                     end
                     for tns in setdiff(used_in_scope, decl_in_scope)
                         style = if get_tensor_mode(ctx, tns).kind === reader
@@ -375,13 +381,15 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                             tns,
                             distribute(ctx_5, resolve(ctx_5, tns), subtask, style),
                         )
+                        reroot_set!(ctx_5, get_binding(ctx_5, tns), diff)
                     end
+                    body = reroot_get(ctx_5, body, diff)
                     i = index(freshen(ctx, :i))
                     root_2 = loop(i, Extent(tid, tid),
                         loop(root.idx, ext.ext,
                             sieve(
                                 access(VirtualSplitMask(device.n), reader(), root.idx, i),
-                                root.body,
+                                body,
                             ),
                         ),
                     )
