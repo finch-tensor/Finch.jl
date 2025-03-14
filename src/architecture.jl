@@ -138,6 +138,7 @@ struct VirtualCPULocalMemory
 end
 finch_leaf(mem::VirtualCPULocalMemory) = virtual(mem)
 virtualize(ctx, ex, ::Type{CPULocalMemory}) = VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
+lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle) = :(CPULocalMemory($(ctx(mem.device))))
 
 struct CPUSharedMemory
     device::CPU
@@ -147,6 +148,7 @@ struct VirtualCPUSharedMemory
 end
 finch_leaf(mem::VirtualCPUShareddMemory) = virtual(mem)
 virtualize(ctx, ex, ::Type{CPUSharedMemory}) = VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
+lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle) = :(CPUSharedMemory($(ctx(mem.device))))
 
 local_memory(device::CPU) = CPULocalMemory(device)
 shared_memory(device::CPU) = CPUSharedMemory(device)
@@ -188,6 +190,9 @@ function transfer(task::CPUThread, arr::CPULocalArray)
         return arr
     end
 end
+function transfer(dst::AbstractArray, arr::AbstractArray)
+    return arr
+end
 
 """
     transfer(device, arr)
@@ -219,7 +224,7 @@ const host_global = HostGlobal()
 struct DeviceGlobal end
 const device_global = DeviceGlobal()
 
-function distribute_buffer(ctx, buf, device, style::HostLocal)
+function distribute_buffer(ctx, buf, device, ::HostLocal)
     buf_2 = freshen(ctx, :buf)
     push_preamble!(ctx, quote
         $buf_2 = $transfer($(ctx(local_memory(device))), $buf)
@@ -227,7 +232,7 @@ function distribute_buffer(ctx, buf, device, style::HostLocal)
     return buf_2
 end
 
-function distribute_buffer(ctx, buf, device, style::DeviceLocal)
+function distribute_buffer(ctx, buf, device, ::HostGlobal)
     buf_2 = freshen(ctx, :buf)
     push_preamble!(ctx, quote
         $buf_2 = $transfer($(ctx(global_memory(device))), $buf)
@@ -235,10 +240,13 @@ function distribute_buffer(ctx, buf, device, style::DeviceLocal)
     return buf_2
 end
 
-function distribute_buffer(ctx, buf, device, style::DeviceShared)
+function distribute_buffer(ctx, buf, device, ::HostShared)
     buf_2 = freshen(ctx, :buf)
     push_preamble!(ctx, quote
         $buf_2 = $transfer($(ctx(shared_memory(device))), $buf)
+    end)
+    push_epilogue!(ctx, quote
+        $buf = $transfer($buf, $buf_2)
     end)
     return buf_2
 end
