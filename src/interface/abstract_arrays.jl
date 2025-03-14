@@ -30,6 +30,18 @@ function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
     )
 end
 
+function distribute(
+    ctx::AbstractCompiler, arr::VirtualAbstractArray, arch, style
+)
+    return VirtualSparseVector(
+        lvl.tag,
+        distribute_buffer(ctx, lvl.data, arch, style),
+        lvl.eltype,
+        lvl.ndims,
+        lvl.shape
+    )
+end
+
 function reroot_set!(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
     diff[arr.tag] = arr
 end
