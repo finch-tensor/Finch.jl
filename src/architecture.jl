@@ -156,6 +156,23 @@ const host_global = HostGlobal()
 struct DeviceGlobal end
 const device_global = DeviceGlobal()
 
+function distribute_buffer(ctx, buf, device, style::Union{HostLocal})
+    buf_2 = freshen(ctx, :buf)
+    push_preamble!(ctx, quote
+        $buf_2 = $transfer($(ctx(local_memory(device))), $buf)
+    end)
+    return buf_2
+end
+
+function distribute_buffer(ctx, buf, task, style::Union{DeviceLocal})
+    buf_2 = freshen(ctx, :buf)
+    push_preamble!(ctx, quote
+        $buf_2 = $transfer($(ctx(task)), $buf)
+    end)
+    return buf_2
+end
+
+
 @inline function make_lock(::Type{Threads.Atomic{T}}) where {T}
     return Threads.Atomic{T}(zero(T))
 end
