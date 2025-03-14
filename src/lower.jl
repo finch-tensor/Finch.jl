@@ -365,7 +365,11 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                         )
                     end
                     for tns in setdiff(used_in_scope, decl_in_scope)
-                        style = get_tensor_mode(ctx, tns).kind === reader ? device_global : device_shared
+                        style = if get_tensor_mode(ctx, tns).kind === reader
+                            device_global
+                        else
+                            device_shared
+                        end
                         set_binding!(
                             ctx_5,
                             tns,

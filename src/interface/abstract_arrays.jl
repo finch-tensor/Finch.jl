@@ -157,14 +157,13 @@ virtual_fill_value(ctx, ::VirtualAbstractArray) = 0
 virtual_eltype(ctx, tns::VirtualAbstractArray) = tns.eltype
 
 function distribute(ctx, arr::VirtualAbstractArray, device, style)
-    data = freshen(ctx, arr.data)
-    push_preamble!(
-        ctx,
-        quote
-            $data = $transfer($(ctx(device)), $(arr.data))
-        end,
+    VirtualAbstractArray(
+        arr.tag,
+        distribute_buffer(ctx, arr.data, device, style),
+        arr.eltype,
+        arr.ndims,
+        arr.shape,
     )
-    VirtualAbstractArray(arr.tag, data, arr.eltype, arr.ndims, arr.shape)
 end
 
 fill_value(a::AbstractArray) = fill_value(typeof(a))

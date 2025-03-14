@@ -268,20 +268,15 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    tbl_2 = freshen(ctx, lvl.tbl)
-    srt_2 = freshen(ctx, lvl.srt)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = transfer($(ctx(arch)), $(lvl.ptr))
-            $tbl_2 = transfer($(ctx(arch)), $(lvl.tbl))
-            $srt_2 = transfer($(ctx(arch)), $(lvl.srt))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseByteMapLevel(
-        lvl.tag, lvl_2, lvl.Ti, ptr_2, tbl_2, srt_2, lvl.shape, lvl.qos_fill,
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.srt, arch, style),
+        lvl.shape,
+        lvl.qos_fill,
         lvl.qos_stop,
     )
 end

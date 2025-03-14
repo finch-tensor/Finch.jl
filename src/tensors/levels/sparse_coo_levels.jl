@@ -374,26 +374,15 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
-        end,
-    )
-    tbl_2 = map(lvl.tbl) do idx
-        idx_2 = freshen(ctx, idx)
-        push_preamble!(
-            ctx,
-            quote
-                $idx_2 = $transfer($(ctx(arch)), $idx)
-            end,
-        )
-        idx_2
-    end
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseCOOLevel(
-        lvl.tag, lvl_2, lvl.N, lvl.TI, ptr_2, tbl_2, lvl.Lvl, lvl.shape,
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, style),
+        lvl.N,
+        lvl.TI,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        map(idx -> distribute_buffer(ctx, idx, arch, style), lvl.tbl),
+        lvl.Lvl,
+        lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,
         lvl.prev_pos,

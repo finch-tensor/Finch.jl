@@ -178,14 +178,13 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, style
 )
-    val_2 = freshen(ctx, :val)
-    push_preamble!(
-        ctx,
-        quote
-            $val_2 = $transfer($(ctx(arch)), $(lvl.val))
-        end,
+    VirtualAtomicElementLevel(
+        lvl.tag,
+        lvl.Vf,
+        lvl.Tv,
+        lvl.Tp,
+        distribute_buffer(ctx, lvl.Tv, lvl.val, style),
     )
-    VirtualAtomicElementLevel(lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, val_2)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)

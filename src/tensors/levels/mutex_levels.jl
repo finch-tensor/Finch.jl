@@ -230,17 +230,15 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, pos)
 end
 
 function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
-    #Add for seperation level too.
-    locks_2 = freshen(ctx, :locks)
-
-    push_preamble!(
-        ctx,
-        quote
-            $locks_2 = $transfer($(ctx(arch)), $(lvl.locks))
-        end,
+    VirtualMutexLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, style),
+        distribute_buffer(ctx, lvl.locks, arch, style),
+        lvl.Tv,
+        lvl.Val,
+        lvl.AVal,
+        lvl.Lvl,
     )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
-    VirtualMutexLevel(lvl.tag, lvl_2, locks_2, lvl.Tv, lvl.Val, lvl.AVal, lvl.Lvl)
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)

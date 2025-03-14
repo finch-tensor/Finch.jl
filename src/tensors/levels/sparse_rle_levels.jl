@@ -335,30 +335,17 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    left_2 = freshen(ctx, lvl.left)
-    right_2 = freshen(ctx, lvl.right)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
-            $left_2 = $transfer($(ctx(arch)), $(lvl.left))
-            $right_2 = $transfer($(ctx(arch)), $(lvl.right))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
-    buf_2 = distribute_level(ctx, lvl.buf, arch, style)
     return VirtualSparseRunListLevel(
         lvl.tag,
-        lvl_2,
+        distribute_level(ctx, lvl.lvl, arch, style),
         lvl.Ti,
         lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,
-        ptr_2,
-        left_2,
-        right_2,
-        buf_2,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.left, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        distribute_level(ctx, lvl.buf, arch, style),
         lvl.merge,
         lvl.prev_pos,
     )

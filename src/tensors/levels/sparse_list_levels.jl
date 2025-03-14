@@ -343,22 +343,12 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    idx_2 = freshen(ctx, lvl.idx)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
-            $idx_2 = $transfer($(ctx(arch)), $(lvl.idx))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseListLevel(
         lvl.tag,
-        lvl_2,
+        distribute_level(ctx, lvl.lvl, arch, style),
         lvl.Ti,
-        ptr_2,
-        idx_2,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,

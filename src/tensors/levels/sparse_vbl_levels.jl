@@ -320,21 +320,9 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    tbl_2 = freshen(ctx, lvl.tbl)
-    ofs_2 = freshen(ctx, lvl.ofs)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $transfer($(ctx(arch)), $(lvl.ptr))
-            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
-            $ofs_2 = $transfer($(ctx(arch)), $(lvl.ofs))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseBlockListLevel(
         lvl.tag,
-        lvl_2,
+        distribute_level(ctx, lvl.lvl, arch, style),
         lvl.Ti,
         lvl.shape,
         lvl.qos_fill,
@@ -342,9 +330,9 @@ function distribute_level(
         lvl.ros_fill,
         lvl.ros_stop,
         lvl.dirty,
-        ptr_2,
-        tbl_2,
-        ofs_2,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
         lvl.prev_pos,
     )
 end

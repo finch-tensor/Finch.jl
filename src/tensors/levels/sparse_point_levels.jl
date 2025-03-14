@@ -278,16 +278,12 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    idx_2 = freshen(ctx, lvl.idx)
-    push_preamble!(
-        ctx,
-        quote
-            $idx_2 = $transfer($(ctx(arch)), $(lvl.idx))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
-    return VirtualSparsePointLevel(lvl.tag, lvl_2, lvl.Ti, idx_2, lvl.shape)
+    return VirtualSparsePointLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.idx, arch, style),
+        lvl.shape)
 end
 
 function unfurl(

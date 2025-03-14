@@ -97,7 +97,7 @@ local_memory(::VirtualSerial) = VirtualSerialMemory()
 shared_memory(::VirtualSerial) = VirtualSerialMemory()
 global_memory(::VirtualSerial) = VirtualSerialMemory()
 
-transfer(device::Union{Serial, SerialMemory}, arr) = arr
+transfer(device::Union{Serial,SerialMemory}, arr) = arr
 
 """
     CPU(n)
@@ -137,8 +137,12 @@ struct VirtualCPULocalMemory
     device::VirtualCPU
 end
 finch_leaf(mem::VirtualCPULocalMemory) = virtual(mem)
-virtualize(ctx, ex, ::Type{CPULocalMemory}) = VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
-lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle) = :(CPULocalMemory($(ctx(mem.device))))
+function virtualize(ctx, ex, ::Type{CPULocalMemory})
+    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
+end
+function lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle)
+    :(CPULocalMemory($(ctx(mem.device))))
+end
 
 struct CPUSharedMemory
     device::CPU
@@ -147,8 +151,12 @@ struct VirtualCPUSharedMemory
     device::VirtualCPU
 end
 finch_leaf(mem::VirtualCPUShareddMemory) = virtual(mem)
-virtualize(ctx, ex, ::Type{CPUSharedMemory}) = VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
-lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle) = :(CPUSharedMemory($(ctx(mem.device))))
+function virtualize(ctx, ex, ::Type{CPUSharedMemory})
+    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
+end
+function lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle)
+    :(CPUSharedMemory($(ctx(mem.device))))
+end
 
 local_memory(device::CPU) = CPULocalMemory(device)
 shared_memory(device::CPU) = CPUSharedMemory(device)
@@ -178,7 +186,7 @@ end
 Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
 Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
-transfer(device::Union{CPUThread, CPUSharedMemory}, arr::AbstractArray) = arr
+transfer(device::Union{CPUThread,CPUSharedMemory}, arr::AbstractArray) = arr
 function transfer(device::CPULocalMemory, arr::AbstractArray)
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
@@ -226,36 +234,53 @@ const device_global = DeviceGlobal()
 
 function distribute_buffer(ctx, buf, device, ::HostLocal)
     buf_2 = freshen(ctx, :buf)
-    push_preamble!(ctx, quote
-        $buf_2 = $transfer($(ctx(local_memory(device))), $buf)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $buf_2 = $transfer($(ctx(local_memory(device))), $buf)
+        end,
+    )
     return buf_2
 end
 
 function distribute_buffer(ctx, buf, device, ::HostGlobal)
     buf_2 = freshen(ctx, :buf)
-    push_preamble!(ctx, quote
-        $buf_2 = $transfer($(ctx(global_memory(device))), $buf)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $buf_2 = $transfer($(ctx(global_memory(device))), $buf)
+        end,
+    )
     return buf_2
 end
 
 function distribute_buffer(ctx, buf, device, ::HostShared)
     buf_2 = freshen(ctx, :buf)
-    push_preamble!(ctx, quote
-        $buf_2 = $transfer($(ctx(shared_memory(device))), $buf)
-    end)
-    push_epilogue!(ctx, quote
-        $buf = $transfer($buf, $buf_2)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $buf_2 = $transfer($(ctx(shared_memory(device))), $buf)
+        end,
+    )
+    push_epilogue!(
+        ctx,
+        quote
+            $buf = $transfer($buf, $buf_2)
+        end,
+    )
     return buf_2
 end
 
-function distribute_buffer(ctx, buf, task, style::Union{DeviceLocal, DeviceShared, DeviceGlobal})
+function distribute_buffer(
+    ctx, buf, task, style::Union{DeviceLocal,DeviceShared,DeviceGlobal}
+)
     buf_2 = freshen(ctx, :buf)
-    push_preamble!(ctx, quote
-        $buf_2 = $transfer($(ctx(task)), $buf)
-    end)
+    push_preamble!(
+        ctx,
+        quote
+            $buf_2 = $transfer($(ctx(task)), $buf)
+        end,
+    )
     return buf_2
 end
 

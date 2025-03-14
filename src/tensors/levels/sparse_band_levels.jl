@@ -272,19 +272,9 @@ virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style
 )
-    tbl_2 = freshen(ctx, lvl.tbl)
-    ofs_2 = freshen(ctx, lvl.ofs)
-    push_preamble!(
-        ctx,
-        quote
-            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
-            $ofs_2 = $transfer($(ctx(arch)), $(lvl.ofs))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     VirtualSparseBandLevel(
         lvl.tag,
-        lvl_2,
+        distribute_level(ctx, lvl.lvl, arch, style),
         lvl.Ti,
         lvl.shape,
         lvl.qos_fill,
@@ -292,8 +282,8 @@ function distribute_level(
         lvl.ros_fill,
         lvl.ros_stop,
         lvl.dirty,
-        tbl_2,
-        ofs_2,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
         lvl.prev_pos,
     )
 end

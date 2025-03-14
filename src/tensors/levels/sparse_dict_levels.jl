@@ -414,24 +414,14 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style
 )
-    ptr_2 = freshen(ctx, lvl.ptr)
-    idx_2 = freshen(ctx, lvl.idx)
-    tbl_2 = freshen(ctx, lvl.tbl_2)
-    push_preamble!(
-        ctx,
-        quote
-            $tbl_2 = $transfer($(ctx(arch)), $(lvl.tbl))
-        end,
-    )
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
     return VirtualSparseDictLevel(
         lvl.tag,
-        lvl_2,
+        distribute_level(ctx, lvl.lvl, arch, style),
         lvl.Ti,
-        ptr_2,
-        idx_2,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.val,
-        tbl_2,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
         lvl.pool,
         lvl.shape,
         lvl.qos_stop,
