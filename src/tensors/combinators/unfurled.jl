@@ -12,13 +12,9 @@
 end
 
 function distribute(
-    ctx::AbstractCompiler, tns::Unfurled, arch, style
+    ctx::AbstractCompiler, tns::Unfurled, arch, diff, style
 )
-    Unfurled(tns.arr, tns.ndims, distribute(ctx, tns.body, arch, style))
-end
-
-function reroot_set!(ctx::AbstractCompiler, tns::Unfurled, diff)
-    reroot_set!(ctx, tns.body, diff)
+    Unfurled(tns.arr, tns.ndims, distribute(ctx, tns.body, arch, diff, style))
 end
 
 function reroot_get(ctx::AbstractCompiler, tns::Unfurled, diff)

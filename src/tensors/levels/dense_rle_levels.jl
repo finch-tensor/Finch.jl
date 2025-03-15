@@ -216,32 +216,6 @@ mutable struct VirtualRunListLevel <: AbstractVirtualLevel
     merge
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-    reroot_set!(ctx, lvl.buf, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualRunListLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.ptr,
-            lvl.right,
-            reroot_get(ctx, lvl.buf, diff),
-            lvl.prev_pos,
-            lvl.i_prev,
-            lvl.merge,
-        ),
-    )
-end
 
 function is_level_injective(ctx, lvl::VirtualRunListLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]
@@ -311,6 +285,46 @@ function lower(ctx::AbstractCompiler, lvl::VirtualRunListLevel, ::DefaultStyle)
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualRunListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        distribute_level(ctx, lvl.buf, arch, diff, style),
+        lvl.prev_pos,
+        lvl.i_prev,
+        lvl.merge,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualRunListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ptr,
+            lvl.right,
+            reroot_get(ctx, lvl.buf, diff),
+            lvl.prev_pos,
+            lvl.i_prev,
+            lvl.merge,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualRunListLevel) = "RunList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualRunListLevel)
@@ -323,25 +337,6 @@ function virtual_level_resize!(ctx, lvl::VirtualRunListLevel, dims...)
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl.buf = virtual_level_resize!(ctx, lvl.buf, dims[1:(end - 1)]...)
     lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style
-)
-    VirtualRunListLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.right, arch, style),
-        distribute_level(ctx, lvl.buf, arch, style),
-        lvl.prev_pos,
-        lvl.i_prev,
-        lvl.merge,
-    )
 end
 
 virtual_level_eltype(lvl::VirtualRunListLevel) = virtual_level_eltype(lvl.lvl)

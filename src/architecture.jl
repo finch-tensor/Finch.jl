@@ -211,13 +211,36 @@ and copies the data in to it, according to the `device` trait.
 transfer(device, arr) = arr
 
 """
-    distribute(ctx, arr, device, style)
+    distribute(ctx, arr, device, diff, style)
 
 If the virtual array is not on the given device, copy the array to that device. This
 function may modify underlying data arrays, but cannot change the virtual itself. This
-function is used to move data to the device before a kernel is launched.
+function is used to move data to the device before a kernel is launched. Since this
+function may modify the root node, iterators in-progress may need to be updated.
+We can store new root objects in the `diff` dictionary.
 """
-distribute(ctx, arr, device, style) = arr
+distribute(ctx, arr, device, diff, style) = arr
+
+"""
+reroot_get(ctx, node, diff)
+
+    When the root node changes, several derivative nodes may need to be updated.
+The `reroot_get` function traverses `tns` and updates it based on the updated
+objects in the `diff` dictionary.
+"""
+reroot_get(ctx, node, diff) = node
+
+function reroot_get(ctx::AbstractCompiler, node::FinchNode, diff)
+    if node.kind === virtual
+        virtual(reroot_get(ctx, node.val, diff))
+    elseif istree(node)
+        similarterm(
+            node, operation(node), map(x -> reroot_get(ctx, x, diff), arguments(node))
+        )
+    else
+        node
+    end
+end
 
 struct HostLocal end
 const host_local = HostLocal()
@@ -233,7 +256,7 @@ struct DeviceGlobal end
 const device_global = DeviceGlobal()
 
 function distribute_buffer(ctx, buf, device, ::HostLocal)
-    buf_2 = freshen(ctx, :buf)
+    buf_2 = freshen(ctx, buf)
     push_preamble!(
         ctx,
         quote
@@ -244,7 +267,7 @@ function distribute_buffer(ctx, buf, device, ::HostLocal)
 end
 
 function distribute_buffer(ctx, buf, device, ::HostGlobal)
-    buf_2 = freshen(ctx, :buf)
+    buf_2 = freshen(ctx, buf)
     push_preamble!(
         ctx,
         quote
@@ -255,7 +278,7 @@ function distribute_buffer(ctx, buf, device, ::HostGlobal)
 end
 
 function distribute_buffer(ctx, buf, device, ::HostShared)
-    buf_2 = freshen(ctx, :buf)
+    buf_2 = freshen(ctx, buf)
     push_preamble!(
         ctx,
         quote
@@ -274,7 +297,7 @@ end
 function distribute_buffer(
     ctx, buf, task, style::Union{DeviceLocal,DeviceShared,DeviceGlobal}
 )
-    buf_2 = freshen(ctx, :buf)
+    buf_2 = freshen(ctx, buf)
     push_preamble!(
         ctx,
         quote

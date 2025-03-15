@@ -223,30 +223,6 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     qos_stop
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseDictLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.ptr,
-            lvl.idx,
-            lvl.val,
-            lvl.tbl,
-            lvl.pool,
-            lvl.shape,
-            lvl.qos_stop,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseDictLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -299,6 +275,42 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyl
             $(lvl.pool),
         )
     end
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseDictLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.idx, arch, style),
+        lvl.val,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        lvl.pool,
+        lvl.shape,
+        lvl.qos_stop,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseDictLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.idx,
+            lvl.val,
+            lvl.tbl,
+            lvl.pool,
+            lvl.shape,
+            lvl.qos_stop,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparseDictLevel) = "SparseDict($(summary(lvl.lvl)))"
@@ -409,23 +421,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
     return lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style
-)
-    return VirtualSparseDictLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.idx, arch, style),
-        lvl.val,
-        distribute_buffer(ctx, lvl.tbl, arch, style),
-        lvl.pool,
-        lvl.shape,
-        lvl.qos_stop,
-    )
 end
 
 function unfurl(

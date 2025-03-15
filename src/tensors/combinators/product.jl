@@ -25,13 +25,9 @@ struct VirtualProductArray <: AbstractVirtualCombinator
 end
 
 function distribute(
-    ctx::AbstractCompiler, tns::VirtualProductArray, arch, style
+    ctx::AbstractCompiler, tns::VirtualProductArray, arch, diff, style
 )
-    VirtualProductArray(distribute(ctx, tns.body, arch, style), tns.dim)
-end
-
-function reroot_set!(ctx::AbstractCompiler, tns::VirtualProductArray, diff)
-    reroot_set!(ctx, tns.body, diff)
+    VirtualProductArray(distribute(ctx, tns.body, arch, diff, style), tns.dim)
 end
 
 function reroot_get(ctx::AbstractCompiler, tns::VirtualProductArray, diff)

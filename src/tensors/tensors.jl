@@ -72,14 +72,6 @@ mutable struct VirtualFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
 end
 
-function reroot_set!(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
-    reroot_set!(ctx, fbr.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
-    VirtualFiber(reroot_get(ctx, fbr.lvl, diff))
-end
-
 is_injective(ctx, tns::VirtualFiber) = is_level_injective(ctx, tns.lvl)
 is_concurrent(ctx, tns::VirtualFiber) = is_level_concurrent(ctx, tns.lvl)[1]
 
@@ -91,6 +83,14 @@ function virtualize(ctx, ex, ::Type{<:Tensor{Lvl}}, tag=freshen(ctx, :tns)) wher
 end
 lower(ctx::AbstractCompiler, fbr::VirtualFiber, ::DefaultStyle) = :(Tensor($(ctx(fbr.lvl))))
 FinchNotation.finch_leaf(x::VirtualFiber) = virtual(x)
+
+function distribute(ctx::AbstractCompiler, fbr::VirtualFiber, arch, diff, style)
+    VirtualFiber(distribute_level(ctx, fbr.lvl, arch, diff, style))
+end
+
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
+    VirtualFiber(reroot_get(ctx, fbr.lvl, diff))
+end
 
 """
     SubFiber(lvl, pos)
@@ -107,14 +107,6 @@ mutable struct VirtualSubFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
-    reroot_set!(ctx, fbr.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
-    VirtualSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos)
-end
-
 function virtualize(
     ctx, ex, ::Type{<:SubFiber{Lvl,Pos}}, tag=freshen(ctx, :tns)
 ) where {Lvl,Pos}
@@ -126,6 +118,14 @@ function lower(ctx::AbstractCompiler, fbr::VirtualSubFiber, ::DefaultStyle)
     :(SubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos))))
 end
 FinchNotation.finch_leaf(x::VirtualSubFiber) = virtual(x)
+
+function distribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, diff, style)
+    VirtualSubFiber(distribute_level(ctx, fbr.lvl, arch, diff, style), fbr.pos)
+end
+
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
+    VirtualSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos)
+end
 
 @inline Base.ndims(::AbstractFiber{Lvl}) where {Lvl} = level_ndims(Lvl)
 @inline Base.ndims(::Type{<:AbstractFiber{Lvl}}) where {Lvl} = level_ndims(Lvl)
@@ -155,15 +155,6 @@ end
 function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(arr.lvl, literal(1)), ext, mode, proto)
 end
-
-function distribute(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
-    VirtualFiber(distribute_level(ctx, fbr.lvl, arch, style))
-end
-
-function distribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
-    VirtualSubFiber(distribute_level(ctx, fbr.lvl, arch, style), fbr.pos)
-end
-
 struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}
     lvl::Lvl
     pos::Pos
@@ -174,14 +165,6 @@ mutable struct VirtualHollowSubFiber{Lvl}
     lvl::Lvl
     pos
     dirty
-end
-
-function reroot_set!(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
-    reroot_set!(ctx, fbr.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
-    VirtualHollowSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
 end
 
 function virtualize(
@@ -197,10 +180,14 @@ function lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle
 end
 FinchNotation.finch_leaf(x::VirtualHollowSubFiber) = virtual(x)
 
-function distribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, style)
+function distribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, diff, style)
     return VirtualHollowSubFiber(
-        distribute_level(ctx, fbr.lvl, arch, style), fbr.pos, fbr.dirty
+        distribute_level(ctx, fbr.lvl, arch, diff, style), fbr.pos, fbr.dirty
     )
+end
+
+function reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
+    VirtualHollowSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
 end
 
 function instantiate(ctx, fbr::VirtualFiber, mode)

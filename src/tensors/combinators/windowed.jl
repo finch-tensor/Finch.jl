@@ -18,13 +18,9 @@ struct VirtualWindowedArray <: AbstractVirtualCombinator
 end
 
 function distribute(
-    ctx::AbstractCompiler, tns::VirtualWindowedArray, arch, style
+    ctx::AbstractCompiler, tns::VirtualWindowedArray, arch, diff, style
 )
-    VirtualWindowedArray(distribute(ctx, tns.body, arch, style), tns.dims)
-end
-
-function reroot_set!(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
-    reroot_set!(ctx, tns.body, diff)
+    VirtualWindowedArray(distribute(ctx, tns.body, arch, diff, style), tns.dims)
 end
 
 function reroot_get(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)

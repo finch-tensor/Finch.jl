@@ -190,29 +190,6 @@ mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseIntervalLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.left,
-            lvl.right,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseIntervalLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]
 end
@@ -261,6 +238,38 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::Default
     end
 end
 
+function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualSparseIntervalLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.left, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseIntervalLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.left,
+            lvl.right,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseIntervalLevel) = "SparseInterval($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseIntervalLevel)
@@ -272,20 +281,6 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseIntervalLevel, dims...)
     lvl.shape = getstop(dims[end])
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl
-end
-
-function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, style)
-    VirtualSparseIntervalLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        distribute_buffer(ctx, lvl.left, arch, style),
-        distribute_buffer(ctx, lvl.right, arch, style),
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
-    )
 end
 
 virtual_level_eltype(lvl::VirtualSparseIntervalLevel) = virtual_level_eltype(lvl.lvl)

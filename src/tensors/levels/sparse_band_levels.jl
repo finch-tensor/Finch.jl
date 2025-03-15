@@ -163,32 +163,6 @@ mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseBandLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.ros_fill,
-            lvl.ros_stop,
-            lvl.dirty,
-            lvl.idx,
-            lvl.ofs,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseBandLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -253,6 +227,46 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, ::DefaultStyl
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualSparseBandLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseBandLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseBandLevel) = "SparseBand($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseBandLevel)
@@ -268,25 +282,6 @@ end
 
 virtual_level_eltype(lvl::VirtualSparseBandLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value(lvl.lvl)
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style
-)
-    VirtualSparseBandLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.ros_fill,
-        lvl.ros_stop,
-        lvl.dirty,
-        distribute_buffer(ctx, lvl.tbl, arch, style),
-        distribute_buffer(ctx, lvl.ofs, arch, style),
-        lvl.prev_pos,
-    )
-end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos, init)
     Tp = postype(lvl)

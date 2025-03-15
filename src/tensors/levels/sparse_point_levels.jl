@@ -158,25 +158,6 @@ mutable struct VirtualSparsePointLevel <: AbstractVirtualLevel
     shape
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparsePointLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.idx,
-            lvl.shape,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparsePointLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -216,6 +197,31 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, ::DefaultSty
             $(lvl.idx),
         )
     end
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparsePointLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.idx, arch, style),
+        lvl.shape)
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparsePointLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.idx,
+            lvl.shape,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparsePointLevel) = "SparsePoint($(summary(lvl.lvl)))"
@@ -273,17 +279,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, pos_st
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(pos_stop))
     return lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, arch, style
-)
-    return VirtualSparsePointLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        distribute_buffer(ctx, lvl.idx, arch, style),
-        lvl.shape)
 end
 
 function unfurl(

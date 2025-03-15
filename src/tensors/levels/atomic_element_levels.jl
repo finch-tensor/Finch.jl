@@ -89,14 +89,6 @@ mutable struct VirtualAtomicElementLevel <: AbstractVirtualLevel
     val
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
-    diff[lvl.tag] = lvl
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
-    get(diff, lvl.tag, lvl)
-end
-
 is_level_injective(ctx, ::VirtualAtomicElementLevel) = []
 is_level_atomic(ctx, lvl::VirtualAtomicElementLevel) = ([], false)
 function is_level_concurrent(ctx, lvl::VirtualAtomicElementLevel)
@@ -120,6 +112,22 @@ function virtualize(
         end,
     )
     VirtualAtomicElementLevel(tag, Vf, Tv, Tp, val)
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualAtomicElementLevel(
+        lvl.tag,
+        lvl.Vf,
+        lvl.Tv,
+        lvl.Tp,
+        distribute_buffer(ctx, lvl.val, arch, style),
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
+    get(diff, lvl.tag, lvl)
 end
 
 Base.summary(lvl::VirtualAtomicElementLevel) = "AtomicElement($(lvl.Vf))"
@@ -173,18 +181,6 @@ function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_s
         end,
     )
     lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, style
-)
-    VirtualAtomicElementLevel(
-        lvl.tag,
-        lvl.Vf,
-        lvl.Tv,
-        lvl.Tp,
-        distribute_buffer(ctx, lvl.val, arch, style),
-    )
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)

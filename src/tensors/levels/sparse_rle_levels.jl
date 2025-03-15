@@ -232,32 +232,6 @@ mutable struct VirtualSparseRunListLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-    reroot_set!(ctx, lvl.buf, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseRunListLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.ptr,
-            lvl.left,
-            lvl.right,
-            reroot_get(ctx, lvl.buf, diff),
-            lvl.merge,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseRunListLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]
 end
@@ -318,6 +292,45 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, ::DefaultS
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseRunListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.left, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        distribute_level(ctx, lvl.buf, arch, diff, style),
+        lvl.merge,
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseRunListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ptr,
+            lvl.left,
+            lvl.right,
+            reroot_get(ctx, lvl.buf, diff),
+            lvl.merge,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseRunListLevel) = "SparseRunList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseRunListLevel)
@@ -330,25 +343,6 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseRunListLevel, dims...)
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl.buf = virtual_level_resize!(ctx, lvl.buf, dims[1:(end - 1)]...)
     lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style
-)
-    return VirtualSparseRunListLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.left, arch, style),
-        distribute_buffer(ctx, lvl.right, arch, style),
-        distribute_level(ctx, lvl.buf, arch, style),
-        lvl.merge,
-        lvl.prev_pos,
-    )
 end
 
 virtual_level_eltype(lvl::VirtualSparseRunListLevel) = virtual_level_eltype(lvl.lvl)

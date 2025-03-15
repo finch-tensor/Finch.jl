@@ -139,9 +139,9 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) w
 end
 
 function distribute(
-    ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, arch, style
+    ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, arch, diff, style
 )
-    return VirtualSparseMatrixCSC(
+    return diff[arr.tag] = VirtualSparseMatrixCSC(
         arr.tag,
         arr.Tv,
         arr.Ti,
@@ -153,10 +153,6 @@ function distribute(
         arr.qos_stop,
         arr.prev_pos,
     )
-end
-
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
-    diff[arr.tag] = arr
 end
 
 function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
@@ -238,10 +234,6 @@ end
 @kwdef struct VirtualSparseMatrixCSCColumn
     mtx::VirtualSparseMatrixCSC
     j
-end
-
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
-    Finch.reroot_set!(ctx, arr.mtx, diff)
 end
 
 function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
@@ -474,9 +466,9 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) wher
 end
 
 function distribute(
-    ctx::AbstractCompiler, arr::VirtualSparseVector, arch, style
+    ctx::AbstractCompiler, arr::VirtualSparseVector, arch, diff, style
 )
-    return VirtualSparseVector(
+    return diff[arr.tag] = VirtualSparseVector(
         arr.tag,
         arr.Tv,
         arr.Ti,
@@ -486,10 +478,6 @@ function distribute(
         arr.qos_fill,
         arr.qos_stop,
     )
-end
-
-function Finch.reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
-    diff[arr.tag] = arr
 end
 
 function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)

@@ -192,29 +192,6 @@ mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     qos_stop
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseByteMapLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.ptr,
-            lvl.tbl,
-            lvl.srt,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseByteMapLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -266,11 +243,11 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultS
 end
 
 function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, style
+    ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, diff, style
 )
-    VirtualSparseByteMapLevel(
+    diff[lvl.tag] = VirtualSparseByteMapLevel(
         lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
@@ -278,6 +255,24 @@ function distribute_level(
         lvl.shape,
         lvl.qos_fill,
         lvl.qos_stop,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseByteMapLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.tbl,
+            lvl.srt,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+        ),
     )
 end
 

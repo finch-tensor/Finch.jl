@@ -102,27 +102,6 @@ mutable struct VirtualMutexLevel <: AbstractVirtualLevel
     Lvl
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualMutexLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.locks,
-            lvl.Tv,
-            lvl.Val,
-            lvl.AVal,
-            lvl.Lvl,
-        ),
-    )
-end
-
 postype(lvl::MutexLevel) = postype(lvl.lvl)
 
 postype(lvl::VirtualMutexLevel) = postype(lvl.lvl)
@@ -160,6 +139,34 @@ function virtualize(ctx, ex, ::Type{MutexLevel{AVal,Lvl}}, tag=:lvl) where {AVal
         tag, lvl_2, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl
     )
     temp
+end
+
+function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualMutexLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        distribute_buffer(ctx, lvl.locks, arch, style),
+        lvl.Tv,
+        lvl.Val,
+        lvl.AVal,
+        lvl.Lvl,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualMutexLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.locks,
+            lvl.Tv,
+            lvl.Val,
+            lvl.AVal,
+            lvl.Lvl,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualMutexLevel) = "Mutex($(lvl.Lvl))"
@@ -227,18 +234,6 @@ end
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, pos)
     lvl.lvl = thaw_level!(ctx, lvl.lvl, pos)
     return lvl
-end
-
-function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
-    VirtualMutexLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        distribute_buffer(ctx, lvl.locks, arch, style),
-        lvl.Tv,
-        lvl.Val,
-        lvl.AVal,
-        lvl.Lvl,
-    )
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)

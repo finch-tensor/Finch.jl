@@ -206,32 +206,6 @@ mutable struct VirtualSparseBlockListLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseBlockListLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.ros_fill,
-            lvl.ros_stop,
-            lvl.dirty,
-            lvl.ptr,
-            lvl.idx,
-            lvl.ofs,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseBlockListLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -299,6 +273,47 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, ::Defaul
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualSparseBlockListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseBlockListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.ptr,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseBlockListLevel) = "SparseBlockList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseBlockListLevel)
@@ -315,26 +330,6 @@ end
 virtual_level_eltype(lvl::VirtualSparseBlockListLevel) = virtual_level_eltype(lvl.lvl)
 function virtual_level_fill_value(lvl::VirtualSparseBlockListLevel)
     virtual_level_fill_value(lvl.lvl)
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style
-)
-    VirtualSparseBlockListLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.ros_fill,
-        lvl.ros_stop,
-        lvl.dirty,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.tbl, arch, style),
-        distribute_buffer(ctx, lvl.ofs, arch, style),
-        lvl.prev_pos,
-    )
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, pos, init)

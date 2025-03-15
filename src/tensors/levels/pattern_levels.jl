@@ -93,21 +93,20 @@ struct VirtualPatternLevel <: AbstractVirtualLevel
     Tp
 end
 
-reroot_set!(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = nothing
-
-reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, style
-)
-end
-
 is_level_injective(ctx, ::VirtualPatternLevel) = []
 is_level_atomic(ctx, lvl::VirtualPatternLevel) = ([], false)
 is_level_concurrent(ctx, lvl::VirtualPatternLevel) = ([], true)
 
 lower(ctx::AbstractCompiler, lvl::VirtualPatternLevel, ::DefaultStyle) = :(PatternLevel())
 virtualize(ctx, ex, ::Type{PatternLevel{Tp}}) where {Tp} = VirtualPatternLevel(Tp)
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, diff, style
+)
+end
+
+reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
+
 
 virtual_level_resize!(ctx, lvl::VirtualPatternLevel) = lvl
 virtual_level_size(ctx, ::VirtualPatternLevel) = ()

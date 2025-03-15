@@ -22,13 +22,9 @@ struct VirtualOffsetArray <: AbstractVirtualCombinator
 end
 
 function distribute(
-    ctx::AbstractCompiler, tns::VirtualOffsetArray, arch, style
+    ctx::AbstractCompiler, tns::VirtualOffsetArray, arch, diff, style
 )
-    VirtualOffsetArray(distribute(ctx, tns.body, arch, style), tns.delta)
-end
-
-function reroot_set!(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
-    reroot_set!(ctx, tns.body, diff)
+    VirtualOffsetArray(distribute(ctx, tns.body, arch, diff, style), tns.delta)
 end
 
 function reroot_get(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)

@@ -28,13 +28,6 @@ struct VirtualScalar
     val
 end
 
-function reroot_set!(ctx::AbstractCompiler, arr::VirtualScalar, diff)
-    diff[arr.tag] = arr
-end
-
-reroot_get(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
-    get(diff, arr.tag, arr)
-
 lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.data
 function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
     tag = freshen(ctx, tag)
@@ -50,7 +43,12 @@ function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
     VirtualScalar(tag, data, Tv, Vf, tag, val)
 end
 
-distribute(ctx, lvl::VirtualScalar, arch, style) = lvl
+function distribute(ctx, lvl::VirtualScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+reroot_get(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
+    get(diff, arr.tag, arr)
 
 virtual_size(ctx, ::VirtualScalar) = ()
 
@@ -134,16 +132,10 @@ struct VirtualSparseScalar
     dirty
 end
 
-function reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff)
-    diff[arr.tag] = arr
-end
-
-reroot_get(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
-    get(diff, arr.tag, arr)
-
 function lower(ctx::AbstractCompiler, tns::VirtualSparseScalar, ::DefaultStyle)
     :($SparseScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
+
 function virtualize(ctx, ex, ::Type{SparseScalar{Vf,Tv}}, tag) where {Vf,Tv}
     tag = freshen(ctx, tag)
     data = Symbol(tag, :_data)
@@ -160,12 +152,18 @@ function virtualize(ctx, ex, ::Type{SparseScalar{Vf,Tv}}, tag) where {Vf,Tv}
     VirtualSparseScalar(tag, data, Tv, Vf, tag, val, dirty)
 end
 
+function distribute(ctx, lvl::VirtualSparseScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+reroot_get(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
+    get(diff, arr.tag, arr)
+
 virtual_size(ctx, ::VirtualSparseScalar) = ()
 
 virtual_fill_value(ctx, tns::VirtualSparseScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseScalar, ctx) = tns.Tv
 
-distribute(ctx, lvl::VirtualSparseScalar, arch, style) = lvl
 
 function declare!(ctx, tns::VirtualSparseScalar, init)
     push_preamble!(
@@ -251,17 +249,10 @@ struct VirtualShortCircuitScalar
     val
 end
 
-function reroot_set!(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
-    diff[arr.tag] = arr
-end
-
-function reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
-    get(diff, arr.tag, arr)
-end
-
 function lower(ctx::AbstractCompiler, tns::VirtualShortCircuitScalar, ::DefaultStyle)
     :($ShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val)))
 end
+
 function virtualize(ctx, ex, ::Type{ShortCircuitScalar{Vf,Tv}}, tag) where {Vf,Tv}
     tag = freshen(ctx, tag)
     data = Symbol(tag, :_data)
@@ -274,6 +265,14 @@ function virtualize(ctx, ex, ::Type{ShortCircuitScalar{Vf,Tv}}, tag) where {Vf,T
         end,
     )
     VirtualShortCircuitScalar(tag, data, Tv, Vf, tag, val)
+end
+
+function distribute(ctx, lvl::VirtualShortCircuitScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+function reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
+    get(diff, arr.tag, arr)
 end
 
 virtual_size(ctx, ::VirtualShortCircuitScalar) = ()
@@ -316,8 +315,6 @@ function lower_assign(ctx, tns::VirtualShortCircuitScalar, mode, op, rhs)
     lhs_2 = ctx(simplify(ctx, call(op, lhs, rhs)))
     :($(tns.val) = $lhs_2)
 end
-
-distribute(ctx, lvl::VirtualShortCircuitScalar, arch, style) = lvl
 
 function short_circuit_cases(ctx, tns::VirtualShortCircuitScalar, op)
     [
@@ -365,14 +362,6 @@ struct VirtualSparseShortCircuitScalar
     dirty
 end
 
-function reroot_set!(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
-    diff[arr.tag] = arr
-end
-
-function reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
-    get(diff, arr.tag, arr)
-end
-
 function lower(ctx::AbstractCompiler, tns::VirtualSparseShortCircuitScalar, ::DefaultStyle)
     :($SparseShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
@@ -392,12 +381,18 @@ function virtualize(ctx, ex, ::Type{SparseShortCircuitScalar{Vf,Tv}}, tag) where
     VirtualSparseShortCircuitScalar(tag, data, Tv, Vf, tag, val, dirty)
 end
 
+function distribute(ctx, lvl::VirtualSparseShortCircuitScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+function reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
+    get(diff, arr.tag, arr)
+end
+
 virtual_size(ctx, ::VirtualSparseShortCircuitScalar) = ()
 
 virtual_fill_value(ctx, tns::VirtualSparseShortCircuitScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseShortCircuitScalar, ctx) = tns.Tv
-
-distribute(ctx, lvl::VirtualSparseShortCircuitScalar, arch, style) = lvl
 
 function declare!(ctx, tns::VirtualSparseShortCircuitScalar, init)
     push_preamble!(

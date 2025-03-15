@@ -21,13 +21,9 @@ struct VirtualPermissiveArray <: AbstractVirtualCombinator
 end
 
 function distribute(
-    ctx::AbstractCompiler, tns::VirtualPermissiveArray, arch, style
+    ctx::AbstractCompiler, tns::VirtualPermissiveArray, arch, diff, style
 )
-    VirtualPermissiveArray(distribute(ctx, tns.body, arch, style), tns.dims)
-end
-
-function reroot_set!(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)
-    reroot_set!(ctx, tns.body, diff)
+    VirtualPermissiveArray(distribute(ctx, tns.body, arch, diff, style), tns.dims)
 end
 
 function reroot_get(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)

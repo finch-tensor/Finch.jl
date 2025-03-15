@@ -121,19 +121,6 @@ mutable struct VirtualDenseLevel <: AbstractVirtualLevel
     shape
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualDenseLevel(lvl.tag, reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualDenseLevel)
     [is_level_injective(ctx, lvl.lvl)..., true]
 end
@@ -167,6 +154,19 @@ function lower(ctx::AbstractCompiler, lvl::VirtualDenseLevel, ::DefaultStyle)
             $(ctx(lvl.shape)),
         )
     end
+end
+
+function distribute_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, diff, style)
+    lvl_2 = distribute_level(ctx, lvl.lvl, arch, diff, style)
+    diff[lvl.tag] = VirtualDenseLevel(lvl.tag, lvl_2, lvl.Ti, lvl.shape)
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualDenseLevel(lvl.tag, reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape),
+    )
 end
 
 Base.summary(lvl::VirtualDenseLevel) = "Dense($(summary(lvl.lvl)))"
@@ -214,11 +214,6 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualDenseLevel, pos)
     lvl.lvl = freeze_level!(ctx, lvl.lvl, call(*, pos, lvl.shape))
     return lvl
-end
-
-function distribute_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, style)
-    lvl_2 = distribute_level(ctx, lvl.lvl, arch, style)
-    VirtualDenseLevel(lvl.tag, lvl_2, lvl.Ti, lvl.shape)
 end
 
 struct DenseTraversal

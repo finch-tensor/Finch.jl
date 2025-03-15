@@ -102,26 +102,6 @@ mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
     Val
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSeparateLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.val,
-            lvl.Tv,
-            lvl.Lvl,
-            lvl.Val,
-        ),
-    )
-end
-
 postype(lvl::VirtualSeparateLevel) = postype(lvl.lvl)
 
 function is_level_injective(ctx, lvl::VirtualSeparateLevel)
@@ -157,6 +137,32 @@ function virtualize(ctx, ex, ::Type{SeparateLevel{Lvl,Val}}, tag=:lvl) where {Lv
     VirtualSeparateLevel(tag, lvl_2, val, typeof(level_fill_value(Lvl)), Lvl, Val)
 end
 
+function distribute_level(ctx, lvl::VirtualSeparateLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualSeparateLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        distribute_buffer(ctx, lvl.val, arch, style),
+        lvl.Tv,
+        lvl.Lvl,
+        lvl.Val,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSeparateLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.val,
+            lvl.Tv,
+            lvl.Lvl,
+            lvl.Val,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSeparateLevel) = "Separate($(lvl.Lvl))"
 
 function virtual_level_resize!(ctx, lvl::VirtualSeparateLevel, dims...)
@@ -165,17 +171,6 @@ end
 virtual_level_size(ctx, lvl::VirtualSeparateLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualSeparateLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSeparateLevel) = virtual_level_fill_value(lvl.lvl)
-
-function distribute_level(ctx, lvl::VirtualSeparateLevel, arch, style)
-    VirtualSeparateLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        distribute_buffer(ctx, lvl.val, arch, style),
-        lvl.Tv,
-        lvl.Lvl,
-        lvl.Val,
-    )
-end
 
 function declare_level!(ctx, lvl::VirtualSeparateLevel, pos, init)
     #declare_level!(lvl.lvl, ctx_2, literal(1), init)

@@ -95,12 +95,6 @@ mutable struct VirtualElementLevel <: AbstractVirtualLevel
     val
 end
 
-reroot_set!(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
-    diff[lvl.tag] = lvl
-
-reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
-    get(diff, lvl.tag, lvl)
-
 is_level_injective(ctx, ::VirtualElementLevel) = []
 is_level_atomic(ctx, lvl::VirtualElementLevel) = ([], false)
 function is_level_concurrent(ctx, lvl::VirtualElementLevel)
@@ -125,6 +119,17 @@ function virtualize(
     )
     VirtualElementLevel(tag, Vf, Tv, Tp, val)
 end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualElementLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualElementLevel(
+        lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, distribute_buffer(ctx, lvl.val, arch, style)
+    )
+end
+
+reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
+    get(diff, lvl.tag, lvl)
 
 Base.summary(lvl::VirtualElementLevel) = "Element($(lvl.Vf))"
 
@@ -177,14 +182,6 @@ function reassemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
         end,
     )
     lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualElementLevel, arch, style
-)
-    VirtualElementLevel(
-        lvl.tag, lvl.Vf, lvl.Tv, lvl.Tp, distribute_buffer(ctx, lvl.val, arch, style)
-    )
 end
 
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode)

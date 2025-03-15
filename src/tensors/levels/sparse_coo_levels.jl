@@ -219,31 +219,6 @@ mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseCOOLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.N,
-            lvl.TI,
-            lvl.ptr,
-            lvl.tbl,
-            lvl.Lvl,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseCOOLevel)
     [is_level_injective(ctx, lvl.lvl)..., (true for _ in 1:(lvl.N))...]
 end
@@ -299,6 +274,45 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle
         )
     end
 end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseCOOLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.N,
+        lvl.TI,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        map(idx -> distribute_buffer(ctx, idx, arch, style), lvl.tbl),
+        lvl.Lvl,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseCOOLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.N,
+            lvl.TI,
+            lvl.ptr,
+            lvl.tbl,
+            lvl.Lvl,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 
 Base.summary(lvl::VirtualSparseCOOLevel) = "SparseCOO{$(lvl.N)}($(summary(lvl.lvl)))"
 
@@ -370,30 +384,20 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style
-)
-    return VirtualSparseCOOLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.N,
-        lvl.TI,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        map(idx -> distribute_buffer(ctx, idx, arch, style), lvl.tbl),
-        lvl.Lvl,
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
-    )
-end
-
 struct SparseCOOWalkTraversal
     lvl
     R
     start
     stop
+end
+
+function reroot_get(ctx::AbstractCompiler, arr::SparseCOOWalkTraversal, diff)
+    SparseCOOWalkTraversal(
+        reroot_get(ctx, arr.lvl, diff),
+        arr.R,
+        arr.start,
+        arr.stop,
+    )
 end
 
 function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode, proto)
@@ -488,6 +492,16 @@ struct SparseCOOExtrudeTraversal
     fbr_dirty
     coords
     prev_coord
+end
+
+function reroot_get(ctx::AbstractCompiler, arr::SparseCOOExtrudeTraversal, diff)
+    SparseCOOExtrudeTraversal(
+        reroot_get(ctx, arr.lvl, diff),
+        arr.qos,
+        arr.fbr_dirty,
+        arr.coords,
+        arr.prev_coord,
+    )
 end
 
 function unfurl(

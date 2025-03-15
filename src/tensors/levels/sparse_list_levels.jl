@@ -171,29 +171,6 @@ mutable struct VirtualSparseListLevel <: AbstractVirtualLevel
     prev_pos
 end
 
-function reroot_set!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
-    diff[lvl.tag] = lvl
-    reroot_set!(ctx, lvl.lvl, diff)
-end
-
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
-    get(
-        diff,
-        lvl.tag,
-        VirtualSparseListLevel(
-            lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
-            lvl.Ti,
-            lvl.ptr,
-            lvl.idx,
-            lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.prev_pos,
-        ),
-    )
-end
-
 function is_level_injective(ctx, lvl::VirtualSparseListLevel)
     [is_level_injective(ctx, lvl.lvl)..., false]
 end
@@ -240,6 +217,40 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, ::DefaultStyl
             $(lvl.idx),
         )
     end
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.idx, arch, style),
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
+end
+
+function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseListLevel(
+            lvl.tag,
+            reroot_get(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.idx,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparseListLevel) = "SparseList($(summary(lvl.lvl)))"
@@ -338,22 +349,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_sto
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
-end
-
-function distribute_level(
-    ctx::AbstractCompiler, lvl::VirtualSparseListLevel, arch, style
-)
-    return VirtualSparseListLevel(
-        lvl.tag,
-        distribute_level(ctx, lvl.lvl, arch, style),
-        lvl.Ti,
-        distribute_buffer(ctx, lvl.ptr, arch, style),
-        distribute_buffer(ctx, lvl.idx, arch, style),
-        lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
-    )
 end
 
 function unfurl(
