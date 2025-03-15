@@ -151,7 +151,7 @@ function distribute(
         distribute_buffer(ctx, arr.val, arch, style),
         arr.qos_fill,
         arr.qos_stop,
-        arr.prev_pos
+        arr.prev_pos,
     )
 end
 
@@ -484,7 +484,7 @@ function distribute(
         distribute_buffer(ctx, arr.idx, arch, style),
         distribute_buffer(ctx, arr.val, arch, style),
         arr.qos_fill,
-        arr.qos_stop
+        arr.qos_stop,
     )
 end
 

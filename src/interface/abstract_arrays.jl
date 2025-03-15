@@ -38,7 +38,7 @@ function distribute(
         distribute_buffer(ctx, arr.data, arch, style),
         arr.eltype,
         arr.ndims,
-        arr.shape
+        arr.shape,
     )
 end
 
