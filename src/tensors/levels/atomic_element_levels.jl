@@ -183,7 +183,7 @@ function distribute_level(
         lvl.Vf,
         lvl.Tv,
         lvl.Tp,
-        distribute_buffer(ctx, lvl.Tv, lvl.val, style),
+        distribute_buffer(ctx, lvl.val, arch, style),
     )
 end
 

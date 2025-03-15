@@ -114,7 +114,6 @@ function reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
         VirtualSeparateLevel(
             lvl.tag,
             reroot_get(ctx, lvl.lvl, diff),
-            lvl.locks,
             lvl.val,
             lvl.Tv,
             lvl.Lvl,

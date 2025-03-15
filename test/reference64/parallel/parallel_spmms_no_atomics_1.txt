@@ -25,7 +25,7 @@ begin
     pos_stop = A_lvl_stop1 * B_lvl_stop2
     Finch.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
     Finch.fill_range!(Ct_lvl_3_val, 0x0000000000000000, 1, pos_stop)
-    val = (Finch).transfer(Ct_lvl_3_val, CPU(Threads.nthreads()), Finch.HostShared())
+    buf = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), Ct_lvl_3_val)
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin
@@ -208,12 +208,14 @@ begin
                                         end
                                     end
                                 end
-                                nothing
+                                phase_start_22 = max(1, 1 + fld(A_lvl_stop1 * tid, Threads.nthreads()))
+                                if A_lvl_stop1 >= phase_start_22
+                                    A_lvl_stop1 + 1
+                                end
                             end)
                     nothing
                 end
         end
-    val_10 = (Finch).transfer(val, CPU(Threads.nthreads()), Finch.GatherRecv())
-    resize!(val_10, A_lvl_stop1 * B_lvl_stop2)
-    (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(val_10), A_lvl_stop1), B_lvl_stop2)),)
+    resize!(buf, A_lvl_stop1 * B_lvl_stop2)
+    (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(buf), A_lvl_stop1), B_lvl_stop2)),)
 end

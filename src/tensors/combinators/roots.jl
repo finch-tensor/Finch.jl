@@ -67,7 +67,7 @@ reroot_get(ctx, node, diff) = node
 
 function reroot_get(ctx::AbstractCompiler, node::FinchNode, diff)
     if node.kind === virtual
-        virtual(reroot_get(ctx, node.val, root))
+        virtual(reroot_get(ctx, node.val, diff))
     elseif istree(node)
         similarterm(
             node, operation(node), map(x -> reroot_get(ctx, x, diff), arguments(node))
