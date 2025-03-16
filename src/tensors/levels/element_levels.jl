@@ -128,7 +128,7 @@ function distribute_level(
     )
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
+redistribute(ctx::AbstractCompiler, lvl::VirtualElementLevel, diff) =
     get(diff, lvl.tag, lvl)
 
 Base.summary(lvl::VirtualElementLevel) = "Element($(lvl.Vf))"

@@ -354,7 +354,7 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                 ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, style)
             )
         end
-        body = reroot_get(ctx, root.body, diff)
+        body = redistribute(ctx, root.body, diff)
 
         virtual_parallel_region(ctx_2, device) do ctx_3
             subtask = get_task(ctx_3)
@@ -383,7 +383,7 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                             distribute(ctx_5, resolve(ctx_5, tns), subtask, diff, style),
                         )
                     end
-                    body = reroot_get(ctx_5, body, diff)
+                    body = redistribute(ctx_5, body, diff)
                     i = index(freshen(ctx, :i))
                     root_2 = loop(i, Extent(tid, tid),
                         loop(root.idx, ext.ext,

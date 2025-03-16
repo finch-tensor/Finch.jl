@@ -293,13 +293,13 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparseCOOLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.N,
             lvl.TI,
             lvl.ptr,
@@ -390,9 +390,9 @@ struct SparseCOOWalkTraversal
     stop
 end
 
-function reroot_get(ctx::AbstractCompiler, arr::SparseCOOWalkTraversal, diff)
+function redistribute(ctx::AbstractCompiler, arr::SparseCOOWalkTraversal, diff)
     SparseCOOWalkTraversal(
-        reroot_get(ctx, arr.lvl, diff),
+        redistribute(ctx, arr.lvl, diff),
         arr.R,
         arr.start,
         arr.stop,
@@ -493,9 +493,9 @@ struct SparseCOOExtrudeTraversal
     prev_coord
 end
 
-function reroot_get(ctx::AbstractCompiler, arr::SparseCOOExtrudeTraversal, diff)
+function redistribute(ctx::AbstractCompiler, arr::SparseCOOExtrudeTraversal, diff)
     SparseCOOExtrudeTraversal(
-        reroot_get(ctx, arr.lvl, diff),
+        redistribute(ctx, arr.lvl, diff),
         arr.qos,
         arr.fbr_dirty,
         arr.coords,

@@ -294,13 +294,13 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparseDictLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.ptr,
             lvl.idx,

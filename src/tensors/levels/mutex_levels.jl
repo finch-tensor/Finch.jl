@@ -153,13 +153,13 @@ function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, d
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualMutexLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.locks,
             lvl.Tv,
             lvl.Val,

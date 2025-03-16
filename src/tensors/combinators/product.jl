@@ -30,9 +30,9 @@ function distribute(
     VirtualProductArray(distribute(ctx, tns.body, arch, diff, style), tns.dim)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualProductArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualProductArray, diff)
     VirtualProductArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.dim,
     )
 end

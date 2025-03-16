@@ -303,20 +303,20 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualRunListLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.shape,
             lvl.qos_fill,
             lvl.qos_stop,
             lvl.ptr,
             lvl.right,
-            reroot_get(ctx, lvl.buf, diff),
+            redistribute(ctx, lvl.buf, diff),
             lvl.prev_pos,
             lvl.i_prev,
             lvl.merge,

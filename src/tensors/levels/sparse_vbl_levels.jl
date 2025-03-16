@@ -293,13 +293,13 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparseBlockListLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.qos_fill,
             lvl.qos_stop,

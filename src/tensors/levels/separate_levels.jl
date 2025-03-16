@@ -148,13 +148,13 @@ function distribute_level(ctx, lvl::VirtualSeparateLevel, arch, diff, style)
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSeparateLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSeparateLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.val,
             lvl.Tv,
             lvl.Lvl,

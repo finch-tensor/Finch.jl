@@ -26,9 +26,9 @@ function distribute(
     VirtualPermissiveArray(distribute(ctx, tns.body, arch, diff, style), tns.dims)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualPermissiveArray, diff)
     VirtualPermissiveArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.dims,
     )
 end

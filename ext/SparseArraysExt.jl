@@ -155,7 +155,7 @@ function distribute(
     )
 end
 
-function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
     get(diff, arr.tag, arr)
 end
 
@@ -236,8 +236,8 @@ end
     j
 end
 
-function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
-    VirtualSparseMatrixCSCColumn(Finch.reroot_get(ctx, arr.mtx, diff), arr.j)
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
+    VirtualSparseMatrixCSCColumn(Finch.redistribute(ctx, arr.mtx, diff), arr.j)
 end
 
 FinchNotation.finch_leaf(x::VirtualSparseMatrixCSCColumn) = virtual(x)
@@ -480,7 +480,7 @@ function distribute(
     )
 end
 
-function Finch.reroot_get(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
     get(diff, arr.tag, arr)
 end
 

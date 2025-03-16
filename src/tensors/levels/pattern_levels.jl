@@ -105,7 +105,7 @@ function distribute_level(
 )
 end
 
-reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
+redistribute(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
 
 virtual_level_resize!(ctx, lvl::VirtualPatternLevel) = lvl
 virtual_level_size(ctx, ::VirtualPatternLevel) = ()

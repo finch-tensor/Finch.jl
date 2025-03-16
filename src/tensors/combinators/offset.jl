@@ -27,9 +27,9 @@ function distribute(
     VirtualOffsetArray(distribute(ctx, tns.body, arch, diff, style), tns.delta)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
     VirtualOffsetArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.delta,
     )
 end

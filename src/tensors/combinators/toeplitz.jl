@@ -35,9 +35,9 @@ function distribute(
     VirtualToeplitzArray(distribute(ctx, tns.body, arch, diff, style), tns.dim)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
     VirtualToeplitzArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.dim,
     )
 end

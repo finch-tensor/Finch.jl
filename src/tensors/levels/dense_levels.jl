@@ -161,11 +161,11 @@ function distribute_level(ctx::AbstractCompiler, lvl::VirtualDenseLevel, arch, d
     diff[lvl.tag] = VirtualDenseLevel(lvl.tag, lvl_2, lvl.Ti, lvl.shape)
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualDenseLevel, diff)
     get(
         diff,
         lvl.tag,
-        VirtualDenseLevel(lvl.tag, reroot_get(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape),
+        VirtualDenseLevel(lvl.tag, redistribute(ctx, lvl.lvl, diff), lvl.Ti, lvl.shape),
     )
 end
 

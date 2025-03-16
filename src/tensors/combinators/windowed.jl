@@ -23,9 +23,9 @@ function distribute(
     VirtualWindowedArray(distribute(ctx, tns.body, arch, diff, style), tns.dims)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
     VirtualWindowedArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.dims,
     )
 end

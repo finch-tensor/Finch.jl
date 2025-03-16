@@ -23,9 +23,9 @@ function distribute(
     VirtualScaleArray(distribute(ctx, tns.body, arch, diff, style), tns.scale)
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)
+function redistribute(ctx::AbstractCompiler, tns::VirtualScaleArray, diff)
     VirtualScaleArray(
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
         tns.scale,
     )
 end

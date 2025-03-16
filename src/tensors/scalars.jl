@@ -47,7 +47,7 @@ function distribute(ctx, lvl::VirtualScalar, arch, diff, style)
     diff[lvl.tag] = lvl
 end
 
-reroot_get(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
+redistribute(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
     get(diff, arr.tag, arr)
 
 virtual_size(ctx, ::VirtualScalar) = ()
@@ -156,7 +156,7 @@ function distribute(ctx, lvl::VirtualSparseScalar, arch, diff, style)
     diff[lvl.tag] = lvl
 end
 
-reroot_get(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
+redistribute(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
     get(diff, arr.tag, arr)
 
 virtual_size(ctx, ::VirtualSparseScalar) = ()
@@ -270,7 +270,7 @@ function distribute(ctx, lvl::VirtualShortCircuitScalar, arch, diff, style)
     diff[lvl.tag] = lvl
 end
 
-function reroot_get(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
+function redistribute(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
     get(diff, arr.tag, arr)
 end
 
@@ -384,7 +384,7 @@ function distribute(ctx, lvl::VirtualSparseShortCircuitScalar, arch, diff, style
     diff[lvl.tag] = lvl
 end
 
-function reroot_get(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
+function redistribute(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
     get(diff, arr.tag, arr)
 end
 

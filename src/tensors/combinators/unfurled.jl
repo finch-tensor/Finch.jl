@@ -17,11 +17,11 @@ function distribute(
     Unfurled(tns.arr, tns.ndims, distribute(ctx, tns.body, arch, diff, style))
 end
 
-function reroot_get(ctx::AbstractCompiler, tns::Unfurled, diff)
+function redistribute(ctx::AbstractCompiler, tns::Unfurled, diff)
     Unfurled(
         tns.arr,
         tns.ndims,
-        reroot_get(ctx, tns.body, diff),
+        redistribute(ctx, tns.body, diff),
     )
 end
 

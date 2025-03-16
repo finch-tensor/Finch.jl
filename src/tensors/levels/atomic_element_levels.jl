@@ -126,7 +126,7 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
     get(diff, lvl.tag, lvl)
 end
 

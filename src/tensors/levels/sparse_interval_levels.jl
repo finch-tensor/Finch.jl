@@ -252,13 +252,13 @@ function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, diff, styl
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparseIntervalLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.left,
             lvl.right,

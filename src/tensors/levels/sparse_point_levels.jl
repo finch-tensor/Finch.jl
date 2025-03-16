@@ -210,13 +210,13 @@ function distribute_level(
         lvl.shape)
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparsePointLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparsePointLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.idx,
             lvl.shape,

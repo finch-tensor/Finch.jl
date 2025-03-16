@@ -88,8 +88,8 @@ function distribute(ctx::AbstractCompiler, fbr::VirtualFiber, arch, diff, style)
     VirtualFiber(distribute_level(ctx, fbr.lvl, arch, diff, style))
 end
 
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
-    VirtualFiber(reroot_get(ctx, fbr.lvl, diff))
+function redistribute(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
+    VirtualFiber(redistribute(ctx, fbr.lvl, diff))
 end
 
 """
@@ -123,8 +123,8 @@ function distribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, diff, sty
     VirtualSubFiber(distribute_level(ctx, fbr.lvl, arch, diff, style), fbr.pos)
 end
 
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
-    VirtualSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos)
+function redistribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
+    VirtualSubFiber(redistribute(ctx, fbr.lvl, diff), fbr.pos)
 end
 
 @inline Base.ndims(::AbstractFiber{Lvl}) where {Lvl} = level_ndims(Lvl)
@@ -186,8 +186,8 @@ function distribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, dif
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
-    VirtualHollowSubFiber(reroot_get(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
+function redistribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
+    VirtualHollowSubFiber(redistribute(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
 end
 
 function instantiate(ctx, fbr::VirtualFiber, mode)

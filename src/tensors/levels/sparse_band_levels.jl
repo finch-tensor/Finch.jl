@@ -246,13 +246,13 @@ function distribute_level(
     )
 end
 
-function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
     get(
         diff,
         lvl.tag,
         VirtualSparseBandLevel(
             lvl.tag,
-            reroot_get(ctx, lvl.lvl, diff),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.shape,
             lvl.qos_fill,
