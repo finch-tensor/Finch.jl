@@ -7,6 +7,27 @@ abstract type AbstractDevice end
 abstract type AbstractVirtualDevice end
 
 """
+    local_memory(dev::AbstractDevice)
+
+Return the default local memory space of `dev`.
+"""
+function local_memory end
+
+"""
+    shared_memory(dev::AbstractDevice)
+
+Return the default shared memory space of `dev`.
+"""
+function shared_memory end
+
+"""
+    global_memory(dev::AbstractDevice)
+
+Return the default global memory space of `dev`.
+"""
+function global_memory end
+
+"""
     AbstractTask
 
 An individual processing unit on a device, responsible for running code.
@@ -205,8 +226,9 @@ end
 """
     transfer(device, arr)
 
-If the array is not on the given device, it creates a new version of this array on that device
-and copies the data in to it, according to the `device` trait.
+If the array is not on the given device, it creates a new version of this array
+on that device and copies the data in to it, according to the `device` trait. If
+the device is simply a data buffer, we copy the array into the buffer.
 """
 transfer(device, arr) = arr
 
@@ -224,7 +246,7 @@ distribute(ctx, arr, device, diff, style) = arr
 """
 redistribute(ctx, node, diff)
 
-    When the root node changes, several derivative nodes may need to be updated.
+    When the root node is distributed, several iterators may need to be updated.
 The `redistribute` function traverses `tns` and updates it based on the updated
 objects in the `diff` dictionary.
 """
@@ -242,16 +264,46 @@ function redistribute(ctx::AbstractCompiler, node::FinchNode, diff)
     end
 end
 
+"""
+    HostLocal()
+
+From the host, distribute the tensor to device local memory.
+"""
 struct HostLocal end
 const host_local = HostLocal()
+"""
+    DeviceLocal()
+
+From the device, load the local version of the tensor.
+"""
 struct DeviceLocal end
 const device_local = DeviceLocal()
+"""
+    HostShared()
+
+From the host, distribute the tensor to device shared memory.
+"""
 struct HostShared end
 const host_shared = HostShared()
+"""
+    DeviceShared()
+
+From the device, load the shared view of the tensor.
+"""
 struct DeviceShared end
 const device_shared = DeviceShared()
+"""
+    HostGlobal()
+
+From the host, distribute the tensor to device global memory.
+"""
 struct HostGlobal end
 const host_global = HostGlobal()
+"""
+    DeviceGlobal()
+
+From the device, load the global view of the tensor.
+"""
 struct DeviceGlobal end
 const device_global = DeviceGlobal()
 
