@@ -216,7 +216,6 @@ mutable struct VirtualRunListLevel <: AbstractVirtualLevel
     merge
 end
 
-
 function is_level_injective(ctx, lvl::VirtualRunListLevel)
     [false, is_level_injective(ctx, lvl.lvl)...]
 end

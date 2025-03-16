@@ -46,4 +46,3 @@ function getroot(node::FinchNode)
         error("could not get root of $(node)")
     end
 end
-

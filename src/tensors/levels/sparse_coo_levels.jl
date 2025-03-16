@@ -313,7 +313,6 @@ function reroot_get(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
     )
 end
 
-
 Base.summary(lvl::VirtualSparseCOOLevel) = "SparseCOO{$(lvl.N)}($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel)

@@ -344,7 +344,9 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
     contain(ctx) do ctx_2
         diff = Dict()
         for tns in intersect(used_in_scope, decl_in_scope)
-            set_binding!(ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, host_local))
+            set_binding!(
+                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, host_local)
+            )
         end
         for tns in setdiff(used_in_scope, decl_in_scope)
             style = get_tensor_mode(ctx, tns).kind === reader ? host_global : host_shared
@@ -364,7 +366,9 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                         set_binding!(
                             ctx_5,
                             tns,
-                            distribute(ctx_5, resolve(ctx_5, tns), subtask, diff, device_local),
+                            distribute(
+                                ctx_5, resolve(ctx_5, tns), subtask, diff, device_local
+                            ),
                         )
                     end
                     for tns in setdiff(used_in_scope, decl_in_scope)

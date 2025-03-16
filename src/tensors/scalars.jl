@@ -164,7 +164,6 @@ virtual_size(ctx, ::VirtualSparseScalar) = ()
 virtual_fill_value(ctx, tns::VirtualSparseScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseScalar, ctx) = tns.Tv
 
-
 function declare!(ctx, tns::VirtualSparseScalar, init)
     push_preamble!(
         ctx,

@@ -107,7 +107,6 @@ end
 
 reroot_get(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
 
-
 virtual_level_resize!(ctx, lvl::VirtualPatternLevel) = lvl
 virtual_level_size(ctx, ::VirtualPatternLevel) = ()
 virtual_level_fill_value(::VirtualPatternLevel) = false
