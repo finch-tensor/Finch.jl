@@ -156,8 +156,9 @@ function distribute(ctx, lvl::VirtualSparseScalar, arch, diff, style)
     diff[lvl.tag] = lvl
 end
 
-redistribute(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff) =
+function redistribute(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff)
     get(diff, arr.tag, arr)
+end
 
 virtual_size(ctx, ::VirtualSparseScalar) = ()
 

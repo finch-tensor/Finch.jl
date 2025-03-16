@@ -24,87 +24,104 @@ begin
     pos_stop = A_lvl_stop1 * B_lvl_stop2
     Finch.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
     Finch.fill_range!(Ct_lvl_3_val, 0x0000000000000000, 1, pos_stop)
-    buf = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), Ct_lvl_3_val)
+    Ct_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), Ct_lvl_3_val)
+    B_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_2_val)
+    B_lvl_ptr_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_ptr)
+    B_lvl_tbl1_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_tbl1)
+    B_lvl_tbl2_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_tbl2)
+    A_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_2_val)
+    A_lvl_ptr_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_ptr)
+    A_lvl_tbl1_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_tbl1)
+    A_lvl_tbl2_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_tbl2)
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                B_lvl_q = B_lvl_ptr[1]
-                                B_lvl_q_stop = B_lvl_ptr[1 + 1]
+                                Ct_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), Ct_lvl_3_val_2)
+                                B_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_2_val_2)
+                                B_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_ptr_2)
+                                B_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl1_2)
+                                B_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl2_2)
+                                A_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_val_2)
+                                A_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_ptr_2)
+                                A_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl1_2)
+                                A_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl2_2)
+                                B_lvl_q = B_lvl_ptr_3[1]
+                                B_lvl_q_stop = B_lvl_ptr_3[1 + 1]
                                 if B_lvl_q < B_lvl_q_stop
-                                    B_lvl_i_stop = B_lvl_tbl2[B_lvl_q_stop - 1]
+                                    B_lvl_i_stop = B_lvl_tbl2_3[B_lvl_q_stop - 1]
                                 else
                                     B_lvl_i_stop = 0
                                 end
                                 phase_start_2 = max(1, 1 + fld(B_lvl_stop2 * (tid + -1), Threads.nthreads()))
                                 phase_stop_2 = min(B_lvl_stop2, B_lvl_i_stop, fld(B_lvl_stop2 * tid, Threads.nthreads()))
                                 if phase_stop_2 >= phase_start_2
-                                    if B_lvl_tbl2[B_lvl_q] < phase_start_2
-                                        B_lvl_q = Finch.scansearch(B_lvl_tbl2, phase_start_2, B_lvl_q, B_lvl_q_stop - 1)
+                                    if B_lvl_tbl2_3[B_lvl_q] < phase_start_2
+                                        B_lvl_q = Finch.scansearch(B_lvl_tbl2_3, phase_start_2, B_lvl_q, B_lvl_q_stop - 1)
                                     end
                                     while true
-                                        B_lvl_i = B_lvl_tbl2[B_lvl_q]
+                                        B_lvl_i = B_lvl_tbl2_3[B_lvl_q]
                                         B_lvl_q_step = B_lvl_q
-                                        if B_lvl_tbl2[B_lvl_q] == B_lvl_i
-                                            B_lvl_q_step = Finch.scansearch(B_lvl_tbl2, B_lvl_i + 1, B_lvl_q, B_lvl_q_stop - 1)
+                                        if B_lvl_tbl2_3[B_lvl_q] == B_lvl_i
+                                            B_lvl_q_step = Finch.scansearch(B_lvl_tbl2_3, B_lvl_i + 1, B_lvl_q, B_lvl_q_stop - 1)
                                         end
                                         if B_lvl_i < phase_stop_2
                                             Ct_lvl_q = (1 - 1) * B_lvl_stop2 + B_lvl_i
                                             for i_7 = 1:A_lvl_stop1
                                                 Ct_lvl_2_q = (Ct_lvl_q - 1) * A_lvl_stop1 + i_7
-                                                A_lvl_q = A_lvl_ptr[1]
-                                                A_lvl_q_stop = A_lvl_ptr[1 + 1]
+                                                A_lvl_q = A_lvl_ptr_3[1]
+                                                A_lvl_q_stop = A_lvl_ptr_3[1 + 1]
                                                 if A_lvl_q < A_lvl_q_stop
-                                                    A_lvl_i_stop = A_lvl_tbl2[A_lvl_q_stop - 1]
+                                                    A_lvl_i_stop = A_lvl_tbl2_3[A_lvl_q_stop - 1]
                                                 else
                                                     A_lvl_i_stop = 0
                                                 end
                                                 B_lvl_q_2 = B_lvl_q
                                                 if B_lvl_q < B_lvl_q_step
-                                                    B_lvl_i_stop_2 = B_lvl_tbl1[B_lvl_q_step - 1]
+                                                    B_lvl_i_stop_2 = B_lvl_tbl1_3[B_lvl_q_step - 1]
                                                 else
                                                     B_lvl_i_stop_2 = 0
                                                 end
                                                 phase_stop_4 = min(B_lvl_stop1, A_lvl_i_stop, B_lvl_i_stop_2)
                                                 if phase_stop_4 >= 1
                                                     k = 1
-                                                    if A_lvl_tbl2[A_lvl_q] < 1
-                                                        A_lvl_q = Finch.scansearch(A_lvl_tbl2, 1, A_lvl_q, A_lvl_q_stop - 1)
+                                                    if A_lvl_tbl2_3[A_lvl_q] < 1
+                                                        A_lvl_q = Finch.scansearch(A_lvl_tbl2_3, 1, A_lvl_q, A_lvl_q_stop - 1)
                                                     end
-                                                    if B_lvl_tbl1[B_lvl_q] < 1
-                                                        B_lvl_q_2 = Finch.scansearch(B_lvl_tbl1, 1, B_lvl_q, B_lvl_q_step - 1)
+                                                    if B_lvl_tbl1_3[B_lvl_q] < 1
+                                                        B_lvl_q_2 = Finch.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
                                                     end
                                                     while k <= phase_stop_4
-                                                        A_lvl_i = A_lvl_tbl2[A_lvl_q]
+                                                        A_lvl_i = A_lvl_tbl2_3[A_lvl_q]
                                                         A_lvl_q_step = A_lvl_q
-                                                        if A_lvl_tbl2[A_lvl_q] == A_lvl_i
-                                                            A_lvl_q_step = Finch.scansearch(A_lvl_tbl2, A_lvl_i + 1, A_lvl_q, A_lvl_q_stop - 1)
+                                                        if A_lvl_tbl2_3[A_lvl_q] == A_lvl_i
+                                                            A_lvl_q_step = Finch.scansearch(A_lvl_tbl2_3, A_lvl_i + 1, A_lvl_q, A_lvl_q_stop - 1)
                                                         end
-                                                        B_lvl_i_2 = B_lvl_tbl1[B_lvl_q_2]
+                                                        B_lvl_i_2 = B_lvl_tbl1_3[B_lvl_q_2]
                                                         phase_stop_5 = min(B_lvl_i_2, phase_stop_4, A_lvl_i)
                                                         if A_lvl_i == phase_stop_5 && B_lvl_i_2 == phase_stop_5
-                                                            B_lvl_2_val_2 = B_lvl_2_val[B_lvl_q_2]
+                                                            B_lvl_2_val_4 = B_lvl_2_val_3[B_lvl_q_2]
                                                             A_lvl_q_2 = A_lvl_q
                                                             if A_lvl_q < A_lvl_q_step
-                                                                A_lvl_i_stop_2 = A_lvl_tbl1[A_lvl_q_step - 1]
+                                                                A_lvl_i_stop_2 = A_lvl_tbl1_3[A_lvl_q_step - 1]
                                                             else
                                                                 A_lvl_i_stop_2 = 0
                                                             end
                                                             phase_stop_6 = min(i_7, A_lvl_i_stop_2)
                                                             if phase_stop_6 >= i_7
-                                                                if A_lvl_tbl1[A_lvl_q] < i_7
-                                                                    A_lvl_q_2 = Finch.scansearch(A_lvl_tbl1, i_7, A_lvl_q, A_lvl_q_step - 1)
+                                                                if A_lvl_tbl1_3[A_lvl_q] < i_7
+                                                                    A_lvl_q_2 = Finch.scansearch(A_lvl_tbl1_3, i_7, A_lvl_q, A_lvl_q_step - 1)
                                                                 end
                                                                 while true
-                                                                    A_lvl_i_2 = A_lvl_tbl1[A_lvl_q_2]
+                                                                    A_lvl_i_2 = A_lvl_tbl1_3[A_lvl_q_2]
                                                                     if A_lvl_i_2 < phase_stop_6
-                                                                        A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q_2]
-                                                                        Ct_lvl_3_val[Ct_lvl_2_q] = B_lvl_2_val_2 * A_lvl_2_val_2 + Ct_lvl_3_val[Ct_lvl_2_q]
+                                                                        A_lvl_2_val_4 = A_lvl_2_val_3[A_lvl_q_2]
+                                                                        Ct_lvl_3_val_3[Ct_lvl_2_q] = B_lvl_2_val_4 * A_lvl_2_val_4 + Ct_lvl_3_val_3[Ct_lvl_2_q]
                                                                         A_lvl_q_2 += 1
                                                                     else
                                                                         phase_stop_8 = min(phase_stop_6, A_lvl_i_2)
                                                                         if A_lvl_i_2 == phase_stop_8
-                                                                            A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q_2]
-                                                                            Ct_lvl_3_val[Ct_lvl_2_q] += B_lvl_2_val_2 * A_lvl_2_val_2
+                                                                            A_lvl_2_val_4 = A_lvl_2_val_3[A_lvl_q_2]
+                                                                            Ct_lvl_3_val_3[Ct_lvl_2_q] += B_lvl_2_val_4 * A_lvl_2_val_4
                                                                             A_lvl_q_2 += 1
                                                                         end
                                                                         break
@@ -129,60 +146,60 @@ begin
                                                 Ct_lvl_q = (1 - 1) * B_lvl_stop2 + phase_stop_13
                                                 for i_9 = 1:A_lvl_stop1
                                                     Ct_lvl_2_q_2 = (Ct_lvl_q - 1) * A_lvl_stop1 + i_9
-                                                    A_lvl_q_3 = A_lvl_ptr[1]
-                                                    A_lvl_q_stop_3 = A_lvl_ptr[1 + 1]
+                                                    A_lvl_q_3 = A_lvl_ptr_3[1]
+                                                    A_lvl_q_stop_3 = A_lvl_ptr_3[1 + 1]
                                                     if A_lvl_q_3 < A_lvl_q_stop_3
-                                                        A_lvl_i_stop_3 = A_lvl_tbl2[A_lvl_q_stop_3 - 1]
+                                                        A_lvl_i_stop_3 = A_lvl_tbl2_3[A_lvl_q_stop_3 - 1]
                                                     else
                                                         A_lvl_i_stop_3 = 0
                                                     end
                                                     B_lvl_q_3 = B_lvl_q
                                                     if B_lvl_q < B_lvl_q_step
-                                                        B_lvl_i_stop_3 = B_lvl_tbl1[B_lvl_q_step - 1]
+                                                        B_lvl_i_stop_3 = B_lvl_tbl1_3[B_lvl_q_step - 1]
                                                     else
                                                         B_lvl_i_stop_3 = 0
                                                     end
                                                     phase_stop_14 = min(B_lvl_stop1, A_lvl_i_stop_3, B_lvl_i_stop_3)
                                                     if phase_stop_14 >= 1
                                                         k = 1
-                                                        if A_lvl_tbl2[A_lvl_q_3] < 1
-                                                            A_lvl_q_3 = Finch.scansearch(A_lvl_tbl2, 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
+                                                        if A_lvl_tbl2_3[A_lvl_q_3] < 1
+                                                            A_lvl_q_3 = Finch.scansearch(A_lvl_tbl2_3, 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
                                                         end
-                                                        if B_lvl_tbl1[B_lvl_q] < 1
-                                                            B_lvl_q_3 = Finch.scansearch(B_lvl_tbl1, 1, B_lvl_q, B_lvl_q_step - 1)
+                                                        if B_lvl_tbl1_3[B_lvl_q] < 1
+                                                            B_lvl_q_3 = Finch.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
                                                         end
                                                         while k <= phase_stop_14
-                                                            A_lvl_i_3 = A_lvl_tbl2[A_lvl_q_3]
+                                                            A_lvl_i_3 = A_lvl_tbl2_3[A_lvl_q_3]
                                                             A_lvl_q_step_3 = A_lvl_q_3
-                                                            if A_lvl_tbl2[A_lvl_q_3] == A_lvl_i_3
-                                                                A_lvl_q_step_3 = Finch.scansearch(A_lvl_tbl2, A_lvl_i_3 + 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
+                                                            if A_lvl_tbl2_3[A_lvl_q_3] == A_lvl_i_3
+                                                                A_lvl_q_step_3 = Finch.scansearch(A_lvl_tbl2_3, A_lvl_i_3 + 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
                                                             end
-                                                            B_lvl_i_3 = B_lvl_tbl1[B_lvl_q_3]
+                                                            B_lvl_i_3 = B_lvl_tbl1_3[B_lvl_q_3]
                                                             phase_stop_15 = min(B_lvl_i_3, phase_stop_14, A_lvl_i_3)
                                                             if A_lvl_i_3 == phase_stop_15 && B_lvl_i_3 == phase_stop_15
-                                                                B_lvl_2_val_4 = B_lvl_2_val[B_lvl_q_3]
+                                                                B_lvl_2_val_6 = B_lvl_2_val_3[B_lvl_q_3]
                                                                 A_lvl_q_4 = A_lvl_q_3
                                                                 if A_lvl_q_3 < A_lvl_q_step_3
-                                                                    A_lvl_i_stop_4 = A_lvl_tbl1[A_lvl_q_step_3 - 1]
+                                                                    A_lvl_i_stop_4 = A_lvl_tbl1_3[A_lvl_q_step_3 - 1]
                                                                 else
                                                                     A_lvl_i_stop_4 = 0
                                                                 end
                                                                 phase_stop_16 = min(i_9, A_lvl_i_stop_4)
                                                                 if phase_stop_16 >= i_9
-                                                                    if A_lvl_tbl1[A_lvl_q_3] < i_9
-                                                                        A_lvl_q_4 = Finch.scansearch(A_lvl_tbl1, i_9, A_lvl_q_3, A_lvl_q_step_3 - 1)
+                                                                    if A_lvl_tbl1_3[A_lvl_q_3] < i_9
+                                                                        A_lvl_q_4 = Finch.scansearch(A_lvl_tbl1_3, i_9, A_lvl_q_3, A_lvl_q_step_3 - 1)
                                                                     end
                                                                     while true
-                                                                        A_lvl_i_4 = A_lvl_tbl1[A_lvl_q_4]
+                                                                        A_lvl_i_4 = A_lvl_tbl1_3[A_lvl_q_4]
                                                                         if A_lvl_i_4 < phase_stop_16
-                                                                            A_lvl_2_val_3 = A_lvl_2_val[A_lvl_q_4]
-                                                                            Ct_lvl_3_val[Ct_lvl_2_q_2] = B_lvl_2_val_4 * A_lvl_2_val_3 + Ct_lvl_3_val[Ct_lvl_2_q_2]
+                                                                            A_lvl_2_val_5 = A_lvl_2_val_3[A_lvl_q_4]
+                                                                            Ct_lvl_3_val_3[Ct_lvl_2_q_2] = B_lvl_2_val_6 * A_lvl_2_val_5 + Ct_lvl_3_val_3[Ct_lvl_2_q_2]
                                                                             A_lvl_q_4 += 1
                                                                         else
                                                                             phase_stop_18 = min(phase_stop_16, A_lvl_i_4)
                                                                             if A_lvl_i_4 == phase_stop_18
-                                                                                A_lvl_2_val_3 = A_lvl_2_val[A_lvl_q_4]
-                                                                                Ct_lvl_3_val[Ct_lvl_2_q_2] += B_lvl_2_val_4 * A_lvl_2_val_3
+                                                                                A_lvl_2_val_5 = A_lvl_2_val_3[A_lvl_q_4]
+                                                                                Ct_lvl_3_val_3[Ct_lvl_2_q_2] += B_lvl_2_val_6 * A_lvl_2_val_5
                                                                                 A_lvl_q_4 += 1
                                                                             end
                                                                             break
@@ -214,6 +231,6 @@ begin
                     nothing
                 end
         end
-    resize!(buf, A_lvl_stop1 * B_lvl_stop2)
-    (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(buf), A_lvl_stop1), B_lvl_stop2)),)
+    resize!(Ct_lvl_3_val_2, A_lvl_stop1 * B_lvl_stop2)
+    (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(Ct_lvl_3_val_2), A_lvl_stop1), B_lvl_stop2)),)
 end

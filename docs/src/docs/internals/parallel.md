@@ -32,7 +32,7 @@ resident in the current task to process operations on that tensor, such as loops
 over the indices, accesses to the tensor, or `declare`, `freeze`, or `thaw`.
 Upon entering a parallel loop, we must transfer the tensor to the tasks
 where it is needed. Upon exiting the parallel loop, we may need to combine
-the data from multiple tasks into a single tensor. 
+the data from multiple tasks into a single tensor.
 
 All tensor and buffer transfers are accomplished with the `transfer` function.
 

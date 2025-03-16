@@ -23,12 +23,15 @@ begin
     pos_stop = input_lvl_2_stop * input_lvl_stop
     Finch.resize_if_smaller!(output_lvl_3_val, pos_stop)
     Finch.fill_range!(output_lvl_3_val, 0.0, 1, pos_stop)
-    buf = (Finch).transfer(CPULocalMemory(cpu), tmp_lvl_2_val)
-    buf_3 = (Finch).transfer(CPUSharedMemory(cpu), output_lvl_3_val)
+    tmp_lvl_2_val_2 = (Finch).transfer(CPULocalMemory(cpu), tmp_lvl_2_val)
+    input_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(cpu), input_lvl_3_val)
+    output_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(cpu), output_lvl_3_val)
     Threads.@threads for tid = 1:cpu.n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                buf_4 = (Finch).transfer(CPUThread(tid, cpu, Serial()), buf)
+                                tmp_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), tmp_lvl_2_val_2)
+                                input_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), input_lvl_3_val_2)
+                                output_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), output_lvl_3_val_2)
                                 phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), cpu.n))
                                 phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, cpu.n))
                                 if phase_stop_2 >= phase_start_2
@@ -37,24 +40,24 @@ begin
                                         input_lvl_q = (1 - 1) * input_lvl_stop + y_8
                                         input_lvl_q_3 = (1 - 1) * input_lvl_stop + y_8
                                         output_lvl_q = (1 - 1) * input_lvl_stop + y_8
-                                        Finch.resize_if_smaller!(buf_4, input_lvl_2_stop)
-                                        Finch.fill_range!(buf_4, 0, 1, input_lvl_2_stop)
+                                        Finch.resize_if_smaller!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                        Finch.fill_range!(tmp_lvl_2_val_3, 0, 1, input_lvl_2_stop)
                                         for x_9 = 1:input_lvl_2_stop
                                             tmp_lvl_q = (1 - 1) * input_lvl_2_stop + x_9
                                             input_lvl_2_q = (input_lvl_q_2 - 1) * input_lvl_2_stop + (-1 + x_9)
                                             input_lvl_2_q_2 = (input_lvl_q - 1) * input_lvl_2_stop + x_9
                                             input_lvl_2_q_3 = (input_lvl_q_3 - 1) * input_lvl_2_stop + (1 + x_9)
-                                            input_lvl_3_val_2 = input_lvl_3_val[input_lvl_2_q]
-                                            input_lvl_3_val_3 = input_lvl_3_val[input_lvl_2_q_2]
-                                            input_lvl_3_val_4 = input_lvl_3_val[input_lvl_2_q_3]
-                                            buf_4[tmp_lvl_q] = input_lvl_3_val_3 + input_lvl_3_val_2 + input_lvl_3_val_4 + buf_4[tmp_lvl_q]
+                                            input_lvl_3_val_4 = input_lvl_3_val_3[input_lvl_2_q]
+                                            input_lvl_3_val_5 = input_lvl_3_val_3[input_lvl_2_q_2]
+                                            input_lvl_3_val_6 = input_lvl_3_val_3[input_lvl_2_q_3]
+                                            tmp_lvl_2_val_3[tmp_lvl_q] = input_lvl_3_val_5 + input_lvl_3_val_4 + input_lvl_3_val_6 + tmp_lvl_2_val_3[tmp_lvl_q]
                                         end
-                                        resize!(buf_4, input_lvl_2_stop)
+                                        resize!(tmp_lvl_2_val_3, input_lvl_2_stop)
                                         for x_10 = 1:input_lvl_2_stop
                                             output_lvl_2_q = (output_lvl_q - 1) * input_lvl_2_stop + x_10
                                             tmp_lvl_q_2 = (1 - 1) * input_lvl_2_stop + x_10
-                                            tmp_lvl_2_val_2 = buf_4[tmp_lvl_q_2]
-                                            output_lvl_3_val[output_lvl_2_q] = tmp_lvl_2_val_2
+                                            tmp_lvl_2_val_4 = tmp_lvl_2_val_3[tmp_lvl_q_2]
+                                            output_lvl_3_val_3[output_lvl_2_q] = tmp_lvl_2_val_4
                                         end
                                     end
                                 end
@@ -66,6 +69,6 @@ begin
                     nothing
                 end
         end
-    resize!(buf_3, input_lvl_2_stop * input_lvl_stop)
-    (output = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(buf_3), input_lvl_2_stop), input_lvl_stop)),)
+    resize!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
+    (output = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(output_lvl_3_val_2), input_lvl_2_stop), input_lvl_stop)),)
 end
