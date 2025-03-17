@@ -17,38 +17,41 @@ end
 # output
 
 quote
-    s = (ex.bodies[1]).body.body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.body.lhs.tns.bind
+    s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
-    for j_3 = 1:A_lvl.shape
-        A_lvl_q = (1 - 1) * A_lvl.shape + j_3
-        A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-        A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
+    for j_3 = 1:A_lvl_stop
+        A_lvl_q = (1 - 1) * A_lvl_stop + j_3
+        A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+        A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
         if A_lvl_2_q &lt; A_lvl_2_q_stop
-            A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+            A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
         else
             A_lvl_2_i1 = 0
         end
-        phase_stop = min(A_lvl_2_i1, A_lvl_2.shape)
+        phase_stop = min(A_lvl_2_i1, A_lvl_2_stop)
         if phase_stop &gt;= 1
-            if A_lvl_idx[A_lvl_2_q] &lt; 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+            if A_lvl_2_idx[A_lvl_2_q] &lt; 1
+                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
-                A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                 if A_lvl_2_i &lt; phase_stop
-                    A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                    s_val = A_lvl_3_val + s_val
+                    A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                    s_val = A_lvl_3_val_2 + s_val
                     A_lvl_2_q += 1
                 else
                     phase_stop_3 = min(phase_stop, A_lvl_2_i)
                     if A_lvl_2_i == phase_stop_3
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                        s_val += A_lvl_3_val
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                        s_val += A_lvl_3_val_2
                         A_lvl_2_q += 1
                     end
                     break
@@ -57,7 +60,7 @@ quote
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end</code></pre><p>When the loop order does not correspond to storage order, we call this <em>discordant</em> iteration. For example, if we swap the loop order in the above example, then Finch needs to randomly access each sparse column for each row <code>i</code>. We end up needing to find each <code>(i, j)</code> pair because we don&#39;t know whether it will be zero until we search for it. In all, this takes time <code>O(n * m * log(nnz))</code>, much less efficient! We shouldn&#39;t randomly access sparse arrays unless we really need to and they support it efficiently!</p><p>Note the double for loop in the following code</p><pre><code class="language-julia hljs">@finch_code for i in _, j in _
     s[] += A[i, j]
@@ -66,40 +69,43 @@ end # DISCORDANT, DO NOT DO THIS
 # output
 
 quote
-    s = (ex.bodies[1]).body.body.lhs.tns.bind
-    s_val = s.val
+    s_data = (ex.bodies[1]).body.body.lhs.tns.bind
+    s_val = s_data.val
     A_lvl = (ex.bodies[1]).body.body.rhs.tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
     @warn &quot;Performance Warning: non-concordant traversal of A[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)&quot;
-    for i_3 = 1:A_lvl_2.shape
-        for j_3 = 1:A_lvl.shape
-            A_lvl_q = (1 - 1) * A_lvl.shape + j_3
-            A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-            A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+    for i_3 = 1:A_lvl_2_stop
+        for j_3 = 1:A_lvl_stop
+            A_lvl_q = (1 - 1) * A_lvl_stop + j_3
+            A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+            A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
             if A_lvl_2_q &lt; A_lvl_2_q_stop
-                A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+                A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
             else
                 A_lvl_2_i1 = 0
             end
             phase_stop = min(i_3, A_lvl_2_i1)
             if phase_stop &gt;= i_3
-                if A_lvl_idx[A_lvl_2_q] &lt; i_3
-                    A_lvl_2_q = Finch.scansearch(A_lvl_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                if A_lvl_2_idx[A_lvl_2_q] &lt; i_3
+                    A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
                 end
                 while true
-                    A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                    A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                     if A_lvl_2_i &lt; phase_stop
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                        s_val = A_lvl_3_val + s_val
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                        s_val = A_lvl_3_val_2 + s_val
                         A_lvl_2_q += 1
                     else
                         phase_stop_3 = min(phase_stop, A_lvl_2_i)
                         if A_lvl_2_i == phase_stop_3
-                            A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                            s_val += A_lvl_3_val
+                            A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                            s_val += A_lvl_3_val_2
                             A_lvl_2_q += 1
                         end
                         break
@@ -109,7 +115,7 @@ quote
         end
     end
     result = ()
-    s.val = s_val
+    s_data.val = s_val
     result
 end</code></pre><p>TL;DR: As a quick heuristic, if your array indices are all in alphabetical order, then the loop indices should be reverse alphabetical.</p><h2 id="Appropriate-Fill-Values"><a class="docs-heading-anchor" href="#Appropriate-Fill-Values">Appropriate Fill Values</a><a id="Appropriate-Fill-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Appropriate-Fill-Values" title="Permalink"></a></h2><p>The @finch macro requires the user to specify an output format. This is the most flexibile approach, but can sometimes lead to densification unless the output fill value is appropriate for the computation.</p><p>For example, if <code>A</code> is <code>m × n</code> with <code>nnz</code> nonzeros, the following Finch kernel will densify <code>B</code>, filling it with <code>m * n</code> stored values:</p><pre><code class="language-julia hljs">A = Tensor(
     Dense(SparseList(Element(0.0))),
@@ -185,60 +191,63 @@ return C)
 # output
 
 quote
-    C = ((ex.bodies[1]).bodies[1]).tns.bind
+    C_data = ((ex.bodies[1]).bodies[1]).tns.bind
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[1]).tns.bind.lvl
+    A_lvl_stop = A_lvl.shape
     A_lvl_2 = A_lvl.lvl
-    A_lvl_ptr = A_lvl_2.ptr
-    A_lvl_idx = A_lvl_2.idx
-    A_lvl_2_val = A_lvl_2.lvl.val
-    B = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind
+    A_lvl_2_ptr = A_lvl_2.ptr
+    A_lvl_2_idx = A_lvl_2.idx
+    A_lvl_2_stop = A_lvl_2.shape
+    A_lvl_3 = A_lvl_2.lvl
+    A_lvl_3_val = A_lvl_3.val
+    B_data = (((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind
     sugar_1 = size((((ex.bodies[1]).bodies[2]).body.body.rhs.args[2]).tns.bind)
     B_mode1_stop = sugar_1[1]
     B_mode2_stop = sugar_1[2]
-    B_mode1_stop == A_lvl_2.shape || throw(DimensionMismatch(&quot;mismatched dimension limits ($(B_mode1_stop) != $(A_lvl_2.shape))&quot;))
-    B_mode2_stop == A_lvl.shape || throw(DimensionMismatch(&quot;mismatched dimension limits ($(B_mode2_stop) != $(A_lvl.shape))&quot;))
+    B_mode1_stop == A_lvl_2_stop || throw(DimensionMismatch(&quot;mismatched dimension limits ($(B_mode1_stop) != $(A_lvl_2_stop))&quot;))
+    B_mode2_stop == A_lvl_stop || throw(DimensionMismatch(&quot;mismatched dimension limits ($(B_mode2_stop) != $(A_lvl_stop))&quot;))
     C_val = 0
     for j_4 = 1:B_mode2_stop
-        A_lvl_q = (1 - 1) * A_lvl.shape + j_4
-        A_lvl_2_q = A_lvl_ptr[A_lvl_q]
-        A_lvl_2_q_stop = A_lvl_ptr[A_lvl_q + 1]
+        A_lvl_q = (1 - 1) * A_lvl_stop + j_4
+        A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
+        A_lvl_2_q_stop = A_lvl_2_ptr[A_lvl_q + 1]
         if A_lvl_2_q &lt; A_lvl_2_q_stop
-            A_lvl_2_i1 = A_lvl_idx[A_lvl_2_q_stop - 1]
+            A_lvl_2_i1 = A_lvl_2_idx[A_lvl_2_q_stop - 1]
         else
             A_lvl_2_i1 = 0
         end
         phase_stop = min(B_mode1_stop, A_lvl_2_i1)
         if phase_stop &gt;= 1
             i = 1
-            if A_lvl_idx[A_lvl_2_q] &lt; 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+            if A_lvl_2_idx[A_lvl_2_q] &lt; 1
+                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
-                A_lvl_2_i = A_lvl_idx[A_lvl_2_q]
+                A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
                 if A_lvl_2_i &lt; phase_stop
                     for i_6 = i:-1 + A_lvl_2_i
-                        val = B[i_6, j_4]
+                        val = B_data[i_6, j_4]
                         C_val = (Main).f(0.0, val) + C_val
                     end
-                    A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                    val_2 = B[A_lvl_2_i, j_4]
-                    C_val += (Main).f(A_lvl_3_val, val_2)
+                    A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                    val_2 = B_data[A_lvl_2_i, j_4]
+                    C_val += (Main).f(A_lvl_3_val_2, val_2)
                     A_lvl_2_q += 1
                     i = A_lvl_2_i + 1
                 else
                     phase_stop_3 = min(phase_stop, A_lvl_2_i)
                     if A_lvl_2_i == phase_stop_3
                         for i_8 = i:-1 + phase_stop_3
-                            val_3 = B[i_8, j_4]
+                            val_3 = B_data[i_8, j_4]
                             C_val += (Main).f(0.0, val_3)
                         end
-                        A_lvl_3_val = A_lvl_2_val[A_lvl_2_q]
-                        val_4 = B[phase_stop_3, j_4]
-                        C_val += (Main).f(A_lvl_3_val, val_4)
+                        A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
+                        val_4 = B_data[phase_stop_3, j_4]
+                        C_val += (Main).f(A_lvl_3_val_2, val_4)
                         A_lvl_2_q += 1
                     else
                         for i_10 = i:phase_stop_3
-                            val_5 = B[i_10, j_4]
+                            val_5 = B_data[i_10, j_4]
                             C_val += (Main).f(0.0, val_5)
                         end
                     end
@@ -250,12 +259,12 @@ quote
         phase_start_3 = max(1, 1 + A_lvl_2_i1)
         if B_mode1_stop &gt;= phase_start_3
             for i_12 = phase_start_3:B_mode1_stop
-                val_6 = B[i_12, j_4]
+                val_6 = B_data[i_12, j_4]
                 C_val += (Main).f(0.0, val_6)
             end
         end
     end
-    C.val = C_val
-    (C = C,)
+    C_data.val = C_val
+    (C = C_data,)
 end
-</code></pre><h2 id="Type-Stability"><a class="docs-heading-anchor" href="#Type-Stability">Type Stability</a><a id="Type-Stability-1"></a><a class="docs-heading-anchor-permalink" href="#Type-Stability" title="Permalink"></a></h2><p>Julia code runs fastest when the compiler can <a href="https://docs.julialang.org/en/v1/manual/performance-tips/#Write-%22type-stable%22-functions">infer the types</a> of all intermediate values.  Finch does not check that the generated code is type-stable. In situations where tensors have nonuniform index or element types, or the computation itself might involve multiple types, one should check that the output of <code>@finch_kernel</code> code is type-stable with <a href="https://docs.julialang.org/en/v1/stdlib/InteractiveUtils/#InteractiveUtils.@code_warntype"><code>@code_warntype</code></a>.</p><h2 id="Dense-Arrays"><a class="docs-heading-anchor" href="#Dense-Arrays">Dense Arrays</a><a id="Dense-Arrays-1"></a><a class="docs-heading-anchor-permalink" href="#Dense-Arrays" title="Permalink"></a></h2><p>Finch is currently optimized for sparse code and does not implement traditional dense optimizations. We are currently adding these features, but if you need dense performance, you may want to look at <a href="https://github.com/JuliaGPU">JuliaGPU</a> instead.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../interoperability/">« Interoperability</a><a class="docs-footer-nextpage" href="../benchmarking_tips/">Benchmarking Tips »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Sunday 16 March 2025 01:36">Sunday 16 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</code></pre><h2 id="Type-Stability"><a class="docs-heading-anchor" href="#Type-Stability">Type Stability</a><a id="Type-Stability-1"></a><a class="docs-heading-anchor-permalink" href="#Type-Stability" title="Permalink"></a></h2><p>Julia code runs fastest when the compiler can <a href="https://docs.julialang.org/en/v1/manual/performance-tips/#Write-%22type-stable%22-functions">infer the types</a> of all intermediate values.  Finch does not check that the generated code is type-stable. In situations where tensors have nonuniform index or element types, or the computation itself might involve multiple types, one should check that the output of <code>@finch_kernel</code> code is type-stable with <a href="https://docs.julialang.org/en/v1/stdlib/InteractiveUtils/#InteractiveUtils.@code_warntype"><code>@code_warntype</code></a>.</p><h2 id="Dense-Arrays"><a class="docs-heading-anchor" href="#Dense-Arrays">Dense Arrays</a><a id="Dense-Arrays-1"></a><a class="docs-heading-anchor-permalink" href="#Dense-Arrays" title="Permalink"></a></h2><p>Finch is currently optimized for sparse code and does not implement traditional dense optimizations. We are currently adding these features, but if you need dense performance, you may want to look at <a href="https://github.com/JuliaGPU">JuliaGPU</a> instead.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../interoperability/">« Interoperability</a><a class="docs-footer-nextpage" href="../benchmarking_tips/">Benchmarking Tips »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.9.0 on <span class="colophon-date" title="Monday 17 March 2025 02:52">Monday 17 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
