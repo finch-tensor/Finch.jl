@@ -29,6 +29,19 @@ struct VirtualToeplitzArray <: AbstractVirtualCombinator
     end
 end
 
+function distribute(
+    ctx::AbstractCompiler, tns::VirtualToeplitzArray, arch, diff, style
+)
+    VirtualToeplitzArray(distribute(ctx, tns.body, arch, diff, style), tns.dim)
+end
+
+function redistribute(ctx::AbstractCompiler, tns::VirtualToeplitzArray, diff)
+    VirtualToeplitzArray(
+        redistribute(ctx, tns.body, diff),
+        tns.dim,
+    )
+end
+
 function is_injective(ctx, lvl::VirtualToeplitzArray)
     sub = is_injective(ctx, lvl.body)
     return [sub[1:(lvl.dim)]..., false, sub[(lvl.dim + 1):end]...]

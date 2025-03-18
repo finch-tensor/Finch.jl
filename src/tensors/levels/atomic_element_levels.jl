@@ -41,7 +41,7 @@ end
 postype(::Type{<:AtomicElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
 function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv,Tp}
-    return AtomicElementLevel{Vf,Tv,Tp}(transfer(lvl.val, device), style)
+    return AtomicElementLevel{Vf,Tv,Tp}(transfer(device, lvl.val))
 end
 
 pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
@@ -82,7 +82,7 @@ end
 countstored_level(lvl::AtomicElementLevel, pos) = pos
 
 mutable struct VirtualAtomicElementLevel <: AbstractVirtualLevel
-    ex
+    tag
     Vf
     Tv
     Tp
@@ -95,21 +95,39 @@ function is_level_concurrent(ctx, lvl::VirtualAtomicElementLevel)
     return ([], true)
 end
 
-lower(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, ::DefaultStyle) = lvl.ex
+function lower(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, ::DefaultStyle)
+    :(AtomicElementLevel{$(lvl.Vf),$(lvl.Tv),$(lvl.Tp)}($(lvl.val)))
+end
 
 function virtualize(
     ctx, ex, ::Type{AtomicElementLevel{Vf,Tv,Tp,Val}}, tag=:lvl
 ) where {Vf,Tv,Tp,Val}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     val = freshen(ctx, tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $ex.val
+            $tag = $ex
+            $val = $tag.val
         end,
     )
-    VirtualAtomicElementLevel(sym, Vf, Tv, Tp, val)
+    VirtualAtomicElementLevel(tag, Vf, Tv, Tp, val)
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualAtomicElementLevel(
+        lvl.tag,
+        lvl.Vf,
+        lvl.Tv,
+        lvl.Tp,
+        distribute_buffer(ctx, lvl.val, arch, style),
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, diff)
+    get(diff, lvl.tag, lvl)
 end
 
 Base.summary(lvl::VirtualAtomicElementLevel) = "AtomicElement($(lvl.Vf))"
@@ -165,32 +183,15 @@ function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_s
     lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualAtomicElementLevel, arch, style)
-    val_2 = freshen(ctx, :val)
-    push_preamble!(
-        ctx,
-        quote
-            $val_2 = $(lvl.val)
-            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.val) = $val_2
-        end,
-    )
-end
-
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
-        val = freshen(ctx.code, lvl.ex, :_val)
+        val = freshen(ctx.code, lvl.tag, :_val)
         return Thunk(;
             preamble=quote
                 $val = $(lvl.val)[$(ctx(pos))]
             end,
-            body=(ctx) -> VirtualScalar(nothing, lvl.Tv, lvl.Vf, gensym(), val),
+            body=(ctx) -> VirtualScalar(nothing, nothing, lvl.Tv, lvl.Vf, gensym(), val),
         )
     else
         return fbr

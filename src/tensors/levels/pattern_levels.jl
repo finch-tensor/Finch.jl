@@ -47,7 +47,7 @@ isstructequal(a::T, b::T) where {T<:Pattern} = true
 
 postype(::Type{<:PatternLevel{Tp}}) where {Tp} = Tp
 
-function transfer(lvl::PatternLevel{Tp}, device, style) where {Tp}
+function transfer(device, lvl::PatternLevel{Tp}) where {Tp}
     return PatternLevel{Tp}()
 end
 
@@ -93,15 +93,19 @@ struct VirtualPatternLevel <: AbstractVirtualLevel
     Tp
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, style)
-end
-
 is_level_injective(ctx, ::VirtualPatternLevel) = []
 is_level_atomic(ctx, lvl::VirtualPatternLevel) = ([], false)
 is_level_concurrent(ctx, lvl::VirtualPatternLevel) = ([], true)
 
 lower(ctx::AbstractCompiler, lvl::VirtualPatternLevel, ::DefaultStyle) = :(PatternLevel())
 virtualize(ctx, ex, ::Type{PatternLevel{Tp}}) where {Tp} = VirtualPatternLevel(Tp)
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualPatternLevel, arch, diff, style
+)
+end
+
+redistribute(ctx::AbstractCompiler, lvl::VirtualPatternLevel, diff) = lvl
 
 virtual_level_resize!(ctx, lvl::VirtualPatternLevel) = lvl
 virtual_level_size(ctx, ::VirtualPatternLevel) = ()
@@ -129,11 +133,11 @@ function instantiate(ctx, ::VirtualSubFiber{VirtualPatternLevel}, mode)
     else
         val = freshen(ctx, :null)
         push_preamble!(ctx, :($val = false))
-        VirtualScalar(nothing, Bool, false, gensym(), val)
+        VirtualScalar(nothing, nothing, Bool, false, gensym(), val)
     end
 end
 
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualPatternLevel}, mode)
     @assert mode.kind === updater
-    VirtualScalar(nothing, Bool, false, gensym(), fbr.dirty)
+    VirtualScalar(nothing, nothing, Bool, false, gensym(), fbr.dirty)
 end

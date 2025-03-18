@@ -54,11 +54,11 @@ function postype(
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseBlockListLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    idx_2 = transfer(lvl.idx, device, style)
-    ofs_2 = transfer(lvl.ofs, device, style)
+function transfer(device, lvl::SparseBlockListLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    idx_2 = transfer(device, lvl.idx)
+    ofs_2 = transfer(device, lvl.ofs)
     return SparseBlockListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, ofs_2)
 end
 
@@ -191,8 +191,8 @@ function (fbr::SubFiber{<:SparseBlockListLevel})(idxs...)
 end
 
 mutable struct VirtualSparseBlockListLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     shape
     qos_fill
@@ -222,30 +222,32 @@ postype(lvl::VirtualSparseBlockListLevel) = postype(lvl.lvl)
 function virtualize(
     ctx, ex, ::Type{SparseBlockListLevel{Ti,Ptr,Idx,Ofs,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Idx,Ofs,Lvl}
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    ros_fill = freshen(ctx, sym, :_ros_fill)
-    ros_stop = freshen(ctx, sym, :_ros_stop)
-    dirty = freshen(ctx, sym, :_dirty)
+    tag = freshen(ctx, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    ros_fill = freshen(ctx, tag, :_ros_fill)
+    ros_stop = freshen(ctx, tag, :_ros_stop)
+    dirty = freshen(ctx, tag, :_dirty)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     ofs = freshen(ctx, tag, :_ofs)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $idx = $sym.idx
-            $ofs = $sym.ofs
+            $tag = $ex
+            $ptr = $tag.ptr
+            $idx = $tag.idx
+            $ofs = $tag.ofs
+            $stop = $tag.shape
         end,
     )
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
+    shape = value(stop, Int)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseBlockListLevel(
+        tag,
         lvl_2,
-        sym,
         Ti,
         shape,
         qos_fill,
@@ -271,6 +273,47 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, ::Defaul
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualSparseBlockListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
+        lvl.prev_pos,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseBlockListLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.ptr,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseBlockListLevel) = "SparseBlockList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseBlockListLevel)
@@ -287,32 +330,6 @@ end
 virtual_level_eltype(lvl::VirtualSparseBlockListLevel) = virtual_level_eltype(lvl.lvl)
 function virtual_level_fill_value(lvl::VirtualSparseBlockListLevel)
     virtual_level_fill_value(lvl.lvl)
-end
-
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, arch, style)
-    ptr_2 = freshen(ctx, lvl.ptr)
-    tbl_2 = freshen(ctx, lvl.tbl)
-    ofs_2 = freshen(ctx, lvl.ofs)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $(lvl.ptr)
-            $tbl_2 = $(lvl.tbl)
-            $ofs_2 = $(lvl.ofs)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
-            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.tbl) = $tbl_2
-            $(lvl.ofs) = $ofs_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
 end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, pos, init)
@@ -381,7 +398,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -453,7 +470,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseBlockListLevel}, ext, mode, ::typeof(gallop)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -537,7 +554,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_p = freshen(ctx, tag, :_p)

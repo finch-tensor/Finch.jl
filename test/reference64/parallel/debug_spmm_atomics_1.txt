@@ -2,24 +2,30 @@ begin
     CR_lvl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl
     CR_lvl_2 = CR_lvl.lvl
     CR_lvl_3 = CR_lvl_2.lvl
-    CR_lvl_2_val = CR_lvl_2.lvl.val
+    CR_lvl_3_val = CR_lvl_3.val
     A_lvl = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl
-    A_lvl_ptr = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.ptr
+    A_lvl_ptr = A_lvl.ptr
     A_lvl_tbl1 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.tbl[1]
+    A_lvl_stop1 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.shape[1]
     A_lvl_tbl2 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.tbl[2]
-    A_lvl_val = A_lvl.lvl.val
+    A_lvl_stop2 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[1]).tns.bind.lvl.shape[2]
+    A_lvl_2 = A_lvl.lvl
+    A_lvl_2_val = A_lvl_2.val
     B_lvl = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl
-    B_lvl_ptr = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.ptr
+    B_lvl_ptr = B_lvl.ptr
     B_lvl_tbl1 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.tbl[1]
+    B_lvl_stop1 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.shape[1]
     B_lvl_tbl2 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.tbl[2]
-    B_lvl_val = B_lvl.lvl.val
-    B_lvl.shape[1] == A_lvl.shape[2] || throw(DimensionMismatch("mismatched dimension limits ($(B_lvl.shape[1]) != $(A_lvl.shape[2]))"))
+    B_lvl_stop2 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.shape[2]
+    B_lvl_2 = B_lvl.lvl
+    B_lvl_2_val = B_lvl_2.val
+    B_lvl_stop1 == A_lvl_stop2 || throw(DimensionMismatch("mismatched dimension limits ($(B_lvl_stop1) != $(A_lvl_stop2))"))
     @warn "Performance Warning: non-concordant traversal of CR[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
     @warn "Performance Warning: non-concordant traversal of A[i, k] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
-    pos_stop = A_lvl.shape[1] * B_lvl.shape[2]
-    Finch.resize_if_smaller!(CR_lvl_2_val, pos_stop)
-    Finch.fill_range!(CR_lvl_2_val, 0x0000000000000000, 1, pos_stop)
-    for i_4 = 1:A_lvl.shape[1]
+    pos_stop = A_lvl_stop1 * B_lvl_stop2
+    Finch.resize_if_smaller!(CR_lvl_3_val, pos_stop)
+    Finch.fill_range!(CR_lvl_3_val, 0x0000000000000000, 1, pos_stop)
+    for i_4 = 1:A_lvl_stop1
         B_lvl_q = B_lvl_ptr[1]
         B_lvl_q_stop = B_lvl_ptr[1 + 1]
         if B_lvl_q < B_lvl_q_stop
@@ -27,7 +33,7 @@ begin
         else
             B_lvl_i_stop = 0
         end
-        phase_stop = min(B_lvl.shape[2], B_lvl_i_stop)
+        phase_stop = min(B_lvl_stop2, B_lvl_i_stop)
         if phase_stop >= 1
             if B_lvl_tbl2[B_lvl_q] < 1
                 B_lvl_q = Finch.scansearch(B_lvl_tbl2, 1, B_lvl_q, B_lvl_q_stop - 1)
@@ -39,8 +45,8 @@ begin
                     B_lvl_q_step = Finch.scansearch(B_lvl_tbl2, B_lvl_i + 1, B_lvl_q, B_lvl_q_stop - 1)
                 end
                 if B_lvl_i < phase_stop
-                    CR_lvl_q = (1 - 1) * B_lvl.shape[2] + B_lvl_i
-                    CR_lvl_2_q = (CR_lvl_q - 1) * A_lvl.shape[1] + i_4
+                    CR_lvl_q = (1 - 1) * B_lvl_stop2 + B_lvl_i
+                    CR_lvl_2_q = (CR_lvl_q - 1) * A_lvl_stop1 + i_4
                     B_lvl_q_2 = B_lvl_q
                     if B_lvl_q < B_lvl_q_step
                         B_lvl_i_stop_2 = B_lvl_tbl1[B_lvl_q_step - 1]
@@ -54,7 +60,7 @@ begin
                     else
                         A_lvl_i_stop = 0
                     end
-                    phase_stop_3 = min(B_lvl.shape[1], B_lvl_i_stop_2, A_lvl_i_stop)
+                    phase_stop_3 = min(B_lvl_stop1, B_lvl_i_stop_2, A_lvl_i_stop)
                     if phase_stop_3 >= 1
                         k = 1
                         if B_lvl_tbl1[B_lvl_q] < 1
@@ -72,7 +78,7 @@ begin
                             end
                             phase_stop_4 = min(A_lvl_i, phase_stop_3, B_lvl_i_2)
                             if B_lvl_i_2 == phase_stop_4 && A_lvl_i == phase_stop_4
-                                B_lvl_2_val = B_lvl_val[B_lvl_q_2]
+                                B_lvl_2_val_2 = B_lvl_2_val[B_lvl_q_2]
                                 A_lvl_q_2 = A_lvl_q
                                 if A_lvl_q < A_lvl_q_step
                                     A_lvl_i_stop_2 = A_lvl_tbl1[A_lvl_q_step - 1]
@@ -87,14 +93,14 @@ begin
                                     while true
                                         A_lvl_i_2 = A_lvl_tbl1[A_lvl_q_2]
                                         if A_lvl_i_2 < phase_stop_5
-                                            A_lvl_2_val = A_lvl_val[A_lvl_q_2]
-                                            CR_lvl_2_val[CR_lvl_2_q] = B_lvl_2_val * A_lvl_2_val + CR_lvl_2_val[CR_lvl_2_q]
+                                            A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q_2]
+                                            CR_lvl_3_val[CR_lvl_2_q] = B_lvl_2_val_2 * A_lvl_2_val_2 + CR_lvl_3_val[CR_lvl_2_q]
                                             A_lvl_q_2 += 1
                                         else
                                             phase_stop_7 = min(phase_stop_5, A_lvl_i_2)
                                             if A_lvl_i_2 == phase_stop_7
-                                                A_lvl_2_val = A_lvl_val[A_lvl_q_2]
-                                                CR_lvl_2_val[CR_lvl_2_q] += B_lvl_2_val * A_lvl_2_val
+                                                A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q_2]
+                                                CR_lvl_3_val[CR_lvl_2_q] += B_lvl_2_val_2 * A_lvl_2_val_2
                                                 A_lvl_q_2 += 1
                                             end
                                             break
@@ -115,8 +121,8 @@ begin
                 else
                     phase_stop_12 = min(phase_stop, B_lvl_i)
                     if B_lvl_i == phase_stop_12
-                        CR_lvl_q = (1 - 1) * B_lvl.shape[2] + phase_stop_12
-                        CR_lvl_2_q_2 = (CR_lvl_q - 1) * A_lvl.shape[1] + i_4
+                        CR_lvl_q = (1 - 1) * B_lvl_stop2 + phase_stop_12
+                        CR_lvl_2_q_2 = (CR_lvl_q - 1) * A_lvl_stop1 + i_4
                         B_lvl_q_3 = B_lvl_q
                         if B_lvl_q < B_lvl_q_step
                             B_lvl_i_stop_3 = B_lvl_tbl1[B_lvl_q_step - 1]
@@ -130,7 +136,7 @@ begin
                         else
                             A_lvl_i_stop_3 = 0
                         end
-                        phase_stop_13 = min(B_lvl.shape[1], B_lvl_i_stop_3, A_lvl_i_stop_3)
+                        phase_stop_13 = min(B_lvl_stop1, B_lvl_i_stop_3, A_lvl_i_stop_3)
                         if phase_stop_13 >= 1
                             k = 1
                             if B_lvl_tbl1[B_lvl_q] < 1
@@ -148,7 +154,7 @@ begin
                                 end
                                 phase_stop_14 = min(A_lvl_i_3, phase_stop_13, B_lvl_i_3)
                                 if B_lvl_i_3 == phase_stop_14 && A_lvl_i_3 == phase_stop_14
-                                    B_lvl_2_val_3 = B_lvl_val[B_lvl_q_3]
+                                    B_lvl_2_val_4 = B_lvl_2_val[B_lvl_q_3]
                                     A_lvl_q_4 = A_lvl_q_3
                                     if A_lvl_q_3 < A_lvl_q_step_3
                                         A_lvl_i_stop_4 = A_lvl_tbl1[A_lvl_q_step_3 - 1]
@@ -163,14 +169,14 @@ begin
                                         while true
                                             A_lvl_i_4 = A_lvl_tbl1[A_lvl_q_4]
                                             if A_lvl_i_4 < phase_stop_15
-                                                A_lvl_2_val_2 = A_lvl_val[A_lvl_q_4]
-                                                CR_lvl_2_val[CR_lvl_2_q_2] = B_lvl_2_val_3 * A_lvl_2_val_2 + CR_lvl_2_val[CR_lvl_2_q_2]
+                                                A_lvl_2_val_3 = A_lvl_2_val[A_lvl_q_4]
+                                                CR_lvl_3_val[CR_lvl_2_q_2] = B_lvl_2_val_4 * A_lvl_2_val_3 + CR_lvl_3_val[CR_lvl_2_q_2]
                                                 A_lvl_q_4 += 1
                                             else
                                                 phase_stop_17 = min(phase_stop_15, A_lvl_i_4)
                                                 if A_lvl_i_4 == phase_stop_17
-                                                    A_lvl_2_val_2 = A_lvl_val[A_lvl_q_4]
-                                                    CR_lvl_2_val[CR_lvl_2_q_2] += B_lvl_2_val_3 * A_lvl_2_val_2
+                                                    A_lvl_2_val_3 = A_lvl_2_val[A_lvl_q_4]
+                                                    CR_lvl_3_val[CR_lvl_2_q_2] += B_lvl_2_val_4 * A_lvl_2_val_3
                                                     A_lvl_q_4 += 1
                                                 end
                                                 break
@@ -194,6 +200,6 @@ begin
             end
         end
     end
-    resize!(CR_lvl_2_val, A_lvl.shape[1] * B_lvl.shape[2])
-    (CR = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(CR_lvl_3, A_lvl.shape[1]), B_lvl.shape[2])),)
+    resize!(CR_lvl_3_val, A_lvl_stop1 * B_lvl_stop2)
+    (CR = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(CR_lvl_3_val), A_lvl_stop1), B_lvl_stop2)),)
 end

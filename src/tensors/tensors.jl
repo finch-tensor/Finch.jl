@@ -84,6 +84,14 @@ end
 lower(ctx::AbstractCompiler, fbr::VirtualFiber, ::DefaultStyle) = :(Tensor($(ctx(fbr.lvl))))
 FinchNotation.finch_leaf(x::VirtualFiber) = virtual(x)
 
+function distribute(ctx::AbstractCompiler, fbr::VirtualFiber, arch, diff, style)
+    VirtualFiber(distribute_level(ctx, fbr.lvl, arch, diff, style))
+end
+
+function redistribute(ctx::AbstractCompiler, fbr::VirtualFiber, diff)
+    VirtualFiber(redistribute(ctx, fbr.lvl, diff))
+end
+
 """
     SubFiber(lvl, pos)
 
@@ -98,6 +106,7 @@ mutable struct VirtualSubFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
     pos
 end
+
 function virtualize(
     ctx, ex, ::Type{<:SubFiber{Lvl,Pos}}, tag=freshen(ctx, :tns)
 ) where {Lvl,Pos}
@@ -109,6 +118,14 @@ function lower(ctx::AbstractCompiler, fbr::VirtualSubFiber, ::DefaultStyle)
     :(SubFiber($(ctx(fbr.lvl)), $(ctx(fbr.pos))))
 end
 FinchNotation.finch_leaf(x::VirtualSubFiber) = virtual(x)
+
+function distribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, diff, style)
+    VirtualSubFiber(distribute_level(ctx, fbr.lvl, arch, diff, style), fbr.pos)
+end
+
+function redistribute(ctx::AbstractCompiler, fbr::VirtualSubFiber, diff)
+    VirtualSubFiber(redistribute(ctx, fbr.lvl, diff), fbr.pos)
+end
 
 @inline Base.ndims(::AbstractFiber{Lvl}) where {Lvl} = level_ndims(Lvl)
 @inline Base.ndims(::Type{<:AbstractFiber{Lvl}}) where {Lvl} = level_ndims(Lvl)
@@ -138,15 +155,6 @@ end
 function unfurl(ctx::AbstractCompiler, arr::VirtualFiber, ext, mode, proto)
     unfurl(ctx, VirtualSubFiber(arr.lvl, literal(1)), ext, mode, proto)
 end
-
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualFiber, arch, style)
-    virtual_transfer_level(ctx, fbr.lvl, arch, style)
-end
-
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualSubFiber, arch, style)
-    virtual_transfer_level(ctx, fbr.lvl, arch, style)
-end
-
 struct HollowSubFiber{Lvl,Pos,Dirty} <: AbstractFiber{Lvl}
     lvl::Lvl
     pos::Pos
@@ -158,6 +166,7 @@ mutable struct VirtualHollowSubFiber{Lvl}
     pos
     dirty
 end
+
 function virtualize(
     ctx, ex, ::Type{<:HollowSubFiber{Lvl,Pos,Dirty}}, tag=freshen(ctx, :tns)
 ) where {Lvl,Pos,Dirty}
@@ -171,10 +180,14 @@ function lower(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, ::DefaultStyle
 end
 FinchNotation.finch_leaf(x::VirtualHollowSubFiber) = virtual(x)
 
-function virtual_transfer(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, style)
+function distribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, arch, diff, style)
     return VirtualHollowSubFiber(
-        virtual_transfer_level(ctx, fbr.lvl, arch, style), fbr.pos, fbr.dirty
+        distribute_level(ctx, fbr.lvl, arch, diff, style), fbr.pos, fbr.dirty
     )
+end
+
+function redistribute(ctx::AbstractCompiler, fbr::VirtualHollowSubFiber, diff)
+    VirtualHollowSubFiber(redistribute(ctx, fbr.lvl, diff), fbr.pos, fbr.dirty)
 end
 
 function instantiate(ctx, fbr::VirtualFiber, mode)
@@ -333,7 +346,7 @@ function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple)
     Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
 end
 
-transfer(tns::Tensor, device) = Tensor(transfer(tns.lvl, device), style)
+transfer(device, tns::Tensor) = Tensor(transfer(device, tns.lvl))
 
 struct Structure
     t

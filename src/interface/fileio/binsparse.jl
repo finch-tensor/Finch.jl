@@ -93,35 +93,35 @@ end
 bspread_tensor_lookup = OrderedDict(
     "DVEC" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "element"
+                "level_desc" => "element"
             ),
         ),
     ),
     "DMAT" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "dense",
+                "level_desc" => "dense",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
     ),
     "DMATR" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "dense",
+                "level_desc" => "dense",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
@@ -129,35 +129,35 @@ bspread_tensor_lookup = OrderedDict(
     "DMATC" => OrderedDict(
         "transpose" => [1, 0],
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "dense",
+                "level_desc" => "dense",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
     ),
     "CVEC" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "element"
+                "level_desc" => "element"
             ),
         ),
     ),
     "CSR" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "sparse",
+                "level_desc" => "sparse",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
@@ -165,26 +165,26 @@ bspread_tensor_lookup = OrderedDict(
     "CSC" => OrderedDict(
         "transpose" => [1, 0],
         "level" => OrderedDict(
-            "level_kind" => "dense",
+            "level_desc" => "dense",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "sparse",
+                "level_desc" => "sparse",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
     ),
     "DCSR" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "sparse",
+                "level_desc" => "sparse",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
@@ -192,42 +192,42 @@ bspread_tensor_lookup = OrderedDict(
     "DCSC" => OrderedDict(
         "transpose" => [1, 0],
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 1,
             "level" => OrderedDict(
-                "level_kind" => "sparse",
+                "level_desc" => "sparse",
                 "rank" => 1,
                 "level" => OrderedDict(
-                    "level_kind" => "element"
+                    "level_desc" => "element"
                 ),
             ),
         ),
     ),
     "COO" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 2,
             "level" => OrderedDict(
-                "level_kind" => "element"
+                "level_desc" => "element"
             ),
         ),
     ),
     "COOR" => OrderedDict(
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 2,
             "level" => OrderedDict(
-                "level_kind" => "element"
+                "level_desc" => "element"
             ),
         ),
     ),
     "COOC" => OrderedDict(
         "transpose" => [1, 0],
         "level" => OrderedDict(
-            "level_kind" => "sparse",
+            "level_desc" => "sparse",
             "rank" => 2,
             "level" => OrderedDict(
-                "level_kind" => "element"
+                "level_desc" => "element"
             ),
         ),
     ),
@@ -277,7 +277,7 @@ function bspwrite_tensor(
     io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict()
 ) where {dims}
     desc = OrderedDict(
-        "tensor" => OrderedDict{Any,Any}(
+        "custom" => OrderedDict{Any,Any}(
             "level" => OrderedDict()
         ),
         "fill" => true,
@@ -288,11 +288,11 @@ function bspwrite_tensor(
         "attrs" => attrs,
     )
     if !issorted(reverse(collect(dims)))
-        desc["tensor"]["transpose"] = reverse(collect(dims)) .- 1
+        desc["custom"]["transpose"] = reverse(collect(dims)) .- 1
     end
-    bspwrite_level(io, desc, desc["tensor"]["level"], arr.body.lvl)
-    if haskey(bspwrite_format_lookup, desc["tensor"])
-        desc["format"] = bspwrite_format_lookup[desc["tensor"]]
+    bspwrite_level(io, desc, desc["custom"]["level"], arr.body.lvl)
+    if haskey(bspwrite_format_lookup, desc["custom"])
+        desc["format"] = bspwrite_format_lookup[desc["custom"]]
     end
     bspwrite_header(io, json(Dict("binsparse" => desc), 4))
 end
@@ -330,7 +330,7 @@ function bspread(f)
     desc = bspread_header(f)["binsparse"]
     @assert desc["version"] == "$BINSPARSE_VERSION"
     fmt = OrderedDict{Any,Any}(
-        get(() -> bspread_tensor_lookup[desc["format"]], desc, "tensor")
+        get(() -> bspread_tensor_lookup[desc["format"]], desc, "custom")
     )
     if !haskey(fmt, "transpose")
         fmt["transpose"] = collect(0:(length(desc["shape"]) - 1))
@@ -349,10 +349,10 @@ function bspread(f)
     fbr
 end
 
-bspread_level(f, desc, fmt) = bspread_level(f, desc, fmt, Val(Symbol(fmt["level_kind"])))
+bspread_level(f, desc, fmt) = bspread_level(f, desc, fmt, Val(Symbol(fmt["level_desc"])))
 
 function bspwrite_level(f, desc, fmt, lvl::ElementLevel{Vf}) where {Vf}
-    fmt["level_kind"] = "element"
+    fmt["level_desc"] = "element"
     bspwrite_data(f, desc, "values", lvl.val)
     bspwrite_data(f, desc, "fill_value", [Vf])
 end
@@ -367,7 +367,7 @@ function bspread_level(f, desc, fmt, ::Val{:element})
 end
 
 function bspwrite_level(f, desc, fmt, lvl::DenseLevel{Vf}) where {Vf}
-    fmt["level_kind"] = "dense"
+    fmt["level_desc"] = "dense"
     fmt["rank"] = 1
     fmt["level"] = OrderedDict()
     bspwrite_level(f, desc, fmt["level"], lvl.lvl)
@@ -384,7 +384,7 @@ function bspread_level(f, desc, fmt, ::Val{:dense})
 end
 
 function bspwrite_level(f, desc, fmt, lvl::SparseListLevel)
-    fmt["level_kind"] = "sparse"
+    fmt["level_desc"] = "sparse"
     fmt["rank"] = 1
     n = level_ndims(typeof(lvl))
     N = length(desc["shape"])
@@ -396,7 +396,7 @@ function bspwrite_level(f, desc, fmt, lvl::SparseListLevel)
     bspwrite_level(f, desc, fmt["level"], lvl.lvl)
 end
 function bspwrite_level(f, desc, fmt, lvl::SparseCOOLevel{R}) where {R}
-    fmt["level_kind"] = "sparse"
+    fmt["level_desc"] = "sparse"
     fmt["rank"] = R
     n = level_ndims(typeof(lvl))
     N = length(desc["shape"])

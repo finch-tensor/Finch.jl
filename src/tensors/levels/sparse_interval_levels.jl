@@ -63,10 +63,12 @@ function postype(::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}) where {Ti,Left,
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style) where {Ti,Left,Right,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    left_2 = transfer(lvl.left, Tm, style)
-    right_2 = transfer(lvl.right, Tm, style)
+function transfer(
+    lvl::SparseIntervalLevel{Ti,Left,Right,Lvl}, Tm, style
+) where {Ti,Left,Right,Lvl}
+    lvl_2 = transfer(Tm, lvl.lvl)
+    left_2 = transfer(Tm, lvl.left)
+    right_2 = transfer(Tm, lvl.right)
     return SparseIntervalLevel{Ti}(lvl_2, lvl.shape, left_2, right_2)
 end
 
@@ -177,8 +179,8 @@ function (fbr::SubFiber{<:SparseIntervalLevel})(idxs...)
 end
 
 mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     left
     right
@@ -203,24 +205,26 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseIntervalLevel{Ti,Left,Right,Lvl}}, tag=:lvl
 ) where {Ti,Left,Right,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     left = freshen(ctx, tag, :_left)
     right = freshen(ctx, tag, :_right)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $left = $sym.left
-            $right = $sym.right
+            $tag = $ex
+            $left = $tag.left
+            $right = $tag.right
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
     VirtualSparseIntervalLevel(
-        lvl_2, sym, Ti, left, right, shape, qos_fill, qos_stop, prev_pos
+        tag, lvl_2, Ti, left, right, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::DefaultStyle)
@@ -228,10 +232,42 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::Default
         $SparseIntervalLevel{$(lvl.Ti)}(
             $(ctx(lvl.lvl)),
             $(ctx(lvl.shape)),
-            $(lvl.ex).left,
-            $(lvl.ex).right,
+            $(lvl.left),
+            $(lvl.right),
         )
     end
+end
+
+function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualSparseIntervalLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.left, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseIntervalLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.left,
+            lvl.right,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparseIntervalLevel) = "SparseInterval($(summary(lvl.lvl)))"
@@ -306,7 +342,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i_stop = freshen(ctx, tag, :_i_stop)
@@ -355,7 +391,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     dirty = freshen(ctx, tag, :dirty)

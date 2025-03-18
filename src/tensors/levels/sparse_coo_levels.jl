@@ -86,9 +86,9 @@ function postype(::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,L
 end
 
 function transfer(lvl::SparseCOOLevel{N,TI}, device, style) where {N,TI}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    tbl_2 = ntuple(n -> transfer(lvl.tbl[n], device), N, style)
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    tbl_2 = ntuple(n -> transfer(device, lvl.tbl[n]), N)
     return SparseCOOLevel{N,TI}(lvl_2, lvl.shape, ptr_2, tbl_2)
 end
 
@@ -206,8 +206,8 @@ function (fbr::SubFiber{<:SparseCOOLevel{N,TI}})(idxs...) where {N,TI}
 end
 
 mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     N
     TI
     ptr
@@ -234,17 +234,17 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}, tag=:lvl
 ) where {N,TI,Ptr,Tbl,Lvl}
-    sym = freshen(ctx, tag)
-    shape = map(n -> value(:($sym.shape[$n]), Int), 1:N)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
+    tag = freshen(ctx, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = map(n -> freshen(ctx, tag, :_tbl, n), 1:N)
+    stop = map(n -> freshen(ctx, tag, :_stop, n), 1:N)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $ex.ptr
+            $tag = $ex
+            $ptr = $tag.ptr
         end,
     )
     for n in 1:N
@@ -252,14 +252,16 @@ function virtualize(
             ctx,
             quote
                 $(tbl[n]) = $ex.tbl[$n]
+                $(stop[n]) = $ex.shape[$n]
             end,
         )
     end
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    prev_coord = map(n -> freshen(ctx, sym, :_prev_coord_, n), 1:N)
+    shape = map(n -> value(stop[n], Int), 1:N)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    prev_coord = map(n -> freshen(ctx, tag, :_prev_coord_, n), 1:N)
     VirtualSparseCOOLevel(
-        lvl_2, sym, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
+        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle)
@@ -271,6 +273,44 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle
             ($(lvl.tbl...),),
         )
     end
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseCOOLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.N,
+        lvl.TI,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        map(idx -> distribute_buffer(ctx, idx, arch, style), lvl.tbl),
+        lvl.Lvl,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.prev_pos,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseCOOLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.N,
+            lvl.TI,
+            lvl.ptr,
+            lvl.tbl,
+            lvl.Lvl,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.prev_pos,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparseCOOLevel) = "SparseCOO{$(lvl.N)}($(summary(lvl.lvl)))"
@@ -343,47 +383,20 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
-
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, arch, style)
-    ptr_2 = freshen(ctx, lvl.ptr)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $(lvl.ptr)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-        end,
-    )
-    tbl_2 = map(lvl.tbl) do idx
-        idx_2 = freshen(ctx, idx)
-        push_preamble!(
-            ctx,
-            quote
-                $idx_2 = $idx
-                $idx = $transfer($idx, $(ctx(arch)), style)
-            end,
-        )
-        push_epilogue!(
-            ctx,
-            quote
-                $idx = $idx_2
-            end,
-        )
-        idx_2
-    end
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-end
-
 struct SparseCOOWalkTraversal
     lvl
     R
     start
     stop
+end
+
+function redistribute(ctx::AbstractCompiler, arr::SparseCOOWalkTraversal, diff)
+    SparseCOOWalkTraversal(
+        redistribute(ctx, arr.lvl, diff),
+        arr.R,
+        arr.start,
+        arr.stop,
+    )
 end
 
 function unfurl(ctx, fbr::VirtualSubFiber{VirtualSparseCOOLevel}, ext, mode, proto)
@@ -402,7 +415,7 @@ function unfurl(
     ctx, trv::SparseCOOWalkTraversal, ext, mode, ::Union{typeof(defaultread),typeof(walk)}
 )
     (lvl, R, start, stop) = (trv.lvl, trv.R, trv.start, trv.stop)
-    tag = lvl.ex
+    tag = lvl.tag
     TI = lvl.TI
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
@@ -480,6 +493,16 @@ struct SparseCOOExtrudeTraversal
     prev_coord
 end
 
+function redistribute(ctx::AbstractCompiler, arr::SparseCOOExtrudeTraversal, diff)
+    SparseCOOExtrudeTraversal(
+        redistribute(ctx, arr.lvl, diff),
+        arr.qos,
+        arr.fbr_dirty,
+        arr.coords,
+        arr.prev_coord,
+    )
+end
+
 function unfurl(
     ctx,
     fbr::VirtualSubFiber{VirtualSparseCOOLevel},
@@ -504,7 +527,7 @@ function unfurl(
     proto::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     TI = lvl.TI
     Tp = postype(lvl)
     qos_fill = lvl.qos_fill

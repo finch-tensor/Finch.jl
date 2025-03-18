@@ -35,9 +35,9 @@ end
 
 postype(::Type{<:MutexLevel{AVal,Lvl}}) where {Lvl,AVal} = postype(Lvl)
 
-function transfer(lvl::MutexLevel, device, style)
-    lvl_2 = transfer(lvl.lvl, device, style)
-    locks_2 = transfer(lvl.locks, device, style)
+function transfer(device, lvl::MutexLevel)
+    lvl_2 = transfer(device, lvl.lvl)
+    locks_2 = transfer(device, lvl.locks)
     return MutexLevel(lvl_2, locks_2)
 end
 
@@ -93,14 +93,15 @@ end
 countstored_level(lvl::MutexLevel, pos) = countstored_level(lvl.lvl, pos)
 
 mutable struct VirtualMutexLevel <: AbstractVirtualLevel
-    lvl # the level below us.
-    ex
+    tag
+    lvl
     locks
     Tv
     Val
     AVal
     Lvl
 end
+
 postype(lvl::MutexLevel) = postype(lvl.lvl)
 
 postype(lvl::VirtualMutexLevel) = postype(lvl.lvl)
@@ -124,20 +125,48 @@ function lower(ctx::AbstractCompiler, lvl::VirtualMutexLevel, ::DefaultStyle)
 end
 
 function virtualize(ctx, ex, ::Type{MutexLevel{AVal,Lvl}}, tag=:lvl) where {AVal,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     atomics = freshen(ctx, tag, :_locks)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $atomics = $ex.locks
+            $tag = $ex
+            $atomics = $tag.locks
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     temp = VirtualMutexLevel(
-        lvl_2, sym, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl
+        tag, lvl_2, atomics, typeof(level_fill_value(Lvl)), Val, AVal, Lvl
     )
     temp
+end
+
+function distribute_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualMutexLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        distribute_buffer(ctx, lvl.locks, arch, style),
+        lvl.Tv,
+        lvl.Val,
+        lvl.AVal,
+        lvl.Lvl,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualMutexLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualMutexLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.locks,
+            lvl.Tv,
+            lvl.Val,
+            lvl.AVal,
+            lvl.Lvl,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualMutexLevel) = "Mutex($(lvl.Lvl))"
@@ -207,26 +236,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualMutexLevel, pos)
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualMutexLevel, arch, style)
-    #Add for seperation level too.
-    atomics = freshen(ctx, :locksArray)
-
-    push_preamble!(
-        ctx,
-        quote
-            $atomics = $(lvl.locks)
-            $(lvl.locks) = $transfer($(lvl.locks), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.locks) = $atomics
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-end
-
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if mode.kind === reader
@@ -241,9 +250,9 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
     if mode.kind === reader
         return unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
     else
-        sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
-        atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
-        lockVal = freshen(ctx, lvl.ex, :lockVal)
+        sym = freshen(ctx, lvl.tag, :after_atomic_lvl)
+        atomicData = freshen(ctx, lvl.tag, :atomicArraysAcc)
+        lockVal = freshen(ctx, lvl.tag, :lockVal)
         dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
         push_preamble!(
             ctx,
@@ -268,9 +277,9 @@ end
 function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, ext, mode, proto)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     @assert mode.kind === updater
-    sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
-    atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
-    lockVal = freshen(ctx, lvl.ex, :lockVal)
+    sym = freshen(ctx, lvl.tag, :after_atomic_lvl)
+    atomicData = freshen(ctx, lvl.tag, :atomicArraysAcc)
+    lockVal = freshen(ctx, lvl.tag, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(
         ctx,
@@ -293,9 +302,9 @@ end
 
 function lower_assign(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
-    atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
-    lockVal = freshen(ctx, lvl.ex, :lockVal)
+    sym = freshen(ctx, lvl.tag, :after_atomic_lvl)
+    atomicData = freshen(ctx, lvl.tag, :atomicArraysAcc)
+    lockVal = freshen(ctx, lvl.tag, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(
         ctx,
@@ -318,9 +327,9 @@ end
 
 function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, mode, op, rhs)
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    sym = freshen(ctx, lvl.ex, :after_atomic_lvl)
-    atomicData = freshen(ctx, lvl.ex, :atomicArraysAcc)
-    lockVal = freshen(ctx, lvl.ex, :lockVal)
+    sym = freshen(ctx, lvl.tag, :after_atomic_lvl)
+    atomicData = freshen(ctx, lvl.tag, :atomicArraysAcc)
+    lockVal = freshen(ctx, lvl.tag, :lockVal)
     dev = lower(ctx, get_device(ctx.code.task), DefaultStyle())
     push_preamble!(
         ctx,

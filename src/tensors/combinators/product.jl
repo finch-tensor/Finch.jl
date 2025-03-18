@@ -24,6 +24,19 @@ struct VirtualProductArray <: AbstractVirtualCombinator
     dim
 end
 
+function distribute(
+    ctx::AbstractCompiler, tns::VirtualProductArray, arch, diff, style
+)
+    VirtualProductArray(distribute(ctx, tns.body, arch, diff, style), tns.dim)
+end
+
+function redistribute(ctx::AbstractCompiler, tns::VirtualProductArray, diff)
+    VirtualProductArray(
+        redistribute(ctx, tns.body, diff),
+        tns.dim,
+    )
+end
+
 function is_injective(ctx, lvl::VirtualProductArray)
     sub = is_injective(ctx, lvl.body)
     return [sub[1:(lvl.dim)]..., false, sub[(lvl.dim + 1):end]...]

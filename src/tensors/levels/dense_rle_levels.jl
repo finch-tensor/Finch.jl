@@ -64,11 +64,11 @@ function postype(
     return postype(Lvl)
 end
 
-function transfer(lvl::RunListLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr = transfer(lvl.ptr, device, style)
-    right = transfer(lvl.right, device, style)
-    buf = transfer(lvl.buf, device, style)
+function transfer(device, lvl::RunListLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr = transfer(device, lvl.ptr)
+    right = transfer(device, lvl.right)
+    buf = transfer(device, lvl.buf)
     return RunListLevel{Ti}(
         lvl_2, lvl.shape, lvl.ptr, lvl.right, lvl.buf; merge=getmerge(lvl)
     )
@@ -202,8 +202,8 @@ function (fbr::SubFiber{<:RunListLevel})(idxs...)
 end
 
 mutable struct VirtualRunListLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     shape
     qos_fill
@@ -242,29 +242,32 @@ function virtualize(
     # 3. for all p in 1:prevpos-1, ptr[p] is the number of runs in that position
     # 4. qos_fill is the position of the last index written
 
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    dirty = freshen(ctx, sym, :_dirty)
+    tag = freshen(ctx, tag)
+    stop = freshen(ctx, tag, :_stop)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    dirty = freshen(ctx, tag, :_dirty)
     ptr = freshen(ctx, tag, :_ptr)
     right = freshen(ctx, tag, :_right)
     buf = freshen(ctx, tag, :_buf)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $right = $sym.right
-            $buf = $sym.buf
+            $tag = $ex
+            $ptr = $tag.ptr
+            $right = $tag.right
+            $buf = $tag.buf
+            $stop = $tag.shape
         end,
     )
+    shape = value(stop, Int)
     i_prev = freshen(ctx, tag, :_i_prev)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    buf = virtualize(ctx, :($sym.buf), Lvl, sym)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    buf = virtualize(ctx, :($tag.buf), Lvl, tag)
     VirtualRunListLevel(
-        lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev, merge
+        tag, lvl_2, Ti, shape, qos_fill, qos_stop, ptr, right, buf, prev_pos, i_prev,
+        merge,
     )
 end
 
@@ -281,6 +284,46 @@ function lower(ctx::AbstractCompiler, lvl::VirtualRunListLevel, ::DefaultStyle)
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualRunListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        distribute_level(ctx, lvl.buf, arch, diff, style),
+        lvl.prev_pos,
+        lvl.i_prev,
+        lvl.merge,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualRunListLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ptr,
+            lvl.right,
+            redistribute(ctx, lvl.buf, diff),
+            lvl.prev_pos,
+            lvl.i_prev,
+            lvl.merge,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualRunListLevel) = "RunList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualRunListLevel)
@@ -293,29 +336,6 @@ function virtual_level_resize!(ctx, lvl::VirtualRunListLevel, dims...)
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl.buf = virtual_level_resize!(ctx, lvl.buf, dims[1:(end - 1)]...)
     lvl
-end
-
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualRunListLevel, arch, style)
-    ptr_2 = freshen(ctx, lvl.ptr)
-    right_2 = freshen(ctx, lvl.right)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $(lvl.ptr)
-            $right_2 = $(lvl.right)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.right) = $transfer($(lvl.right), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.right) = $right_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    virtual_transfer_level(ctx, lvl.buf, arch, style)
 end
 
 virtual_level_eltype(lvl::VirtualRunListLevel) = virtual_level_eltype(lvl.lvl)
@@ -457,7 +477,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
                                         ),
                                     )
                                     check = VirtualScalar(
-                                        :UNREACHABLE, Bool, false, :check, checkval
+                                        nothing, :UNREACHABLE, Bool, false, :check, checkval
                                     )
                                     exts = virtual_level_size(ctx_2, lvl.buf)
                                     inds = [
@@ -578,7 +598,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -653,7 +673,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     qos = freshen(ctx, tag, :_qos)

@@ -72,12 +72,12 @@ function postype(
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseRunListLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr = transfer(lvl.ptr, device, style)
-    left = transfer(lvl.left, device, style)
-    right = transfer(lvl.right, device, style)
-    buf = transfer(lvl.buf, device, style)
+function transfer(device, lvl::SparseRunListLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr = transfer(device, lvl.ptr)
+    left = transfer(device, lvl.left)
+    right = transfer(device, lvl.right)
+    buf = transfer(device, lvl.buf)
     return SparseRunListLevel{Ti}(
         lvl_2, lvl.shape, lvl.ptr, lvl.left, lvl.right, lvl.buf; merge=getmerge(lvl)
     )
@@ -218,8 +218,8 @@ function (fbr::SubFiber{<:SparseRunListLevel})(idxs...)
 end
 
 mutable struct VirtualSparseRunListLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     shape
     qos_fill
@@ -249,30 +249,33 @@ postype(lvl::VirtualSparseRunListLevel) = postype(lvl.lvl)
 function virtualize(
     ctx, ex, ::Type{SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Left,Right,merge,Lvl}
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    dirty = freshen(ctx, sym, :_dirty)
+    tag = freshen(ctx, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    dirty = freshen(ctx, tag, :_dirty)
     ptr = freshen(ctx, tag, :_ptr)
     left = freshen(ctx, tag, :_left)
     right = freshen(ctx, tag, :_right)
     buf = freshen(ctx, tag, :_buf)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $left = $sym.left
-            $right = $sym.right
-            $buf = $sym.buf
+            $tag = $ex
+            $ptr = $tag.ptr
+            $left = $tag.left
+            $right = $tag.right
+            $buf = $tag.buf
+            $stop = $tag.shape
         end,
     )
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    buf = virtualize(ctx, :($sym.buf), Lvl, sym)
+    shape = value(stop, Int)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    buf = virtualize(ctx, :($tag.buf), Lvl, tag)
     VirtualSparseRunListLevel(
-        lvl_2, sym, Ti, shape, qos_fill, qos_stop, ptr, left, right, buf, merge, prev_pos
+        tag, lvl_2, Ti, shape, qos_fill, qos_stop, ptr, left, right, buf, merge,
+        prev_pos,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, ::DefaultStyle)
@@ -289,6 +292,45 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, ::DefaultS
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseRunListLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.left, arch, style),
+        distribute_buffer(ctx, lvl.right, arch, style),
+        distribute_level(ctx, lvl.buf, arch, diff, style),
+        lvl.merge,
+        lvl.prev_pos,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseRunListLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ptr,
+            lvl.left,
+            lvl.right,
+            redistribute(ctx, lvl.buf, diff),
+            lvl.merge,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseRunListLevel) = "SparseRunList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseRunListLevel)
@@ -301,33 +343,6 @@ function virtual_level_resize!(ctx, lvl::VirtualSparseRunListLevel, dims...)
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl.buf = virtual_level_resize!(ctx, lvl.buf, dims[1:(end - 1)]...)
     lvl
-end
-
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, arch, style)
-    ptr_2 = freshen(ctx, lvl.ptr)
-    left_2 = freshen(ctx, lvl.left)
-    right_2 = freshen(ctx, lvl.right)
-    push_preamble!(
-        ctx,
-        quote
-            $ptr_2 = $(lvl.ptr)
-            $left_2 = $(lvl.left)
-            $right_2 = $(lvl.right)
-            $(lvl.ptr) = $transfer($(lvl.ptr), $(ctx(arch)), style)
-            $(lvl.left) = $transfer($(lvl.left), $(ctx(arch)), style)
-            $(lvl.right) = $transfer($(lvl.right), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.ptr) = $ptr_2
-            $(lvl.left) = $left_2
-            $(lvl.right) = $right_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-    virtual_transfer_level(ctx, lvl.buf, arch, style)
 end
 
 virtual_level_eltype(lvl::VirtualSparseRunListLevel) = virtual_level_eltype(lvl.lvl)
@@ -450,7 +465,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                                         ),
                                     )
                                     check = VirtualScalar(
-                                        :UNREACHABLE, Bool, false, :check, checkval
+                                        nothing, :UNREACHABLE, Bool, false, :check, checkval
                                     )
                                     exts = virtual_level_size(ctx_2, lvl.buf)
                                     inds = [
@@ -579,7 +594,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i_end = freshen(ctx, tag, :_i_end)
@@ -657,7 +672,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     qos = freshen(ctx, tag, :_qos)

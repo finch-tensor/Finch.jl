@@ -17,6 +17,19 @@ struct VirtualWindowedArray <: AbstractVirtualCombinator
     dims
 end
 
+function distribute(
+    ctx::AbstractCompiler, tns::VirtualWindowedArray, arch, diff, style
+)
+    VirtualWindowedArray(distribute(ctx, tns.body, arch, diff, style), tns.dims)
+end
+
+function redistribute(ctx::AbstractCompiler, tns::VirtualWindowedArray, diff)
+    VirtualWindowedArray(
+        redistribute(ctx, tns.body, diff),
+        tns.dims,
+    )
+end
+
 is_injective(ctx, lvl::VirtualWindowedArray) = is_injective(ctx, lvl.body)
 is_atomic(ctx, lvl::VirtualWindowedArray) = is_atomic(ctx, lvl.body)
 is_concurrent(ctx, lvl::VirtualWindowedArray) = is_concurrent(ctx, lvl.body)

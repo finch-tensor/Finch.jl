@@ -77,7 +77,7 @@ function SparseArrays.sparse(fbr::Union{Tensor,SwizzleArray})
 end
 
 @kwdef mutable struct VirtualSparseMatrixCSC
-    ex
+    tag
     Tv
     Ti
     shape
@@ -110,32 +110,53 @@ function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ::Defau
 end
 
 function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) where {Tv,Ti}
-    sym = freshen(ctx, tag)
-    shape = [
-        Extent(literal(1), value(:($ex.m), Ti)), Extent(literal(1), value(:($ex.n), Ti))
-    ]
+    tag = freshen(ctx, tag)
+    m = freshen(ctx, tag, :_m)
+    n = freshen(ctx, tag, :_n)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.colptr
-            $idx = $sym.rowval
-            $val = $sym.nzval
+            $tag = $ex
+            $m = $tag.m
+            $n = $tag.n
+            $ptr = $tag.colptr
+            $idx = $tag.rowval
+            $val = $tag.nzval
         end,
     )
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    push_preamble!(
-        ctx,
-        quote
-            $sym = $ex
-        end,
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    shape = [
+        Extent(literal(1), value(m, Ti)), Extent(literal(1), value(n, Ti))
+    ]
+    VirtualSparseMatrixCSC(
+        tag, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos
     )
-    VirtualSparseMatrixCSC(sym, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos)
+end
+
+function distribute(
+    ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, arch, diff, style
+)
+    return diff[arr.tag] = VirtualSparseMatrixCSC(
+        arr.tag,
+        arr.Tv,
+        arr.Ti,
+        arr.shape,
+        distribute_buffer(ctx, arr.ptr, arch, style),
+        distribute_buffer(ctx, arr.idx, arch, style),
+        distribute_buffer(ctx, arr.val, arch, style),
+        arr.qos_fill,
+        arr.qos_stop,
+        arr.prev_pos,
+    )
+end
+
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
+    get(diff, arr.tag, arr)
 end
 
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init)
@@ -215,6 +236,10 @@ end
     j
 end
 
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
+    VirtualSparseMatrixCSCColumn(Finch.redistribute(ctx, arr.mtx, diff), arr.j)
+end
+
 FinchNotation.finch_leaf(x::VirtualSparseMatrixCSCColumn) = virtual(x)
 
 function Finch.unfurl(
@@ -225,7 +250,7 @@ function Finch.unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     arr = tns.mtx
-    tag = arr.ex
+    tag = arr.tag
     j = tns.j
     Ti = arr.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -235,11 +260,11 @@ function Finch.unfurl(
     my_val = freshen(ctx, tag, :_val)
     Thunk(;
         preamble=quote
-            $my_q = $(arr.ex).colptr[$(ctx(j))]
-            $my_q_stop = $(arr.ex).colptr[$(ctx(j)) + $(Ti(1))]
+            $my_q = $(arr.ptr)[$(ctx(j))]
+            $my_q_stop = $(arr.ptr)[$(ctx(j)) + $(Ti(1))]
             if $my_q < $my_q_stop
-                $my_i = $(arr.ex).rowval[$my_q]
-                $my_i1 = $(arr.ex).rowval[$my_q_stop - $(Ti(1))]
+                $my_i = $(arr.idx)[$my_q]
+                $my_i1 = $(arr.idx)[$my_q_stop - $(Ti(1))]
             else
                 $my_i = $(Ti(1))
                 $my_i1 = $(Ti(0))
@@ -250,17 +275,17 @@ function Finch.unfurl(
                 stop = (ctx, ext) -> value(my_i1),
                 body = (ctx, ext) -> Stepper(;
                 seek=(ctx, ext) -> quote
-                    if $(arr.ex).rowval[$my_q] < $(ctx(getstart(ext)))
-                        $my_q = Finch.scansearch($(arr.ex).rowval, $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
+                    if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
+                        $my_q = Finch.scansearch($(arr.idx), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
                     end
                 end,
-                preamble=:($my_i = $(arr.ex).rowval[$my_q]),
+                preamble=:($my_i = $(arr.idx)[$my_q]),
                 stop=(ctx, ext) -> value(my_i),
                 chunk=Spike(;
                 body = FillLeaf(zero(arr.Tv)),
                 tail = Thunk(;
                 preamble=quote
-                    $my_val = $(arr.ex).nzval[$my_q]
+                    $my_val = $(arr.val)[$my_q]
                 end,
                 body=(ctx) -> FillLeaf(value(my_val, arr.Tv))
             )
@@ -288,7 +313,7 @@ function Finch.unfurl(
     mode,
     ::Union{typeof(defaultread),typeof(walk)},
 )
-    tag = arr.ex
+    tag = arr.tag
     Unfurled(;
         arr=arr,
         body=Lookup(;
@@ -304,7 +329,7 @@ function Finch.unfurl(
     mode,
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
-    tag = arr.ex
+    tag = arr.tag
     Unfurled(;
         arr=arr,
         body=Lookup(;
@@ -321,7 +346,7 @@ function Finch.unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     arr = tns.mtx
-    tag = arr.ex
+    tag = arr.tag
     j = tns.j
     Tp = arr.Ti
     qos = freshen(ctx, tag, :_qos)
@@ -347,7 +372,7 @@ function Finch.unfurl(
             end
             $dirty = false
         end,
-        body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
+        body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
         epilogue = quote
             if $dirty
                 $(arr.idx)[$qos] = $(ctx(idx))
@@ -398,7 +423,7 @@ function SparseArrays.SparseVector(
     return SparseVector{Tv,Ti}(size(arr)..., arr.lvl.idx, arr.lvl.lvl.val)
 end
 @kwdef mutable struct VirtualSparseVector
-    ex
+    tag
     Tv
     Ti
     shape
@@ -423,27 +448,40 @@ function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseVector, ::DefaultS
 end
 
 function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) where {Tv,Ti}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     shape = [Extent(literal(1), value(:($ex.n), Ti))]
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $idx = $sym.nzind
-            $val = $sym.nzval
+            $tag = $ex
+            $idx = $tag.nzind
+            $val = $tag.nzval
         end,
     )
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    push_preamble!(
-        ctx,
-        quote
-            $sym = $ex
-        end,
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    VirtualSparseVector(tag, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
+end
+
+function distribute(
+    ctx::AbstractCompiler, arr::VirtualSparseVector, arch, diff, style
+)
+    return diff[arr.tag] = VirtualSparseVector(
+        arr.tag,
+        arr.Tv,
+        arr.Ti,
+        arr.shape,
+        distribute_buffer(ctx, arr.idx, arch, style),
+        distribute_buffer(ctx, arr.val, arch, style),
+        arr.qos_fill,
+        arr.qos_stop,
     )
-    VirtualSparseVector(sym, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
+end
+
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
+    get(diff, arr.tag, arr)
 end
 
 function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
@@ -494,7 +532,7 @@ function Finch.unfurl(
     mode,
     ::Union{typeof(defaultread),typeof(walk)},
 )
-    tag = arr.ex
+    tag = arr.tag
     Ti = arr.Ti
     my_i = freshen(ctx, tag, :_i)
     my_q = freshen(ctx, tag, :_q)
@@ -507,10 +545,10 @@ function Finch.unfurl(
         body=Thunk(;
             preamble=quote
                 $my_q = 1
-                $my_q_stop = length($(arr.ex).nzind) + 1
+                $my_q_stop = length($(arr.idx)) + 1
                 if $my_q < $my_q_stop
-                    $my_i = $(arr.ex).nzind[$my_q]
-                    $my_i1 = $(arr.ex).nzind[$my_q_stop - $(Ti(1))]
+                    $my_i = $(arr.idx)[$my_q]
+                    $my_i1 = $(arr.idx)[$my_q_stop - $(Ti(1))]
                 else
                     $my_i = $(Ti(1))
                     $my_i1 = $(Ti(0))
@@ -521,17 +559,17 @@ function Finch.unfurl(
                     stop = (ctx, ext) -> value(my_i1),
                     body = (ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
-                        if $(arr.ex).nzind[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch($(arr.ex).nzind, $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
+                        if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
+                            $my_q = Finch.scansearch($(arr.idx), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
                         end
                     end,
-                    preamble=:($my_i = $(arr.ex).nzind[$my_q]),
+                    preamble=:($my_i = $(arr.idx)[$my_q]),
                     stop=(ctx, ext) -> value(my_i),
                     chunk=Spike(;
                     body = FillLeaf(zero(arr.Tv)),
                     tail = Thunk(;
                     preamble=quote
-                        $my_val = $(arr.ex).nzval[$my_q]
+                        $my_val = $(arr.val)[$my_q]
                     end,
                     body=(ctx) -> FillLeaf(value(my_val, arr.Tv))
                 )
@@ -552,7 +590,7 @@ end
 function Finch.unfurl(
     ctx, arr::VirtualSparseVector, ext, mode, ::Union{typeof(defaultupdate),typeof(extrude)}
 )
-    tag = arr.ex
+    tag = arr.tag
     Tp = arr.Ti
     qos = freshen(ctx, tag, :_qos)
     qos_fill = arr.qos_fill
@@ -575,7 +613,7 @@ function Finch.unfurl(
                 end
                 $dirty = false
             end,
-            body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
+            body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
             epilogue = quote
                 if $dirty
                     $(arr.idx)[$qos] = $(ctx(idx))

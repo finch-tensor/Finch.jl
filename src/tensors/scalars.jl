@@ -20,28 +20,35 @@ Base.similar(tns::Scalar{Vf,Tv}) where {Vf,Tv} = Scalar{Vf,Tv}()
 @inline Base.getindex(tns::Scalar) = tns.val
 
 struct VirtualScalar
-    ex
+    tag
+    data
     Tv
     Vf
     name
     val
 end
 
-lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.ex
+lower(ctx::AbstractCompiler, tns::VirtualScalar, ::DefaultStyle) = tns.data
 function virtualize(ctx, ex, ::Type{Scalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
+            $data = $ex
+            $val = $data.val
         end,
     )
-    VirtualScalar(sym, Tv, Vf, tag, val)
+    VirtualScalar(tag, data, Tv, Vf, tag, val)
 end
 
-virtual_transfer(ctx, lvl::VirtualScalar, arch, style) = lvl
+function distribute(ctx, lvl::VirtualScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+redistribute(ctx::AbstractCompiler, arr::VirtualScalar, diff) =
+    get(diff, arr.tag, arr)
 
 virtual_size(ctx, ::VirtualScalar) = ()
 
@@ -68,7 +75,7 @@ function freeze!(ctx, tns::VirtualScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -116,7 +123,8 @@ Base.similar(tns::SparseScalar{Vf,Tv}) where {Vf,Tv} = SparseScalar{Vf,Tv}()
 @inline Base.getindex(tns::SparseScalar) = tns.val
 
 struct VirtualSparseScalar
-    ex
+    tag
+    data
     Tv
     Vf
     name
@@ -127,27 +135,35 @@ end
 function lower(ctx::AbstractCompiler, tns::VirtualSparseScalar, ::DefaultStyle)
     :($SparseScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
+
 function virtualize(ctx, ex, ::Type{SparseScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
-    dirty = Symbol(tag, :_dirty) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
+    dirty = Symbol(tag, :_dirty)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
-            $dirty = $sym.dirty
+            $data = $ex
+            $val = $data.val
+            $dirty = $data.dirty
         end,
     )
-    VirtualSparseScalar(sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseScalar(tag, data, Tv, Vf, tag, val, dirty)
+end
+
+function distribute(ctx, lvl::VirtualSparseScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+function redistribute(ctx::AbstractCompiler, arr::VirtualSparseScalar, diff)
+    get(diff, arr.tag, arr)
 end
 
 virtual_size(ctx, ::VirtualSparseScalar) = ()
 
 virtual_fill_value(ctx, tns::VirtualSparseScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseScalar, ctx) = tns.Tv
-
-virtual_transfer(ctx, lvl::VirtualSparseScalar, arch, style) = lvl
 
 function declare!(ctx, tns::VirtualSparseScalar, init)
     push_preamble!(
@@ -168,7 +184,7 @@ function freeze!(ctx, tns::VirtualSparseScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -225,7 +241,8 @@ Base.similar(tns::ShortCircuitScalar{Vf,Tv}) where {Vf,Tv} = ShortCircuitScalar{
 @inline Base.getindex(tns::ShortCircuitScalar) = tns.val
 
 struct VirtualShortCircuitScalar
-    ex
+    tag
+    data
     Tv
     Vf
     name
@@ -235,17 +252,27 @@ end
 function lower(ctx::AbstractCompiler, tns::VirtualShortCircuitScalar, ::DefaultStyle)
     :($ShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val)))
 end
+
 function virtualize(ctx, ex, ::Type{ShortCircuitScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
+            $data = $ex
+            $val = $data.val
         end,
     )
-    VirtualShortCircuitScalar(sym, Tv, Vf, tag, val)
+    VirtualShortCircuitScalar(tag, data, Tv, Vf, tag, val)
+end
+
+function distribute(ctx, lvl::VirtualShortCircuitScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+function redistribute(ctx::AbstractCompiler, arr::VirtualShortCircuitScalar, diff)
+    get(diff, arr.tag, arr)
 end
 
 virtual_size(ctx, ::VirtualShortCircuitScalar) = ()
@@ -273,7 +300,7 @@ function freeze!(ctx, tns::VirtualShortCircuitScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns
@@ -288,8 +315,6 @@ function lower_assign(ctx, tns::VirtualShortCircuitScalar, mode, op, rhs)
     lhs_2 = ctx(simplify(ctx, call(op, lhs, rhs)))
     :($(tns.val) = $lhs_2)
 end
-
-virtual_transfer(ctx, lvl::VirtualShortCircuitScalar, arch, style) = lvl
 
 function short_circuit_cases(ctx, tns::VirtualShortCircuitScalar, op)
     [
@@ -328,7 +353,8 @@ end
 @inline Base.getindex(tns::SparseShortCircuitScalar) = tns.val
 
 struct VirtualSparseShortCircuitScalar
-    ex
+    tag
+    data
     Tv
     Vf
     name
@@ -340,26 +366,33 @@ function lower(ctx::AbstractCompiler, tns::VirtualSparseShortCircuitScalar, ::De
     :($SparseShortCircuitScalar{$(tns.Vf),$(tns.Tv)}($(tns.val), $(tns.dirty)))
 end
 function virtualize(ctx, ex, ::Type{SparseShortCircuitScalar{Vf,Tv}}, tag) where {Vf,Tv}
-    sym = freshen(ctx, tag)
-    val = Symbol(tag, :_val) #TODO hmm this is risky
-    dirty = Symbol(tag, :_dirty) #TODO hmm this is risky
+    tag = freshen(ctx, tag)
+    data = Symbol(tag, :_data)
+    val = Symbol(tag, :_val)
+    dirty = Symbol(tag, :_dirty)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $val = $sym.val
-            $dirty = $sym.dirty
+            $data = $ex
+            $val = $data.val
+            $dirty = $data.dirty
         end,
     )
-    VirtualSparseShortCircuitScalar(sym, Tv, Vf, tag, val, dirty)
+    VirtualSparseShortCircuitScalar(tag, data, Tv, Vf, tag, val, dirty)
+end
+
+function distribute(ctx, lvl::VirtualSparseShortCircuitScalar, arch, diff, style)
+    diff[lvl.tag] = lvl
+end
+
+function redistribute(ctx::AbstractCompiler, arr::VirtualSparseShortCircuitScalar, diff)
+    get(diff, arr.tag, arr)
 end
 
 virtual_size(ctx, ::VirtualSparseShortCircuitScalar) = ()
 
 virtual_fill_value(ctx, tns::VirtualSparseShortCircuitScalar) = tns.Vf
 virtual_eltype(tns::VirtualSparseShortCircuitScalar, ctx) = tns.Tv
-
-virtual_transfer(ctx, lvl::VirtualSparseShortCircuitScalar, arch, style) = lvl
 
 function declare!(ctx, tns::VirtualSparseShortCircuitScalar, init)
     push_preamble!(
@@ -380,7 +413,7 @@ function freeze!(ctx, tns::VirtualSparseShortCircuitScalar)
     push_preamble!(
         ctx,
         quote
-            $(tns.ex).val = $(ctx(tns.val))
+            $(tns.data).val = $(ctx(tns.val))
         end,
     )
     return tns

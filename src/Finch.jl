@@ -59,7 +59,7 @@ export fill_value, AsArray, expanddims, tensor_tree
 
 export parallelAnalysis, ParallelAnalysisResults
 export parallel, realextent, extent, auto
-export CPU, CPULocalVector, CPULocalMemory
+export CPU, CPULocalArray, CPULocalMemory
 
 export Limit, Eps
 
@@ -127,7 +127,7 @@ include("looplets/fills.jl")
 
 include("tensors/scalars.jl")
 include("tensors/abstract_level.jl")
-include("tensors/fibers.jl")
+include("tensors/tensors.jl")
 include("tensors/levels/sparse_rle_levels.jl")
 include("tensors/levels/sparse_interval_levels.jl")
 include("tensors/levels/sparse_list_levels.jl")
@@ -316,22 +316,92 @@ end
     # Putting some things in `setup` can reduce the size of the
     # precompile file and potentially make loading faster.
     @compile_workload begin
+        @info "Running enhanced Finch.jl precompilation... (to disable, run `using Preferences; Preferences.set_preferences!(\"Finch\", \"precompile_workload\" => false; force=true)`). See https://julialang.github.io/PrecompileTools.jl/stable/#Package-developers:-reducing-the-cost-of-precompilation-during-development for more."
         # all calls in this block will be precompiled, regardless of whether
         # they belong to your package or not (on Julia 1.8 and higher)
+
         y = Tensor(Dense(Element(0.0)))
         A = Tensor(Dense(SparseList(Element(0.0))))
         x = Tensor(SparseList(Element(0.0)))
-        Finch.execute_code(:ex, typeof(Finch.@finch_program_instance begin
+        @finch_code begin
             for j in _, i in _
                 y[i] += A[i, j] * x[j]
             end
         end
-))
 
-        if @load_preference("precompile", true)
-            @info "Running enhanced precompilation... (to disable, run `using Preferences; Preferences.set_preferences!(\"Finch\", \"precompile\"=>false)`"
-            include("../test/precompile.jl")
+        formats = []
+        Ts = [Int, Float64]#, Bool]
+
+        tik = time()
+        for (n, T) in enumerate(Ts)
+            if n > 1
+                tok = time()
+                estimated = ceil(Int, (tok - tik) / (n - 1) * (length(Ts) - n + 1))
+                @info "Precompiling common tensor formats... (estimated: $(fld(estimated, 60)) minutes and $(mod(estimated, 60)) seconds)"
+            else
+                @info "Precompiling common tensor formats..."
+            end
+            f = zero(T)
+            append!(
+                formats,
+                [
+                    Scalar(f, rand(T)),
+                    Tensor(Dense(Element(f)), rand(T, 2)),
+                    Tensor(SparseList(Element(f)), rand(T, 2)),
+                    Tensor(Dense(Dense(Element(f))), rand(T, 2, 2)),
+                    Tensor(Dense(SparseList(Element(f))), rand(T, 2, 2)),
+                ],
+            )
         end
+
+        for (n, format) in enumerate(formats)
+            if n > 1
+                tok = time()
+                estimated = ceil(Int, (tok - tik) / (n - 1) * (length(formats) - n + 1))
+                @info "Precompiling common tensor operations... (estimated: $(fld(estimated, 60)) minutes and $(mod(estimated, 60)) seconds)"
+            else
+                @info "Precompiling common tensor operations..."
+            end
+            A = deepcopy(format)
+            B = deepcopy(format)
+
+            if ndims(format) > 0
+                dropfills(A)
+                copyto!(A, B)
+            end
+            A == B
+            i = rand(1:2, ndims(A))
+            A[i...]
+            #if eltype(format) == Bool
+            #    .!(A)
+            #    any(A)
+            #    all(A)
+            #end
+            if eltype(format) <: Integer
+                .~(A)
+                A .& B
+                A .| B
+            end
+            if eltype(format) <: Union{Integer,AbstractFloat} && eltype(format) != Bool
+                sum(A)
+                A .* B
+                A + A
+                A - A
+                maximum(A)
+                max.(A, B)
+                println("")
+                for T in Ts
+                    A * rand(T)
+                    A + rand(T)
+                end
+                if ndims(A) == 2
+                    A * A
+                    A * Tensor(Dense(Element(zero(eltype(A)))), rand(eltype(A), 2))
+                end
+            end
+        end
+
+        @info "Done!"
     end
 end
 

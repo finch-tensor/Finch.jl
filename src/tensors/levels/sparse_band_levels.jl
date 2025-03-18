@@ -36,10 +36,10 @@ function postype(::Type{SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl}
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseBandLevel{Ti}, device, style) where {Ti}
-    lvl_2 = transfer(lvl.lvl, device, style)
-    idx_2 = transfer(lvl.idx, device, style)
-    ofs_2 = transfer(lvl.ofs, device, style)
+function transfer(device, lvl::SparseBandLevel{Ti}) where {Ti}
+    lvl_2 = transfer(device, lvl.lvl)
+    idx_2 = transfer(device, lvl.idx)
+    ofs_2 = transfer(device, lvl.ofs)
     return SparseBandLevel{Ti}(lvl_2, lvl.shape, idx_2, ofs_2)
 end
 
@@ -149,8 +149,8 @@ function (fbr::SubFiber{<:SparseBandLevel})(idxs...)
 end
 
 mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     shape
     qos_fill
@@ -180,28 +180,30 @@ postype(lvl::VirtualSparseBandLevel) = postype(lvl.lvl)
 function virtualize(
     ctx, ex, ::Type{SparseBandLevel{Ti,Idx,Ofs,Lvl}}, tag=:lvl
 ) where {Ti,Idx,Ofs,Lvl}
-    sym = freshen(ctx, tag)
-    shape = value(:($sym.shape), Int)
-    qos_fill = freshen(ctx, sym, :_qos_fill)
-    qos_stop = freshen(ctx, sym, :_qos_stop)
-    ros_fill = freshen(ctx, sym, :_ros_fill)
-    ros_stop = freshen(ctx, sym, :_ros_stop)
-    dirty = freshen(ctx, sym, :_dirty)
+    tag = freshen(ctx, tag)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    ros_fill = freshen(ctx, tag, :_ros_fill)
+    ros_stop = freshen(ctx, tag, :_ros_stop)
+    dirty = freshen(ctx, tag, :_dirty)
     idx = freshen(ctx, tag, :_idx)
     ofs = freshen(ctx, tag, :_ofs)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $idx = $sym.idx
-            $ofs = $sym.ofs
+            $tag = $ex
+            $idx = $tag.idx
+            $ofs = $tag.ofs
+            $stop = $tag.shape
         end,
     )
-    prev_pos = freshen(ctx, sym, :_prev_pos)
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
+    shape = value(stop, Int)
+    prev_pos = freshen(ctx, tag, :_prev_pos)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseBandLevel(
+        tag,
         lvl_2,
-        sym,
         Ti,
         shape,
         qos_fill,
@@ -225,6 +227,46 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, ::DefaultStyl
     end
 end
 
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, diff, style
+)
+    diff[lvl.tag] = VirtualSparseBandLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        lvl.shape,
+        lvl.qos_fill,
+        lvl.qos_stop,
+        lvl.ros_fill,
+        lvl.ros_stop,
+        lvl.dirty,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.ofs, arch, style),
+        lvl.prev_pos,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseBandLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.shape,
+            lvl.qos_fill,
+            lvl.qos_stop,
+            lvl.ros_fill,
+            lvl.ros_stop,
+            lvl.dirty,
+            lvl.idx,
+            lvl.ofs,
+            lvl.prev_pos,
+        ),
+    )
+end
+
 Base.summary(lvl::VirtualSparseBandLevel) = "SparseBand($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseBandLevel)
@@ -240,28 +282,6 @@ end
 
 virtual_level_eltype(lvl::VirtualSparseBandLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseBandLevel) = virtual_level_fill_value(lvl.lvl)
-
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, arch, style)
-    tbl_2 = freshen(ctx, lvl.tbl)
-    ofs_2 = freshen(ctx, lvl.ofs)
-    push_preamble!(
-        ctx,
-        quote
-            $tbl_2 = $(lvl.tbl)
-            $ofs_2 = $(lvl.ofs)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
-            $(lvl.ofs) = $transfer($(lvl.ofs), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.tbl) = $tbl_2
-            $(lvl.ofs) = $ofs_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-end
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos, init)
     Tp = postype(lvl)
@@ -326,7 +346,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -388,7 +408,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_p = freshen(ctx, tag, :_p)

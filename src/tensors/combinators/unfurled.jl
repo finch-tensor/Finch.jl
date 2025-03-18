@@ -11,6 +11,20 @@
     Unfurled(arr, body) = Unfurled(arr, 0, body)
 end
 
+function distribute(
+    ctx::AbstractCompiler, tns::Unfurled, arch, diff, style
+)
+    Unfurled(tns.arr, tns.ndims, distribute(ctx, tns.body, arch, diff, style))
+end
+
+function redistribute(ctx::AbstractCompiler, tns::Unfurled, diff)
+    Unfurled(
+        tns.arr,
+        tns.ndims,
+        redistribute(ctx, tns.body, diff),
+    )
+end
+
 Base.show(io::IO, ex::Unfurled) = Base.show(io, MIME"text/plain"(), ex)
 
 function Base.show(io::IO, mime::MIME"text/plain", ex::Unfurled)

@@ -1,5 +1,6 @@
 @kwdef mutable struct VirtualAbstractArray <: AbstractVirtualTensor
-    ex
+    tag
+    data
     eltype
     ndims
     shape
@@ -10,27 +11,46 @@ function virtual_size(ctx::AbstractCompiler, arr::VirtualAbstractArray)
 end
 
 function lower(ctx::AbstractCompiler, arr::VirtualAbstractArray, ::DefaultStyle)
-    return arr.ex
+    return arr.data
 end
 
 function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
-    sym = freshen(ctx, tag)
-    dims = map(i -> Symbol(sym, :_mode, i, :_stop), 1:N)
+    tag = freshen(ctx, tag)
+    dims = map(i -> Symbol(tag, :_mode, i, :_stop), 1:N)
+    data = freshen(ctx, tag, :_data)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
+            $data = $ex
             ($(dims...),) = size($ex)
         end,
     )
-    VirtualAbstractArray(sym, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N))
+    VirtualAbstractArray(
+        tag, data, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N)
+    )
+end
+
+function distribute(
+    ctx::AbstractCompiler, arr::VirtualAbstractArray, arch, diff, style
+)
+    return diff[arr.tag] = VirtualAbstractArray(
+        arr.tag,
+        distribute_buffer(ctx, arr.data, arch, style),
+        arr.eltype,
+        arr.ndims,
+        arr.shape,
+    )
+end
+
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
+    get(diff, arr.tag, arr)
 end
 
 function declare!(ctx::AbstractCompiler, arr::VirtualAbstractArray, init)
     push_preamble!(
         ctx,
         quote
-            fill!($(arr.ex), $(ctx(init)))
+            fill!($(arr.data), $(ctx(init)))
         end,
     )
     arr
@@ -42,6 +62,10 @@ thaw!(ctx::AbstractCompiler, arr::VirtualAbstractArray) = arr
 @kwdef struct VirtualAbstractArraySlice
     arr::VirtualAbstractArray
     idx
+end
+
+function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff)
+    VirtualAbstractArraySlice(Finch.redistribute(ctx, arr.mtx, diff), arr.idx)
 end
 
 FinchNotation.finch_leaf(x::VirtualAbstractArraySlice) = virtual(x)
@@ -57,11 +81,13 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                 if mode.kind === reader
                     Thunk(;
                         preamble=quote
-                            $val = $(arr.ex)[$(map(ctx, idx_2)...)]
+                            $val = $(arr.data)[$(map(ctx, idx_2)...)]
                         end,
                         body=(ctx) -> instantiate(
                             ctx,
-                            VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
+                            VirtualScalar(
+                                nothing, nothing, arr.eltype, nothing, gensym(), val
+                            ),
                             mode,
                         ), #=We don't know what init is, but it won't be used here =#
                     )
@@ -71,10 +97,11 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                             ctx,
                             VirtualScalar(
                                 nothing,
+                                nothing,
                                 arr.eltype,
                                 nothing,
                                 gensym(),
-                                :($(arr.ex)[$(map(ctx, idx_2)...)]),
+                                :($(arr.data)[$(map(ctx, idx_2)...)]),
                             ),
                             mode,
                         ), #=We don't know what init is, but it won't be used here=#
@@ -100,11 +127,11 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
         if mode.kind === reader
             Thunk(;
                 preamble=quote
-                    $val = $(arr.ex)[]
+                    $val = $(arr.data)[]
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
-                    VirtualScalar(nothing, arr.eltype, nothing, gensym(), val),
+                    VirtualScalar(nothing, nothing, arr.eltype, nothing, gensym(), val),
                     mode,
                 ), #=We don't know what init is, but it won't be used here =#
             )
@@ -112,7 +139,10 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
             Thunk(;
                 body=(ctx,) -> instantiate(
                     ctx,
-                    VirtualScalar(nothing, arr.eltype, nothing, gensym(), :($(arr.ex)[])),
+                    VirtualScalar(
+                        nothing, nothing, arr.eltype, nothing, gensym(),
+                        :($(arr.data)[]),
+                    ),
                     mode,
                 ), #=We don't know what init is, but it won't be used here=#
             )
@@ -130,20 +160,13 @@ FinchNotation.finch_leaf(x::VirtualAbstractArray) = virtual(x)
 virtual_fill_value(ctx, ::VirtualAbstractArray) = 0
 virtual_eltype(ctx, tns::VirtualAbstractArray) = tns.eltype
 
-function virtual_transfer(ctx, vec::VirtualAbstractArray, device, style)
-    ex = freshen(ctx, vec.ex)
-    push_preamble!(
-        ctx,
-        quote
-            $ex = $(vec.ex)
-            $(vec.ex) = $transfer($(vec.ex), $(ctx(device)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(vec.ex) = $ex
-        end,
+function distribute(ctx, arr::VirtualAbstractArray, device, diff, style)
+    VirtualAbstractArray(
+        arr.tag,
+        distribute_buffer(ctx, arr.data, device, style),
+        arr.eltype,
+        arr.ndims,
+        arr.shape,
     )
 end
 

@@ -341,27 +341,60 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
         ),
     )
 
-    for tns in setdiff(used_in_scope, decl_in_scope)
-        virtual_transfer(ctx, resolve(ctx, tns), device, style)
-    end
-
-    virtual_parallel_region(ctx, device) do ctx_2
-        subtask = get_task(ctx_2)
-        tid = get_task_num(subtask)
+    contain(ctx) do ctx_2
+        diff = Dict()
         for tns in intersect(used_in_scope, decl_in_scope)
-            virtual_transfer(ctx_2, resolve(ctx_2, tns), subtask, style)
+            set_binding!(
+                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, host_local)
+            )
         end
-        contain(ctx_2) do ctx_3
+        for tns in setdiff(used_in_scope, decl_in_scope)
+            style = get_tensor_mode(ctx, tns).kind === reader ? host_global : host_shared
+            set_binding!(
+                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, style)
+            )
+        end
+        body = redistribute(ctx, root.body, diff)
+
+        virtual_parallel_region(ctx_2, device) do ctx_3
+            subtask = get_task(ctx_3)
+            tid = get_task_num(subtask)
             open_scope(ctx_3) do ctx_4
-                i = index(freshen(ctx, :i))
-                root_2 = loop(i, Extent(tid, tid),
-                    loop(root.idx, ext.ext,
-                        sieve(access(VirtualSplitMask(device.n), reader(), root.idx, i),
-                            root.body,
+                contain(ctx_4) do ctx_5
+                    diff = Dict()
+                    for tns in intersect(used_in_scope, decl_in_scope)
+                        set_binding!(
+                            ctx_5,
+                            tns,
+                            distribute(
+                                ctx_5, resolve(ctx_5, tns), subtask, diff, device_local
+                            ),
+                        )
+                    end
+                    for tns in setdiff(used_in_scope, decl_in_scope)
+                        style = if get_tensor_mode(ctx, tns).kind === reader
+                            device_global
+                        else
+                            device_shared
+                        end
+                        set_binding!(
+                            ctx_5,
+                            tns,
+                            distribute(ctx_5, resolve(ctx_5, tns), subtask, diff, style),
+                        )
+                    end
+                    body = redistribute(ctx_5, body, diff)
+                    i = index(freshen(ctx, :i))
+                    root_2 = loop(i, Extent(tid, tid),
+                        loop(root.idx, ext.ext,
+                            sieve(
+                                access(VirtualSplitMask(device.n), reader(), root.idx, i),
+                                body,
+                            ),
                         ),
-                    ),
-                )
-                ctx_4(instantiate!(ctx_4, root_2))
+                    )
+                    ctx_5(instantiate!(ctx_5, root_2))
+                end
             end
         end
     end

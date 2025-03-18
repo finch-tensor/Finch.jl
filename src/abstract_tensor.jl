@@ -93,7 +93,6 @@ function similar in spirit to `Base.resize!`.
 """
 function virtual_resize! end
 
-
 struct LabelledTree
     key
     node

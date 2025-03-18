@@ -5,6 +5,11 @@ end
 
 Base.show(io::IO, ex::OffsetArray) = print(io, "OffsetArray($(ex.body), $(ex.delta)")
 
+function transfer(device, tns::OffsetArray{Ti}) where {Ti}
+    body_2 = transfer(device, tns.body)
+    return OffsetArray{Ti}(body_2, tns.delta)
+end
+
 function labelled_show(io::IO, ::OffsetArray)
     print(io, "OffsetArray [$(join(map(d -> ":+$d", ex.delta), ", "))]")
 end
@@ -14,6 +19,19 @@ labelled_children(ex::OffsetArray) = [LabelledTree(ex.body)]
 struct VirtualOffsetArray <: AbstractVirtualCombinator
     body
     delta
+end
+
+function distribute(
+    ctx::AbstractCompiler, tns::VirtualOffsetArray, arch, diff, style
+)
+    VirtualOffsetArray(distribute(ctx, tns.body, arch, diff, style), tns.delta)
+end
+
+function redistribute(ctx::AbstractCompiler, tns::VirtualOffsetArray, diff)
+    VirtualOffsetArray(
+        redistribute(ctx, tns.body, diff),
+        tns.delta,
+    )
 end
 
 is_injective(ctx, lvl::VirtualOffsetArray) = is_injective(ctx, lvl.body)

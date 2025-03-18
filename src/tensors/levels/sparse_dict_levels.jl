@@ -93,12 +93,12 @@ end
 function transfer(
     lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}, Tm
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    lvl_2 = transfer(lvl.lvl, Tm, style)
-    ptr_2 = transfer(lvl.ptr, Tm, style)
-    idx_2 = transfer(lvl.idx, Tm, style)
-    val_2 = transfer(lvl.val, Tm, style)
-    tbl_2 = transfer(lvl.tbl, Tm, style)
-    pool_2 = transfer(lvl.pool, Tm, style)
+    lvl_2 = transfer(Tm, lvl.lvl)
+    ptr_2 = transfer(Tm, lvl.ptr)
+    idx_2 = transfer(Tm, lvl.idx)
+    val_2 = transfer(Tm, lvl.val)
+    tbl_2 = transfer(Tm, lvl.tbl)
+    pool_2 = transfer(Tm, lvl.pool)
     return SparseDictLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_2, pool_2)
 end
 
@@ -211,8 +211,8 @@ function (fbr::SubFiber{<:SparseDictLevel{Ti}})(idxs...) where {Ti}
 end
 
 mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
+    tag
     lvl
-    ex
     Ti
     ptr
     idx
@@ -238,28 +238,30 @@ end
 function virtualize(
     ctx, ex, ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}, tag=:lvl
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
     qos_stop = freshen(ctx, tag, :_qos_stop)
+    stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $sym.ptr
-            $idx = $sym.idx
-            $val = $sym.val
-            $tbl = $sym.tbl
-            $pool = $sym.pool
+            $tag = $ex
+            $ptr = $tag.ptr
+            $idx = $tag.idx
+            $val = $tag.val
+            $tbl = $tag.tbl
+            $pool = $tag.pool
             $qos_stop = length($tbl)
+            $stop = $tag.shape
         end,
     )
-    lvl_2 = virtualize(ctx, :($sym.lvl), Lvl, sym)
-    shape = value(:($sym.shape), Int)
-    VirtualSparseDictLevel(lvl_2, sym, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
+    shape = value(stop, Int)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -273,6 +275,42 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyl
             $(lvl.pool),
         )
     end
+end
+
+function distribute_level(
+    ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, diff, style
+)
+    return diff[lvl.tag] = VirtualSparseDictLevel(
+        lvl.tag,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        lvl.Ti,
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.idx, arch, style),
+        lvl.val,
+        distribute_buffer(ctx, lvl.tbl, arch, style),
+        lvl.pool,
+        lvl.shape,
+        lvl.qos_stop,
+    )
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualSparseDictLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.Ti,
+            lvl.ptr,
+            lvl.idx,
+            lvl.val,
+            lvl.tbl,
+            lvl.pool,
+            lvl.shape,
+            lvl.qos_stop,
+        ),
+    )
 end
 
 Base.summary(lvl::VirtualSparseDictLevel) = "SparseDict($(summary(lvl.lvl)))"
@@ -385,26 +423,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     return lvl
 end
 
-function virtual_transfer_level(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, arch, style)
-    ptr_2 = freshen(ctx, lvl.ptr)
-    idx_2 = freshen(ctx, lvl.idx)
-    tbl_2 = freshen(ctx, lvl.tbl_2)
-    push_preamble!(
-        ctx,
-        quote
-            $tbl_2 = $(lvl.tbl)
-            $(lvl.tbl) = $transfer($(lvl.tbl), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.tbl) = $tbl_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-end
-
 function unfurl(
     ctx,
     fbr::VirtualSubFiber{VirtualSparseDictLevel},
@@ -413,7 +431,7 @@ function unfurl(
     ::Union{typeof(defaultread),typeof(walk)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     Ti = lvl.Ti
     my_i = freshen(ctx, tag, :_i)
@@ -467,7 +485,7 @@ function unfurl(
     ctx, fbr::VirtualSubFiber{VirtualSparseDictLevel}, ext, mode, ::typeof(follow)
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     my_q = freshen(ctx, tag, :_q)
 
@@ -507,7 +525,7 @@ function unfurl(
     ::Union{typeof(defaultupdate),typeof(extrude)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
     qos_stop = lvl.qos_stop
