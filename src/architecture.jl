@@ -418,19 +418,6 @@ get_device(task::VirtualCPUThread) = task.dev
 get_parent_task(task::VirtualCPUThread) = task.parent
 get_task_num(task::VirtualCPUThread) = task.tid
 
-"""
-    local_memory(device)
-
-Returns the local memory type for a given device.
-"""
-function local_memory(device::CPU)
-    return CPULocalMemory(device)
-end
-
-function local_memory(device::Serial)
-    return device
-end
-
 struct Converter{f,T} end
 
 (::Converter{f,T})(x) where {f,T} = T(f(x))
