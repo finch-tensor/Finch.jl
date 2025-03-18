@@ -806,6 +806,37 @@ end
                     @test A * x == C * x
                     @test A * x == compute(lazy(C) * x)
                 end
+
+                # https://github.com/finch-tensor/Finch.jl/issues/708
+                let
+                    for p in [-Inf, -3, -2, -1, 0, 1, 2, 3, Inf]
+                        @testset "$p-norm" begin
+                            A_ref = rand(4, 3)
+                            A = Tensor(A_ref)
+                            @test norm(A_ref, p) ≈ norm(A, p)
+
+                            A_ref = sprand(4, 3, 1.0)
+                            A = Tensor(A_ref)
+                            @test norm(A_ref, p) ≈ norm(A, p)
+                        end
+                    end
+                end
+
+                # https://github.com/finch-tensor/Finch.jl/pull/709
+                let
+                    A_ref = [1 2 0 4 0; 0 -2 1 0 1]
+                    A = swizzle(Tensor(Dense(SparseList(Element(0))), A_ref), 1, 2)
+
+                    @test norm(A, 1) == norm(A_ref, 1)
+                    @test norm(A, 2) == norm(A_ref, 2)
+                    @test norm(A, 3) == norm(A_ref, 3)
+                end
+
+                # https://github.com/finch-tensor/Finch.jl/issues/686
+                let
+                    A = fsprand(5, 5, 3)
+                    @test countstored(A - A) == 3 skip = (key != "default")
+                end
             end
         end
     end

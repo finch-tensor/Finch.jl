@@ -119,6 +119,9 @@ function get_simplify_rules(alg, shash)
         (@rule call(norm, ~x::isliteral, ~y) => if iszero(x.val)
             x
         end),
+        (@rule call(^, ~x, ~p::isliteral) => if isone(p.val)
+            x
+        end),
         (@rule block(~a1..., sieve(~c, ~b1), sieve(~c, ~b2), ~a2...) =>
             block(a1..., sieve(~c, block(b1, b2)), a2...)
     ),

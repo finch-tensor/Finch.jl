@@ -396,12 +396,13 @@ struct Square{T,S}
     scale::S
 end
 
-@inline square(x) = Square(sign(x)^2, norm(x))
+@inline square(x) = Square(sign(x)^2 / one(x), norm(x))
 
 @inline root(x::Square) = sqrt(x.arg) * x.scale
 
 @inline Base.zero(::Type{Square{T,S}}) where {T,S} = Square{T,S}(zero(T), zero(S))
 @inline Base.zero(::Square{T,S}) where {T,S} = Square{T,S}(zero(T), zero(S))
+@inline Base.isone(x::Square) = isone(root(x))
 
 @inline Base.isinf(x::Finch.Square) = isinf(x.arg) || isinf(x.scale)
 
@@ -458,6 +459,7 @@ end
     Power{T,S,E}(zero(T), zero(S), one(E))
 @inline Base.zero(x::Power) = Power(zero(x.arg), zero(x.scale), x.exponent)
 @inline Base.isinf(x::Finch.Power) = isinf(x.arg) || isinf(x.scale) || isinf(x.exponent)
+@inline Base.isone(x::Power) = isone(root(x))
 
 function Base.promote_rule(
     ::Type{Power{T1,S1,E1}}, ::Type{Power{T2,S2,E2}}
