@@ -137,6 +137,8 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     ptr
     task
     val
+    local_qos_fill
+    local_qos_stop
     Tv
     Device
     Lvl
@@ -186,7 +188,7 @@ function virtualize(
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val,)
+    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, val, typeof(level_fill_value(Lvl)), nothing, nothing, Device, Lvl, Ptr, Task, Val,)
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
@@ -211,6 +213,8 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.task, arch, style),
         distribute_buffer(ctx, lvl.val, arch, style),
+        lvl.local_qos_fill,
+        lvl.local_qos_stop,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -218,6 +222,66 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         lvl.Task,
         lvl.Val,
     )
+end
+
+function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{DeviceShared})
+    #lvl_2 = freshen(ctx, :lvl)
+    #push_preamble!(
+    #    ctx,
+    #    quote
+    #        val_2 = map($lvl_2 -> $(contain(ctx) do ctx_2
+    #                lvl_3 = virtualize(ctx_2, lvl_2, lvl_2.Lvl)
+    #                ctx_2(distribute(ctx_2, $val_2[i], arch, diff, style))
+    #            end)
+    #        end
+    #        $(lvl.ptr) = $transfer($(ctx(arch)), $(lvl.ptr), style)
+    #        $(lvl.task) = $transfer($(ctx(arch)), $(lvl.task), style)
+    #        $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
+    #    end,
+    #)
+    if true #get_device(arch) == lvl.device
+        local_qos_fill = freshen(ctx, lvl.tag, :_local_qos_fill)
+        local_qos_stop = freshen(ctx, lvl.tag, :_local_qos_stop)
+        lvl_2 = virtualize(ctx, :($(lvl.val)[$(get_task_num(arch))]), lvl.Lvl)
+        lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
+        push_epilogue!(ctx, contain(ctx) do ctx_2
+            lvl_3 = freeze_level!(ctx_2, lvl_2, literal(1))
+            :($(lvl.val)[$(get_task_num(arch))] = $(ctx_2(lvl_3)))
+        end)
+        diff[lvl.tag] = VirtualShardLevel(
+            lvl.tag,
+            lvl.device,
+            distribute_level(ctx, lvl_2, arch, diff, style),
+            distribute_buffer(ctx, lvl.ptr, arch, style),
+            distribute_buffer(ctx, lvl.task, arch, style),
+            distribute_buffer(ctx, lvl.val, arch, style),
+            local_qos_fill,
+            local_qos_stop,
+            lvl.Tv,
+            lvl.Device,
+            lvl.Lvl,
+            lvl.Ptr,
+            lvl.Task,
+            lvl.Val,
+        )
+    else
+        diff[lvl.tag] = VirtualShardLevel(
+            lvl.tag,
+            lvl.device,
+            distribute_level(ctx, lvl.lvl, arch, diff, style),
+            distribute_buffer(ctx, lvl.ptr, arch, style),
+            distribute_buffer(ctx, lvl.task, arch, style),
+            distribute_buffer(ctx, lvl.val, arch, style),
+            lvl.local_qos_fill,
+            lvl.local_qos_stop,
+            lvl.Tv,
+            lvl.Device,
+            lvl.Lvl,
+            lvl.Ptr,
+            lvl.Task,
+            lvl.Val,
+        )
+    end
 end
 
 function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
@@ -231,6 +295,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.ptr,
             lvl.task,
             lvl.val,
+            lvl.local_qos_fill,
+            lvl.local_qos_stop,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -318,25 +384,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
             end,
         )
     else
-        (lvl, pos) = (fbr.lvl, fbr.pos)
-        tag = lvl.tag
-        sym = freshen(ctx, :pointer_to_lvl)
-
-        return Thunk(;
-            body=(ctx) -> begin
-                lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
-                lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
-                push_preamble!(ctx, assemble_level!(ctx, lvl_2, literal(1), literal(1)))
-                res = instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode)
-                push_epilogue!(ctx,
-                    contain(ctx) do ctx_2
-                        lvl_2 = freeze_level!(ctx_2, lvl_2, literal(1))
-                        :($(lvl.val)[$(ctx_2(pos))] = $(ctx_2(lvl_2)))
-                    end,
-                )
-                res
-            end,
-        )
+        instantiate(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :dirty)), mode)
     end
 end
 
@@ -359,31 +407,34 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.tag
     sym = freshen(ctx, :pointer_to_lvl)
+    Tp = postype(lvl)
 
     task = freshen(ctx, tag, :_task)
+    dirty = freshen(ctx, tag, :_dirty)
+    qos = freshen(ctx, :qos)
 
     return Thunk(;
         preamble = quote
             $task = $(lvl.task)[$(ctx(pos))]
             if task == 0
-                $(lvl.task)[$(ctx(pos))] = $(gettasknum(ctx))
-                qos = local_qos_fill
+                $(lvl.task)[$(ctx(pos))] = $(get_task_num(ctx))
+                qos = lvl.local_qos_fill
                 if $(lvl.local_qos_fill) > $(lvl.local_qos_stop)
-                    $local_qos_stop = max($local_qos_stop << 1, 1)
-                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos_fill, Tp), value(qos_stop, Tp)), ctx))
+                    $(lvl.local_qos_stop) = max($(lvl.local_qos_stop) << 1, 1)
+                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(lvl.local_qos_fill, Tp), value(lvl.local_qos_stop, Tp)), ctx))
                 end
             else
                 qos = $(lvl.ptr)[$(ctx(pos))]
                 qos_stop = $(lvl.local_qos_stop)
-                #only in safe mode, we check if task == $(gettasknum(ctx)) and if not error("Task mismatch in ShardLevel")
+                #only in safe mode, we check if task == $(get_task_num(ctx)) and if not error("Task mismatch in ShardLevel")
             end
-            dirty = true
+            $dirty = true
         end,
         body     = (ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), dirty),
         epilogue = quote
             #this task will always own this position forever, even if we don't write to it. Still, we try to be conservative of memory usage of the underlying level.
-            if dirty && $(lvl.ptr)[$(ctx(pos))] == 0
-                local_qos_fill += 1
+            if $dirty && $(lvl.ptr)[$(ctx(pos))] == 0
+                $(lvl.local_qos_fill) += 1
                 $(lvl.ptr)[$(ctx(pos))] = $(lvl.local_qos_fill) += 1
             end
         end,
