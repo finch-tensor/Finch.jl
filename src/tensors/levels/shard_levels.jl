@@ -27,7 +27,7 @@ struct ShardLevel{Device,Lvl,Ptr,Task,Val} <: AbstractLevel
 end
 const Shard = ShardLevel
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
-    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], transfer(lvl, device), style)
+    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], transfer(lvl, device))
 end
 
 function ShardLevel{Device}(
@@ -50,7 +50,7 @@ function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Val}}) where {Device,Lvl,Ptr
     postype(Lvl)
 end
 
-function transfer(device, lvl::ShardLevel, device, style)
+function transfer(device, lvl::ShardLevel)
     lvl_2 = transfer(device, lvl.lvl)
     ptr_2 = transfer(device, lvl.ptr)
     task_2 = transfer(device, lvl.task)
@@ -184,21 +184,40 @@ function virtualize(
             $val = $tag.val
         end,
     )
-    device_2 = virtualize(ctx, :($tag.device), Device, sym)
-    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, sym)
-    VirtualShardLevel( device_2, lvl_2, tag, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val,)
+    device_2 = virtualize(ctx, :($tag.device), Device, tag)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val,)
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
-    val_2 = freshen(ctx, lvl.val)
-    push_preamble!(
-        ctx,
-        quote
-            $val_2 = $(lvl.val)
-            $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
-        end,
+    #lvl_2 = freshen(ctx, :lvl)
+    #push_preamble!(
+    #    ctx,
+    #    quote
+    #        val_2 = map($lvl_2 -> $(contain(ctx) do ctx_2
+    #                lvl_3 = virtualize(ctx_2, lvl_2, lvl_2.Lvl)
+    #                ctx_2(distribute(ctx_2, $val_2[i], arch, diff, style))
+    #            end)
+    #        end
+    #        $(lvl.ptr) = $transfer($(ctx(arch)), $(lvl.ptr), style)
+    #        $(lvl.task) = $transfer($(ctx(arch)), $(lvl.task), style)
+    #        $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
+    #    end,
+    #)
+    diff[lvl.tag] = VirtualShardLevel(
+        lvl.tag,
+        lvl.device,
+        distribute_level(ctx, lvl.lvl, arch, diff, style),
+        distribute_buffer(ctx, lvl.ptr, arch, style),
+        distribute_buffer(ctx, lvl.task, arch, style),
+        distribute_buffer(ctx, lvl.val, arch, style),
+        lvl.Tv,
+        lvl.Device,
+        lvl.Lvl,
+        lvl.Ptr,
+        lvl.Task,
+        lvl.Val,
     )
-    diff[lvl.tag] = distribute_level(ctx, lvl.lvl, arch, diff, style)
 end
 
 function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
@@ -207,6 +226,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
         lvl.tag,
         VirtualShardLevel(
             lvl.tag,
+            lvl.device,
             redistribute(ctx, lvl.lvl, diff),
             lvl.ptr,
             lvl.task,
@@ -286,11 +306,11 @@ end
 function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
     if mode.kind === reader
         (lvl, pos) = (fbr.lvl, fbr.pos)
-        tag = lvl.ex
+        tag = lvl.tag
         isnulltest = freshen(ctx, tag, :_nulltest)
         Vf = level_fill_value(lvl.Lvl)
         sym = freshen(ctx, :pointer_to_lvl)
-        val = freshen(ctx, lvl.ex, :_val)
+        val = freshen(ctx, lvl.tag, :_val)
         return Thunk(;
             body=(ctx) -> begin
                 lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
@@ -299,7 +319,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         )
     else
         (lvl, pos) = (fbr.lvl, fbr.pos)
-        tag = lvl.ex
+        tag = lvl.tag
         sym = freshen(ctx, :pointer_to_lvl)
 
         return Thunk(;
@@ -337,7 +357,7 @@ The outer level needs to be concurrent, like denselevel.
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     @assert mode.kind === updater
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    tag = lvl.ex
+    tag = lvl.tag
     sym = freshen(ctx, :pointer_to_lvl)
 
     task = freshen(ctx, tag, :_task)
