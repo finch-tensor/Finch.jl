@@ -64,6 +64,19 @@ function expanddims(arr::LazyTensor{T}, dims) where {T}
     )
 end
 
+function dropdims(arr::LazyTensor{T}, dims) where {T}
+    @assert allunique(dims)
+    @assert issubset(dims, 1:ndims(arr))
+    newdims = setdiff(1:ndims(arr), dims)
+    idxs_1 = [field(gensym(:i)) for _ in 1:ndims(arr)]
+    idxs_2 = idxs_1[newdims]
+    data_2 = reorder(relabel(arr.data, idxs_1...), idxs_2...)
+    extrude_2 = arr.extrude[newdims]
+    return LazyTensor{T, length(newdims)}(
+        data_2, tuple(extrude_2...), fill_value(arr)
+    )
+end
+
 function identify(data)
     lhs = alias(gensym(:A))
     subquery(lhs, data)
