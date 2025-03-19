@@ -41,12 +41,14 @@ abstract type AbstractVirtualTask end
 Return the number of tasks on the device dev.
 """
 function get_num_tasks end
+
 """
     get_task_num(task::AbstractTask)
 
 Return the task number of `task`.
 """
 function get_task_num end
+
 """
     get_device(task::AbstractTask)
 
@@ -60,6 +62,12 @@ function get_device end
 Return the task which spawned `task`.
 """
 function get_parent_task end
+
+get_num_tasks(ctx::AbstractCompiler) = get_num_tasks(get_task(ctx))
+get_num_tasks(task::AbstractTask) = get_num_tasks(get_device(task))
+get_task_num(ctx::AbstractCompiler) = get_task_num(get_task(ctx))
+get_device(ctx::AbstractCompiler) = get_device(get_task(ctx))
+get_parent_task(ctx::AbstractCompiler) = get_parent_task(get_task(ctx))
 
 """
     aquire_lock!(dev::AbstractDevice, val)
