@@ -28,7 +28,7 @@ end
 const Shard = ShardLevel
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], transfer(lvl, device), style)
-end #TODO scatterto?
+end
 
 function ShardLevel{Device}(
     device, lvl::Lvl, ptr::Ptr, task::Task, val::Val
@@ -50,10 +50,10 @@ function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Val}}) where {Device,Lvl,Ptr
     postype(Lvl)
 end
 
-function transfer(lvl::ShardLevel, device, style)
-    lvl_2 = transfer(lvl.lvl, device, style)
-    ptr_2 = transfer(lvl.ptr, device, style)
-    task_2 = transfer(lvl.task, device, style)
+function transfer(device, lvl::ShardLevel, device, style)
+    lvl_2 = transfer(device, lvl.lvl)
+    ptr_2 = transfer(device, lvl.ptr)
+    task_2 = transfer(device, lvl.task)
     return ShardLevel(lvl_2, ptr_2, task_2, val_2)
 end
 
@@ -131,9 +131,9 @@ end
 countstored_level(lvl::ShardLevel, pos) = pos
 
 mutable struct VirtualShardLevel <: AbstractVirtualLevel
+    tag
     device
     lvl  # stand-in for the sublevel for virtual resize, etc.
-    ex
     ptr
     task
     val
@@ -170,7 +170,7 @@ end
 function virtualize(
     ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Val}}, tag=:lvl
 ) where {Device,Lvl,Ptr,Task,Val}
-    sym = freshen(ctx, tag)
+    tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
     val = freshen(ctx, tag, :_val)
@@ -178,27 +178,46 @@ function virtualize(
     push_preamble!(
         ctx,
         quote
-            $sym = $ex
-            $ptr = $ex.ptr
-            $task = $ex.task
-            $val = $ex.val
+            $tag = $ex
+            $ptr = $tag.ptr
+            $task = $tag.task
+            $val = $tag.val
         end,
     )
-    device_2 = virtualize(ctx, :($ex.device), Device, sym)
-    lvl_2 = virtualize(ctx, :($ex.lvl), Lvl, sym)
-    VirtualShardLevel(
-        device_2,
-        lvl_2,
-        sym,
-        ptr,
-        task,
-        val,
-        typeof(level_fill_value(Lvl)),
-        Device,
-        Lvl,
-        Ptr,
-        Task,
-        Val,
+    device_2 = virtualize(ctx, :($tag.device), Device, sym)
+    lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, sym)
+    VirtualShardLevel( device_2, lvl_2, tag, ptr, task, val, typeof(level_fill_value(Lvl)), Device, Lvl, Ptr, Task, Val,)
+end
+
+function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
+    val_2 = freshen(ctx, lvl.val)
+    push_preamble!(
+        ctx,
+        quote
+            $val_2 = $(lvl.val)
+            $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
+        end,
+    )
+    diff[lvl.tag] = distribute_level(ctx, lvl.lvl, arch, diff, style)
+end
+
+function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
+    get(
+        diff,
+        lvl.tag,
+        VirtualShardLevel(
+            lvl.tag,
+            redistribute(ctx, lvl.lvl, diff),
+            lvl.ptr,
+            lvl.task,
+            lvl.val,
+            lvl.Tv,
+            lvl.Device,
+            lvl.Lvl,
+            lvl.Ptr,
+            lvl.Task,
+            lvl.Val,
+        ),
     )
 end
 
@@ -211,29 +230,11 @@ virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lv
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
-function virtual_transfer_level(ctx, lvl::VirtualShardLevel, arch, style)
-    val_2 = freshen(ctx, lvl.val)
-    push_preamble!(
-        ctx,
-        quote
-            $val_2 = $(lvl.val)
-            $(lvl.val) = $transfer($(lvl.val), $(ctx(arch)), style)
-        end,
-    )
-    push_epilogue!(
-        ctx,
-        quote
-            $(lvl.val) = $val_2
-        end,
-    )
-    virtual_transfer_level(ctx, lvl.lvl, arch, style)
-end
-
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
     push_preamble!(ctx,
         virtual_parallel_region(ctx, lvl.device) do ctx_2
             lvl_2 = virtualize(
-                ctx_2, :($(lvl.ex).val[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl
+                ctx_2, :($(lvl.val)[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl
             ) #TODO should this virtualize the eltype of Val?
             declare_level!(ctx_2, lvl_2, literal(1), init)
         end,
@@ -272,7 +273,7 @@ end
 supports_reassembly(::VirtualShardLevel) = false
 
 """
-these two are no-ops, we insteaed do these on instantiate
+these two are no-ops, we instead do these on instantiate
 """
 function freeze_level!(ctx, lvl::VirtualShardLevel, pos)
     return lvl
