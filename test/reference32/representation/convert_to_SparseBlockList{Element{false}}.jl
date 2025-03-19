@@ -9,7 +9,7 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    tmp_lvl_qos_stop = 0
+    tmp_lvl_qos_alloc = 0
     tmp_lvl_ros_stop = 0
     Finch.resize_if_smaller!(tmp_lvl_ofs, 1)
     tmp_lvl_ofs[1] = 1
@@ -35,10 +35,10 @@ quote
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]
             if ref_lvl_i < phase_stop
                 ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
-                if tmp_lvl_qos > tmp_lvl_qos_stop
-                    tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                    Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_qos, tmp_lvl_qos_stop)
+                if tmp_lvl_qos > tmp_lvl_qos_alloc
+                    tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                    Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_qos, tmp_lvl_qos_alloc)
                 end
                 tmp_lvl_val[tmp_lvl_qos] = ref_lvl_2_val
                 if ref_lvl_i > tmp_lvl_i_prev + 1
@@ -57,10 +57,10 @@ quote
                 phase_stop_3 = min(phase_stop, ref_lvl_i)
                 if ref_lvl_i == phase_stop_3
                     ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
-                    if tmp_lvl_qos > tmp_lvl_qos_stop
-                        tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                        Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_qos, tmp_lvl_qos_stop)
+                    if tmp_lvl_qos > tmp_lvl_qos_alloc
+                        tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                        Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_qos, tmp_lvl_qos_alloc)
                     end
                     tmp_lvl_val[tmp_lvl_qos] = ref_lvl_2_val
                     if phase_stop_3 > tmp_lvl_i_prev + 1
@@ -88,7 +88,7 @@ quote
     ros_stop = tmp_lvl_ptr[1 + 1] - 1
     resize!(tmp_lvl_idx, ros_stop)
     resize!(tmp_lvl_ofs, ros_stop + 1)
-    qos_stop = tmp_lvl_ofs[ros_stop + 1] - 1
-    resize!(tmp_lvl_val, qos_stop)
+    qos_alloc = tmp_lvl_ofs[ros_stop + 1] - 1
+    resize!(tmp_lvl_val, qos_alloc)
     (tmp = Tensor((SparseBlockListLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx, tmp_lvl_ofs)),)
 end

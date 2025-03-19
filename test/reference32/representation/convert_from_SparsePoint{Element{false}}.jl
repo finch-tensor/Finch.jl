@@ -18,10 +18,10 @@ quote
         else
             tmp_lvl_2_val = tmp_lvl_val[1]
             if res_lvl_qos > 0
-                res_lvl_qos_stop = max(0 << 1, 1)
-                Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
-                Finch.resize_if_smaller!(res_lvl_val, res_lvl_qos_stop)
-                Finch.fill_range!(res_lvl_val, false, res_lvl_qos, res_lvl_qos_stop)
+                res_lvl_qos_alloc = max(0 << 1, 1)
+                Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_alloc)
+                Finch.resize_if_smaller!(res_lvl_val, res_lvl_qos_alloc)
+                Finch.fill_range!(res_lvl_val, false, res_lvl_qos, res_lvl_qos_alloc)
             end
             res = (res_lvl_val[res_lvl_qos] = tmp_lvl_2_val)
             res_lvl_idx[res_lvl_qos] = phase_stop
@@ -33,8 +33,8 @@ quote
     for p = 1:1
         res_lvl_ptr[p + 1] += res_lvl_ptr[p]
     end
-    qos_stop = res_lvl_ptr[1 + 1] - 1
-    resize!(res_lvl_idx, qos_stop)
-    resize!(res_lvl_val, qos_stop)
+    qos_alloc = res_lvl_ptr[1 + 1] - 1
+    resize!(res_lvl_idx, qos_alloc)
+    resize!(res_lvl_val, qos_alloc)
     (res = Tensor((SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape, res_lvl_ptr, res_lvl_idx)),)
 end

@@ -18,38 +18,38 @@ julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
       └─ 3.0
 ```
 """
-struct ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop} <: AbstractLevel
+struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
     task::Task
+    used::Used
+    alloc::Alloc
     val::Val
-    qos_fill::QosFill
-    qos_stop::QosStop
 end
 const Shard = ShardLevel
 
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
-    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], transfer(lvl, device), postype(lvl)[], postype(lvl)[])
+    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], postype(lvl)[], postype(lvl)[], transfer(lvl, device))
 end
 
 function ShardLevel{Device}(
-    device, lvl::Lvl, ptr::Ptr, task::Task, val::Val, qos_fill::QosFill, qos_stop::QosStop
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
-    ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}(device, lvl, ptr, task, val, qos_fill, qos_stop)
+    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc, val::Val
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}(device, lvl, ptr, task, used, alloc, val)
 end
 
-function Base.summary(::Shard{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
+function Base.summary(::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
     "Shard($(Lvl))"
 end
 
 function similar_level(
-    lvl::Shard{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}, fill_value, eltype::Type, dims...
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
-    ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...), lvl.qos_fill, lvl.qos_stop)
+    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+    ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...))
 end
 
-function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}}) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
+function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}}) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
     postype(Lvl)
 end
 
@@ -57,13 +57,13 @@ function transfer(device, lvl::ShardLevel)
     lvl_2 = transfer(device, lvl.lvl)
     ptr_2 = transfer(device, lvl.ptr)
     task_2 = transfer(device, lvl.task)
-    qos_fill_2 = transfer(device, lvl.qos_fill)
-    qos_stop_2 = transfer(device, lvl.qos_stop)
-    return ShardLevel(lvl_2, ptr_2, task_2, val_2, qos_fill_2, qos_stop_2)
+    qos_used_2 = transfer(device, lvl.used)
+    qos_alloc_2 = transfer(device, lvl.alloc)
+    return ShardLevel(lvl_2, ptr_2, task_2, qos_used_2, qos_alloc_2, lvl.val)
 end
 
 function pattern!(lvl::ShardLevel)
-    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, map(pattern!, lvl.val), lvl.qos_fill, lvl.qos_stop)
+    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc, map(pattern!, lvl.val))
 end
 
 function set_fill_value!(lvl::ShardLevel, init)
@@ -71,9 +71,9 @@ function set_fill_value!(lvl::ShardLevel, init)
         set_fill_value!(lvl.lvl, init),
         lvl.ptr,
         lvl.task,
+        lvl.used,
+        lvl.alloc,
         map(lvl_2 -> set_fill_value!(lvl_2, init), lvl.val),
-        lvl.qos_fill,
-        lvl.qos_stop,
     )
 end
 
@@ -82,15 +82,15 @@ function Base.resize!(lvl::ShardLevel, dims...)
         resize!(lvl.lvl, dims...),
         lvl.ptr,
         lvl.task,
+        lvl.used,
+        lvl.alloc,
         map(lvl_2 -> resize!(lvl_2, dims...), lvl.val),
-        lvl.qos_fill,
-        lvl.qos_stop,
     )
 end
 
 function Base.show(
-    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
+    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
     print(io, "Shard(")
     if get(io, :compact, false)
         print(io, "…")
@@ -101,11 +101,11 @@ function Base.show(
         print(io, ", ")
         show(io, lvl.task)
         print(io, ", ")
+        show(io, lvl.used)
+        print(io, ", ")
+        show(io, lvl.alloc)
+        print(io, ", ")
         show(io, lvl.val)
-        print(io, ", ")
-        show(io, lvl.qos_fill)
-        print(io, ", ")
-        show(io, lvl.qos_stop)
     end
     print(io, ")")
 end
@@ -123,20 +123,20 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop} = level_ndims(Lvl)
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_ndims(Lvl)
 @inline level_size(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop} = level_size(lvl.lvl)
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop} = level_axes(lvl.lvl)
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop} = level_eltype(Lvl)
+    ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}}
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop} = level_fill_value(Lvl)
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardLevel})(idxs...)
     q = fbr.pos
@@ -151,19 +151,19 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     lvl  # stand-in for the sublevel for virtual resize, etc.
     ptr
     task
+    used
+    alloc
     val
-    qos_fill
-    qos_stop
-    local_qos_fill
-    local_qos_stop
+    qos_used
+    qos_alloc
     Tv
     Device
     Lvl
     Ptr
     Task
+    Used
+    Alloc
     Val
-    QosFill
-    QosStop
 end
 
 postype(lvl::VirtualShardLevel) = postype(lvl.lvl)
@@ -182,21 +182,21 @@ end
 
 function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
     quote
-        $ShardLevel{$(lvl.Lvl),$(lvl.Ptr),$(lvl.Task),$(lvl.Val),$(lvl.QosFill),$(lvl.QosStop)}(
+        $ShardLevel{$(lvl.Lvl),$(lvl.Ptr),$(lvl.Task),$(lvl.Used),$(lvl.Alloc),$(lvl.Val)}(
             $(ctx(lvl.lvl)), $(lvl.val)
         )
     end
 end
 
 function virtualize(
-    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Val,QosFill,QosStop}}, tag=:lvl
-) where {Device,Lvl,Ptr,Task,Val,QosFill,QosStop}
+    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}}, tag=:lvl
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
+    used = freshen(ctx, tag, :_qos_used)
+    alloc = freshen(ctx, tag, :_qos_alloc)
     val = freshen(ctx, tag, :_val)
-    qos_fill = freshen(ctx, tag, :_qos_fill)
-    qos_stop = freshen(ctx, tag, :_qos_stop)
 
     push_preamble!(
         ctx,
@@ -204,54 +204,44 @@ function virtualize(
             $tag = $ex
             $ptr = $tag.ptr
             $task = $tag.task
+            $used = $tag.used
+            $alloc = $tag.alloc
             $val = $tag.val
-            $qos_fill = $tag.qos_fill
-            $qos_stop = $tag.qos_stop
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, val, qos_fill, qos_stop, typeof(level_fill_value(Lvl)), nothing, nothing, Device, Lvl, Ptr, Task, Val, QosFill, QosStop)
+    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, used, alloc, val, typeof(level_fill_value(Lvl)), nothing, nothing, Device, Lvl, Ptr, Task, Used, Alloc, Val)
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
-    #lvl_2 = freshen(ctx, :lvl)
-    #push_preamble!(
-    #    ctx,
-    #    quote
-    #        val_2 = map($lvl_2 -> $(contain(ctx) do ctx_2
-    #                lvl_3 = virtualize(ctx_2, lvl_2, lvl_2.Lvl)
-    #                ctx_2(distribute(ctx_2, $val_2[i], arch, diff, style))
-    #            end)
-    #        end
-    #        $(lvl.ptr) = $transfer($(ctx(arch)), $(lvl.ptr), style)
-    #        $(lvl.task) = $transfer($(ctx(arch)), $(lvl.task), style)
-    #        $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
-    #    end,
-    #)
     diff[lvl.tag] = VirtualShardLevel(
         lvl.tag,
         lvl.device,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.task, arch, style),
+        distribute_buffer(ctx, lvl.used, arch, style),
+        distribute_buffer(ctx, lvl.alloc, arch, style),
         distribute_buffer(ctx, lvl.val, arch, style),
-        distribute_buffer(ctx, lvl.qos_fill, arch, style),
-        distribute_buffer(ctx, lvl.qos_stop, arch, style),
-        lvl.local_qos_fill,
-        lvl.local_qos_stop,
+        lvl.qos_used,
+        lvl.qos_alloc,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
         lvl.Ptr,
         lvl.Task,
+        lvl.Used,
+        lvl.Alloc,
         lvl.Val,
-        lvl.QosFill,
-        lvl.QosStop,
     )
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{DeviceShared})
+    tag = lvl.tag
+    qos_used = freshen(ctx, tag, :qos_used)
+    qos_alloc = freshen(ctx, tag, :qos_alloc)
+    
     #lvl_2 = freshen(ctx, :lvl)
     #push_preamble!(
     #    ctx,
@@ -267,8 +257,8 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
     #    end,
     #)
     if true #get_device(arch) == lvl.device
-        local_qos_fill = freshen(ctx, lvl.tag, :_local_qos_fill)
-        local_qos_stop = freshen(ctx, lvl.tag, :_local_qos_stop)
+        qos_used = freshen(ctx, tag, :_qos_used)
+        qos_alloc = freshen(ctx, tag, :_qos_alloc)
         lvl_2 = virtualize(ctx, :($(lvl.val)[$(get_task_num(arch))]), lvl.Lvl)
         lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
         push_epilogue!(ctx, contain(ctx) do ctx_2
@@ -281,19 +271,19 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
             distribute_level(ctx, lvl_2, arch, diff, style),
             distribute_buffer(ctx, lvl.ptr, arch, style),
             distribute_buffer(ctx, lvl.task, arch, style),
+            distribute_buffer(ctx, lvl.used, arch, style),
+            distribute_buffer(ctx, lvl.alloc, arch, style),
             distribute_buffer(ctx, lvl.val, arch, style),
-            distribute_buffer(ctx, lvl.qos_fill, arch, style),
-            distribute_buffer(ctx, lvl.qos_stop, arch, style),
-            local_qos_fill,
-            local_qos_stop,
+            qos_used,
+            qos_alloc,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
             lvl.Ptr,
             lvl.Task,
+            lvl.Used,
+            lvl.Alloc,
             lvl.Val,
-            lvl.QosFill,
-            lvl.QosStop,
         )
     else
         diff[lvl.tag] = VirtualShardLevel(
@@ -302,19 +292,19 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
             distribute_level(ctx, lvl.lvl, arch, diff, style),
             distribute_buffer(ctx, lvl.ptr, arch, style),
             distribute_buffer(ctx, lvl.task, arch, style),
+            distribute_buffer(ctx, lvl.used, arch, style),
+            distribute_buffer(ctx, lvl.alloc, arch, style),
             distribute_buffer(ctx, lvl.val, arch, style),
-            distribute_buffer(ctx, lvl.qos_fill, arch, style),
-            distribute_buffer(ctx, lvl.qos_stop, arch, style),
-            lvl.local_qos_fill,
-            lvl.local_qos_stop,
+            lvl.qos_used,
+            lvl.qos_alloc,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
             lvl.Ptr,
             lvl.Task,
+            lvl.Used,
+            lvl.Alloc,
             lvl.Val,
-            lvl.QosFill,
-            lvl.QosStop,
         )
     end
 end
@@ -329,19 +319,19 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             redistribute(ctx, lvl.lvl, diff),
             lvl.ptr,
             lvl.task,
+            lvl.used,
+            lvl.alloc,
             lvl.val,
-            lvl.qos_fill,
-            lvl.qos_stop,
-            lvl.local_qos_fill,
-            lvl.local_qos_stop,
+            lvl.qos_used,
+            lvl.qos_alloc,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
             lvl.Ptr,
             lvl.Task,
+            lvl.Used,
+            lvl.Alloc,
             lvl.Val,
-            lvl.QosFill,
-            lvl.QosStop,
         ),
     )
 end
@@ -455,16 +445,18 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     return Thunk(;
         preamble = quote
             $task = $(lvl.task)[$(ctx(pos))]
-            if task == 0
+            if $task == 0
                 $(lvl.task)[$(ctx(pos))] = $(get_task_num(ctx))
-                qos = lvl.local_qos_fill
-                if $(lvl.local_qos_fill) > $(lvl.local_qos_stop)
-                    $(lvl.local_qos_stop) = max($(lvl.local_qos_stop) << 1, 1)
-                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(lvl.local_qos_fill, Tp), value(lvl.local_qos_stop, Tp)), ctx))
+                $qos = lvl.used[$(get_task_num(ctx))]
+                if $(lvl.qos_used) > $(lvl.qos_alloc)
+                    $(lvl.qos_alloc) = max($(lvl.qos_alloc) << 1, 1)
+                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(lvl.qos_used, Tp), value(lvl.qos_alloc, Tp)), ctx))
                 end
             else
+                if $(get_mode_flag(ctx) === :safe)
+                    @assert $task == $(get_task_num(ctx)) "Task mismatch in ShardLevel"
+                end
                 qos = $(lvl.ptr)[$(ctx(pos))]
-                qos_stop = $(lvl.local_qos_stop)
                 #only in safe mode, we check if task == $(get_task_num(ctx)) and if not error("Task mismatch in ShardLevel")
             end
             $dirty = true
@@ -473,8 +465,8 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
         epilogue = quote
             #this task will always own this position forever, even if we don't write to it. Still, we try to be conservative of memory usage of the underlying level.
             if $dirty && $(lvl.ptr)[$(ctx(pos))] == 0
-                $(lvl.local_qos_fill) += 1
-                $(lvl.ptr)[$(ctx(pos))] = $(lvl.local_qos_fill) += 1
+                $(lvl.qos_used) += 1
+                $(lvl.ptr)[$(ctx(pos))] = $(lvl.qos_used) += 1
             end
         end,
     )
