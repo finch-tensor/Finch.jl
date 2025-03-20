@@ -70,7 +70,7 @@ More formally,
 ```
 """
 permissive(body, dims...) = PermissiveArray(body, dims)
-function virtual_call(ctx, ::typeof(permissive), body, dims...)
+function rewrap(ctx, ::typeof(permissive), body, dims...)
     @assert All(isliteral)(dims)
     VirtualPermissiveArray(body, map(dim -> dim.val, dims))
 end

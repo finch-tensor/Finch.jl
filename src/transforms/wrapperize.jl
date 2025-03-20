@@ -175,13 +175,15 @@ function get_wrapper_rules(ctx, depth, alg)
         end),
         (@rule call(offset, call(swizzle, ~A, ~sigma...), ~delta...) =>
             call(swizzle, call(offset, A, delta[invperm(getval.(sigma))]...), sigma...)),
-        (@rule access(~A, ~m, ~i1..., call(call(extent, ~start, ~stop), ~k), ~i2...) =>
-            begin
+        (@rule access(
+            ~A, ~m, ~i1..., call(~ext::isvirtual, ~k), ~i2...
+        ) =>
+            if ext.val isa AbstractVirtualExtent
                 A_2 = call(
                     window,
                     A,
                     [nothing for _ in i1]...,
-                    call(extent, start, stop),
+                    ext,
                     [nothing for _ in i2]...,
                 )
                 A_3 = call(
@@ -190,7 +192,7 @@ function get_wrapper_rules(ctx, depth, alg)
                 access(A_3, m, i1..., k, i2...)
             end),
         (@rule access(~A, ~m, ~i1..., call(~I::isvirtual, ~k), ~i2...) =>
-            if I.val isa Extent
+            if I.val isa AbstractVirtualExtent
                 A_2 = call(window, A, [nothing for _ in i1]..., I, [nothing for _ in i2]...)
                 A_3 = call(
                     offset,
@@ -201,13 +203,13 @@ function get_wrapper_rules(ctx, depth, alg)
                 )
                 access(A_3, m, i1..., k, i2...)
             end),
-        (@rule assign(access(~a, updater(initwrite), ~i...), initwrite, ~rhs) => begin
-            assign(
-                access(a, updater(call(initwrite, call(fill_value, a))), i...),
-                call(initwrite, call(fill_value, a)),
-                rhs,
-            ) #updater(auto)
-        end),
+        #(@rule assign(access(~a, updater(initwrite), ~i...), initwrite, ~rhs) => begin
+        #    assign(
+        #        access(a, updater(call(initwrite, call(fill_value, a))), i...),
+        #        call(initwrite, call(fill_value, a)),
+        #        rhs,
+        #    ) #updater(auto)
+        #end),
         (@rule call(swizzle, call(swizzle, ~A, ~sigma_1...), ~sigma_2...) =>
             call(swizzle, A, sigma_1[getval.(sigma_2)]...)),
         (@rule access(call(swizzle, ~A, ~sigma...), ~m, ~i...) =>
@@ -284,8 +286,35 @@ function wrapperize(ctx::AbstractCompiler, root)
     )(
         root
     )
-    evaluate_partial(ctx, root)
+
+    Rewrite(
+        Fixpoint(
+            Postwalk(
+            (@rule call(
+                ~f::isliteral,
+                ~a...,
+            ) => begin
+                x = rewrap(ctx, f.val, a...)
+                if x !== nothing
+                    finch_leaf(x)
+                end
+            end),
+        ),
+        ),
+    )(
+        root
+    )
+    #evaluate_partial(ctx, root)
 end
+
+"""
+    rewrap(ctx, f, a...)
+
+Given the virtual arguments `a...`, and a literal function `f`, tion is not
+foldable, return nothing. This function is used so that we can call e.g. tensor
+constructors in finch code.
+"""
+rewrap(ctx, f, a...) = nothing
 
 function unwrap(ctx, x, var)
     if x isa FinchNode && isvirtual(x)

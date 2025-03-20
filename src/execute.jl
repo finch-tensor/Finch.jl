@@ -282,6 +282,8 @@ function finch_kernel(
         end
         execute_code(unreachable, prgm; algebra=algebra, mode=mode, ctx=ctx_2)
     end
+    code = unquote_literals(dataflow(unresolve(pretty(code))))
+    #Note: check for unreachable only after dead code elimination, otherwise we may see spurious errors from redundant virtualization of tagged variables.
     if unreachable in PostOrderDFS(code)
         throw(
             FinchNotation.FinchSyntaxError(
@@ -289,7 +291,6 @@ function finch_kernel(
             ),
         )
     end
-    code = unquote_literals(dataflow(unresolve(pretty(code))))
     arg_defs = map(((key, val),) -> :($key::$(maybe_typeof(val))), args)
     striplines(:(function $fname($(arg_defs...))
         @inbounds @fastmath $(striplines(unblock(code)))
@@ -314,13 +315,13 @@ macro finch_kernel(opts_def...)
         throw(ArgumentError("unrecognized function definition in @finch_kernel"))
     named_args = map(arg -> :($(QuoteNode(arg)) => $(esc(arg))), args)
     prgm = FinchNotation.finch_parse_instance(ex)
-    for arg in args
-        prgm = quote
-            let $(esc(arg)) = $(FinchNotation.variable_instance(arg))
-                $prgm
-            end
-        end
-    end
+    #for arg in args
+    #    prgm = quote
+    #        let $(esc(arg)) = $(FinchNotation.variable_instance(arg))
+    #            $prgm
+    #        end
+    #    end
+    #end
     return quote
         $finch_kernel(
             $(QuoteNode(name)), Any[$(named_args...),], typeof($prgm); $(map(esc, opts)...)

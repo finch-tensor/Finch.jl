@@ -57,7 +57,7 @@ export choose, minby, maxby, overwrite, initwrite, filterop, d
 export fill_value, AsArray, expanddims, tensor_tree
 
 export parallelAnalysis, ParallelAnalysisResults
-export parallel, realextent, extent, auto
+export parallel, extent, auto
 export CPU, CPULocalArray, CPULocalMemory
 
 export Limit, Eps

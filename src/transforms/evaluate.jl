@@ -1,7 +1,3 @@
-function isfoldable(x)
-    isconstant(x) || (x.kind === call && isliteral(x.op) && all(isfoldable, x.args))
-end
-
 """
     evaluate_partial(ctx, root)
 
@@ -42,15 +38,6 @@ function evaluate_partial(ctx, root)
                 Postwalk(
                     Fixpoint(
                         Chain([
-                            (@rule call(
-                                ~f::isliteral,
-                                ~a::(All(Or(isvariable, isvirtual, isfoldable)))...,
-                            ) => begin
-                                x = virtual_call(ctx, f.val, a...)
-                                if x !== nothing
-                                    finch_leaf(x)
-                                end
-                            end),
                             (@rule ~v::isvariable => if has_binding(ctx, v)
                                 val = get_binding(ctx, v)
                                 if isvariable(val) || isconstant(val)
@@ -83,20 +70,4 @@ function evaluate_partial(ctx, root)
     )(
         root
     )
-end
-
-"""
-    virtual_call(ctx, f, a...)
-
-Given the virtual arguments `a...`, and a literal function `f`, return a virtual
-object representing the result of the function call. If the function is not
-foldable, return nothing. This function is used so that we can call e.g. tensor
-constructors in finch code.
-"""
-virtual_call(ctx, f, a...) = nothing
-
-function virtual_call(ctx, ::typeof(fill_value), a)
-    if has_binding(ctx, getroot(a))
-        return virtual_fill_value(ctx, a)
-    end
 end

@@ -5,12 +5,12 @@
         x = Tensor(SparseRunList{Limit{Float32}}(Element(0)), 10)
         @finch mode = :fast (x[3] = 1)
         @finch mode = :fast (
-            for i in realextent(5 + Eps, 7 - Eps)
+            for i in extent(5 + Eps, 7 - Eps)
                 x[~i] = 1
             end
         )
         @finch mode = :fast (
-            for i in realextent(8, 9 + Eps)
+            for i in extent(8, 9 + Eps)
                 x[~i] = 1
             end
         )
@@ -28,14 +28,14 @@
         x = Tensor(SparseRunList{Limit{Float32}}(SparseList(Element(0))), 10, 10)
         a = [1, 4, 8]
         @finch mode = :fast (
-            for i in realextent(2, 4 - Eps)
+            for i in extent(2, 4 - Eps)
                 for j in extent(1, 3)
                     x[a[j], ~i] = 1
                 end
             end
         )
         @finch mode = :fast (
-            for i in realextent(6 + Eps, 10 - Eps)
+            for i in extent(6 + Eps, 10 - Eps)
                 x[2, ~i] = 1
             end
         )
@@ -152,11 +152,11 @@
         @test z1.val == z2.val
 
         @finch (z1 .= 0;
-        for i in realextent(3, 15)
+        for i in extent(3, 15)
             z1[] += coalesce(x[~(2 * i + 10)], 0)
         end)
         @finch (z2 .= 0;
-        for i in realextent(3, 15)
+        for i in extent(3, 15)
             z2[] += coalesce(y[~(2 * i + 10)], 0)
         end)
         @test z1.val == 5 && z2.val == 5

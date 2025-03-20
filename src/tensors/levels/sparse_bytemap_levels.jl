@@ -279,7 +279,7 @@ end
 Base.summary(lvl::VirtualSparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseByteMapLevel)
-    ext = Extent(literal(lvl.Ti(1)), lvl.shape)
+    ext = VirtualExtent(literal(lvl.Ti(1)), lvl.shape)
     (virtual_level_size(ctx, lvl.lvl)..., ext)
 end
 

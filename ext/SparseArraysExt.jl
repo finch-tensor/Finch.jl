@@ -1,7 +1,7 @@
 module SparseArraysExt
 
 using Finch
-using Finch: AbstractCompiler, DefaultStyle, Extent
+using Finch: AbstractCompiler, DefaultStyle, VirtualExtent
 using Finch: Unfurled, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
     Thunk, Spike
 using Finch: virtual_size, virtual_fill_value, getstart, getstop, freshen, push_preamble!,
@@ -131,7 +131,7 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) w
     qos_stop = freshen(ctx, tag, :_qos_stop)
     prev_pos = freshen(ctx, tag, :_prev_pos)
     shape = [
-        Extent(literal(1), value(m, Ti)), Extent(literal(1), value(n, Ti))
+        VirtualExtent(literal(1), value(m, Ti)), VirtualExtent(literal(1), value(n, Ti))
     ]
     VirtualSparseMatrixCSC(
         tag, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos
@@ -449,7 +449,7 @@ end
 
 function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) where {Tv,Ti}
     tag = freshen(ctx, tag)
-    shape = [Extent(literal(1), value(:($ex.n), Ti))]
+    shape = [VirtualExtent(literal(1), value(:($ex.n), Ti))]
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
     push_preamble!(

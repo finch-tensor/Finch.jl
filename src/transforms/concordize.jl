@@ -89,7 +89,7 @@ function (ctx::ConcordizeVisitor)(node::FinchNode)
     for (select_idx, idx_ex) in reverse(selects)
         var = variable(freshen(ctx, :v))
 
-        node = define(var, idx_ex, loop(select_idx, Extent(var, var), node))
+        node = define(var, idx_ex, loop(select_idx, VirtualExtent(var, var), node))
     end
 
     node

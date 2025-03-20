@@ -118,8 +118,8 @@
             output, points, radius, ox, oy
         )
             output .= false
-            for x in realextent(ox - radius, ox + radius),
-                y in realextent(oy - radius, oy + radius)
+            for x in extent(ox - radius, ox + radius),
+                y in extent(oy - radius, oy + radius)
 
                 if (x - ox)^2 + (y - oy)^2 <= radius^2
                     for id in _
@@ -192,8 +192,8 @@
         timeray = Tensor(SparseInterval{Int64}(Pattern()), 100)
         @finch begin
             grid .= 0
-            for i in realextent(4.0, 12.0), j in realextent(4.0, 12.0),
-                k in realextent(4.0, 12.0)
+            for i in extent(4.0, 12.0), j in extent(4.0, 12.0),
+                k in extent(4.0, 12.0)
 
                 for c in _
                     grid[c, ~k, ~j, ~i] = 1.0
@@ -216,8 +216,8 @@
             output .= 0
             for t in _
                 if timeray[t]
-                    for i in realextent(0.0, 1.0), j in realextent(0.0, 1.0),
-                        k in realextent(0.0, 1.0)
+                    for i in extent(0.0, 1.0), j in extent(0.0, 1.0),
+                        k in extent(0.0, 1.0)
 
                         for c in _
                             output[c, t] +=

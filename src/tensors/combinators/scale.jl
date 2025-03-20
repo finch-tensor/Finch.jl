@@ -61,7 +61,7 @@ delta...]`.  The dimensions declared by an OffsetArray are shifted, so that
 tensors with real-valued dimensions.
 """
 scale(body, delta...) = ScaleArray(body, delta)
-virtual_call(ctx, ::typeof(scale), body, scale...) = VirtualScaleArray(body, scale)
+rewrap(ctx, ::typeof(scale), body, scale...) = VirtualScaleArray(body, scale)
 unwrap(arr::VirtualScaleArray) = call(scale, unwrap(ctx, arr.body, var), arr.scale...)
 
 function lower(ctx::AbstractCompiler, tns::VirtualScaleArray, ::DefaultStyle)

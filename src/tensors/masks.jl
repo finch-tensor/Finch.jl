@@ -230,7 +230,7 @@ function virtualize(ctx, ex, ::Type{SplitMask})
 end
 
 FinchNotation.finch_leaf(x::VirtualSplitMask) = virtual(x)
-Finch.virtual_size(ctx, arr::VirtualSplitMask) = (auto, Extent(literal(1), arr.P))
+Finch.virtual_size(ctx, arr::VirtualSplitMask) = (auto, VirtualExtent(literal(1), arr.P))
 
 struct VirtualSplitMaskColumn
     P
@@ -286,23 +286,17 @@ function virtualize(ctx, ex, ::Type{ChunkMask{Dim}}) where {Dim}
 end
 
 """
-    chunkmask(b)
+    chunkmask(b, ext)
 
 A mask for a chunked tensor, `chunkmask[i, j] = b * (j - 1) < i <= b * j`. Note
 that this specializes each column for the cases where `i < b * (j - 1)`, `b * (j
 - 1) < i <= b * j`, and `b * j < i`.
 """
-function chunkmask end
-
-function Finch.virtual_call(ctx, ::typeof(chunkmask), b, dim)
-    if dim.kind === virtual
-        return VirtualChunkMask(b, dim.val)
-    end
-end
+chunkmask(b, ext) = ChunkMask(b, ext)
 
 FinchNotation.finch_leaf(x::VirtualChunkMask) = virtual(x)
 function Finch.virtual_size(ctx, arr::VirtualChunkMask)
-    (arr.dim, Extent(literal(1), call(cld, measure(arr.dim), arr.b)))
+    (arr.dim, VirtualExtent(literal(1), call(cld, measure(arr.dim), arr.b)))
 end
 
 struct VirtualChunkMaskColumn

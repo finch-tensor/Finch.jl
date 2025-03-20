@@ -72,9 +72,7 @@ function (ctx::LogicMachine)(ex)
             elseif idx in lhs_idxs
                 body = loop_instance(
                     index_instance(idx.name),
-                    call_instance(
-                        literal_instance(extent), literal_instance(1), literal_instance(1)
-                    ),
+                    Extent(1, 1),
                     body,
                 )
             end
@@ -109,9 +107,7 @@ function (ctx::LogicMachine)(ex)
             elseif idx in lhs_idxs
                 body = loop_instance(
                     index_instance(idx.name),
-                    call_instance(
-                        literal_instance(extent), literal_instance(1), literal_instance(1)
-                    ),
+                    Extent(1, 1),
                     body,
                 )
             end
