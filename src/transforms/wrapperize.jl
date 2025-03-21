@@ -203,13 +203,6 @@ function get_wrapper_rules(ctx, depth, alg)
                 )
                 access(A_3, m, i1..., k, i2...)
             end),
-        #(@rule assign(access(~a, updater(initwrite), ~i...), initwrite, ~rhs) => begin
-        #    assign(
-        #        access(a, updater(call(initwrite, call(fill_value, a))), i...),
-        #        call(initwrite, call(fill_value, a)),
-        #        rhs,
-        #    ) #updater(auto)
-        #end),
         (@rule call(swizzle, call(swizzle, ~A, ~sigma_1...), ~sigma_2...) =>
             call(swizzle, A, sigma_1[getval.(sigma_2)]...)),
         (@rule access(call(swizzle, ~A, ~sigma...), ~m, ~i...) =>
@@ -310,9 +303,8 @@ end
 """
     rewrap(ctx, f, a...)
 
-Given the virtual arguments `a...`, and a literal function `f`, tion is not
-foldable, return nothing. This function is used so that we can call e.g. tensor
-constructors in finch code.
+Given arguments `a...`, and a literal wrapper function `f`, return a wrapper
+array virtual.
 """
 rewrap(ctx, f, a...) = nothing
 
