@@ -42,7 +42,7 @@ combinedim(ctx, a::Auto, b) = b
     stop::Stop
 end
 
-extent(start::Integer, stop::Integer) = Extent(start, stop)
+FinchNotation.extent(start::Integer, stop::Integer) = Extent(start, stop)
 
 @kwdef struct VirtualExtent
     start
@@ -67,7 +67,9 @@ FinchNotation.finch_leaf(x::VirtualExtent) = virtual(x)
     stop::Stop
 end
 
-extent(start::Union{Real,Limit}, stop::Union{Real,Limit}) = ContinuousExtent(start, stop)
+function FinchNotation.extent(start::Union{Real,Limit}, stop::Union{Real,Limit})
+    ContinuousExtent(start, stop)
+end
 
 @kwdef struct VirtualContinuousExtent
     start

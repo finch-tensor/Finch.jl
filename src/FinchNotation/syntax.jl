@@ -133,7 +133,7 @@ end
 function replacesyms(sym::Symbol)
     if sym == :_
         return auto
-    elseif sym == :(_)
+    elseif sym == :(:)
         return extent
     else
         return sym
