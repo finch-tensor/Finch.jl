@@ -62,6 +62,12 @@ end
 
 FinchNotation.finch_leaf(x::VirtualExtent) = virtual(x)
 
+function virtual_call(ctx, ::typeof(extent), start, stop)
+    if isfoldable(start) && isfoldable(stop)
+        Extent(start, stop)
+    end
+end
+
 @kwdef struct ContinuousExtent{Start,Stop}
     start::Start
     stop::Stop
@@ -74,6 +80,12 @@ end
 @kwdef struct VirtualContinuousExtent
     start
     stop
+end
+
+function virtual_call(ctx, ::typeof(extent), start, stop)
+    if isfoldable(start) && isfoldable(stop)
+        ContinuousExtent(start, stop)
+    end
 end
 
 function virtualize(ctx, ex, ::Type{ContinuousExtent{Start,Stop}}) where {Start,Stop}
@@ -212,6 +224,20 @@ A dimension `ext` that is parallelized over `device`. The `ext` field is usually
 `_`, or dimensionless, but can be any standard dimension argument.
 """
 parallel(dim, device=CPU(Threads.nthreads())) = ParallelDimension(dim, device)
+
+function virtual_call(ctx, ::typeof(parallel), ext)
+    if ext.kind === virtual
+        n = cache!(ctx, :n, value(:(Threads.nthreads()), Int))
+        virtual_call(ctx, parallel, ext, finch_leaf(VirtualCPU(nothing, n)))
+    end
+end
+
+function virtual_call(ctx, ::typeof(parallel), ext, device)
+    device = resolve(ctx, device) #TODO this feels broken
+    if ext.kind === virtual
+        ParallelDimension(ext.val, device)
+    end
+end
 
 Base.:(==)(a::VirtualParallelDimension, b::VirtualParallelDimension) = a.ext == b.ext
 

@@ -42,6 +42,15 @@ function evaluate_partial(ctx, root)
                 Postwalk(
                     Fixpoint(
                         Chain([
+                            (@rule call(
+                                ~f::isliteral,
+                                ~a::(All(Or(isvariable, isvirtual, isfoldable)))...,
+                            ) => begin
+                                x = virtual_call(ctx, f.val, a...)
+                                if x !== nothing
+                                    finch_leaf(x)
+                                end
+                            end),
                             (@rule ~v::isvariable => if has_binding(ctx, v)
                                 val = get_binding(ctx, v)
                                 if isvariable(val) || isconstant(val)
@@ -86,19 +95,8 @@ constructors in finch code.
 """
 virtual_call(ctx, f, a...) = nothing
 
-#function virtual_call(ctx, ::typeof(fill_value), a)
-#    if has_binding(ctx, getroot(a))
-#        return virtual_fill_value(ctx, a)
-#    end
-#end
-
-
-#                            (@rule call(
-#                                ~f::isliteral,
-#                                ~a::(All(Or(isvariable, isvirtual, isfoldable)))...,
-#                            ) => begin
-#                                x = virtual_call(ctx, f.val, a...)
-#                                if x !== nothing
-#                                    finch_leaf(x)
-#                                end
-#                            end),
+function virtual_call(ctx, ::typeof(fill_value), a)
+    if has_binding(ctx, getroot(a))
+        return virtual_fill_value(ctx, a)
+    end
+end

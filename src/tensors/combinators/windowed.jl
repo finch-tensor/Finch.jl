@@ -69,7 +69,7 @@ of each `dim`. The `dims` may also be `nothing` to represent a full view of the
 underlying dimension.
 """
 window(body, dims...) = WindowedArray(body, dims)
-function rewrap(ctx, ::typeof(window), body, dims...)
+function virtual_call(ctx, ::typeof(window), body, dims...)
     if all(isvirtual, dims)
         VirtualWindowedArray(body, map(dim -> dim.val, dims))
     end

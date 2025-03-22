@@ -126,20 +126,6 @@ struct Auto end
 const auto = Auto()
 function extent end
 
-replacesyms(ex) = ex
-function replacesyms(ex::Expr)
-    return Expr(ex.head, map(replacesyms, ex.args)...)
-end
-function replacesyms(sym::Symbol)
-    if sym == :_
-        return auto
-    elseif sym == :(:)
-        return extent
-    else
-        return sym
-    end
-end
-
 struct FinchParserVisitor
     nodes
 end
@@ -199,7 +185,7 @@ function (ctx::FinchParserVisitor)(ex::Expr)
             ))
         end
     elseif @capture ex :for(:(=)(~idx, ~ext), ~body)
-        ext = replacesyms(ext)
+        ext = ctx(ext)
         body = ctx(body)
         if idx isa Symbol
             return quote

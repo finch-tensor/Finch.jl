@@ -279,34 +279,8 @@ function wrapperize(ctx::AbstractCompiler, root)
     )(
         root
     )
-
-    Rewrite(
-        Fixpoint(
-            Postwalk(
-            (@rule call(
-                ~f::isliteral,
-                ~a...,
-            ) => begin
-                x = rewrap(ctx, f.val, a...)
-                if x !== nothing
-                    finch_leaf(x)
-                end
-            end),
-        ),
-        ),
-    )(
-        root
-    )
-    #evaluate_partial(ctx, root)
+    evaluate_partial(ctx, root)
 end
-
-"""
-    rewrap(ctx, f, a...)
-
-Given arguments `a...`, and a literal wrapper function `f`, return a wrapper
-array virtual.
-"""
-rewrap(ctx, f, a...) = nothing
 
 function unwrap(ctx, x, var)
     if x isa FinchNode && isvirtual(x)

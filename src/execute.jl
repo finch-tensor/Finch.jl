@@ -282,8 +282,6 @@ function finch_kernel(
         end
         execute_code(unreachable, prgm; algebra=algebra, mode=mode, ctx=ctx_2)
     end
-    code = unquote_literals(dataflow(unresolve(pretty(code))))
-    #Note: check for unreachable only after dead code elimination, otherwise we may see spurious errors from redundant virtualization of tagged variables.
     if unreachable in PostOrderDFS(code)
         throw(
             FinchNotation.FinchSyntaxError(
@@ -291,6 +289,7 @@ function finch_kernel(
             ),
         )
     end
+    code = unquote_literals(dataflow(unresolve(pretty(code))))
     arg_defs = map(((key, val),) -> :($key::$(maybe_typeof(val))), args)
     striplines(:(function $fname($(arg_defs...))
         @inbounds @fastmath $(striplines(unblock(code)))
