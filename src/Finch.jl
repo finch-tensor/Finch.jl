@@ -59,6 +59,7 @@ export fill_value, AsArray, expanddims, tensor_tree
 
 export parallelAnalysis, ParallelAnalysisResults
 export parallel, extent, auto
+export Schedule, static, dynamic
 export CPU, CPULocalArray, CPULocalMemory
 
 export Limit, Eps
