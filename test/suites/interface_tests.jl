@@ -928,6 +928,21 @@ end
                     @test size(v) == (3, 2)
                     @test expanddims(v, 2) == u
                 end
+
+                #https://github.com/finch-tensor/Finch.jl/issues/701
+                let 
+                    A = rand(4)
+                    @test argmin(A) == argmin(Tensor(A))
+                    @test argmax(A) == argmax(Tensor(A))
+
+                    A = rand(4, 5)
+                    @test argmin(A) == argmin(Tensor(A))
+                    @test argmin(A, dims=1) == argmin(Tensor(A), dims=1)
+                    @test argmin(A, dims=(1,2)) == argmin(Tensor(A), dims=(1, 2))
+                    @test argmax(A) == argmax(Tensor(A))
+                    @test argmax(A, dims=1) == argmax(Tensor(A), dims=1)
+                    @test argmax(A, dims=(1,2)) == argmax(Tensor(A), dims=(1, 2))
+                end
             end
         end
     end
