@@ -3,14 +3,14 @@ quote
     tmp_lvl_ptr = ((ex.bodies[1]).bodies[1]).tns.bind.lvl.ptr
     tmp_lvl_tbl = ((ex.bodies[1]).bodies[1]).tns.bind.lvl.tbl
     tmp_lvl_srt = ((ex.bodies[1]).bodies[1]).tns.bind.lvl.srt
-    tmp_lvl_qos_stop = (tmp_lvl_qos_fill = length(tmp_lvl.srt))
+    tmp_lvl_qos_alloc = (tmp_lvl_qos_used = length(tmp_lvl.srt))
     tmp_lvl_2 = tmp_lvl.lvl
     tmp_lvl_val = tmp_lvl.lvl.val
     ref_lvl = ((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.lvl
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    for tmp_lvl_r = 1:tmp_lvl_qos_fill
+    for tmp_lvl_r = 1:tmp_lvl_qos_used
         tmp_lvl_p = first(tmp_lvl_srt[tmp_lvl_r])
         tmp_lvl_ptr[tmp_lvl_p] = 0
         tmp_lvl_ptr[tmp_lvl_p + 1] = 0
@@ -20,7 +20,7 @@ quote
         Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_q)
         Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_q, tmp_lvl_q)
     end
-    tmp_lvl_qos_fill = 0
+    tmp_lvl_qos_used = 0
     tmp_lvl_ptr[1] = 1
     tmp_lvlq_stop = 1 * ref_lvl.shape
     Finch.resize_if_smaller!(tmp_lvl_ptr, 1 + 1)
@@ -50,12 +50,12 @@ quote
                 tmp_lvl_val[tmp_lvl_q_2] = ref_lvl_2_val
                 if !(tmp_lvl_tbl[tmp_lvl_q_2])
                     tmp_lvl_tbl[tmp_lvl_q_2] = true
-                    tmp_lvl_qos_fill += 1
-                    if tmp_lvl_qos_fill > tmp_lvl_qos_stop
-                        tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                        Finch.resize_if_smaller!(tmp_lvl_srt, tmp_lvl_qos_stop)
+                    tmp_lvl_qos_used += 1
+                    if tmp_lvl_qos_used > tmp_lvl_qos_alloc
+                        tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                        Finch.resize_if_smaller!(tmp_lvl_srt, tmp_lvl_qos_alloc)
                     end
-                    tmp_lvl_srt[tmp_lvl_qos_fill] = (1, ref_lvl_i)
+                    tmp_lvl_srt[tmp_lvl_qos_used] = (1, ref_lvl_i)
                 end
                 ref_lvl_q += 1
             else
@@ -66,12 +66,12 @@ quote
                     tmp_lvl_val[tmp_lvl_q_2] = ref_lvl_2_val
                     if !(tmp_lvl_tbl[tmp_lvl_q_2])
                         tmp_lvl_tbl[tmp_lvl_q_2] = true
-                        tmp_lvl_qos_fill += 1
-                        if tmp_lvl_qos_fill > tmp_lvl_qos_stop
-                            tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                            Finch.resize_if_smaller!(tmp_lvl_srt, tmp_lvl_qos_stop)
+                        tmp_lvl_qos_used += 1
+                        if tmp_lvl_qos_used > tmp_lvl_qos_alloc
+                            tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                            Finch.resize_if_smaller!(tmp_lvl_srt, tmp_lvl_qos_alloc)
                         end
-                        tmp_lvl_srt[tmp_lvl_qos_fill] = (1, phase_stop_3)
+                        tmp_lvl_srt[tmp_lvl_qos_used] = (1, phase_stop_3)
                     end
                     ref_lvl_q += 1
                 end
@@ -81,10 +81,10 @@ quote
     end
     resize!(tmp_lvl_ptr, 1 + 1)
     resize!(tmp_lvl_tbl, 1 * ref_lvl.shape)
-    resize!(tmp_lvl_srt, tmp_lvl_qos_fill)
+    resize!(tmp_lvl_srt, tmp_lvl_qos_used)
     sort!(tmp_lvl_srt)
     tmp_lvl_p_prev = 0
-    for tmp_lvl_r_2 = 1:tmp_lvl_qos_fill
+    for tmp_lvl_r_2 = 1:tmp_lvl_qos_used
         tmp_lvl_p_2 = first(tmp_lvl_srt[tmp_lvl_r_2])
         if tmp_lvl_p_2 != tmp_lvl_p_prev
             tmp_lvl_ptr[tmp_lvl_p_prev + 1] = tmp_lvl_r_2
@@ -92,7 +92,7 @@ quote
         end
         tmp_lvl_p_prev = tmp_lvl_p_2
     end
-    tmp_lvl_ptr[tmp_lvl_p_prev + 1] = tmp_lvl_qos_fill + 1
+    tmp_lvl_ptr[tmp_lvl_p_prev + 1] = tmp_lvl_qos_used + 1
     resize!(tmp_lvl_val, ref_lvl.shape)
     (tmp = Tensor((SparseByteMapLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_tbl, tmp_lvl_srt)),)
 end

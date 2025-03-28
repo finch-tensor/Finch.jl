@@ -8,7 +8,7 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    tmp_lvl_qos_stop = 0
+    tmp_lvl_qos_alloc = 0
     Finch.resize_if_smaller!(tmp_lvl_ofs, 1)
     tmp_lvl_ofs[1] = 1
     Finch.resize_if_smaller!(tmp_lvl_idx, 1)
@@ -41,13 +41,13 @@ quote
                     end
                     tmp_lvl_qos = (ref_lvl_i - tmp_lvl_i_prev) + 0 + 1
                 end
-                if tmp_lvl_qos > tmp_lvl_qos_stop
-                    tmp_lvl_qos_2 = tmp_lvl_qos_stop + 1
-                    while tmp_lvl_qos > tmp_lvl_qos_stop
-                        tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
+                if tmp_lvl_qos > tmp_lvl_qos_alloc
+                    tmp_lvl_qos_2 = tmp_lvl_qos_alloc + 1
+                    while tmp_lvl_qos > tmp_lvl_qos_alloc
+                        tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
                     end
-                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                    Finch.fill_range!(tmp_lvl_val, 0.0, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                    Finch.fill_range!(tmp_lvl_val, 0.0, tmp_lvl_qos_2, tmp_lvl_qos_alloc)
                 end
                 tmp_lvl_val[tmp_lvl_qos] = ref_lvl_2_val
                 if tmp_lvl_i_prev <= 0
@@ -65,13 +65,13 @@ quote
                         end
                         tmp_lvl_qos = (phase_stop_3 - tmp_lvl_i_prev) + 0 + 1
                     end
-                    if tmp_lvl_qos > tmp_lvl_qos_stop
-                        tmp_lvl_qos_2 = tmp_lvl_qos_stop + 1
-                        while tmp_lvl_qos > tmp_lvl_qos_stop
-                            tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
+                    if tmp_lvl_qos > tmp_lvl_qos_alloc
+                        tmp_lvl_qos_2 = tmp_lvl_qos_alloc + 1
+                        while tmp_lvl_qos > tmp_lvl_qos_alloc
+                            tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
                         end
-                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                        Finch.fill_range!(tmp_lvl_val, 0.0, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                        Finch.fill_range!(tmp_lvl_val, 0.0, tmp_lvl_qos_2, tmp_lvl_qos_alloc)
                     end
                     tmp_lvl_val[tmp_lvl_qos] = ref_lvl_2_val
                     if tmp_lvl_i_prev <= 0
@@ -93,7 +93,7 @@ quote
     for p = 2:1 + 1
         tmp_lvl_ofs[p] += tmp_lvl_ofs[p - 1]
     end
-    qos_stop = tmp_lvl_ofs[1 + 1] - 1
-    resize!(tmp_lvl_val, qos_stop)
+    qos_alloc = tmp_lvl_ofs[1 + 1] - 1
+    resize!(tmp_lvl_val, qos_alloc)
     (tmp = Tensor((SparseBandLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx, tmp_lvl_ofs)),)
 end
