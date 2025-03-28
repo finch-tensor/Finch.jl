@@ -70,7 +70,7 @@ dimension of a matrix `A`, we write `A[gallop(i), j]`, which becomes
 `protocolize(A, gallop, nothing)[i, j]`.
 """
 protocolize(body, protos...) = ProtocolizedArray(body, protos)
-function virtual_call(ctx, ::typeof(protocolize), body, protos...)
+function virtual_call_def(ctx, alg, ::typeof(protocolize), ::Any, body, protos...)
     @assert All(isliteral)(protos)
     VirtualProtocolizedArray(body, map(proto -> proto.val, protos))
 end

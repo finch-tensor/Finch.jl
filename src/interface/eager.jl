@@ -178,3 +178,71 @@ Expand the dimensions of an array by inserting a new singleton axis or axes that
 will appear at the `dims` position in the expanded array shape.
 """
 expanddims(arr::AbstractTensor, dims) = compute(expanddims(lazy(arr), dims))
+
+"""
+    dropdims(arr::AbstractTensor, dims)
+
+Reduces the dimensions of an array by removing the singleton axis or axes that
+appear at the `dims` position in the array shape.
+"""
+Base.dropdims(arr::AbstractTensor, dims) = compute(dropdims(lazy(arr), dims))
+
+function Statistics.mean(tns::AbstractTensorOrBroadcast; dims=:)
+    res = compute(mean(lazy(tns); dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end
+
+function Statistics.mean(f, tns::AbstractTensorOrBroadcast; dims=:)
+    res = compute(mean(f, lazy(tns); dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end
+
+function Statistics.varm(tns::AbstractTensorOrBroadcast, m; corrected=true, dims=:)
+    res = compute(varm(lazy(tns), m; corrected=corrected, dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end
+
+function Statistics.var(
+    tns::AbstractTensorOrBroadcast; corrected=true, mean=nothing, dims=:
+)
+    res = compute(var(lazy(tns); corrected=corrected, mean=mean, dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end
+
+function Statistics.stdm(
+    tns::AbstractTensorOrBroadcast, m; corrected=true, dims=:
+)
+    res = compute(stdm(lazy(tns), lazy(m); corrected=corrected, dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end
+
+function Statistics.std(
+    tns::AbstractTensorOrBroadcast; corrected=true, mean=nothing, dims=:
+)
+    res = compute(std(lazy(tns); corrected=corrected, mean=mean, dims=dims))
+    if dims === Colon()
+        return res[]
+    else
+        return res
+    end
+end

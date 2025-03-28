@@ -316,7 +316,10 @@ end
 Base.summary(lvl::VirtualSparseCOOLevel) = "SparseCOO{$(lvl.N)}($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel)
-    ext = map((ti, stop) -> Extent(literal(ti(1)), stop), lvl.TI.parameters, lvl.shape)
+    ext = map(
+        (Ti, stop) -> virtual_call(ctx, extent, literal(Ti(1)), stop), lvl.TI.parameters,
+        lvl.shape,
+    )
     (virtual_level_size(ctx, lvl.lvl)..., ext...)
 end
 

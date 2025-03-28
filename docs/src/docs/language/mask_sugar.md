@@ -45,5 +45,6 @@ uptrimask
 lotrimask
 diagmask
 bandmask
+splitmask
 chunkmask
 ```

@@ -81,7 +81,7 @@ Create a `ToeplitzArray` such that
 The ToplitzArray can be thought of as adding a dimension that shifts another dimension of the original tensor.
 """
 toeplitz(body, dim) = ToeplitzArray(body, dim)
-function virtual_call(ctx, ::typeof(toeplitz), body, dim)
+function virtual_call_def(ctx, alg, ::typeof(toeplitz), ::Any, body, dim)
     @assert isliteral(dim)
     VirtualToeplitzArray(body, dim.val)
 end

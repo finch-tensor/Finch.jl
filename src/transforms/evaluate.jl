@@ -16,7 +16,11 @@ function evaluate_partial(ctx, root)
                     (@rule tag(~var, ~bind::isindex) => bind),
                     (@rule tag(~var, ~bind::isvariable) => bind),
                     (@rule tag(~var, ~bind::isliteral) => bind),
-                    (@rule tag(~var, ~bind::isvalue) => bind),
+                    (@rule tag(~var, ~bind::isvalue) => if has_binding(ctx, var)
+                        get_binding(ctx, var)
+                    else
+                        bind
+                    end),
                     (@rule tag(~var, ~bind::isvirtual) => begin
                         get_binding!(ctx, var, bind)
                         var
@@ -86,17 +90,53 @@ function evaluate_partial(ctx, root)
 end
 
 """
-    virtual_call(ctx, f, a...)
+    virtual_type(ctx, algebra, arg)
 
-Given the virtual arguments `a...`, and a literal function `f`, return a virtual
-object representing the result of the function call. If the function is not
-foldable, return nothing. This function is used so that we can call e.g. tensor
-constructors in finch code.
+Return the narrowest type constraint on the argument `arg` that is compatible with the algebra.
 """
-virtual_call(ctx, f, a...) = nothing
+virtual_type(ctx, alg, arg) = Any
+virtual_type(ctx, arg) = virtual_type(ctx, get_algebra(ctx), arg)
 
-function virtual_call(ctx, ::typeof(fill_value), a)
-    if has_binding(ctx, getroot(a))
-        return virtual_fill_value(ctx, a)
+function virtual_type(ctx, alg, arg::FinchNode)
+    if arg.kind === literal
+        return typeof(arg.val)
+    elseif arg.kind === value
+        return arg.type
+    elseif arg.kind === variable || arg.kind === index
+        if has_binding(ctx, arg)
+            return virtual_type(ctx, alg, get_binding(ctx, arg))
+        else
+            return Any
+        end
+    elseif arg.kind === virtual
+        return virtual_type(ctx, alg, arg.val)
+    elseif @capture arg call(~f::isliteral, ~args...)
+        arg_types = map(arg.args) do arg
+            virtual_type(ctx, alg, arg)
+        end
+        T = return_type(alg, f.val, arg_types...)
+        return return_type(alg, f.val, arg_types...)
+    else
+        return Any
     end
 end
+
+"""
+    virtual_call(ctx, f, args...)
+
+Given the virtual arguments `args...`, and a literal function `f`, return a virtual
+object representing the result of the function call. If the function is not
+foldable, return nothing. This function is used so that we can call e.g. tensor
+wrapper constructors and dimension constructors in finch code. Implementations should overload
+`virtual_call_def` to provide the actual implementation.
+"""
+function virtual_call(ctx, f, args...)
+    virtual_call_def(
+        ctx,
+        get_algebra(ctx),
+        f,
+        Tuple{map(arg -> virtual_type(ctx, arg), args)...},
+        args...)
+end
+
+virtual_call_def(ctx, alg, f, arg_types, args...) = nothing

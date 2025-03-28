@@ -216,10 +216,10 @@ end
 function collapsed(alg, idx, ext, lhs, f::typeof(*), rhs)
     assign(lhs, f, call(^, rhs, measure(ext)))
 end
-function collapsed(alg, idx, ext::Extent, lhs, f::typeof(+), rhs)
+function collapsed(alg, idx, ext::VirtualExtent, lhs, f::typeof(+), rhs)
     assign(lhs, f, call(*, measure(ext), rhs))
 end
-function collapsed(alg, idx, ext::ContinuousExtent, lhs, f::typeof(+), rhs)
+function collapsed(alg, idx, ext::VirtualContinuousExtent, lhs, f::typeof(+), rhs)
     if (@capture rhs call(*, ~a1..., call(d, ~i1..., idx, ~i2...), ~a2...)) # Lebesgue
         if prove(FinchCompiler(), call(==, measure(ext), 0))
             assign(lhs, f, literal(0))

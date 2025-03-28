@@ -14,12 +14,12 @@ function virtualize(ctx, ex, arrtype::Type{<:AbstractUnitRange{T}}, tag=:tns) wh
     tag = freshen(ctx, tag)
     data = freshen(ctx, tag, :_data)
     push_preamble!(ctx, :($data = $ex))
-    target = Extent(value(:(first($data)), T), value(:(last($data)), T))
+    target = VirtualExtent(value(:(first($data)), T), value(:(last($data)), T))
     VirtualAbstractUnitRange(tag, data, target, arrtype, T)
 end
 
 function virtual_size(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange)
-    return [Extent(literal(1), value(:(length($(arr.data))), Int))]
+    return [VirtualExtent(literal(1), value(:(length($(arr.data))), Int))]
 end
 
 virtual_resize!(ctx::AbstractCompiler, arr::VirtualAbstractUnitRange, idx_dim) = arr

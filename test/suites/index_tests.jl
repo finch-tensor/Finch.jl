@@ -232,42 +232,58 @@
         println(io, "chunkmask tests")
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 15, 3)
+        @repl io m = Finch.chunkmask(15, 5)
         @repl io @finch begin
-            let m = Finch.chunkmask(5, 1:15)
-                for i in _
-                    for j in _
-                        A[j, i] = m[j, i]
-                    end
+            for i in _
+                for j in _
+                    A[j, i] = m[j, i]
                 end
             end
         end
         @repl io AsArray(A)
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 14, 3)
+        @repl io m = Finch.chunkmask(14, 5)
         @repl io @finch begin
-            let m = Finch.chunkmask(5, 1:14)
-                for i in _
-                    for j in _
-                        A[j, i] = m[j, i]
-                    end
+            for i in _
+                for j in _
+                    A[j, i] = m[j, i]
                 end
             end
         end
         @repl io AsArray(A)
 
         @test check_output("index/chunkmask.txt", String(take!(io)))
+
+        io = IOBuffer()
+        println(io, "splitmask tests")
+
+        @repl io A = Tensor(Dense(Dense(Element(0.0))), 15, 5)
+        @repl io m = Finch.splitmask(15, 5)
+        @repl io @finch begin
+            for i in _
+                for j in _
+                    A[j, i] = m[j, i]
+                end
+            end
+        end
+        @repl io AsArray(A)
+
+        @repl io A = Tensor(Dense(Dense(Element(0.0))), 14, 5)
+        @repl io m = Finch.splitmask(14, 5)
+        @repl io @finch begin
+            for i in _
+                for j in _
+                    A[j, i] = m[j, i]
+                end
+            end
+        end
+        @repl io AsArray(A)
+
+        @test check_output("index/splitmask.txt", String(take!(io)))
     end
 
     let
-        #=
-            function wrapper_result(inst)
-                ctx = Finch.FinchCompiler()
-                prgm = Finch.virtualize(ctx.code, :inst, typeof(inst))
-                prgm = Finch.evaluate_partial(ctx, prgm)
-                Finch.wrapperize(ctx, prgm)
-            end
-        =#
-
         x = Scalar(0.0)
         A = Tensor(Dense(Dense(Dense(Element(0.0)))),
             reshape(

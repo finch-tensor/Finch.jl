@@ -334,7 +334,7 @@ end
 Base.summary(lvl::VirtualSparseRunListLevel) = "SparseRunList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseRunListLevel)
-    ext = make_extent(lvl.Ti, literal(lvl.Ti(1.0)), lvl.shape)
+    ext = virtual_call(ctx, extent, literal(lvl.Ti(1.0)), lvl.shape)
     (virtual_level_size(ctx, lvl.lvl)..., ext)
 end
 

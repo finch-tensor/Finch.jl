@@ -317,7 +317,7 @@ end
 Base.summary(lvl::VirtualSparseBlockListLevel) = "SparseBlockList($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparseBlockListLevel)
-    ext = Extent(literal(lvl.Ti(1)), lvl.shape)
+    ext = VirtualExtent(literal(lvl.Ti(1)), lvl.shape)
     (virtual_level_size(ctx, lvl.lvl)..., ext)
 end
 

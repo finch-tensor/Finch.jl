@@ -82,7 +82,7 @@ Create a `ProductArray` such that
 This is like [`toeplitz`](@ref) but with times instead of plus.
 """
 products(body, dim) = ProductArray(body, dim)
-function virtual_call(ctx, ::typeof(products), body, dim)
+function virtual_call_def(ctx, alg, ::typeof(products), ::Any, body, dim)
     @assert isliteral(dim)
     VirtualProductArray(body, dim.val)
 end

@@ -227,7 +227,7 @@ end
 Base.summary(lvl::VirtualSparsePointLevel) = "SparsePoint($(summary(lvl.lvl)))"
 
 function virtual_level_size(ctx, lvl::VirtualSparsePointLevel)
-    ext = make_extent(lvl.Ti, literal(lvl.Ti(1)), lvl.shape)
+    ext = virtual_call(ctx, extent, literal(lvl.Ti(1)), lvl.shape)
     (virtual_level_size(ctx, lvl.lvl)..., ext)
 end
 

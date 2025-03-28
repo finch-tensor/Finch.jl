@@ -125,15 +125,16 @@ finch to pick up the loop bounds from the tensors automatically.
 struct Auto end
 const auto = Auto()
 function extent end
-function realextent end
 
 struct FinchParserVisitor
     nodes
 end
 
 function (ctx::FinchParserVisitor)(ex::Symbol)
-    if ex == :_ || ex == :(:)
+    if ex == :_
         return :($auto)
+    elseif ex == :(:)
+        return ctx.nodes.leaf(extent)
     elseif ex in evaluable_exprs
         return ctx.nodes.literal(@eval($ex))
     else
@@ -247,7 +248,7 @@ function (ctx::FinchParserVisitor)(ex::Expr)
         return ctx(:($lhs << $(incs[op]) >>= $rhs))
     elseif @capture ex :(=)(:ref(~tns, ~idxs...), ~rhs)
         mode = ctx.nodes.updater
-        op = :($(ctx.nodes.literal)($initwrite))
+        op = :($(ctx.nodes.literal)($initwrite($fill_value($(esc(tns))))))
         lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode($op), $(map(ctx, idxs)...)))
         return :($(ctx.nodes.assign)($lhs, $op, $(ctx(rhs))))
     elseif @capture ex :>>=(:call(:<<, :ref(~tns, ~idxs...), ~op), ~rhs)
@@ -269,11 +270,7 @@ function (ctx::FinchParserVisitor)(ex::Expr)
     elseif @capture ex :||(~a, ~b)
         return ctx(:($or($a, $b)))
     elseif @capture ex :call(~op, ~args...)
-        if op == :(:)
-            return :($(ctx.nodes.call)($(ctx(:extent)), $(map(ctx, args)...)))
-        else
-            return :($(ctx.nodes.call)($(ctx(op)), $(map(ctx, args)...)))
-        end
+        return :($(ctx.nodes.call)($(ctx(op)), $(map(ctx, args)...)))
     elseif @capture ex :(...)(~arg) #TODO error on any unrecognized syntax like this.
         return esc(ex)
     elseif @capture ex :$(~arg)

@@ -271,7 +271,7 @@ function finch_kernel(
     ctx=FinchCompiler(; algebra=algebra, mode=mode),
 )
     maybe_typeof(x) = x isa Type ? x : typeof(x)
-    unreachable = gensym(:unreachable)
+    ex = freshen(ctx, :ex)
     code = contain(ctx) do ctx_2
         foreach(args) do (key, val)
             set_binding!(
@@ -280,14 +280,11 @@ function finch_kernel(
                 finch_leaf(virtualize(ctx_2.code, key, maybe_typeof(val), key)),
             )
         end
-        execute_code(unreachable, prgm; algebra=algebra, mode=mode, ctx=ctx_2)
+        execute_code(ex, prgm; algebra=algebra, mode=mode, ctx=ctx_2)
     end
-    if unreachable in PostOrderDFS(code)
-        throw(
-            FinchNotation.FinchSyntaxError(
-                "Attempting to interpolate value from local scope into @finch_kernel, pass values as function arguments or use \$ to interpolate explicitly."
-            ),
-        )
+    code = quote
+        $ex = $prgm #TODO this is pretty messy because the whole program gets passed in as a global. However, I'm pretty sure we could do a cleanup pass to fix this, and no code currently uses globals this way anyway.
+        $code
     end
     code = unquote_literals(dataflow(unresolve(pretty(code))))
     arg_defs = map(((key, val),) -> :($key::$(maybe_typeof(val))), args)
@@ -301,7 +298,7 @@ end
 
 Return a definition for a function named `fname` which executes `@finch prgm` on
 the arguments `args`. `args` should be a list of variables holding
-representative argument instances or types.
+representative argument instances.
 
 See also: [`@finch`](@ref)
 """
@@ -314,13 +311,13 @@ macro finch_kernel(opts_def...)
         throw(ArgumentError("unrecognized function definition in @finch_kernel"))
     named_args = map(arg -> :($(QuoteNode(arg)) => $(esc(arg))), args)
     prgm = FinchNotation.finch_parse_instance(ex)
-    for arg in args
-        prgm = quote
-            let $(esc(arg)) = $(FinchNotation.variable_instance(arg))
-                $prgm
-            end
-        end
-    end
+    #for arg in args
+    #    prgm = quote
+    #        let $(esc(arg)) = $(FinchNotation.variable_instance(arg))
+    #            $prgm
+    #        end
+    #    end
+    #end
     return quote
         $finch_kernel(
             $(QuoteNode(name)), Any[$(named_args...),], typeof($prgm); $(map(esc, opts)...)

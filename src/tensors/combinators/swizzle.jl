@@ -63,7 +63,7 @@ function swizzle(body::SwizzleArray{dims}, dims_2...) where {dims}
     SwizzleArray(body.body, ntuple(n -> dims[dims_2[n]], ndims(body)))
 end
 
-function virtual_call(ctx, ::typeof(swizzle), body, dims...)
+function virtual_call_def(ctx, alg, ::typeof(swizzle), ::Any, body, dims...)
     @assert All(isliteral)(dims)
     VirtualSwizzleArray(body, map(dim -> dim.val, collect(dims)))
 end

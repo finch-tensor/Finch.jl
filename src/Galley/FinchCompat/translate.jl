@@ -53,10 +53,8 @@ function aggs_to_mapjoins(prgm)
         Fixpoint(
             Prewalk(
                 Chain([
-                    (@rule aggregate(~op, ~init, ~arg) => if isnothing(init)
-                        arg
-                    end),
                     (@rule aggregate(~op, ~init, ~arg) => mapjoin(op, init, arg)),
+                    (@rule mapjoin(overwrite, nothing, ~arg) => arg),
                 ]),
             ),
         ),
@@ -111,7 +109,8 @@ function remove_reorders(prgm::LogicNode)
                         if length(idxs2) < length(getfields(arg))
                             reorder(
                                 aggregate(
-                                    nothing, nothing, arg, setdiff(getfields(arg), idxs2)...
+                                    overwrite, nothing, arg,
+                                    setdiff(getfields(arg), idxs2)...,
                                 ),
                                 idxs2...,
                             )

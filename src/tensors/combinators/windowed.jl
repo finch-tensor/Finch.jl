@@ -53,7 +53,8 @@ function virtualize(ctx, ex, ::Type{WindowedArray{Dims,Body}}) where {Dims,Body}
             virtualize(ctx, :($ex.dims[$n]), param)
         end
     end
-    VirtualWindowedArray(virtualize(ctx, :($ex.body), Body), dims)
+    body = virtualize(ctx, :($ex.body), Body)
+    VirtualWindowedArray(body, dims)
 end
 
 """
@@ -67,13 +68,15 @@ The windowed array restricts the new dimension to the dimension of valid indices
 of each `dim`. The `dims` may also be `nothing` to represent a full view of the
 underlying dimension.
 """
-window(body, delta...) = WindowArray(body, delta)
-function virtual_call(ctx, ::typeof(window), body, delta...)
-    VirtualWindowedArray(body, delta)
+window(body, dims...) = WindowedArray(body, dims)
+function virtual_call_def(ctx, alg, ::typeof(window), ::Any, body, dims...)
+    if all(isvirtual, dims)
+        VirtualWindowedArray(body, map(dim -> dim.val, dims))
+    end
 end
 
 function unwrap(ctx, arr::VirtualWindowedArray, var)
-    call(window, unwrap(ctx, arr.body, var), arr.delta...)
+    call(window, unwrap(ctx, arr.body, var), arr.dims...)
 end
 
 function lower(ctx::AbstractCompiler, tns::VirtualWindowedArray, ::DefaultStyle)

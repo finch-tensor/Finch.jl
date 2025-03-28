@@ -26,7 +26,7 @@ function virtualize(ctx, ex, ::Type{<:AbstractArray{T,N}}, tag=:tns) where {T,N}
         end,
     )
     VirtualAbstractArray(
-        tag, data, T, N, map(i -> Extent(literal(1), value(dims[i], Int)), 1:N)
+        tag, data, T, N, map(i -> VirtualExtent(literal(1), value(dims[i], Int)), 1:N)
     )
 end
 

@@ -16,12 +16,27 @@ julia> A = Tensor(Dense(Dense(Element(0.0))), 15, 3)
  0.0  0.0  0.0
  0.0  0.0  0.0
  0.0  0.0  0.0
+julia> m = Finch.chunkmask(15, 5)
+15×3 Finch.ChunkMask{Int64}:
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  0  1
+ 0  0  1
+ 0  0  1
+ 0  0  1
+ 0  0  1
 julia> @finch begin
-        let m = Finch.chunkmask(5, 1:15)
-            for i = _
-                for j = _
-                    A[j, i] = m[j, i]
-                end
+        for i = _
+            for j = _
+                A[j, i] = m[j, i]
             end
         end
     end
@@ -59,12 +74,26 @@ julia> A = Tensor(Dense(Dense(Element(0.0))), 14, 3)
  0.0  0.0  0.0
  0.0  0.0  0.0
  0.0  0.0  0.0
+julia> m = Finch.chunkmask(14, 5)
+14×3 Finch.ChunkMask{Int64}:
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 1  0  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  1  0
+ 0  0  1
+ 0  0  1
+ 0  0  1
+ 0  0  1
 julia> @finch begin
-        let m = Finch.chunkmask(5, 1:14)
-            for i = _
-                for j = _
-                    A[j, i] = m[j, i]
-                end
+        for i = _
+            for j = _
+                A[j, i] = m[j, i]
             end
         end
     end

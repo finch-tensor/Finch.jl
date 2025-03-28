@@ -38,7 +38,7 @@ export isprotocol
 
 export getval, getname
 
-export overwrite, initwrite, Auto, auto, extent, realextent
+export overwrite, initwrite, Auto, auto, extent
 
 export d
 

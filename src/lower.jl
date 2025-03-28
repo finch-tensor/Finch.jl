@@ -313,10 +313,10 @@ function lower_loop(ctx, root, ext)
     end
 end
 
-function lower_loop(ctx, root, ext::ParallelDimension)
+function lower_loop(ctx, root, ext::VirtualParallelDimension)
     lower_parallel_loop(ctx, root, ext, ext.device)
 end
-function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualCPU)
+function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::VirtualCPU)
     root = ensure_concurrent(root, ctx)
 
     decl_in_scope = unique(
@@ -385,10 +385,15 @@ function lower_parallel_loop(ctx, root, ext::ParallelDimension, device::VirtualC
                     end
                     body = redistribute(ctx_5, body, diff)
                     i = index(freshen(ctx, :i))
-                    root_2 = loop(i, Extent(tid, tid),
+                    root_2 = loop(i, VirtualExtent(tid, tid),
                         loop(root.idx, ext.ext,
                             sieve(
-                                access(VirtualSplitMask(device.n), reader(), root.idx, i),
+                                access(
+                                    VirtualSplitMask(getstop(ext.ext), device.n),
+                                    reader(),
+                                    root.idx,
+                                    i,
+                                ), #=TODO correct only for 1:n ranges =#
                                 body,
                             ),
                         ),

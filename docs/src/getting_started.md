@@ -103,13 +103,13 @@ julia> B = A .* 2
  0.0  0.0  0.0  0.0  0.0  0.0
 
 julia> C = lazy(A)
-?×?-LazyTensor{Float64}
+3×6-LazyTensor{Float64}
 
 julia> D = lazy(B)
-?×?-LazyTensor{Float64}
+3×6-LazyTensor{Float64}
 
 julia> E = (C .+ D) ./ 2
-?×?-LazyTensor{Float64}
+3×6-LazyTensor{Float64}
 
 julia> compute(E)
 3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
