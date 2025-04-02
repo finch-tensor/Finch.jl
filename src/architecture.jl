@@ -220,7 +220,7 @@ function transfer(device::CPULocalMemory, arr::AbstractArray)
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
 function transfer(task::CPUThread, arr::CPULocalArray)
-    if get_device(task) === arr.device
+    if get_device(task) == arr.device
         temp = arr.data[task.tid]
         return temp
     else

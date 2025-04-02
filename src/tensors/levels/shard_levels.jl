@@ -241,6 +241,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
     tag = lvl.tag
     qos_used = freshen(ctx, tag, :qos_used)
     qos_alloc = freshen(ctx, tag, :qos_alloc)
+    Tp = postype(lvl)
     
     #lvl_2 = freshen(ctx, :lvl)
     #push_preamble!(
@@ -259,16 +260,25 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
     if true #get_device(arch) == lvl.device
         qos_used = freshen(ctx, tag, :_qos_used)
         qos_alloc = freshen(ctx, tag, :_qos_alloc)
-        lvl_2 = virtualize(ctx, :($(lvl.val)[$(get_task_num(arch))]), lvl.Lvl)
-        lvl_2 = thaw_level!(ctx, lvl_2, literal(1))
+        tid = ctx(get_task_num(arch))
+        push_preamble!(ctx, quote
+            $qos_used = $(lvl.used)[$tid]
+            $qos_alloc = $(lvl.alloc)[$tid]
+        end)
+        lvl_2 = virtualize(ctx, :($(lvl.val)[$tid]), lvl.Lvl)
+        lvl_2 = thaw_level!(ctx, lvl_2, value(qos_alloc, Tp))
         push_epilogue!(ctx, contain(ctx) do ctx_2
-            lvl_3 = freeze_level!(ctx_2, lvl_2, literal(1))
-            :($(lvl.val)[$(get_task_num(arch))] = $(ctx_2(lvl_3)))
+            lvl_3 = freeze_level!(ctx_2, lvl_2, qos_alloc)
+            quote
+                $(lvl.used)[$tid] = $qos_used 
+                $(lvl.alloc)[$tid] = $qos_alloc
+                $(lvl.val)[$tid] = $(ctx_2(lvl_3))
+            end
         end)
         diff[lvl.tag] = VirtualShardLevel(
             lvl.tag,
             lvl.device,
-            distribute_level(ctx, lvl_2, arch, diff, style),
+            lvl_2,#distribute_level(ctx, lvl_2, arch, diff, style),
             distribute_buffer(ctx, lvl.ptr, arch, style),
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
@@ -289,7 +299,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
         diff[lvl.tag] = VirtualShardLevel(
             lvl.tag,
             lvl.device,
-            distribute_level(ctx, lvl.lvl, arch, diff, style),
+            lvl_2,#distribute_level(ctx, lvl.lvl, arch, diff, style),
             distribute_buffer(ctx, lvl.ptr, arch, style),
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
@@ -438,36 +448,28 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     sym = freshen(ctx, :pointer_to_lvl)
     Tp = postype(lvl)
 
-    task = freshen(ctx, tag, :_task)
-    dirty = freshen(ctx, tag, :_dirty)
+    tid = freshen(ctx, tag, :_tid)
     qos = freshen(ctx, :qos)
 
     return Thunk(;
         preamble = quote
-            $task = $(lvl.task)[$(ctx(pos))]
-            if $task == 0
-                $(lvl.task)[$(ctx(pos))] = $(get_task_num(ctx))
-                $qos = lvl.used[$(get_task_num(ctx))]
+            $qos = $(lvl.ptr)[$(ctx(pos))]
+            $tid = $(ctx(get_task_num(ctx)))
+            if $qos == 0
+                #this task will always own this position forever, even if we don't write to it.
+                $qos = $(lvl.qos_used) += 1
+                $(lvl.task)[$(ctx(pos))] = $tid
+                $(lvl.ptr)[$(ctx(pos))] = $(lvl.qos_used)
                 if $(lvl.qos_used) > $(lvl.qos_alloc)
                     $(lvl.qos_alloc) = max($(lvl.qos_alloc) << 1, 1)
                     $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(lvl.qos_used, Tp), value(lvl.qos_alloc, Tp)), ctx))
                 end
             else
                 if $(get_mode_flag(ctx) === :safe)
-                    @assert $task == $(get_task_num(ctx)) "Task mismatch in ShardLevel"
+                    @assert $(lvl.task)[$(ctx(pos))] == $tid "Task mismatch in ShardLevel"
                 end
-                qos = $(lvl.ptr)[$(ctx(pos))]
-                #only in safe mode, we check if task == $(get_task_num(ctx)) and if not error("Task mismatch in ShardLevel")
-            end
-            $dirty = true
-        end,
-        body     = (ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), dirty),
-        epilogue = quote
-            #this task will always own this position forever, even if we don't write to it. Still, we try to be conservative of memory usage of the underlying level.
-            if $dirty && $(lvl.ptr)[$(ctx(pos))] == 0
-                $(lvl.qos_used) += 1
-                $(lvl.ptr)[$(ctx(pos))] = $(lvl.qos_used) += 1
             end
         end,
+        body = (ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), fbr.dirty),
     )
 end
