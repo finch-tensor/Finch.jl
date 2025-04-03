@@ -186,7 +186,7 @@ mutable struct VirtualSparseIntervalLevel <: AbstractVirtualLevel
     right
     shape
     qos_used
-    qos_alloc
+    qos_asmbld
     prev_pos
 end
 
@@ -221,10 +221,10 @@ function virtualize(
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_asmbld = freshen(ctx, tag, :_qos_alloc)
     prev_pos = freshen(ctx, tag, :_prev_pos)
     VirtualSparseIntervalLevel(
-        tag, lvl_2, Ti, left, right, shape, qos_used, qos_alloc, prev_pos
+        tag, lvl_2, Ti, left, right, shape, qos_used, qos_asmbld, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, ::DefaultStyle)
@@ -247,7 +247,7 @@ function distribute_level(ctx, lvl::VirtualSparseIntervalLevel, arch, diff, styl
         distribute_buffer(ctx, lvl.right, arch, style),
         lvl.shape,
         lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_asmbld,
         lvl.prev_pos,
     )
 end
@@ -264,7 +264,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseIntervalLevel, di
             lvl.right,
             lvl.shape,
             lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_asmbld,
             lvl.prev_pos,
         ),
     )

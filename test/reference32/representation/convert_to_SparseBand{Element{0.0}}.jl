@@ -93,7 +93,7 @@ quote
     for p = 2:1 + 1
         tmp_lvl_ofs[p] += tmp_lvl_ofs[p - 1]
     end
-    qos_alloc = tmp_lvl_ofs[1 + 1] - 1
-    resize!(tmp_lvl_val, qos_alloc)
+    qos_asmbld = tmp_lvl_ofs[1 + 1] - 1
+    resize!(tmp_lvl_val, qos_asmbld)
     (tmp = Tensor((SparseBandLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx, tmp_lvl_ofs)),)
 end

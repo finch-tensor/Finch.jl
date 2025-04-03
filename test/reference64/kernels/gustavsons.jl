@@ -250,8 +250,8 @@ begin
     for p = 1:A_lvl_stop
         B_lvl_2_ptr[p + 1] += B_lvl_2_ptr[p]
     end
-    qos_alloc = B_lvl_2_ptr[A_lvl_stop + 1] - 1
-    resize!(B_lvl_2_idx, qos_alloc)
-    resize!(B_lvl_3_val, qos_alloc)
+    qos_asmbld = B_lvl_2_ptr[A_lvl_stop + 1] - 1
+    resize!(B_lvl_2_idx, qos_asmbld)
+    resize!(B_lvl_3_val, qos_asmbld)
     (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_3_val), A_lvl_2_stop, B_lvl_2_ptr, B_lvl_2_idx), A_lvl_stop)),)
 end

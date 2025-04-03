@@ -292,9 +292,9 @@ quote
     for p = 1:1
         z_lvl_ptr[p + 1] += z_lvl_ptr[p]
     end
-    qos_alloc = z_lvl_ptr[1 + 1] - 1
-    resize!(z_lvl_idx, qos_alloc)
-    resize!(z_lvl_2_val, qos_alloc)
+    qos_asmbld = z_lvl_ptr[1 + 1] - 1
+    resize!(z_lvl_idx, qos_asmbld)
+    resize!(z_lvl_2_val, qos_asmbld)
     (z = Tensor((SparseListLevel){Int32}(ElementLevel{0.0, Float64, Int32}(z_lvl_2_val), y_lvl_stop, z_lvl_ptr, z_lvl_idx)),)
 end
 julia> @finch begin

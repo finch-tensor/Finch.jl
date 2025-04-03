@@ -90,7 +90,7 @@ quote
     for p = 1:1
         tmp_lvl_ptr[p + 1] += tmp_lvl_ptr[p]
     end
-    qos_alloc = tmp_lvl_ptr[1 + 1] - 1
-    resize!(tmp_lvl_idx, qos_alloc)
+    qos_asmbld = tmp_lvl_ptr[1 + 1] - 1
+    resize!(tmp_lvl_idx, qos_asmbld)
     (tmp = Tensor((SparseListLevel){Int32}((SeparateLevel){ElementLevel{false, Bool, Int32, Vector{Bool}}, Vector{ElementLevel{false, Bool, Int32, Vector{Bool}}}}(tmp_lvl_3, tmp_lvl_val), ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx)),)
 end

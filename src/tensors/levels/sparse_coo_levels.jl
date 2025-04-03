@@ -215,7 +215,7 @@ mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     Lvl
     shape
     qos_used
-    qos_alloc
+    qos_asmbld
     prev_pos
 end
 
@@ -236,7 +236,7 @@ function virtualize(
 ) where {N,TI,Ptr,Tbl,Lvl}
     tag = freshen(ctx, tag)
     qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_asmbld = freshen(ctx, tag, :_qos_alloc)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = map(n -> freshen(ctx, tag, :_tbl, n), 1:N)
     stop = map(n -> freshen(ctx, tag, :_stop, n), 1:N)
@@ -261,7 +261,7 @@ function virtualize(
     prev_pos = freshen(ctx, tag, :_prev_pos)
     prev_coord = map(n -> freshen(ctx, tag, :_prev_coord_, n), 1:N)
     VirtualSparseCOOLevel(
-        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_used, qos_alloc, prev_pos
+        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_used, qos_asmbld, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle)
@@ -288,7 +288,7 @@ function distribute_level(
         lvl.Lvl,
         lvl.shape,
         lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_asmbld,
         lvl.prev_pos,
     )
 end
@@ -307,7 +307,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
             lvl.Lvl,
             lvl.shape,
             lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_asmbld,
             lvl.prev_pos,
         ),
     )
@@ -342,7 +342,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos, 
         ctx,
         quote
             $(lvl.qos_used) = $(Tp(0))
-            $(lvl.qos_alloc) = $(Tp(0))
+            $(lvl.qos_asmbld) = $(Tp(0))
         end,
     )
     if issafe(get_mode_flag(ctx))
@@ -369,7 +369,7 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_asmbld = freshen(ctx, :qos_asmbld)
     push_preamble!(
         ctx,
         quote
@@ -377,13 +377,13 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
             for $p in 2:($pos_stop + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            $qos_alloc = $(lvl.ptr)[$pos_stop + 1] - 1
+            $qos_asmbld = $(lvl.ptr)[$pos_stop + 1] - 1
             $(Expr(:block, map(1:(lvl.N)) do n
-                :(resize!($(lvl.tbl[n]), $qos_alloc))
+                :(resize!($(lvl.tbl[n]), $qos_asmbld))
             end...))
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_asmbld))
     return lvl
 end
 struct SparseCOOWalkTraversal
@@ -534,7 +534,7 @@ function unfurl(
     TI = lvl.TI
     Tp = postype(lvl)
     qos_used = lvl.qos_used
-    qos_alloc = lvl.qos_alloc
+    qos_asmbld = lvl.qos_asmbld
 
     qos = freshen(ctx, tag, :_q)
     prev_coord = freshen(ctx, tag, :_prev_coord)
@@ -574,7 +574,7 @@ function unfurl(
     TI = lvl.TI
     Tp = postype(lvl)
     qos_used = lvl.qos_used
-    qos_alloc = lvl.qos_alloc
+    qos_asmbld = lvl.qos_asmbld
     if length(coords) + 1 < lvl.N
         Lookup(;
             body=(ctx, i) -> instantiate(
@@ -590,12 +590,12 @@ function unfurl(
         Lookup(;
             body=(ctx, idx) -> Thunk(;
                 preamble = quote
-                    if $qos > $qos_alloc
-                        $qos_alloc = max($qos_alloc << 1, 1)
+                    if $qos > $qos_asmbld
+                        $qos_asmbld = max($qos_asmbld << 1, 1)
                         $(Expr(:block, map(1:(lvl.N)) do n
-                            :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_alloc))
+                            :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_asmbld))
                         end...))
-                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_alloc, Tp)), ctx))
+                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_asmbld, Tp)), ctx))
                     end
                     $dirty = false
                 end,
