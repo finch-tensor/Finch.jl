@@ -708,3 +708,11 @@ function compute_parse(ctx, args::Tuple)
 
     return ress
 end
+
+function Base.argmax(arr::LazyTensor, dims::Real=2)
+    return argmax(arr, dims)
+end
+
+function Base.argmin(arr::LazyTensor, dims::Real=2)
+    return argmin(arr, dims)
+end
