@@ -531,7 +531,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
         channel_task = VirtualMemoryChannel(value(t, postype(lvl)), multi_channel_dev, task)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, DeviceGlobal())
-        instantiate(ctx, VirtualSubFiber(lvl_2, value(q, postype(lvl)), mode))
+        instantiate(ctx, VirtualSubFiber(lvl_2, value(q, postype(lvl))), mode)
     else
         @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :dirty)), mode)
