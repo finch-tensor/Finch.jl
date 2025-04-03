@@ -455,13 +455,27 @@ virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
-    push_preamble!(ctx,
-        virtual_parallel_region(ctx, lvl.device) do ctx_2
-            lvl_2 = virtualize(
-                ctx_2, :($(lvl.val)[$(ctx_2(get_task_num(get_task(ctx_2))))]), lvl.Lvl
-            ) #TODO should this virtualize the eltype of Val?
-            declare_level!(ctx_2, lvl_2, literal(1), init)
-        end,
+    push_preamble!(ctx, contain(ctx) do ctx_2
+            diff = Dict()
+            lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
+            used = distribute_buffer(ctx_2, lvl.used, lvl.device, HostShared())
+            alloc = distribute_buffer(ctx_2, lvl.alloc, lvl.device, HostShared())
+            virtual_parallel_region(ctx_2, lvl.device) do ctx_3
+                task = get_task(ctx_3)
+                multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
+                channel_task = VirtualMemoryChannel(get_task_num(task), multi_channel_dev, task)
+                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared()),
+                used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
+                alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
+                lvl_4 = declare_level!(ctx_3, lvl_3, literal(1), init)
+                freeze_level!(ctx_3, lvl_4, literal(1))
+                tid = ctx_3(get_task_num(ctx_3))
+                quote
+                    $(ctx_3(used))[$tid] = 0
+                    $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)
+                end
+            end
+        end
     )
     lvl
 end
@@ -479,6 +493,7 @@ write:
 The outer level needs to be concurrent, like denselevel.
 """
 function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
+    #TODO This really depends on whether we are in the parallel region or not.
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
@@ -497,7 +512,7 @@ end
 supports_reassembly(::VirtualShardLevel) = false
 
 """
-these two are no-ops, we instead do these on instantiate
+these two are no-ops, we instead do these on distribute
 """
 function freeze_level!(ctx, lvl::VirtualShardLevel, pos)
     return lvl
