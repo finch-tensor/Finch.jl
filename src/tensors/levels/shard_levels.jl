@@ -1,10 +1,116 @@
+struct MultiChannelMemory{Device} <: AbstractDevice
+    device
+    n::Int
+end
+
+get_num_tasks(device::MultiChannelMemory) = device.n
+get_device(device::MultiChannelMemory) = device.device
+
+struct VirtualMultiChannelMemory <: AbstractVirtualDevice
+    device
+    n::Int
+end
+
+get_num_tasks(device::VirtualMultiChannelMemory) = device.n
+get_device(device::VirtualMultiChannelMemory) = device.device
+
+function MultiChannelMemory(device::Device) where {Device}
+    MultiChannelMemory{Device}(device)
+end
+
+function virtualize(ctx, ex, ::Type{MultiChannelMemory{Device}}) where {Device}
+    device = virtualize(ctx, :($ex.device), Device)
+    n = freshen(ctx, :n)
+    push_preamble!(quote
+        $n = $(ctx(ex.n))
+    end)
+    VirtualMultiChannelMemory(device, n)
+end
+
+function lower(ctx::AbstractCompiler, mem::VirtualMultiChannelMemory, ::DefaultStyle)
+    quote
+        MultiChannelMemory($(ctx(mem.device)), $(ctx(mem.n)))
+    end
+end
+
+struct MemoryChannel{Device<:MultiChannelMemory, Parent} <: AbstractTask
+    t::Int
+    device::Device
+    Parent::Parent
+end
+
+get_device(device::MemoryChannel) = device.device
+get_parent_task(device::MemoryChannel) = device.parent
+get_task_num(device::MemoryChannel) = device.t
+
+struct VirtualMemoryChannel <: AbstractVirtualTask
+    t
+    device
+    parent
+end
+
+function virtualize(ctx, ex, ::Type{MemoryChannel{Device, Parent}}) where {Device, Parent}
+    device = virtualize(ctx, :($ex.device), Device)
+    parent = virtualize(ctx, :($ex.parent), Parent)
+    t = freshen(ctx, :t)
+    push_preamble!(quote
+        $t = $(ctx(ex.t))
+    end)
+    VirtualMemoryChannel(device, t)
+end
+
+function lower(ctx::AbstractCompiler, mem::VirtualMemoryChannel, ::DefaultStyle)
+    quote
+        MultiChannelMemory($(ctx(mem.device)), $(ctx(mem.n)))
+    end
+end
+
+struct MultiChannelBuffer{A}
+    device::MultiChannelMemory
+    data::Vector{A}
+end
+
+function MultiChannelBuffer{A}(device::MultiChannelMemory) where {A}
+    MultiChannelBuffer{A}(device, [A([]) for _ in 1:(device.n)])
+end
+
+Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
+Base.ndims(::Type{MultiChannelBuffer{A}}) where {A} = ndims(A)
+
+function transfer(device::MultiChannelMemory, arr::AbstractArray)
+    MultiChannelBuffer{A}(mem.device, [transfer(device.device, copy(arr)) for _ in 1:(mem.device.n)])
+end
+function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
+    @assert device.device = arr.device.device
+    if arr.device.n > device.n
+        return arr
+    end
+    return MultiChannelBuffer{A}(mem.device, resize!(arr.data, device.n))
+end
+function transfer(task::MemoryChannel, arr::MultiChannelArray)
+    if task.device == arr.device
+        temp = arr.data[task.tid]
+        return temp
+    else
+        return arr
+    end
+end
+function transfer(dst::MultiChannelArray, arr::MultiChannelArray)
+    return arr
+end
+function transfer(dst::AbstractDevice, arr::MultiChannelArray)
+    if dst == arr.device
+        return arr
+    else
+        return MultiChannelArray(dst, [transfer(dst, arr.data[i]) for i in 1:length(arr.data)])
+    end
+end
+
 """
-    ShardLevel{Lvl, [Val]}()
+    ShardLevel{Lvl}()
 
-Each subfiber of a Shard level is stored in a thread-local tensor of type
-`Lvl`, in a thread-local memory space.
-
-Each sublevel is stored in a vector of type `Val` with `eltype(Val) = Lvl`.
+Each subfiber of a Shard level is stored in a thread-specific tensor of type
+`Lvl`, managed by MultiChannelMemory.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
@@ -18,14 +124,13 @@ julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
       └─ 3.0
 ```
 """
-struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val} <: AbstractLevel
+struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
     task::Task
     used::Used
     alloc::Alloc
-    val::Val
 end
 const Shard = ShardLevel
 
@@ -34,22 +139,22 @@ function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
 end
 
 function ShardLevel{Device}(
-    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc, val::Val
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
-    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}(device, lvl, ptr, task, used, alloc, val)
+    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc
+) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}(device, lvl, ptr, task, used, alloc)
 end
 
-function Base.summary(::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+function Base.summary(::Shard{Device,Lvl,Ptr,Task,Used,Alloc}) where {Device,Lvl,Ptr,Task,Used,Alloc}
     "Shard($(Lvl))"
 end
 
 function similar_level(
-    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}, fill_value, eltype::Type, dims...
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Ptr,Task,Used,Alloc}
     ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...))
 end
 
-function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc,Val}}) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc}}) where {Device,Lvl,Ptr,Task,Used,Alloc}
     postype(Lvl)
 end
 
@@ -59,11 +164,11 @@ function transfer(device, lvl::ShardLevel)
     task_2 = transfer(device, lvl.task)
     qos_used_2 = transfer(device, lvl.used)
     qos_alloc_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl_2, ptr_2, task_2, qos_used_2, qos_alloc_2, lvl.val)
+    return ShardLevel(lvl_2, ptr_2, task_2, qos_used_2, qos_alloc_2)
 end
 
 function pattern!(lvl::ShardLevel)
-    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc, map(pattern!, lvl.val))
+    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc)
 end
 
 function set_fill_value!(lvl::ShardLevel, init)
@@ -73,7 +178,7 @@ function set_fill_value!(lvl::ShardLevel, init)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        map(lvl_2 -> set_fill_value!(lvl_2, init), lvl.val),
+        map(lvl_2 -> set_fill_value!(lvl_2, init)),
     )
 end
 
@@ -84,13 +189,13 @@ function Base.resize!(lvl::ShardLevel, dims...)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        map(lvl_2 -> resize!(lvl_2, dims...), lvl.val),
+        map(lvl_2 -> resize!(lvl_2, dims...)),
     )
 end
 
 function Base.show(
-    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
+) where {Device,Lvl,Ptr,Task,Used,Alloc}
     print(io, "Shard(")
     if get(io, :compact, false)
         print(io, "…")
@@ -104,8 +209,6 @@ function Base.show(
         show(io, lvl.used)
         print(io, ", ")
         show(io, lvl.alloc)
-        print(io, ", ")
-        show(io, lvl.val)
     end
     print(io, ")")
 end
@@ -118,7 +221,8 @@ end
 function labelled_children(fbr::SubFiber{<:ShardLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    pos > length(lvl.val) && return []
+    pos > length(lvl.ptr) && return []
+    lvl_2 = transfer(MemoryChannel(lvl.task[pos]), lvl.lvl)
     [LabelledTree(SubFiber(lvl.val[lvl.task[pos]], lvl.ptr[pos]))]
 end
 

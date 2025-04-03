@@ -231,6 +231,7 @@ function transfer(dst::AbstractArray, arr::AbstractArray)
     return arr
 end
 
+
 """
     transfer(device, arr)
 
