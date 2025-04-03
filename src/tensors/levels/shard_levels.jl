@@ -22,7 +22,7 @@ function virtualize(ctx, ex, ::Type{MultiChannelMemory{Device}}) where {Device}
     device = virtualize(ctx, :($ex.device), Device)
     n = freshen(ctx, :n)
     push_preamble!(quote
-        $n = $(ctx(ex.n))
+        $n = $ex.n
     end)
     VirtualMultiChannelMemory(device, n)
 end
@@ -70,24 +70,30 @@ struct MultiChannelBuffer{A}
     data::Vector{A}
 end
 
-function MultiChannelBuffer{A}(device::MultiChannelMemory) where {A}
-    MultiChannelBuffer{A}(device, [A([]) for _ in 1:(device.n)])
+function MultiChannelBuffer(device::MultiChannelMemory, data::Vector{A}) where {A}
+    MultiChannelBuffer{A}(device, data)
 end
 
 Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
 Base.ndims(::Type{MultiChannelBuffer{A}}) where {A} = ndims(A)
 
 function transfer(device::MultiChannelMemory, arr::AbstractArray)
-    MultiChannelBuffer{A}(mem.device, [transfer(device.device, copy(arr)) for _ in 1:(mem.device.n)])
+    data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
+    MultiChannelBuffer(mem.device, data)
 end
 function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
-    @assert device.device = arr.device.device
-    if arr.device.n > device.n
-        return arr
+    data = arr.data
+    if device.device != arr.device
+        data = map(buf -> transfer(device.device, buf), data)
     end
-    return MultiChannelBuffer{A}(mem.device, resize!(arr.data, device.n))
+    if arr.device.n > device.n
+        MultiChannelBuffer(device.device, data)
+    else
+        MultiChannelBuffer(device.device, vcat(data, [transfer(device, []) for _ in 1:(device.n - arr.device.n)]))
+    end
 end
-function transfer(task::MemoryChannel, arr::MultiChannelArray)
+
+function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
     if task.device == arr.device
         temp = arr.data[task.tid]
         return temp
@@ -95,14 +101,15 @@ function transfer(task::MemoryChannel, arr::MultiChannelArray)
         return arr
     end
 end
-function transfer(dst::MultiChannelArray, arr::MultiChannelArray)
+function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)
     return arr
 end
-function transfer(dst::AbstractDevice, arr::MultiChannelArray)
+function transfer(dst::AbstractDevice, arr::MultiChannelBuffer)
     if dst == arr.device
         return arr
     else
-        return MultiChannelArray(dst, [transfer(dst, arr.data[i]) for i in 1:length(arr.data)])
+        data = map(buf -> transfer(device.device, buf), arr.data)
+        return MultiChannelBuffer(arr.device, data)
     end
 end
 
@@ -135,7 +142,11 @@ end
 const Shard = ShardLevel
 
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
-    ShardLevel{Device}(device, lvl, postype(lvl)[], postype(lvl)[], postype(lvl)[], postype(lvl)[], transfer(lvl, device))
+    ptr = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
+    task = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
+    used = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
+    alloc = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
+    ShardLevel{Device}(device, transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl), ptr, task, used, alloc)
 end
 
 function ShardLevel{Device}(
@@ -151,7 +162,8 @@ end
 function similar_level(
     lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc}, fill_value, eltype::Type, dims...
 ) where {Device,Lvl,Ptr,Task,Used,Alloc}
-    ShardLevel(lvl.device, similar_level(lvl.lvl, fill_value, eltype, dims...))
+    lvl_2 = similar(lvl.lvl, fill_value, eltype, dims...)
+    ShardLevel(lvl.device, transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl_2))
 end
 
 function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc}}) where {Device,Lvl,Ptr,Task,Used,Alloc}
@@ -159,7 +171,8 @@ function postype(::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc}}) where {Device,
 end
 
 function transfer(device, lvl::ShardLevel)
-    lvl_2 = transfer(device, lvl.lvl)
+    #lvl_2 = transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl.lvl)
+    lvl_2 = transfer(device, lvl.lvl) #TODO unclear
     ptr_2 = transfer(device, lvl.ptr)
     task_2 = transfer(device, lvl.task)
     qos_used_2 = transfer(device, lvl.used)
@@ -178,7 +191,6 @@ function set_fill_value!(lvl::ShardLevel, init)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        map(lvl_2 -> set_fill_value!(lvl_2, init)),
     )
 end
 
@@ -189,7 +201,6 @@ function Base.resize!(lvl::ShardLevel, dims...)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        map(lvl_2 -> resize!(lvl_2, dims...)),
     )
 end
 
@@ -222,8 +233,8 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
     lvl = fbr.lvl
     pos = fbr.pos
     pos > length(lvl.ptr) && return []
-    lvl_2 = transfer(MemoryChannel(lvl.task[pos]), lvl.lvl)
-    [LabelledTree(SubFiber(lvl.val[lvl.task[pos]], lvl.ptr[pos]))]
+    lvl_2 = transfer(MemoryChannel(lvl.task[pos], MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), Serial()), lvl.lvl)
+    [LabelledTree(SubFiber(lvl_2, lvl.ptr[pos]))]
 end
 
 @inline level_ndims(
@@ -243,21 +254,28 @@ end
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Val} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardLevel})(idxs...)
-    q = fbr.pos
-    return SubFiber(fbr.lvl.val[q], 1)(idxs...)
+    lvl = fbr.lvl
+    pos = fbr.pos
+    pos > length(lvl.ptr) && return []
+    lvl_2 = transfer(MemoryChannel(lvl.task[pos], MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), Serial()), lvl.lvl)
+    SubFiber(lvl_2, lvl.ptr[pos])(idxs...)
 end
 
-countstored_level(lvl::ShardLevel, pos) = pos
+function countstored_level(lvl::ShardLevel, pos)
+    sum(1:pos) do qos
+        lvl_2 = transfer(MemoryChannel(lvl.task[qos], MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), Serial()), lvl.lvl)
+        countstored_level(lvl_2, lvl.used[qos])
+    end
+end
 
 mutable struct VirtualShardLevel <: AbstractVirtualLevel
     tag
     device
-    lvl  # stand-in for the sublevel for virtual resize, etc.
+    lvl
     ptr
     task
     used
     alloc
-    val
     qos_used
     qos_alloc
     Tv
@@ -267,7 +285,6 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     Task
     Used
     Alloc
-    Val
 end
 
 postype(lvl::VirtualShardLevel) = postype(lvl.lvl)
@@ -286,21 +303,25 @@ end
 
 function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
     quote
-        $ShardLevel{$(lvl.Lvl),$(lvl.Ptr),$(lvl.Task),$(lvl.Used),$(lvl.Alloc),$(lvl.Val)}(
-            $(ctx(lvl.lvl)), $(lvl.val)
+        $ShardLevel(
+            $(ctx(lvl.device)),
+            $(ctx(lvl.lvl)),
+            $(ctx(lvl.ptr)),
+            $(ctx(lvl.task)),
+            $(ctx(lvl.used)),
+            $(ctx(lvl.alloc))
         )
     end
 end
 
 function virtualize(
-    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Val}}, tag=:lvl
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Val}
+    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}, tag=:lvl
+) where {Device,Lvl,Ptr,Task,Used,Alloc}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
     used = freshen(ctx, tag, :_qos_used)
     alloc = freshen(ctx, tag, :_qos_alloc)
-    val = freshen(ctx, tag, :_val)
 
     push_preamble!(
         ctx,
@@ -310,12 +331,11 @@ function virtualize(
             $task = $tag.task
             $used = $tag.used
             $alloc = $tag.alloc
-            $val = $tag.val
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, used, alloc, val, typeof(level_fill_value(Lvl)), nothing, nothing, Device, Lvl, Ptr, Task, Used, Alloc, Val)
+    VirtualShardLevel(tag, device_2, lvl_2, ptr, task, used, alloc, typeof(level_fill_value(Lvl)), nothing, nothing, Device, Lvl, Ptr, Task, Used, Alloc)
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
@@ -327,7 +347,6 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         distribute_buffer(ctx, lvl.task, arch, style),
         distribute_buffer(ctx, lvl.used, arch, style),
         distribute_buffer(ctx, lvl.alloc, arch, style),
-        distribute_buffer(ctx, lvl.val, arch, style),
         lvl.qos_used,
         lvl.qos_alloc,
         lvl.Tv,
@@ -337,30 +356,10 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         lvl.Task,
         lvl.Used,
         lvl.Alloc,
-        lvl.Val,
     )
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{DeviceShared})
-    tag = lvl.tag
-    qos_used = freshen(ctx, tag, :qos_used)
-    qos_alloc = freshen(ctx, tag, :qos_alloc)
-    Tp = postype(lvl)
-    
-    #lvl_2 = freshen(ctx, :lvl)
-    #push_preamble!(
-    #    ctx,
-    #    quote
-    #        val_2 = map($lvl_2 -> $(contain(ctx) do ctx_2
-    #                lvl_3 = virtualize(ctx_2, lvl_2, lvl_2.Lvl)
-    #                ctx_2(distribute(ctx_2, $val_2[i], arch, diff, style))
-    #            end)
-    #        end
-    #        $(lvl.ptr) = $transfer($(ctx(arch)), $(lvl.ptr), style)
-    #        $(lvl.task) = $transfer($(ctx(arch)), $(lvl.task), style)
-    #        $(lvl.val) = $transfer($(ctx(arch)), $(lvl.val), style)
-    #    end,
-    #)
     if true #get_device(arch) == lvl.device
         qos_used = freshen(ctx, tag, :_qos_used)
         qos_alloc = freshen(ctx, tag, :_qos_alloc)
@@ -369,46 +368,26 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
             $qos_used = $(lvl.used)[$tid]
             $qos_alloc = $(lvl.alloc)[$tid]
         end)
-        lvl_2 = virtualize(ctx, :($(lvl.val)[$tid]), lvl.Lvl)
+        dev = get_device(arch)
+        multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
+        channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
+        lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style),
         lvl_2 = thaw_level!(ctx, lvl_2, value(qos_alloc, Tp))
         push_epilogue!(ctx, contain(ctx) do ctx_2
-            lvl_3 = freeze_level!(ctx_2, lvl_2, qos_alloc)
             quote
                 $(lvl.used)[$tid] = $qos_used 
                 $(lvl.alloc)[$tid] = $qos_alloc
-                $(lvl.val)[$tid] = $(ctx_2(lvl_3))
+                freeze_level!(ctx_2, lvl_2, qos_alloc)
             end
         end)
         diff[lvl.tag] = VirtualShardLevel(
             lvl.tag,
             lvl.device,
-            lvl_2,#distribute_level(ctx, lvl_2, arch, diff, style),
+            lvl_2,
             distribute_buffer(ctx, lvl.ptr, arch, style),
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
             distribute_buffer(ctx, lvl.alloc, arch, style),
-            distribute_buffer(ctx, lvl.val, arch, style),
-            qos_used,
-            qos_alloc,
-            lvl.Tv,
-            lvl.Device,
-            lvl.Lvl,
-            lvl.Ptr,
-            lvl.Task,
-            lvl.Used,
-            lvl.Alloc,
-            lvl.Val,
-        )
-    else
-        diff[lvl.tag] = VirtualShardLevel(
-            lvl.tag,
-            lvl.device,
-            lvl_2,#distribute_level(ctx, lvl.lvl, arch, diff, style),
-            distribute_buffer(ctx, lvl.ptr, arch, style),
-            distribute_buffer(ctx, lvl.task, arch, style),
-            distribute_buffer(ctx, lvl.used, arch, style),
-            distribute_buffer(ctx, lvl.alloc, arch, style),
-            distribute_buffer(ctx, lvl.val, arch, style),
             lvl.qos_used,
             lvl.qos_alloc,
             lvl.Tv,
@@ -418,7 +397,25 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style::Union{
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
-            lvl.Val,
+        )
+    else
+        diff[lvl.tag] = VirtualShardLevel(
+            lvl.tag,
+            lvl.device,
+            distribute_level(ctx, lvl.lvl, arch, diff, style),
+            distribute_buffer(ctx, lvl.ptr, arch, style),
+            distribute_buffer(ctx, lvl.task, arch, style),
+            distribute_buffer(ctx, lvl.used, arch, style),
+            distribute_buffer(ctx, lvl.alloc, arch, style),
+            lvl.qos_used,
+            lvl.qos_alloc,
+            lvl.Tv,
+            lvl.Device,
+            lvl.Lvl,
+            lvl.Ptr,
+            lvl.Task,
+            lvl.Used,
+            lvl.Alloc,
         )
     end
 end
@@ -435,7 +432,6 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.task,
             lvl.used,
             lvl.alloc,
-            lvl.val,
             lvl.qos_used,
             lvl.qos_alloc,
             lvl.Tv,
@@ -445,7 +441,6 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
-            lvl.Val,
         ),
     )
 end
