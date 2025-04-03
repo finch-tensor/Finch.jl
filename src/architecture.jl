@@ -69,6 +69,19 @@ get_task_num(ctx::AbstractCompiler) = get_task_num(get_task(ctx))
 get_device(ctx::AbstractCompiler) = get_device(get_task(ctx))
 get_parent_task(ctx::AbstractCompiler) = get_parent_task(get_task(ctx))
 
+function is_on_device(ctx::AbstractCompiler, dev::AbstractDevice)
+    res = false
+    task = get_task(ctx)
+    while task != nothing
+        if get_device(task) == dev
+            res = true
+            break
+        end
+        task = get_parent_task(task)
+    end
+    return res
+end
+
 """
     aquire_lock!(dev::AbstractDevice, val)
 

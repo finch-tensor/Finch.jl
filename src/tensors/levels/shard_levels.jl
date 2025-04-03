@@ -142,8 +142,8 @@ end
 const Shard = ShardLevel
 
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
-    ptr = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
-    task = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
+    ptr = transfer(shared_memory(device), postype(lvl)[])
+    task = transfer(shared_memory(device), postype(lvl)[])
     used = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
     alloc = transfer(shared_memory(device), zeros(postype(lvl), get_num_tasks(device)))
     ShardLevel{Device}(device, transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl), ptr, task, used, alloc)
@@ -455,6 +455,7 @@ virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
+    @assert !is_on_device(ctx, lvl.device)
     push_preamble!(ctx, contain(ctx) do ctx_2
             diff = Dict()
             lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
@@ -480,20 +481,8 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
     lvl
 end
 
-"""
-assemble:
-    mapping is pos -> task, ptr. task says which task has it, ptr says which position in that task has it.
-
-read:
-    read from pos to task, ptr. simple.
-
-write:
-    allocate something for this task on that position, assemble on the task itself on demand. Complain if the task is wrong.
-
-The outer level needs to be concurrent, like denselevel.
-"""
 function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
-    #TODO This really depends on whether we are in the parallel region or not.
+    @assert !is_on_device(ctx, lvl.device)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
@@ -515,10 +504,12 @@ supports_reassembly(::VirtualShardLevel) = false
 these two are no-ops, we instead do these on distribute
 """
 function freeze_level!(ctx, lvl::VirtualShardLevel, pos)
+    @assert !is_on_device(ctx, lvl.device)
     return lvl
 end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualShardLevel, pos)
+    @assert !is_on_device(ctx, lvl.device)
     return lvl
 end
 
@@ -530,18 +521,22 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         Vf = level_fill_value(lvl.Lvl)
         sym = freshen(ctx, :pointer_to_lvl)
         val = freshen(ctx, lvl.tag, :_val)
-        return Thunk(;
-            body=(ctx) -> begin
-                lvl_2 = virtualize(ctx.code, :($(lvl.val)[$(ctx(pos))]), lvl.Lvl, sym)
-                instantiate(ctx, VirtualSubFiber(lvl_2, literal(1)), mode)
-            end,
-        )
+        t = freshen(ctx, tag, :_t)
+        qos = freshen(ctx, tag, :_q)
+        push_preamble!(ctx, quote
+            $t = $(lvl.task)[$(ctx(pos))]
+            $q = $(lvl.ptr)[$(ctx(pos))]
+        end)
+        task = get_task(ctx_3)
+        multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
+        channel_task = VirtualMemoryChannel(value(t, postype(lvl)), multi_channel_dev, task)
+        lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, DeviceGlobal())
+        instantiate(ctx, VirtualSubFiber(lvl_2, value(q, postype(lvl)), mode))
     else
+        @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :dirty)), mode)
     end
 end
-
-#we need some sort of localization step at the start of a parallel region whereby we can thaw the shart level
 
 """
 assemble:
@@ -564,6 +559,8 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
 
     tid = freshen(ctx, tag, :_tid)
     qos = freshen(ctx, :qos)
+
+    @assert is_on_device(ctx, lvl.device)
 
     return Thunk(;
         preamble = quote
