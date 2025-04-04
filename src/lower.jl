@@ -314,9 +314,16 @@ function lower_loop(ctx, root, ext)
 end
 
 function lower_loop(ctx, root, ext::VirtualParallelDimension)
-    lower_parallel_loop(ctx, root, ext, ext.device)
+    lower_parallel_loop(ctx, root, ext, ext.device, ext.schedule)
 end
-function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::VirtualCPU)
+
+function lower_parallel_loop(
+    ctx,
+    root,
+    ext::VirtualParallelDimension,
+    device::VirtualCPU,
+    schedule::VirtualStaticSchedule,
+)
     root = ensure_concurrent(root, ctx)
 
     decl_in_scope = unique(
@@ -356,7 +363,7 @@ function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::V
         end
         body = redistribute(ctx, root.body, diff)
 
-        virtual_parallel_region(ctx_2, device) do ctx_3
+        virtual_parallel_region(ctx_2, device, schedule) do ctx_3
             subtask = get_task(ctx_3)
             tid = get_task_num(subtask)
             open_scope(ctx_3) do ctx_4
@@ -390,6 +397,101 @@ function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::V
                             sieve(
                                 access(
                                     VirtualSplitMask(getstop(ext.ext), device.n),
+                                    reader(),
+                                    root.idx,
+                                    i,
+                                ), #=TODO correct only for 1:n ranges =#
+                                body,
+                            ),
+                        ),
+                    )
+                    ctx_5(instantiate!(ctx_5, root_2))
+                end
+            end
+        end
+    end
+end
+
+function lower_parallel_loop(
+    ctx,
+    root,
+    ext::VirtualParallelDimension,
+    device::VirtualCPU,
+    schedule::VirtualDynamicSchedule,
+)
+    root = ensure_concurrent(root, ctx)
+
+    decl_in_scope = unique(
+        filter(
+            !isnothing,
+            map(node -> begin
+                    if @capture(node, declare(~tns, ~init, ~op))
+                        tns
+                    end
+                end, PostOrderDFS(root.body)),
+        ),
+    )
+
+    used_in_scope = unique(
+        filter(
+            !isnothing,
+            map(node -> begin
+                    if @capture(node, access(~tns, ~mode, ~idxs...))
+                        getroot(tns)
+                    end
+                end, PostOrderDFS(root.body)),
+        ),
+    )
+
+    contain(ctx) do ctx_2
+        diff = Dict()
+        for tns in intersect(used_in_scope, decl_in_scope)
+            set_binding!(
+                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, host_local)
+            )
+        end
+        for tns in setdiff(used_in_scope, decl_in_scope)
+            style = get_tensor_mode(ctx, tns).kind === reader ? host_global : host_shared
+            set_binding!(
+                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, style)
+            )
+        end
+        body = redistribute(ctx, root.body, diff)
+
+        virtual_parallel_region(ctx_2, device, schedule, ext) do ctx_3
+            subtask = get_task(ctx_3)
+            tid = get_task_num(subtask)
+            open_scope(ctx_3) do ctx_4
+                contain(ctx_4) do ctx_5
+                    diff = Dict()
+                    for tns in intersect(used_in_scope, decl_in_scope)
+                        set_binding!(
+                            ctx_5,
+                            tns,
+                            distribute(
+                                ctx_5, resolve(ctx_5, tns), subtask, diff, device_local
+                            ),
+                        )
+                    end
+                    for tns in setdiff(used_in_scope, decl_in_scope)
+                        style = if get_tensor_mode(ctx, tns).kind === reader
+                            device_global
+                        else
+                            device_shared
+                        end
+                        set_binding!(
+                            ctx_5,
+                            tns,
+                            distribute(ctx_5, resolve(ctx_5, tns), subtask, diff, style),
+                        )
+                    end
+                    body = redistribute(ctx_5, body, diff)
+                    i = index(freshen(ctx, :i))
+                    root_2 = loop(i, VirtualExtent(tid, tid),
+                        loop(root.idx, ext.ext,
+                            sieve(
+                                access(
+                                    VirtualChunkMask(getstop(ext.ext), schedule.chk),
                                     reader(),
                                     root.idx,
                                     i,
