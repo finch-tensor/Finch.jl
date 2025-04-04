@@ -70,8 +70,8 @@ begin
     for p = 1:A_n
         B_ptr[p + 1] += B_ptr[p]
     end
-    qos_asmbld = B_ptr[A_n + 1] - 1
-    resize!(B_idx, qos_asmbld)
-    resize!(B_val, qos_asmbld)
+    qos_alloc = B_ptr[A_n + 1] - 1
+    resize!(B_idx, qos_alloc)
+    resize!(B_val, qos_alloc)
     (B = (SparseMatrixCSC)(A_m, A_n, B_ptr, B_idx, B_val),)
 end

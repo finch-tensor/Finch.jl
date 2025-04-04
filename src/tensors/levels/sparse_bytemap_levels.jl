@@ -189,7 +189,7 @@ mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     srt
     shape
     qos_used
-    qos_asmbld
+    qos_alloc
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseByteMapLevel)
@@ -210,7 +210,7 @@ function virtualize(
     tag = freshen(ctx, tag)
     shape = value(:($tag.shape), Int)
     qos_used = freshen(ctx, tag, :_qos_used)
-    qos_asmbld = freshen(ctx, tag, :_qos_alloc)
+    qos_alloc = freshen(ctx, tag, :_qos_alloc)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = freshen(ctx, tag, :_tbl)
     srt = freshen(ctx, tag, :_srt)
@@ -222,13 +222,13 @@ function virtualize(
             $ptr = $tag.ptr
             $tbl = $tag.tbl
             $srt = $tag.srt
-            $qos_asmbld = $qos_used = length($tag.srt)
+            $qos_alloc = $qos_used = length($tag.srt)
             $stop = $tag.shape
         end,
     )
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualSparseByteMapLevel(tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_used, qos_asmbld)
+    VirtualSparseByteMapLevel(tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_used, qos_alloc)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultStyle)
     quote
@@ -254,7 +254,7 @@ function distribute_level(
         distribute_buffer(ctx, lvl.srt, arch, style),
         lvl.shape,
         lvl.qos_used,
-        lvl.qos_asmbld,
+        lvl.qos_alloc,
     )
 end
 
@@ -271,7 +271,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, dif
             lvl.srt,
             lvl.shape,
             lvl.qos_used,
-            lvl.qos_asmbld,
+            lvl.qos_alloc,
         ),
     )
 end
@@ -321,7 +321,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
             end
             $(lvl.qos_used) = 0
             if $(!supports_reassembly(lvl.lvl))
-                $(lvl.qos_asmbld) = $(Tp(0))
+                $(lvl.qos_alloc) = $(Tp(0))
             end
             $(lvl.ptr)[1] = 1
         end,
@@ -397,7 +397,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
                 $p_prev = $p
             end
             $(lvl.ptr)[$p_prev + 1] = $(lvl.qos_used) + 1
-            $(lvl.qos_asmbld) = $(lvl.qos_used)
+            $(lvl.qos_alloc) = $(lvl.qos_used)
         end,
     )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, call(*, pos_stop, lvl.shape))
@@ -587,9 +587,9 @@ function unfurl(
                         if !$(lvl.tbl)[$my_q]
                             $(lvl.tbl)[$my_q] = true
                             $(lvl.qos_used) += 1
-                            if $(lvl.qos_used) > $(lvl.qos_asmbld)
-                                $(lvl.qos_asmbld) = max($(lvl.qos_asmbld) << 1, 1)
-                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_asmbld))
+                            if $(lvl.qos_used) > $(lvl.qos_alloc)
+                                $(lvl.qos_alloc) = max($(lvl.qos_alloc) << 1, 1)
+                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_alloc))
                             end
                             $(lvl.srt)[$(lvl.qos_used)] = ($(ctx(pos)), $(ctx(idx)))
                         end

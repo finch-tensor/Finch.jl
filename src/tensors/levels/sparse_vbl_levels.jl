@@ -196,7 +196,7 @@ mutable struct VirtualSparseBlockListLevel <: AbstractVirtualLevel
     Ti
     shape
     qos_used
-    qos_asmbld
+    qos_alloc
     ros_fill
     ros_stop
     dirty
@@ -224,7 +224,7 @@ function virtualize(
 ) where {Ti,Ptr,Idx,Ofs,Lvl}
     tag = freshen(ctx, tag)
     qos_used = freshen(ctx, tag, :_qos_used)
-    qos_asmbld = freshen(ctx, tag, :_qos_alloc)
+    qos_alloc = freshen(ctx, tag, :_qos_alloc)
     ros_fill = freshen(ctx, tag, :_ros_fill)
     ros_stop = freshen(ctx, tag, :_ros_stop)
     dirty = freshen(ctx, tag, :_dirty)
@@ -251,7 +251,7 @@ function virtualize(
         Ti,
         shape,
         qos_used,
-        qos_asmbld,
+        qos_alloc,
         ros_fill,
         ros_stop,
         dirty,
@@ -282,7 +282,7 @@ function distribute_level(
         lvl.Ti,
         lvl.shape,
         lvl.qos_used,
-        lvl.qos_asmbld,
+        lvl.qos_alloc,
         lvl.ros_fill,
         lvl.ros_stop,
         lvl.dirty,
@@ -302,7 +302,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, d
             redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.qos_used,
-            lvl.qos_asmbld,
+            lvl.qos_alloc,
             lvl.ros_fill,
             lvl.ros_stop,
             lvl.dirty,
@@ -339,7 +339,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel,
         ctx,
         quote
             $(lvl.qos_used) = $(Tp(0))
-            $(lvl.qos_asmbld) = $(Tp(0))
+            $(lvl.qos_alloc) = $(Tp(0))
             $(lvl.ros_fill) = $(Tp(0))
             $(lvl.ros_stop) = $(Tp(0))
             Finch.resize_if_smaller!($(lvl.ofs), 1)
@@ -372,7 +372,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, 
     Tp = postype(lvl)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     ros_stop = freshen(ctx, :ros_stop)
-    qos_asmbld = freshen(ctx, :qos_asmbld)
+    qos_alloc = freshen(ctx, :qos_alloc)
     push_preamble!(
         ctx,
         quote
@@ -383,10 +383,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel, 
             $ros_stop = $(lvl.ptr)[$pos_stop + 1] - 1
             resize!($(lvl.idx), $ros_stop)
             resize!($(lvl.ofs), $ros_stop + 1)
-            $qos_asmbld = $(lvl.ofs)[$ros_stop + 1] - $(Tp(1))
+            $qos_alloc = $(lvl.ofs)[$ros_stop + 1] - $(Tp(1))
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_asmbld))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
     return lvl
 end
 
@@ -563,7 +563,7 @@ function unfurl(
     qos = freshen(ctx, tag, :_qos)
     ros = freshen(ctx, tag, :_ros)
     qos_used = lvl.qos_used
-    qos_asmbld = lvl.qos_asmbld
+    qos_alloc = lvl.qos_alloc
     ros_fill = lvl.ros_fill
     ros_stop = lvl.ros_stop
     dirty = freshen(ctx, tag, :dirty)
@@ -582,9 +582,9 @@ function unfurl(
         body     = (ctx) -> Lookup(;
         body=(ctx, idx) -> Thunk(;
         preamble = quote
-            if $qos > $qos_asmbld
-                $qos_asmbld = max($qos_asmbld << 1, 1)
-                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_asmbld, Tp)), ctx))
+            if $qos > $qos_alloc
+                $qos_alloc = max($qos_alloc << 1, 1)
+                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_alloc, Tp)), ctx))
             end
             $dirty = false
         end,

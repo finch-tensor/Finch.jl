@@ -109,7 +109,7 @@ quote
         tmp_lvl_val[r] = val_tmp[q]
         ptr_2[p_2] += 1
     end
-    qos_asmbld = tmp_lvl_ptr[1 + 1] - 1
-    resize!(tmp_lvl_val_2, qos_asmbld)
+    qos_alloc = tmp_lvl_ptr[1 + 1] - 1
+    resize!(tmp_lvl_val_2, qos_alloc)
     (tmp = Tensor((SparseDictLevel){Int64}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx, tmp_lvl_val, tmp_lvl_tbl, tmp_lvl_pool)),)
 end

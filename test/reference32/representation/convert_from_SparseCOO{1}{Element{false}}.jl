@@ -63,8 +63,8 @@ quote
     for p = 1:1
         res_lvl_ptr[p + 1] += res_lvl_ptr[p]
     end
-    qos_asmbld = res_lvl_ptr[1 + 1] - 1
-    resize!(res_lvl_idx, qos_asmbld)
-    resize!(res_lvl_val, qos_asmbld)
+    qos_alloc = res_lvl_ptr[1 + 1] - 1
+    resize!(res_lvl_idx, qos_alloc)
+    resize!(res_lvl_val, qos_alloc)
     (res = Tensor((SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape[1], res_lvl_ptr, res_lvl_idx)),)
 end

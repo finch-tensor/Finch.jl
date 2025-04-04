@@ -209,7 +209,7 @@ begin
         fmt_lvl_2_val[r] = val_tmp[q]
         ptr_2[p_3] += 1
     end
-    qos_asmbld = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
-    resize!(fmt_lvl_3_val, qos_asmbld)
+    qos_alloc = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
+    resize!(fmt_lvl_3_val, qos_alloc)
     result
 end

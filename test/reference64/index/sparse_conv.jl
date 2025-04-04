@@ -155,8 +155,8 @@ begin
     for p = 1:1
         C_lvl_ptr[p + 1] += C_lvl_ptr[p]
     end
-    qos_asmbld = C_lvl_ptr[1 + 1] - 1
-    resize!(C_lvl_idx, qos_asmbld)
-    resize!(C_lvl_2_val, qos_asmbld)
+    qos_alloc = C_lvl_ptr[1 + 1] - 1
+    resize!(C_lvl_idx, qos_alloc)
+    resize!(C_lvl_2_val, qos_alloc)
     (C = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(C_lvl_2_val), A_lvl_stop, C_lvl_ptr, C_lvl_idx)),)
 end

@@ -207,7 +207,7 @@ mutable struct VirtualRunListLevel <: AbstractVirtualLevel
     Ti
     shape
     qos_used
-    qos_asmbld
+    qos_alloc
     ptr
     right
     buf
@@ -245,7 +245,7 @@ function virtualize(
     tag = freshen(ctx, tag)
     stop = freshen(ctx, tag, :_stop)
     qos_used = freshen(ctx, tag, :_qos_used)
-    qos_asmbld = freshen(ctx, tag, :_qos_alloc)
+    qos_alloc = freshen(ctx, tag, :_qos_alloc)
     dirty = freshen(ctx, tag, :_dirty)
     ptr = freshen(ctx, tag, :_ptr)
     right = freshen(ctx, tag, :_right)
@@ -266,7 +266,7 @@ function virtualize(
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     buf = virtualize(ctx, :($tag.buf), Lvl, tag)
     VirtualRunListLevel(
-        tag, lvl_2, Ti, shape, qos_used, qos_asmbld, ptr, right, buf, prev_pos, i_prev,
+        tag, lvl_2, Ti, shape, qos_used, qos_alloc, ptr, right, buf, prev_pos, i_prev,
         merge,
     )
 end
@@ -293,7 +293,7 @@ function distribute_level(
         lvl.Ti,
         lvl.shape,
         lvl.qos_used,
-        lvl.qos_asmbld,
+        lvl.qos_alloc,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.right, arch, style),
         distribute_level(ctx, lvl.buf, arch, diff, style),
@@ -313,7 +313,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualRunListLevel, diff)
             lvl.Ti,
             lvl.shape,
             lvl.qos_used,
-            lvl.qos_asmbld,
+            lvl.qos_alloc,
             lvl.ptr,
             lvl.right,
             redistribute(ctx, lvl.buf, diff),
@@ -350,7 +350,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos, in
         ctx,
         quote
             $(lvl.qos_used) = $(Tp(0))
-            $(lvl.qos_asmbld) = $(Tp(0))
+            $(lvl.qos_alloc) = $(Tp(0))
             $(lvl.i_prev) = $(Ti(1)) - $unit
             $(lvl.prev_pos) = $(Tp(1))
         end,
@@ -373,16 +373,16 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
     (lvl.buf, lvl.lvl) = (lvl.lvl, lvl.buf)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_asmbld = freshen(ctx, :qos_asmbld)
+    qos_alloc = freshen(ctx, :qos_alloc)
     push_preamble!(ctx, quote
         resize!($(lvl.ptr), $pos_stop + 1)
         for $p = 1:$pos_stop
             $(lvl.ptr)[$p + 1] += $(lvl.ptr)[$p]
         end
-        $qos_asmbld = $(lvl.ptr)[$pos_stop + 1] - 1
-        resize!($(lvl.right), $qos_asmbld)
+        $qos_alloc = $(lvl.ptr)[$pos_stop + 1] - 1
+        resize!($(lvl.right), $qos_alloc)
     end)
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_asmbld))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
     return lvl
 end
 =#
@@ -393,7 +393,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     Ti = lvl.Ti
     pos_2 = freshen(ctx, tag, :_pos)
-    qos_asmbld = lvl.qos_asmbld
+    qos_alloc = lvl.qos_alloc
     qos_used = lvl.qos_used
     qos = freshen(ctx, :qos)
     unit = ctx(get_smallest_measure(virtual_level_size(ctx, lvl)[end]))
@@ -405,18 +405,18 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
             $qos += $(lvl.i_prev) < $(ctx(lvl.shape))
             #and all the runs after that
             $qos += $(pos_stop) - $(lvl.prev_pos)
-            if $qos > $qos_asmbld
-                $qos_asmbld = $qos
-                Finch.resize_if_smaller!($(lvl.right), $qos_asmbld)
+            if $qos > $qos_alloc
+                $qos_alloc = $qos
+                Finch.resize_if_smaller!($(lvl.right), $qos_alloc)
                 Finch.fill_range!(
-                    $(lvl.right), $(ctx(lvl.shape)), $qos_used + 1, $qos_asmbld
+                    $(lvl.right), $(ctx(lvl.shape)), $qos_used + 1, $qos_alloc
                 )
                 $(contain(
                     ctx_2 -> assemble_level!(
                         ctx_2,
                         lvl.buf,
                         call(+, value(qos_used, Tp), Tp(1)),
-                        value(qos_asmbld, Tp),
+                        value(qos_alloc, Tp),
                     ),
                     ctx,
                 ))
@@ -425,11 +425,11 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
             for $p in 1:($pos_stop)
                 $(lvl.ptr)[$p + 1] += $(lvl.ptr)[$p]
             end
-            $qos_asmbld = $(lvl.ptr)[$pos_stop + 1] - 1
+            $qos_alloc = $(lvl.ptr)[$pos_stop + 1] - 1
         end,
     )
     if lvl.merge
-        lvl.buf = freeze_level!(ctx, lvl.buf, value(qos_asmbld))
+        lvl.buf = freeze_level!(ctx, lvl.buf, value(qos_alloc))
         lvl.lvl = declare_level!(
             ctx, lvl.lvl, literal(1), literal(virtual_level_fill_value(lvl.buf))
         )
@@ -444,7 +444,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
             quote
                 $(contain(
                     ctx_2 ->
-                        assemble_level!(ctx_2, lvl.lvl, value(1, Tp), value(qos_asmbld, Tp)),
+                        assemble_level!(ctx_2, lvl.lvl, value(1, Tp), value(qos_alloc, Tp)),
                     ctx,
                 ))
                 $q = 1
@@ -543,10 +543,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
                     $(lvl.ptr)[$p + 1] = $q_2
                 end
                 resize!($(lvl.right), $q_2 - 1)
-                $qos_asmbld = $q_2 - 1
+                $qos_alloc = $q_2 - 1
             end,
         )
-        lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_asmbld))
+        lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
         lvl.buf = declare_level!(
             ctx, lvl.buf, literal(1), literal(virtual_level_fill_value(lvl.buf))
         )
@@ -556,11 +556,11 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
         push_preamble!(
             ctx,
             quote
-                resize!($(lvl.right), $qos_asmbld)
+                resize!($(lvl.right), $qos_alloc)
             end,
         )
         (lvl.buf, lvl.lvl) = (lvl.lvl, lvl.buf)
-        lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_asmbld))
+        lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
         return lvl
     end
 end
@@ -572,20 +572,20 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop)
     #=
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_asmbld = freshen(ctx, :qos_asmbld)
+    qos_alloc = freshen(ctx, :qos_alloc)
     unit = ctx(get_smallest_measure(virtual_level_size(ctx, lvl)[end]))
     push_preamble!(ctx, quote
         $(lvl.qos_used) = $(lvl.ptr)[$pos_stop + 1] - 1
-        $(lvl.qos_asmbld) = $(lvl.qos_used)
+        $(lvl.qos_alloc) = $(lvl.qos_used)
         $(lvl.i_prev) = $(lvl.right)[$(lvl.qos_used)]
-        $qos_asmbld = $(lvl.qos_used)
-        $(lvl.prev_pos) = Finch.scansearch($(lvl.ptr), $(lvl.qos_asmbld) + 1, 1, $pos_stop) - 1
+        $qos_alloc = $(lvl.qos_used)
+        $(lvl.prev_pos) = Finch.scansearch($(lvl.ptr), $(lvl.qos_alloc) + 1, 1, $pos_stop) - 1
         for $p = $pos_stop:-1:1
             $(lvl.ptr)[$p + 1] -= $(lvl.ptr)[$p]
         end
     end)
     (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
-    lvl.buf = thaw_level!(ctx, lvl.buf, value(qos_asmbld))
+    lvl.buf = thaw_level!(ctx, lvl.buf, value(qos_alloc))
     return lvl
     =#
 end
@@ -678,7 +678,7 @@ function unfurl(
     Ti = lvl.Ti
     qos = freshen(ctx, tag, :_qos)
     qos_used = lvl.qos_used
-    qos_asmbld = lvl.qos_asmbld
+    qos_alloc = lvl.qos_alloc
     dirty = freshen(ctx, tag, :dirty)
     pos_2 = freshen(ctx, tag, :_pos)
     unit = ctx(get_smallest_measure(virtual_level_size(ctx, lvl)[end]))
@@ -717,14 +717,14 @@ function unfurl(
                 body=(ctx, ext) -> Thunk(;
                     preamble = quote
                         $qos_3 = $qos + ($(local_i_prev) < ($(ctx(getstart(ext))) - $unit))
-                        if $qos_3 > $qos_asmbld
-                            $qos_2 = $qos_asmbld + 1
-                            while $qos_3 > $qos_asmbld
-                                $qos_asmbld = max($qos_asmbld << 1, 1)
+                        if $qos_3 > $qos_alloc
+                            $qos_2 = $qos_alloc + 1
+                            while $qos_3 > $qos_alloc
+                                $qos_alloc = max($qos_alloc << 1, 1)
                             end
-                            Finch.resize_if_smaller!($(lvl.right), $qos_asmbld)
-                            Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_asmbld)
-                            $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_asmbld, Tp)), ctx))
+                            Finch.resize_if_smaller!($(lvl.right), $qos_alloc)
+                            Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_alloc)
+                            $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_alloc, Tp)), ctx))
                         end
                         $dirty = false
                     end,

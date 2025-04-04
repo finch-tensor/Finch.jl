@@ -70,10 +70,10 @@ quote
     for p = 1:1
         tmp_lvl_ptr[p + 1] += tmp_lvl_ptr[p]
     end
-    qos_asmbld = tmp_lvl_ptr[1 + 1] - 1
-    resize!(tmp_lvl_val_2, qos_asmbld)
-    Finch.resize_if_smaller!(tmp_lvl_val, qos_asmbld)
-    Finch.fill_range!(tmp_lvl_val, 0.0, 1, qos_asmbld)
+    qos_alloc = tmp_lvl_ptr[1 + 1] - 1
+    resize!(tmp_lvl_val_2, qos_alloc)
+    Finch.resize_if_smaller!(tmp_lvl_val, qos_alloc)
+    Finch.fill_range!(tmp_lvl_val, 0.0, 1, qos_alloc)
     q = 1
     q_2 = 1
     for p_2 = 1:1
@@ -101,8 +101,8 @@ quote
     end
     resize!(tmp_lvl_left, q_2 - 1)
     resize!(tmp_lvl_right, q_2 - 1)
-    qos_asmbld = q_2 - 1
-    resize!(tmp_lvl_val, qos_asmbld)
+    qos_alloc = q_2 - 1
+    resize!(tmp_lvl_val, qos_alloc)
     resize!(tmp_lvl_val_2, 0)
     (tmp = Tensor((SparseRunListLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_left, tmp_lvl_right, tmp_lvl_3; merge = true)),)
 end
