@@ -9,7 +9,7 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    tmp_lvl_qos_stop = 0
+    tmp_lvl_qos_alloc = 0
     Finch.resize_if_smaller!(tmp_lvl_ptr, 1 + 1)
     Finch.fill_range!(tmp_lvl_ptr, 0, 1 + 1, 1 + 1)
     tmp_lvl_qos = 0 + 1
@@ -30,11 +30,11 @@ quote
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]
             if ref_lvl_i < phase_stop
                 ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
-                if tmp_lvl_qos > tmp_lvl_qos_stop
-                    tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                    Finch.resize_if_smaller!(tmp_lvl_idx, tmp_lvl_qos_stop)
-                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                    for pos = tmp_lvl_qos:tmp_lvl_qos_stop
+                if tmp_lvl_qos > tmp_lvl_qos_alloc
+                    tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                    Finch.resize_if_smaller!(tmp_lvl_idx, tmp_lvl_qos_alloc)
+                    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                    for pos = tmp_lvl_qos:tmp_lvl_qos_alloc
                         pointer_to_lvl = Finch.similar_level(tmp_lvl_2.lvl, Finch.level_fill_value(typeof(tmp_lvl_2.lvl)), Finch.level_eltype(typeof(tmp_lvl_2.lvl)))
                         pointer_to_lvl_val = pointer_to_lvl.val
                         Finch.resize_if_smaller!(pointer_to_lvl_val, 1)
@@ -57,11 +57,11 @@ quote
                 phase_stop_3 = min(phase_stop, ref_lvl_i)
                 if ref_lvl_i == phase_stop_3
                     ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
-                    if tmp_lvl_qos > tmp_lvl_qos_stop
-                        tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                        Finch.resize_if_smaller!(tmp_lvl_idx, tmp_lvl_qos_stop)
-                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                        for pos_2 = tmp_lvl_qos:tmp_lvl_qos_stop
+                    if tmp_lvl_qos > tmp_lvl_qos_alloc
+                        tmp_lvl_qos_alloc = max(tmp_lvl_qos_alloc << 1, 1)
+                        Finch.resize_if_smaller!(tmp_lvl_idx, tmp_lvl_qos_alloc)
+                        Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_alloc)
+                        for pos_2 = tmp_lvl_qos:tmp_lvl_qos_alloc
                             pointer_to_lvl_5 = Finch.similar_level(tmp_lvl_2.lvl, Finch.level_fill_value(typeof(tmp_lvl_2.lvl)), Finch.level_eltype(typeof(tmp_lvl_2.lvl)))
                             pointer_to_lvl_5_val = pointer_to_lvl_5.val
                             Finch.resize_if_smaller!(pointer_to_lvl_5_val, 1)
@@ -90,7 +90,7 @@ quote
     for p = 1:1
         tmp_lvl_ptr[p + 1] += tmp_lvl_ptr[p]
     end
-    qos_stop = tmp_lvl_ptr[1 + 1] - 1
-    resize!(tmp_lvl_idx, qos_stop)
+    qos_alloc = tmp_lvl_ptr[1 + 1] - 1
+    resize!(tmp_lvl_idx, qos_alloc)
     (tmp = Tensor((SparseListLevel){Int64}((SeparateLevel){ElementLevel{false, Bool, Int64, Vector{Bool}}, Vector{ElementLevel{false, Bool, Int64, Vector{Bool}}}}(tmp_lvl_3, tmp_lvl_val), ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx)),)
 end

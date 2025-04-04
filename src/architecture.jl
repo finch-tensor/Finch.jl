@@ -41,12 +41,14 @@ abstract type AbstractVirtualTask end
 Return the number of tasks on the device dev.
 """
 function get_num_tasks end
+
 """
     get_task_num(task::AbstractTask)
 
 Return the task number of `task`.
 """
 function get_task_num end
+
 """
     get_device(task::AbstractTask)
 
@@ -60,6 +62,25 @@ function get_device end
 Return the task which spawned `task`.
 """
 function get_parent_task end
+
+get_num_tasks(ctx::AbstractCompiler) = get_num_tasks(get_task(ctx))
+get_num_tasks(task::AbstractTask) = get_num_tasks(get_device(task))
+get_task_num(ctx::AbstractCompiler) = get_task_num(get_task(ctx))
+get_device(ctx::AbstractCompiler) = get_device(get_task(ctx))
+get_parent_task(ctx::AbstractCompiler) = get_parent_task(get_task(ctx))
+
+function is_on_device(ctx::AbstractCompiler, dev::AbstractDevice)
+    res = false
+    task = get_task(ctx)
+    while task != nothing
+        if get_device(task) == dev
+            res = true
+            break
+        end
+        task = get_parent_task(task)
+    end
+    return res
+end
 
 """
     aquire_lock!(dev::AbstractDevice, val)
@@ -212,7 +233,7 @@ function transfer(device::CPULocalMemory, arr::AbstractArray)
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
 function transfer(task::CPUThread, arr::CPULocalArray)
-    if get_device(task) === arr.device
+    if get_device(task) == arr.device
         temp = arr.data[task.tid]
         return temp
     else
@@ -222,6 +243,7 @@ end
 function transfer(dst::AbstractArray, arr::AbstractArray)
     return arr
 end
+
 
 """
     transfer(device, arr)
