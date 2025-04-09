@@ -41,12 +41,14 @@ abstract type AbstractVirtualTask end
 Return the number of tasks on the device dev.
 """
 function get_num_tasks end
+
 """
     get_task_num(task::AbstractTask)
 
 Return the task number of `task`.
 """
 function get_task_num end
+
 """
     get_device(task::AbstractTask)
 
@@ -60,6 +62,25 @@ function get_device end
 Return the task which spawned `task`.
 """
 function get_parent_task end
+
+get_num_tasks(ctx::AbstractCompiler) = get_num_tasks(get_task(ctx))
+get_num_tasks(task::AbstractTask) = get_num_tasks(get_device(task))
+get_task_num(ctx::AbstractCompiler) = get_task_num(get_task(ctx))
+get_device(ctx::AbstractCompiler) = get_device(get_task(ctx))
+get_parent_task(ctx::AbstractCompiler) = get_parent_task(get_task(ctx))
+
+function is_on_device(ctx::AbstractCompiler, dev)
+    res = false
+    task = get_task(ctx)
+    while task != nothing
+        if get_device(task) == dev
+            res = true
+            break
+        end
+        task = get_parent_task(task)
+    end
+    return res
+end
 
 """
     aquire_lock!(dev::AbstractDevice, val)
@@ -92,20 +113,35 @@ function make_lock end
 """
     Serial()
 
-A device that represents a serial CPU execution.
+A Task that represents a serial CPU execution.
 """
-struct Serial <: AbstractTask end
+struct Serial <: AbstractDevice end
 const serial = Serial()
-get_device(::Serial) = CPU(1)
-get_parent_task(::Serial) = nothing
-get_task_num(::Serial) = 1
+get_num_tasks(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
 virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
 lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :(Serial())
 FinchNotation.finch_leaf(device::VirtualSerial) = virtual(device)
-get_device(::VirtualSerial) = VirtualCPU(nothing, 1)
-get_parent_task(::VirtualSerial) = nothing
-get_task_num(::VirtualSerial) = literal(1)
+get_num_tasks(::VirtualSerial) = literal(1)
+Base.:(==)(::Serial, ::Serial) = true
+Base.:(==)(::VirtualSerial, ::VirtualSerial) = true
+
+"""
+    SerialTask()
+
+A Task that represents a serial CPU execution.
+"""
+struct SerialTask <: AbstractDevice end
+get_device(::SerialTask) = Serial()
+get_parent_task(::SerialTask) = nothing
+get_task_num(::SerialTask) = 1
+struct VirtualSerialTask <: AbstractVirtualTask end
+virtualize(ctx, ex, ::Type{SerialTask}) = VirtualSerialTask()
+lower(ctx::AbstractCompiler, task::VirtualSerialTask, ::DefaultStyle) = :(SerialTask())
+FinchNotation.finch_leaf(device::VirtualSerialTask) = virtual(device)
+get_device(::VirtualSerialTask) = VirtualSerial()
+get_parent_task(::VirtualSerialTask) = nothing
+get_task_num(::VirtualSerialTask) = literal(1)
 
 struct SerialMemory end
 struct VirtualSerialMemory end
@@ -148,6 +184,8 @@ function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     something(device.ex, :(CPU($(ctx(device.n)))))
 end
 get_num_tasks(::VirtualCPU) = literal(1)
+Base.:(==)(::CPU, ::CPU) = true
+Base.:(==)(::VirtualCPU, ::VirtualCPU) = true #This is not strictly true. A better approach would name devices, and give them parents so that we can be sure to parallelize through the processor hierarchy.
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
@@ -212,7 +250,7 @@ function transfer(device::CPULocalMemory, arr::AbstractArray)
     CPULocalArray{A}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
 function transfer(task::CPUThread, arr::CPULocalArray)
-    if get_device(task) === arr.device
+    if get_device(task) == arr.device
         temp = arr.data[task.tid]
         return temp
     else
@@ -222,6 +260,7 @@ end
 function transfer(dst::AbstractArray, arr::AbstractArray)
     return arr
 end
+
 
 """
     transfer(device, arr)
@@ -484,8 +523,8 @@ for T in [
     end
 end
 
-function virtual_parallel_region(f, ctx, ::Serial)
-    contain(f, ctx)
+function virtual_parallel_region(f, ctx, ::VirtualSerial)
+    contain(f, ctx; task=VirtualSerialTask())
 end
 
 function virtual_parallel_region(f, ctx, device::VirtualCPU)

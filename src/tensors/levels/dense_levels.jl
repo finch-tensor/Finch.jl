@@ -194,15 +194,15 @@ end
 
 function assemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     qos_start = call(+, call(*, call(-, pos_start, lvl.Ti(1)), lvl.shape), 1)
-    qos_stop = call(*, pos_stop, lvl.shape)
-    assemble_level!(ctx, lvl.lvl, qos_start, qos_stop)
+    qos_alloc = call(*, pos_stop, lvl.shape)
+    assemble_level!(ctx, lvl.lvl, qos_start, qos_alloc)
 end
 
 supports_reassembly(::VirtualDenseLevel) = true
 function reassemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     qos_start = call(+, call(*, call(-, pos_start, lvl.Ti(1)), lvl.shape), 1)
-    qos_stop = call(*, pos_stop, lvl.shape)
-    reassemble_level!(ctx, lvl.lvl, qos_start, qos_stop)
+    qos_alloc = call(*, pos_stop, lvl.shape)
+    reassemble_level!(ctx, lvl.lvl, qos_start, qos_alloc)
     lvl
 end
 
