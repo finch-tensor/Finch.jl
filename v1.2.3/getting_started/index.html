@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Getting Started · Finch.jl</title><meta name="title" content="Getting Started · Finch.jl"/><meta property="og:title" content="Getting Started · Finch.jl"/><meta property="twitter:title" content="Getting Started · Finch.jl"/><meta name="description" content="Documentation for Finch.jl."/><meta property="og:description" content="Documentation for Finch.jl."/><meta property="twitter:description" content="Documentation for Finch.jl."/><meta property="og:url" content="https://finch-tensor.github.io/Finch.jl/getting_started/"/><meta property="twitter:url" content="https://finch-tensor.github.io/Finch.jl/getting_started/"/><link rel="canonical" href="https://finch-tensor.github.io/Finch.jl/getting_started/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/favicon.ico" rel="icon" type="image/x-icon"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="Finch.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Finch.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Getting Started</a><ul class="internal"><li><a class="tocitem" href="#Tensor-Formats"><span>Tensor Formats</span></a></li><li><a class="tocitem" href="#High-Level-Array-API"><span>High-Level Array API</span></a></li><li><a class="tocitem" href="#Array-Fusion"><span>Array Fusion</span></a></li><li><a class="tocitem" href="#Sparse-and-Structured-Utilities"><span>Sparse and Structured Utilities</span></a></li><li><a class="tocitem" href="#File-I/O"><span>File I/O</span></a></li></ul></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../docs/tensor_formats/">Tensor Formats</a></li><li><a class="tocitem" href="../docs/array_api/">High-Level Array API</a></li><li><a class="tocitem" href="../docs/sparse_utils/">Sparse and Structured Utilities</a></li><li><a class="tocitem" href="../docs/user-defined_functions/">User-Defined Functions</a></li><li><a class="tocitem" href="../docs/fileio/">FileIO</a></li><li><input class="collapse-toggle" id="menuitem-3-6" type="checkbox"/><label class="tocitem" for="menuitem-3-6"><span class="docs-label">Advanced: Finch Language</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../docs/language/calling_finch/">Calling Finch</a></li><li><a class="tocitem" href="../docs/language/finch_language/">The Finch Language</a></li><li><a class="tocitem" href="../docs/language/dimensionalization/">Dimensionalization</a></li><li><a class="tocitem" href="../docs/language/index_sugar/">Index Sugar</a></li><li><a class="tocitem" href="../docs/language/mask_sugar/">Mask Sugar</a></li><li><a class="tocitem" href="../docs/language/iteration_protocols/">Iteration Protocols</a></li><li><a class="tocitem" href="../docs/language/parallelization/">Parallelization</a></li><li><a class="tocitem" href="../docs/language/interoperability/">Interoperability</a></li><li><a class="tocitem" href="../docs/language/optimization_tips/">Optimization Tips</a></li><li><a class="tocitem" href="../docs/language/benchmarking_tips/">Benchmarking Tips</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox"/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Developers: Internal Details</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../docs/internals/virtualization/">Virtualization</a></li><li><a class="tocitem" href="../docs/internals/tensor_interface/">Tensor Interface</a></li><li><a class="tocitem" href="../docs/internals/compiler_interface/">Compiler Interfaces</a></li><li><a class="tocitem" href="../docs/internals/finch_notation/">Finch Notation</a></li><li><a class="tocitem" href="../docs/internals/finch_logic/">Finch Logic</a></li></ul></li></ul></li><li><a class="tocitem" href="../CONTRIBUTING/">Community and Contributions</a></li><li><span class="tocitem">Appendices and Additional Resources</span><ul><li><a class="tocitem" href="../appendices/directory_structure/">Directory Structure</a></li><li><a class="tocitem" href="../appendices/directory_structure/">Code Listing</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Getting Started</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Getting Started</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/finch-tensor/Finch.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/finch-tensor/Finch.jl/blob/main/docs/src/getting_started.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Getting-Started"><a class="docs-heading-anchor" href="#Getting-Started">Getting Started</a><a id="Getting-Started-1"></a><a class="docs-heading-anchor-permalink" href="#Getting-Started" title="Permalink"></a></h1><h2 id="Tensor-Formats"><a class="docs-heading-anchor" href="#Tensor-Formats">Tensor Formats</a><a id="Tensor-Formats-1"></a><a class="docs-heading-anchor-permalink" href="#Tensor-Formats" title="Permalink"></a></h2><h3 id="Creating-Tensors"><a class="docs-heading-anchor" href="#Creating-Tensors">Creating Tensors</a><a id="Creating-Tensors-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Tensors" title="Permalink"></a></h3><p>You can create Finch tensors using the <a href="../docs/tensor_formats/#Finch.Tensor"><code>Tensor</code></a> constructor, which closely follows the <code>Array</code> constructor syntax. The first argument specifies the storage format.</p><pre><code class="language-julia-repl hljs">julia&gt; A = Tensor(CSCFormat(), 4, 3);
+
+julia&gt; B = Tensor(COOFormat(2), A);
+</code></pre><p>Some pre-defined formats include:</p><table><tr><th style="text-align: left"><strong>Signature</strong></th><th style="text-align: left"><strong>Description</strong></th></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.DenseFormat"><code>DenseFormat</code></a><code>(N, z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A dense format with a fill value of <code>z</code>.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.CSFFormat"><code>CSFFormat</code></a><code>(N, z = 0.0, T = typeof(z))</code></td><td style="text-align: left">An <code>N</code>-dimensional CSC format for sparse tensors.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.CSCFormat"><code>CSCFormat</code></a><code>(z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A 2D CSC format storing matrices as dense lists.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.DCSFFormat"><code>DCSFFormat</code></a><code>(N, z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A DCSF format storing tensors as nested lists.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.HashFormat"><code>HashFormat</code></a><code>(N, z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A hash-table-based format for sparse data.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.ByteMapFormat"><code>ByteMapFormat</code></a><code>(N, z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A byte-map-based format for compact storage.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.DCSCFormat"><code>DCSCFormat</code></a><code>(z = 0.0, T = typeof(z))</code></td><td style="text-align: left">A 2D DCSC format storing matrices as lists.</td></tr><tr><td style="text-align: left"><a href="../docs/tensor_formats/#Finch.COOFormat"><code>COOFormat</code></a><code>(N, T = Float64, z = zero(T))</code></td><td style="text-align: left">An <code>N</code>-dimensional COO format for coordinate lists.</td></tr></table><p>It is also possible to build custom formats using the interface, as described in the <a href="#tensor-formats">Tensor Formats</a> section.</p><h2 id="High-Level-Array-API"><a class="docs-heading-anchor" href="#High-Level-Array-API">High-Level Array API</a><a id="High-Level-Array-API-1"></a><a class="docs-heading-anchor-permalink" href="#High-Level-Array-API" title="Permalink"></a></h2><h3 id="Basic-Array-Operations"><a class="docs-heading-anchor" href="#Basic-Array-Operations">Basic Array Operations</a><a id="Basic-Array-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Array-Operations" title="Permalink"></a></h3><p>Finch tensors support indexing, slicing, mapping, broadcasting, and reducing. Many functions in the Julia standard array library are supported.</p><pre><code class="language-julia-repl hljs">julia&gt; A = Tensor(CSCFormat(), [0 1; 2 3]);
+
+julia&gt; B = A .+ 1
+2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}}:
+ 1.0  2.0
+ 3.0  4.0
+
+julia&gt; C = max.(A, B)
+2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}}:
+ 1.0  2.0
+ 3.0  4.0
+
+julia&gt; D = sum(C; dims=2)
+2 Tensor{DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 3.0
+ 7.0
+
+julia&gt; E = B[1, :]
+2 Tensor{DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}:
+ 1.0
+ 2.0</code></pre><p>For situations which are difficult to express in the julia standard library, Finch also supports an <code>@einsum</code> syntax:</p><pre><code class="language-julia-repl hljs">julia&gt; @einsum F[i, j, k] *= A[i, j] * B[j, k]
+2×2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
+[:, :, 1] =
+ 0.0  3.0
+ 2.0  9.0
+
+[:, :, 2] =
+ 0.0   4.0
+ 4.0  12.0
+
+julia&gt; @einsum G[j, k] &lt;&lt; max &gt;&gt;= A[i, j] + B[j, k]
+2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{-Inf, Float64, Int64, Vector{Float64}}}}}:
+ 3.0  4.0
+ 6.0  7.0</code></pre><p>The <code>@einsum</code> macro is a powerful tool for expressing complex array operations concisely.</p><h2 id="Array-Fusion"><a class="docs-heading-anchor" href="#Array-Fusion">Array Fusion</a><a id="Array-Fusion-1"></a><a class="docs-heading-anchor-permalink" href="#Array-Fusion" title="Permalink"></a></h2><p>To get the full benefits of a sparse compiler, it is critical to fuse certain operations together. For this, Finch exposes two functions, <a href="../docs/array_api/#Finch.lazy"><code>lazy</code></a> and <a href="../docs/array_api/#Finch.compute"><code>compute</code></a>. The <code>lazy</code> function creates a lazy tensor, which is a symbolic representation of the computation. The <code>compute</code> function evaluates the computation. For convenience, you may wish to use the <a href="../docs/array_api/#Finch.fused"><code>fused</code></a> function, which automatically fuses the computations it contains.</p><pre><code class="language-julia-repl hljs">julia&gt; A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [1.0, 2.0, 3.0])
+3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 0.0  1.0  0.0  2.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  3.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0
+
+julia&gt; B = A .* 2
+3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  2.0  0.0  4.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  6.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0
+
+julia&gt; C = lazy(A)
+3×6-LazyTensor{Float64}
+
+julia&gt; D = lazy(B)
+3×6-LazyTensor{Float64}
+
+julia&gt; E = (C .+ D) ./ 2
+3×6-LazyTensor{Float64}
+
+julia&gt; compute(E)
+3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  1.5  0.0  3.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  4.5  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0</code></pre><p>The <code>lazy</code> and <code>compute</code> functions allow the compiler to fuse operations together, resulting in asymptotically more efficient code.</p><pre><code class="language-julia hljs">julia&gt; using BenchmarkTools
+
+julia&gt; A = fsprand(1000, 1000, 100);
+       B = Tensor(rand(1000, 1000));
+       C = Tensor(rand(1000, 1000));
+
+julia&gt; @btime A .* (B * C);
+  145.940 ms (859 allocations: 7.69 MiB)
+
+julia&gt; @btime compute(lazy(A) .* (lazy(B) * lazy(C)));
+  694.666 μs (712 allocations: 60.86 KiB)</code></pre><p>Different optimizers can be used with <code>compute</code>, such as the state-of-the-art <code>Galley</code> optimizer, which can adapt to the sparsity patterns of the inputs.</p><pre><code class="language-julia hljs">julia&gt; A = fsprand(1000, 1000, 0.1);
+       B = fsprand(1000, 1000, 0.1);
+       C = fsprand(1000, 1000, 0.0001);
+
+julia&gt; A = lazy(A);
+       B = lazy(B);
+       C = lazy(C);
+
+julia&gt; @btime compute(sum(A * B * C));
+  282.503 ms (1018 allocations: 184.43 MiB)
+
+julia&gt; @btime compute(sum(A * B * C), ctx=galley_scheduler());
+  152.792 μs (672 allocations: 28.81 KiB)</code></pre><h2 id="Sparse-and-Structured-Utilities"><a class="docs-heading-anchor" href="#Sparse-and-Structured-Utilities">Sparse and Structured Utilities</a><a id="Sparse-and-Structured-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-and-Structured-Utilities" title="Permalink"></a></h2><h3 id="Sparse-Constructors"><a class="docs-heading-anchor" href="#Sparse-Constructors">Sparse Constructors</a><a id="Sparse-Constructors-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Constructors" title="Permalink"></a></h3><p><a href="../docs/sparse_utils/#Finch.fsparse"><code>fsparse</code></a> constructs a tensor from lists of nonzero coordinates. For example,</p><pre><code class="language-julia-repl hljs">julia&gt; A = fsparse([1, 2, 3], [2, 3, 4], [1.0, 2.0, 3.0])
+3×4 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 0.0  1.0  0.0  0.0
+ 0.0  0.0  2.0  0.0
+ 0.0  0.0  0.0  3.0</code></pre><p>The inverse of <a href="../docs/sparse_utils/#Finch.fsparse"><code>fsparse</code></a> is <a href="../docs/sparse_utils/#Finch.ffindnz"><code>ffindnz</code></a>, which returns a list of nonzero coordinates in a tensor.</p><pre><code class="language-julia-repl hljs">julia&gt; ffindnz(A)
+([1, 2, 3], [2, 3, 4], [1.0, 2.0, 3.0])</code></pre><h3 id="Random-Sparse-Tensors"><a class="docs-heading-anchor" href="#Random-Sparse-Tensors">Random Sparse Tensors</a><a id="Random-Sparse-Tensors-1"></a><a class="docs-heading-anchor-permalink" href="#Random-Sparse-Tensors" title="Permalink"></a></h3><p>The <a href="../docs/sparse_utils/#Finch.fsprand"><code>fsprand</code></a> constructs a random sparse tensor with a specified sparsity or number of nonzeros:</p><pre><code class="language-julia hljs">julia&gt; A = fsprand(5, 5, 0.1)
+</code></pre><h3 id="Fill-Values"><a class="docs-heading-anchor" href="#Fill-Values">Fill Values</a><a id="Fill-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Fill-Values" title="Permalink"></a></h3><p>Fill values represent the background value of a sparse tensor. Usually, this value is zero, but some applications may choose to use other fill values as fits their application. Only values which are not equal to the fill value are stored</p><ul><li><strong><a href="../docs/sparse_utils/#Finch.fill_value"><code>fill_value</code></a></strong>: Retrieve the fill value.</li><li><strong><a href="../docs/sparse_utils/#Finch.set_fill_value!"><code>set_fill_value!</code></a></strong>: Set a new fill value.</li><li><strong><a href="../docs/sparse_utils/#Finch.dropfills"><code>dropfills</code></a></strong> or <strong><a href="../docs/sparse_utils/#Finch.dropfills!"><code>dropfills!</code></a></strong>: Remove elements matching the fill value.</li><li><strong><a href="../docs/sparse_utils/#Finch.countstored"><code>countstored</code></a></strong>: Return the number of stored values in a tensor</li></ul><pre><code class="language-julia-repl hljs">julia&gt; t = Tensor(Dense(SparseList(Element(0.0))), 3, 3)
+3×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
+
+julia&gt; fill_value(t)
+0.0
+
+julia&gt; set_fill_value!(t, -1.0)
+3×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{-1.0, Float64, Int64, Vector{Float64}}}}}:
+ -1.0  -1.0  -1.0
+ -1.0  -1.0  -1.0
+ -1.0  -1.0  -1.0
+
+julia&gt; countstored(t)
+0
+
+julia&gt; countstored(dropfills(t))
+0</code></pre><h3 id="Empty-Tensors"><a class="docs-heading-anchor" href="#Empty-Tensors">Empty Tensors</a><a id="Empty-Tensors-1"></a><a class="docs-heading-anchor-permalink" href="#Empty-Tensors" title="Permalink"></a></h3><p>The Tensor constructor initializes tensors to their fill value when given a list of dimensions, but you can also use <a href="../docs/sparse_utils/#Finch.fspzeros"><code>fspzeros</code></a> for an empty COO Tensor, for consistency with MATLAB.</p><pre><code class="language-julia-repl hljs">julia&gt; A = fspzeros(3, 3)
+3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
+
+julia&gt; B = Tensor(CSCFormat(1.0), 3, 3)
+3×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}}:
+ 1.0  1.0  1.0
+ 1.0  1.0  1.0
+ 1.0  1.0  1.0</code></pre><h3 id="Converting-Between-Formats"><a class="docs-heading-anchor" href="#Converting-Between-Formats">Converting Between Formats</a><a id="Converting-Between-Formats-1"></a><a class="docs-heading-anchor-permalink" href="#Converting-Between-Formats" title="Permalink"></a></h3><p>You can convert between tensor formats with the <code>Tensor</code> constructor. Simply construct a new Tensor in the desired format and</p><pre><code class="language-julia-repl hljs">julia&gt; A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
+3×4 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  0.0  2.0  1.0
+ 0.0  0.0  1.0  0.0
+ 1.0  0.0  0.0  0.0
+
+julia&gt; B = Tensor(DCSCFormat(), A)
+3×4 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  0.0  2.0  1.0
+ 0.0  0.0  1.0  0.0
+ 1.0  0.0  0.0  0.0</code></pre><h3 id="Storage-Order"><a class="docs-heading-anchor" href="#Storage-Order">Storage Order</a><a id="Storage-Order-1"></a><a class="docs-heading-anchor-permalink" href="#Storage-Order" title="Permalink"></a></h3><p>By default, tensors in Finch are column-major. However, you can use the <code>swizzle</code> function to transpose them lazily. To convert to a transposed format, use the <code>dropfills!</code> function.</p><pre><code class="language-julia-repl hljs">julia&gt; A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
+3×4 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  0.0  2.0  1.0
+ 0.0  0.0  1.0  0.0
+ 1.0  0.0  0.0  0.0
+
+julia&gt; swizzle(A, 2, 1)
+4×3 Finch.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
+ 0.0  0.0  1.0
+ 0.0  0.0  0.0
+ 2.0  1.0  0.0
+ 1.0  0.0  0.0
+
+julia&gt; dropfills!(swizzle(Tensor(CSCFormat()), 2, 1), A)
+3×4 Finch.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
+ 0.0  0.0  2.0  1.0
+ 0.0  0.0  1.0  0.0
+ 1.0  0.0  0.0  0.0</code></pre><h2 id="File-I/O"><a class="docs-heading-anchor" href="#File-I/O">File I/O</a><a id="File-I/O-1"></a><a class="docs-heading-anchor-permalink" href="#File-I/O" title="Permalink"></a></h2><h3 id="Reading-and-Writing-Files"><a class="docs-heading-anchor" href="#Reading-and-Writing-Files">Reading and Writing Files</a><a id="Reading-and-Writing-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Reading-and-Writing-Files" title="Permalink"></a></h3><p>Finch supports multiple formats, such as <code>.bsp</code>, <code>.mtx</code>, and <code>.tns</code>. Use <code>fread</code> and <code>fwrite</code> to read and write tensors.</p><pre><code class="language-julia hljs">julia&gt; fwrite(&quot;tensor.bsp&quot;, A)
+
+julia&gt; B = fread(&quot;tensor.bsp&quot;)
+</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../docs/tensor_formats/">Tensor Formats »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Thursday 10 April 2025 00:16">Thursday 10 April 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
