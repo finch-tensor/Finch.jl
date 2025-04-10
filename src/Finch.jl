@@ -42,6 +42,7 @@ export Dense, DenseLevel
 export Element, ElementLevel
 export AtomicElement, AtomicElementLevel
 export Separate, SeparateLevel
+export Shard, ShardLevel
 export Mutex, MutexLevel
 export Pattern, PatternLevel
 export Scalar, SparseScalar, ShortCircuitScalar, SparseShortCircuitScalar
@@ -142,6 +143,7 @@ include("tensors/levels/dense_rle_levels.jl")
 include("tensors/levels/element_levels.jl")
 include("tensors/levels/atomic_element_levels.jl")
 include("tensors/levels/separate_levels.jl")
+include("tensors/levels/shard_levels.jl")
 include("tensors/levels/mutex_levels.jl")
 include("tensors/levels/pattern_levels.jl")
 include("tensors/masks.jl")

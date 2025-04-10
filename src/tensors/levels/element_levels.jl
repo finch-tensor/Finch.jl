@@ -43,7 +43,7 @@ end
 
 postype(::Type{<:ElementLevel{Vf,Tv,Tp}}) where {Vf,Tv,Tp} = Tp
 
-function transfer(lvl::ElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv,Tp}
+function transfer(device, lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp}
     return ElementLevel{Vf,Tv,Tp}(transfer(device, lvl.val))
 end
 

@@ -153,8 +153,8 @@ mutable struct VirtualSparseBandLevel <: AbstractVirtualLevel
     lvl
     Ti
     shape
-    qos_fill
-    qos_stop
+    qos_used
+    qos_alloc
     ros_fill
     ros_stop
     dirty
@@ -181,8 +181,8 @@ function virtualize(
     ctx, ex, ::Type{SparseBandLevel{Ti,Idx,Ofs,Lvl}}, tag=:lvl
 ) where {Ti,Idx,Ofs,Lvl}
     tag = freshen(ctx, tag)
-    qos_fill = freshen(ctx, tag, :_qos_fill)
-    qos_stop = freshen(ctx, tag, :_qos_stop)
+    qos_used = freshen(ctx, tag, :_qos_used)
+    qos_alloc = freshen(ctx, tag, :_qos_alloc)
     ros_fill = freshen(ctx, tag, :_ros_fill)
     ros_stop = freshen(ctx, tag, :_ros_stop)
     dirty = freshen(ctx, tag, :_dirty)
@@ -206,8 +206,8 @@ function virtualize(
         lvl_2,
         Ti,
         shape,
-        qos_fill,
-        qos_stop,
+        qos_used,
+        qos_alloc,
         ros_fill,
         ros_stop,
         dirty,
@@ -235,8 +235,8 @@ function distribute_level(
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
         lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
+        lvl.qos_used,
+        lvl.qos_alloc,
         lvl.ros_fill,
         lvl.ros_stop,
         lvl.dirty,
@@ -255,8 +255,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, diff)
             redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
             lvl.shape,
-            lvl.qos_fill,
-            lvl.qos_stop,
+            lvl.qos_used,
+            lvl.qos_alloc,
             lvl.ros_fill,
             lvl.ros_stop,
             lvl.dirty,
@@ -289,8 +289,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos,
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_fill) = $(Tp(0))
-            $(lvl.qos_stop) = $(Tp(0))
+            $(lvl.qos_used) = $(Tp(0))
+            $(lvl.qos_alloc) = $(Tp(0))
             Finch.resize_if_smaller!($(lvl.ofs), 1)
             $(lvl.ofs)[1] = 1
         end,
@@ -322,7 +322,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos_s
     p = freshen(ctx, :p)
     Tp = postype(lvl)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_stop = freshen(ctx, :qos_stop)
+    qos_alloc = freshen(ctx, :qos_alloc)
     push_preamble!(
         ctx,
         quote
@@ -331,10 +331,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos_s
             for $p in 2:($pos_stop + 1)
                 $(lvl.ofs)[$p] += $(lvl.ofs)[$p - 1]
             end
-            $qos_stop = $(lvl.ofs)[$pos_stop + 1] - $(Tp(1))
+            $qos_alloc = $(lvl.ofs)[$pos_stop + 1] - $(Tp(1))
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
     return lvl
 end
 
@@ -418,8 +418,8 @@ function unfurl(
     qos = freshen(ctx, tag, :_qos)
     qos_set = freshen(ctx, tag, :_qos_set)
     ros = freshen(ctx, tag, :_ros)
-    qos_fill = lvl.qos_fill
-    qos_stop = lvl.qos_stop
+    qos_used = lvl.qos_used
+    qos_alloc = lvl.qos_alloc
     ros_fill = lvl.ros_fill
     ros_stop = lvl.ros_stop
     dirty = freshen(ctx, tag, :dirty)
@@ -429,8 +429,8 @@ function unfurl(
         arr=fbr,
         body=Thunk(;
             preamble = quote
-                $qos = $qos_fill + 1
-                $qos_set = $qos_fill
+                $qos = $qos_used + 1
+                $qos_set = $qos_used
                 $my_i_prev = $(Ti(-1))
                 $my_i_set = $(Ti(-1))
                 $(if issafe(get_mode_flag(ctx))
@@ -450,14 +450,14 @@ function unfurl(
                             end
                         end
                     end)
-                    $qos = $(ctx(idx)) - $my_i_prev + $qos_fill + 1
+                    $qos = $(ctx(idx)) - $my_i_prev + $qos_used + 1
                 end
-                if $qos > $qos_stop
-                    $qos_2 = $qos_stop + 1
-                    while $qos > $qos_stop
-                        $qos_stop = max($qos_stop << 1, 1)
+                if $qos > $qos_alloc
+                    $qos_2 = $qos_alloc + 1
+                    while $qos > $qos_alloc
+                        $qos_alloc = max($qos_alloc << 1, 1)
                     end
-                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos_2, Tp), value(qos_stop, Tp)), ctx))
+                    $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos_2, Tp), value(qos_alloc, Tp)), ctx))
                 end
                 $dirty = false
             end,
@@ -484,7 +484,7 @@ function unfurl(
                             $(lvl.prev_pos) = $(ctx(pos))
                         end
                     end)
-                    $qos_fill = $qos
+                    $qos_used = $qos
                 end
             end,
         ),

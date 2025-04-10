@@ -339,6 +339,11 @@ function propagate_into_reformats(root)
     )
 end
 
+"""
+    issubsequence(a, b)
+
+Returns true if `a` is a subsequence of `b`.
+"""
 function issubsequence(a, b)
     a = collect(a)
     b = collect(b)
@@ -616,52 +621,62 @@ function normalize_names(ex)
     Rewrite(Postwalk(@rule ~a::isalias => alias(normname(a.name))))(ex)
 end
 
-function toposort(chains::Vector{Vector{T}}) where {T}
-    chains = filter(!isempty, deepcopy(chains))
-    parents = Dict{T,Int}(map(chain -> first(chain) => 0, chains))
-    for chain in chains, u in chain[2:end]
-        parents[u] += 1
-    end
-    roots = filter(u -> parents[u] == 0, keys(parents))
-    perm = []
-    while !isempty(parents)
-        isempty(roots) && return nothing
-        push!(perm, pop!(roots))
-        for chain in chains
-            if !isempty(chain) && first(chain) == last(perm)
-                popfirst!(chain)
-                if !isempty(chain)
-                    parents[first(chain)] -= 1
-                    if parents[first(chain)] == 0
-                        push!(roots, first(chain))
-                    end
-                end
-            end
-        end
-        pop!(parents, last(perm))
-    end
-    return perm
-end
+"""
+    heuristic_loop_order(node, reps, reduced = [])
 
-function heuristic_loop_order(node, reps)
-    chains = Vector{LogicNode}[]
+Heuristically determine a loop order for a reduction.
+TODO could be made way better by considering sparsity
+"""
+function heuristic_loop_order(node, reps, reduced = [])
+    swizzles = Vector{LogicNode}[]
     for node in PostOrderDFS(node)
         if @capture node reorder(relabel(~arg, ~idxs...), ~idxs_2...)
-            push!(chains, intersect(idxs, idxs_2))
+            push!(swizzles, intersect(idxs, idxs_2))
         end
     end
-    for idx in getfields(node)
-        push!(chains, [idx])
-    end
-    res = something(toposort(chains), getfields(node))
-    if mapreduce(length, max, chains; init=0) < length(unique(reduce(vcat, chains)))
-        counts = Dict()
-        for chain in chains
-            for idx in chain
-                counts[idx] = get(counts, idx, 0) + 1
-            end
+
+    #The maximum number of dimensions of any tensor
+    max_num_dims = mapreduce(length, max, swizzles; init=0)
+    #The number of loops over at least one of the arguments
+    num_compute_loops = length(unique(reduce(vcat, swizzles)))
+    #The number of times each index occurs in an access
+    idx_counts = countmap(reduce(vcat, swizzles))
+    #At least one access containing each index
+    idx_swizzles = Dict([idx => swizzle for idx in swizzle for swizzle in swizzles])
+    best_score = nothing
+    res = nothing
+    for order in permutations(getfields(node))
+        #A list of the transposed accesses
+        transposed = filter(swizzle -> !issubsequence(swizzle, order), swizzles)
+        #The number of dimensions in the largest transpose
+        biggest_transpose = mapreduce(length, max, transposed; init=0)
+        #The number of transposes which are as big as the biggest transpose
+        num_big_transposes = count(swizzle -> length(swizzle) == biggest_transpose, transposed)
+        #If the number of indices in the loop nest is bigger than the number of
+        #indices on any one argument, transposition should be asymptotically
+        #dominated by the cost of the whole expression. In this case, we can change
+        #the loop order to improve performance.
+        if num_compute_loops > max_num_dims
+            #The loop depth of the last index shared between more than one access
+            last_shared_idx_depth = something(findlast(idx -> idx_counts[idx] > 1, order), 0)
+            #We say an outer product (two indices over unrelated tensors) is
+            #unguarded if it a shared index is nested within it. Ideally, we would
+            #guard the outer product with the shared index.
+            unguarded_outer_product = length(unique([idx_swizzles[idx] for idx in order[1:last_shared_idx_depth] if idx_counts[idx] == 1])) > 1
+            #Because the output index order is set by the loop order, we can 
+            #only scatter during reductions. A scattered dimensions is an unreduced dimension
+            #nested inside a reduced dimension.
+            num_scattered_dims = count(idx -> !in(idx, reduced), order) - something(findfirst(idx -> in(idx, reduced), order), length(order) + 1) - 1
+            #When there is one scattered dimension, we can use gustavson's algorithm.
+            nontrivial_scatter = num_scattered_dims > 1
+            score = (unguarded_outer_product, nontrivial_scatter, biggest_transpose, num_big_transposes)
+        else
+            score = (biggest_transpose, num_big_transposes)
         end
-        sort!(res; by=idx -> counts[idx] == 1, alg=Base.MergeSort)
+        if best_score === nothing || score < best_score
+            best_score = score
+            res = order
+        end
     end
     return res
 end
