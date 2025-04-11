@@ -51,10 +51,10 @@ function Base.getindex(arr::LazyTensor, idxs::Vararg{Union{Nothing,Colon}})
             ),
         )
     end
-    return expanddims(arr, findall(isnothing, idxs))
+    return expanddims(arr, dims=findall(isnothing, idxs))
 end
 
-function expanddims(arr::LazyTensor{Vf,Tv}, dims) where {Vf,Tv}
+function expanddims(arr::LazyTensor{Vf,Tv}; dims) where {Vf,Tv}
     dims = collect(dims)
     @assert allunique(dims)
     @assert issubset(dims, 1:(ndims(arr) + length(dims)))
@@ -74,7 +74,7 @@ function expanddims(arr::LazyTensor{Vf,Tv}, dims) where {Vf,Tv}
     return LazyTensor{Vf,Tv}(data_2, shape_2)
 end
 
-function Base.dropdims(arr::LazyTensor{Vf,Tv}, dims) where {Vf,Tv}
+function Base.dropdims(arr::LazyTensor{Vf,Tv}; dims) where {Vf,Tv}
     @assert allunique(dims)
     @assert issubset(dims, 1:ndims(arr))
     @assert all(isone, arr.shape[dims])
@@ -580,7 +580,7 @@ end
 function Statistics.var(tns::LazyTensor; mean=nothing, corrected=true, dims=:)
     dims = dims == Colon() ? (1:ndims(tns)) : collect(dims)
     if mean === nothing
-        mean = expanddims(Statistics.mean(tns; dims=dims), dims)
+        mean = expanddims(Statistics.mean(tns; dims=dims), dims=dims)
     end
     n = prod(collect(size(tns))[dims])
     return sum(abs2.(tns .- mean); dims=dims) ./ (n - corrected)
@@ -707,4 +707,120 @@ function compute_parse(ctx, args::Tuple)
     end
 
     return ress
+end
+
+function Base.argmin(A::LazyTensor; dims=:)
+    dims = dims == Colon() ? (1:ndims(A)) : collect(dims)
+
+    if (ndims(A) >= 2)
+        return map(
+            last,
+            reduce(
+                minby, 
+                map(
+                    Pair, 
+                    A, 
+                    CartesianIndices(size(A))
+                ), 
+                dims=dims, 
+                init=Inf=>CartesianIndex(fill(0, length(size(A)))...)
+            )
+        )
+    else
+        return map(last, reduce(minby, map(Pair, A, 1:size(A)[1]), dims=dims, init=Inf=>0))
+    end
+end
+
+function Base.argmax(A::LazyTensor; dims=:)
+    dims = dims == Colon() ? (1:ndims(A)) : collect(dims)
+
+    if (ndims(A) >= 2)
+        return map(
+            last,
+            reduce(
+                maxby, 
+                map(
+                    Pair, 
+                    A, 
+                    CartesianIndices(size(A))
+                ), 
+                dims=dims, 
+                init=-Inf=>CartesianIndex(fill(0, length(size(A)))...)
+            )
+        )
+    else
+        return map(last, reduce(maxby, map(Pair, A, 1:size(A)[1]), dims=dims, init=-Inf=>0))
+    end
+end
+
+function argmin_python(A::LazyTensor; dims=:) 
+    dims = dims == Colon() ? (1:ndims(A)) : collect(dims)
+
+    if length(dims) == 1
+        dim = first(dims)
+
+        return map(
+            last,
+            reduce(
+                minby, 
+                map(
+                    Pair, 
+                    A, 
+                    expanddims(lazy(1:size(A)[dim]), dims=setdiff(1:ndims(A), dim))
+                ),
+                dims = dims,
+                init=Inf=>0
+            )
+        )
+    elseif length(dims) == ndims(A)
+        return map(
+            last,
+            reduce(
+                minby, 
+                map(
+                    Pair, 
+                    A, 
+                    LinearIndices(size(A))
+                ), 
+                dims=dims, 
+                init=Inf=>0
+            )
+        )
+    end
+end
+
+function argmax_python(A::LazyTensor; dims=:) 
+    dims = dims == Colon() ? (1:ndims(A)) : collect(dims)
+
+    if length(dims) == 1
+        dim = first(dims)
+
+        return map(
+            last,
+            reduce(
+                maxby, 
+                map(
+                    Pair, 
+                    A, 
+                    expanddims(lazy(1:size(A)[dim]), dims=setdiff(1:ndims(A), dim))
+                ),
+                dims = dims,
+                init=-Inf=>0
+            )
+        )
+    elseif length(dims) == ndims(A)
+        return map(
+            last,
+            reduce(
+                maxby, 
+                map(
+                    Pair, 
+                    A, 
+                    LinearIndices(size(A))
+                ), 
+                dims=dims, 
+                init=-Inf=>0
+            )
+        )
+    end
 end
