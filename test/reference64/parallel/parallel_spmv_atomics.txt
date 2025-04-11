@@ -40,12 +40,12 @@ quote
     Threads.@threads for tid = 1:Threads.nthreads()
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                y_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), y_lvl_3_val_2)
-                                y_lvl_2_locks_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), y_lvl_2_locks_2)
-                                A_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_3_val_2)
-                                A_lvl_2_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_ptr_2)
-                                A_lvl_2_idx_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_idx_2)
-                                x_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), x_lvl_2_val_2)
+                                y_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), y_lvl_3_val_2)
+                                y_lvl_2_locks_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), y_lvl_2_locks_2)
+                                A_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_3_val_2)
+                                A_lvl_2_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_2_ptr_2)
+                                A_lvl_2_idx_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_2_idx_2)
+                                x_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), x_lvl_2_val_2)
                                 phase_start_2 = max(1, 1 + fld(A_lvl_stop * (tid + -1), Threads.nthreads()))
                                 phase_stop_2 = min(A_lvl_stop, fld(A_lvl_stop * tid, Threads.nthreads()))
                                 if phase_stop_2 >= phase_start_2
