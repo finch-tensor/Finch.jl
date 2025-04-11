@@ -181,18 +181,18 @@ macro finch(opts_ex...)
     (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
     prgm = :(
-        $(FinchNotation.block_instance)(
-            $prgm,
-            $(FinchNotation.yieldbind_instance)(
-                $(
-                    map(
-                        FinchNotation.variable_instance,
-                        FinchNotation.finch_parse_default_yieldbind(ex),
-                    )...
-                ),
+    $(FinchNotation.block_instance)(
+        $prgm,
+        $(FinchNotation.yieldbind_instance)(
+            $(
+                map(
+                    FinchNotation.variable_instance,
+                    FinchNotation.finch_parse_default_yieldbind(ex),
+                )...
             ),
-        )
+        ),
     )
+)
     res = esc(:res)
     thunk = quote
         res = $execute($prgm, ; $(map(esc, opts)...))
@@ -230,18 +230,18 @@ macro finch_code(opts_ex...)
     (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
     prgm = :(
-        $(FinchNotation.block_instance)(
-            $prgm,
-            $(FinchNotation.yieldbind_instance)(
-                $(
-                    map(
-                        FinchNotation.variable_instance,
-                        FinchNotation.finch_parse_default_yieldbind(ex),
-                    )...
-                ),
+    $(FinchNotation.block_instance)(
+        $prgm,
+        $(FinchNotation.yieldbind_instance)(
+            $(
+                map(
+                    FinchNotation.variable_instance,
+                    FinchNotation.finch_parse_default_yieldbind(ex),
+                )...
             ),
-        )
+        ),
     )
+)
     return quote
         unquote_literals(
             dataflow(

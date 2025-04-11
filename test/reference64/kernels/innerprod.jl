@@ -13,22 +13,22 @@ begin
     A_lvl_2_stop = A_lvl_2.shape
     A_lvl_3 = A_lvl_2.lvl
     A_lvl_3_val = A_lvl_3.val
-    B_lvl_2_qos_fill = 0
-    B_lvl_2_qos_stop = 0
+    B_lvl_2_qos_used = 0
+    B_lvl_2_qos_alloc = 0
     B_lvl_2_prev_pos = 0
     Finch.resize_if_smaller!(B_lvl_2_ptr, A_lvl_stop + 1)
     Finch.fill_range!(B_lvl_2_ptr, 0, 1 + 1, A_lvl_stop + 1)
     for j_4 = 1:A_lvl_stop
         B_lvl_q = (1 - 1) * A_lvl_stop + j_4
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
-        B_lvl_2_qos = B_lvl_2_qos_fill + 1
+        B_lvl_2_qos = B_lvl_2_qos_used + 1
         B_lvl_2_prev_pos < B_lvl_q || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
         for i_4 = 1:A_lvl_stop
-            if B_lvl_2_qos > B_lvl_2_qos_stop
-                B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
-                Finch.resize_if_smaller!(B_lvl_2_idx, B_lvl_2_qos_stop)
-                Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_stop)
-                Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_stop)
+            if B_lvl_2_qos > B_lvl_2_qos_alloc
+                B_lvl_2_qos_alloc = max(B_lvl_2_qos_alloc << 1, 1)
+                Finch.resize_if_smaller!(B_lvl_2_idx, B_lvl_2_qos_alloc)
+                Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_alloc)
+                Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_alloc)
             end
             B_lvl_2dirty = false
             A_lvl_q_2 = (1 - 1) * A_lvl_stop + i_4
@@ -80,15 +80,15 @@ begin
                 B_lvl_2_prev_pos = B_lvl_q
             end
         end
-        B_lvl_2_ptr[B_lvl_q + 1] += (B_lvl_2_qos - B_lvl_2_qos_fill) - 1
-        B_lvl_2_qos_fill = B_lvl_2_qos - 1
+        B_lvl_2_ptr[B_lvl_q + 1] += (B_lvl_2_qos - B_lvl_2_qos_used) - 1
+        B_lvl_2_qos_used = B_lvl_2_qos - 1
     end
     resize!(B_lvl_2_ptr, A_lvl_stop + 1)
     for p = 1:A_lvl_stop
         B_lvl_2_ptr[p + 1] += B_lvl_2_ptr[p]
     end
-    qos_stop = B_lvl_2_ptr[A_lvl_stop + 1] - 1
-    resize!(B_lvl_2_idx, qos_stop)
-    resize!(B_lvl_3_val, qos_stop)
+    qos_alloc = B_lvl_2_ptr[A_lvl_stop + 1] - 1
+    resize!(B_lvl_2_idx, qos_alloc)
+    resize!(B_lvl_3_val, qos_alloc)
     (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_3_val), A_lvl_stop, B_lvl_2_ptr, B_lvl_2_idx), A_lvl_stop)),)
 end

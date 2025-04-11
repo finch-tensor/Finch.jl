@@ -14,7 +14,7 @@ begin
     F_lvl_stop = F_lvl.shape
     F_lvl_2 = F_lvl.lvl
     F_lvl_2_val = F_lvl_2.val
-    C_lvl_qos_stop = 0
+    C_lvl_qos_alloc = 0
     Finch.resize_if_smaller!(C_lvl_ptr, 1 + 1)
     Finch.fill_range!(C_lvl_ptr, 0, 1 + 1, 1 + 1)
     C_lvl_qos = 0 + 1
@@ -35,11 +35,11 @@ begin
             A_lvl_i = A_lvl_idx[A_lvl_q]
             if A_lvl_i < phase_stop
                 A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
-                if C_lvl_qos > C_lvl_qos_stop
-                    C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
-                    Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
-                    Finch.resize_if_smaller!(C_lvl_2_val, C_lvl_qos_stop)
-                    Finch.fill_range!(C_lvl_2_val, 0.0, C_lvl_qos, C_lvl_qos_stop)
+                if C_lvl_qos > C_lvl_qos_alloc
+                    C_lvl_qos_alloc = max(C_lvl_qos_alloc << 1, 1)
+                    Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_alloc)
+                    Finch.resize_if_smaller!(C_lvl_2_val, C_lvl_qos_alloc)
+                    Finch.fill_range!(C_lvl_2_val, 0.0, C_lvl_qos, C_lvl_qos_alloc)
                 end
                 C_lvldirty = false
                 v_3 = -A_lvl_i
@@ -92,11 +92,11 @@ begin
                 phase_stop_10 = min(phase_stop, A_lvl_i)
                 if A_lvl_i == phase_stop_10
                     A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
-                    if C_lvl_qos > C_lvl_qos_stop
-                        C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
-                        Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
-                        Finch.resize_if_smaller!(C_lvl_2_val, C_lvl_qos_stop)
-                        Finch.fill_range!(C_lvl_2_val, 0.0, C_lvl_qos, C_lvl_qos_stop)
+                    if C_lvl_qos > C_lvl_qos_alloc
+                        C_lvl_qos_alloc = max(C_lvl_qos_alloc << 1, 1)
+                        Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_alloc)
+                        Finch.resize_if_smaller!(C_lvl_2_val, C_lvl_qos_alloc)
+                        Finch.fill_range!(C_lvl_2_val, 0.0, C_lvl_qos, C_lvl_qos_alloc)
                     end
                     C_lvldirty = false
                     v_5 = -phase_stop_10
@@ -155,8 +155,8 @@ begin
     for p = 1:1
         C_lvl_ptr[p + 1] += C_lvl_ptr[p]
     end
-    qos_stop = C_lvl_ptr[1 + 1] - 1
-    resize!(C_lvl_idx, qos_stop)
-    resize!(C_lvl_2_val, qos_stop)
+    qos_alloc = C_lvl_ptr[1 + 1] - 1
+    resize!(C_lvl_idx, qos_alloc)
+    resize!(C_lvl_2_val, qos_alloc)
     (C = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(C_lvl_2_val), A_lvl_stop, C_lvl_ptr, C_lvl_idx)),)
 end

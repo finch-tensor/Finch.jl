@@ -38,15 +38,15 @@ begin
         Threads.@threads for tid = 1:Threads.nthreads()
                 Finch.@barrier begin
                         @inbounds @fastmath(begin
-                                    Ct_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), Ct_lvl_3_val_2)
-                                    B_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_2_val_2)
-                                    B_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_ptr_2)
-                                    B_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl1_2)
-                                    B_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl2_2)
-                                    A_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_val_2)
-                                    A_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_ptr_2)
-                                    A_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl1_2)
-                                    A_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl2_2)
+                                    Ct_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), Ct_lvl_3_val_2)
+                                    B_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), B_lvl_2_val_2)
+                                    B_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), B_lvl_ptr_2)
+                                    B_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), B_lvl_tbl1_2)
+                                    B_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), B_lvl_tbl2_2)
+                                    A_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_2_val_2)
+                                    A_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_ptr_2)
+                                    A_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_tbl1_2)
+                                    A_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_tbl2_2)
                                     B_lvl_q = B_lvl_ptr_3[1]
                                     B_lvl_q_stop = B_lvl_ptr_3[1 + 1]
                                     if B_lvl_q < B_lvl_q_stop
