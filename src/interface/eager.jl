@@ -418,6 +418,13 @@ end
     fiber_ctr(rep, [:(dims[$i]) for i in 1:length(dims)]...)
 end
 
+maybe_multiplicativeinverse(x) = x
+function maybe_multiplicativeinverse(
+    x::Union{Bool,Int8,Int16,Int32,Int64,Int128,UInt8,UInt16,UInt32,UInt64,UInt128}
+)
+    Base.multiplicativeinverse(x)
+end
+
 @staged function reshape_kernel(dst, src, dims, combine_mask, split_mask)
     combine_mask = combine_mask.parameters[1]
     split_mask = split_mask.parameters[1]
@@ -428,9 +435,11 @@ end
     src_idxs = [Symbol(:i_, n) for n in 1:N]
     src_tmps = [Symbol(:t_, n) for n in 1:N]
     src_dims = [Symbol(:src_dim_, n) for n in 1:N]
+    src_invs = [Symbol(:src_inv_, n) for n in 1:N]
     dst_tmps = [Symbol(:s_, m) for m in 1:M]
-    dst_idxs = [Symbol(:j_, m) for m in 1:M]
+    dst_idxs = Any[Symbol(:j_, m) for m in 1:M]
     dst_dims = [Symbol(:dst_dim_, m) for m in 1:M]
+    dst_invs = [Symbol(:dst_inv_, m) for m in 1:M]
 
     for (combine_group, split_group) in zip(combine_mask, split_mask)
         src_tmps[combine_group[end]] = src_idxs[combine_group[end]]
@@ -440,8 +449,6 @@ end
         end
         if length(split_group) == 1
             dst_idxs[split_group[1]] = flat_idx
-        else
-            dst_idxs[split_group[end]] = dst_tmps[split_group[end - 1]]
         end
     end
 
@@ -451,11 +458,17 @@ end
 
     for (combine_group, split_group) in zip(combine_mask, split_mask)
         if length(split_group) > 1
+            i = split_group[end]
+            res = quote
+                let $(dst_idxs[i]) = $(dst_tmps[i - 1]) + 1
+                    $res
+                end
+            end
             for i in split_group[(end - 1):-1:2]
                 res = quote
-                    let $(dst_tmps[i]) = fld1($(dst_tmps[i - 1]), $(dst_dims[i]))
+                    let $(dst_tmps[i]) = div($(dst_tmps[i - 1]), $(dst_invs[i]))
                         let $(dst_idxs[i]) =
-                                $(dst_tmps[i - 1]) - ($(dst_tmps[i]) - 1) * $(dst_dims[i])
+                                $(dst_tmps[i - 1]) - $(dst_tmps[i]) * $(dst_dims[i]) + 1
                             $res
                         end
                     end
@@ -463,10 +476,9 @@ end
             end
             i = split_group[1]
             res = quote
-                let $(dst_tmps[i]) = fld1($(src_tmps[combine_group[1]]), $(dst_dims[i]))
+                let $(dst_tmps[i]) = div($(src_tmps[combine_group[1]]) - 1, $(dst_invs[i]))
                     let $(dst_idxs[i]) =
-                            $(src_tmps[combine_group[1]]) -
-                            ($(dst_tmps[i]) - 1) * $(dst_dims[i])
+                            $(src_tmps[combine_group[1]]) - $(dst_tmps[i]) * $(dst_dims[i])
                         $res
                     end
                 end
@@ -494,6 +506,10 @@ end
     res = quote
         ($(src_dims...),) = size(src)
         ($(dst_dims...),) = dims
+        #($(src_invs...),) = ($(map(dim -> :(Base.multiplicativeinverse($dim)), src_dims)...),)
+        ($(dst_invs...),) = (
+            $(map(dim -> :(maybe_multiplicativeinverse($dim)), dst_dims)...),
+        )
         @finch begin
             dst .= 0
             $res
