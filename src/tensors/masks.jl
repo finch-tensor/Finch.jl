@@ -180,6 +180,7 @@ struct VirtualBandMaskColumn
 end
 
 FinchNotation.finch_leaf(x::VirtualBandMaskColumn) = virtual(x)
+Finch.virtual_size(ctx, ::VirtualBandMaskColumn) = (auto,)
 
 function unfurl(ctx, arr::VirtualBandMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
@@ -199,11 +200,11 @@ end
 function unfurl(ctx, arr::VirtualBandMaskColumn, ext, mode, proto::typeof(defaultread))
     Sequence([
         Phase(;
-            stop=(ctx, ext) -> value(:($(ctx(j)) - 1)),
+            stop=(ctx, ext) -> call(-, arr.j_lo, 1),
             body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
-            stop=(ctx, ext) -> k,
+            stop=(ctx, ext) -> arr.j_hi,
             body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(;

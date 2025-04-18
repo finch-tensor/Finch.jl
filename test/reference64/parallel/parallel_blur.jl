@@ -3,7 +3,7 @@ begin
     output_lvl_2 = output_lvl.lvl
     output_lvl_3 = output_lvl_2.lvl
     output_lvl_3_val = output_lvl_3.val
-    cpu = (((ex.bodies[1]).bodies[2]).ext.args[2]).bind
+    n = (((ex.bodies[1]).bodies[2]).ext.args[2]).bind.n
     tmp_lvl = (((ex.bodies[1]).bodies[2]).body.bodies[1]).tns.bind.lvl
     tmp_lvl_2 = tmp_lvl.lvl
     tmp_lvl_2_val = tmp_lvl_2.val
@@ -23,17 +23,17 @@ begin
     pos_stop = input_lvl_2_stop * input_lvl_stop
     Finch.resize_if_smaller!(output_lvl_3_val, pos_stop)
     Finch.fill_range!(output_lvl_3_val, 0.0, 1, pos_stop)
-    tmp_lvl_2_val_2 = (Finch).transfer(CPULocalMemory(cpu), tmp_lvl_2_val)
-    input_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(cpu), input_lvl_3_val)
-    output_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(cpu), output_lvl_3_val)
-    Threads.@threads for tid = 1:cpu.n
+    tmp_lvl_2_val_2 = (Finch).transfer(Finch.CPULocalMemory(Finch.CPU(n)), tmp_lvl_2_val)
+    input_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), input_lvl_3_val)
+    output_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), output_lvl_3_val)
+    Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                tmp_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), tmp_lvl_2_val_2)
-                                input_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), input_lvl_3_val_2)
-                                output_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, Serial()), output_lvl_3_val_2)
-                                phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), cpu.n))
-                                phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, cpu.n))
+                                tmp_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), tmp_lvl_2_val_2)
+                                input_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), input_lvl_3_val_2)
+                                output_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), output_lvl_3_val_2)
+                                phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
+                                phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
                                 if phase_stop_2 >= phase_start_2
                                     for y_8 = phase_start_2:phase_stop_2
                                         input_lvl_q_2 = (1 - 1) * input_lvl_stop + y_8
@@ -61,7 +61,7 @@ begin
                                         end
                                     end
                                 end
-                                phase_start_3 = max(1, 1 + fld(input_lvl_stop * tid, cpu.n))
+                                phase_start_3 = max(1, 1 + fld(input_lvl_stop * tid, n))
                                 if input_lvl_stop >= phase_start_3
                                     input_lvl_stop + 1
                                 end

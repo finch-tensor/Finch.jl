@@ -59,7 +59,8 @@ export fill_value, AsArray, expanddims, tensor_tree
 
 export parallelAnalysis, ParallelAnalysisResults
 export parallel, extent, auto
-export CPU, CPULocalArray, CPULocalMemory
+export static_schedule, greedy_schedule, julia_schedule
+export serial, cpu
 
 export Limit, Eps
 
