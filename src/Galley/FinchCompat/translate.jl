@@ -120,13 +120,13 @@ function remove_reorders(prgm::LogicNode)
         )(
             expr
         )
-        bc_idxs = OrderedSet()
+        bc_idxs = StableSet()
         for n in PostOrderDFS(expr)
             if n.kind == reorder
                 bc_idxs = bc_idxs ∪ setdiff(n.idxs, getfields(n.arg))
             end
         end
-        table_idxs = OrderedSet()
+        table_idxs = StableSet()
         for n in PostOrderDFS(expr)
             if n.kind == table
                 table_idxs = table_idxs ∪ n.idxs

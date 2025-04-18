@@ -13,7 +13,7 @@ using Statistics
 using Finch
 using Finch: Element, SparseListLevel, SparseDict, Dense, SparseCOO, fsparse_impl,
     compute_parse,
-    isimmediate, set_options, flatten_plans, initmax, initmin
+    isimmediate, set_options, flatten_plans, initmax, initmin, StableSet
 using Finch.FinchNotation: index_instance, variable_instance, tag_instance,
     literal_instance,
     access_instance, reader_instance, updater_instance, assign_instance,

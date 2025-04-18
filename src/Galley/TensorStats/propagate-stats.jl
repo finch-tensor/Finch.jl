@@ -10,7 +10,7 @@ function merge_tensor_stats_union(op, all_stats::Vararg{TensorStats})
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::TensorStats
+    op, init, reduce_indices::StableSet{IndexExpr}, stats::TensorStats
 )
     throw(error("reduce_tensor_stats not implemented for: ", typeof(stats)))
 end
@@ -38,7 +38,7 @@ function merge_tensor_def(op, all_defs::Vararg{TensorDef})
     )
 end
 
-function reduce_tensor_def(op, init, reduce_indices::OrderedSet{IndexExpr}, def::TensorDef)
+function reduce_tensor_def(op, init, reduce_indices::StableSet{IndexExpr}, def::TensorDef)
     op = op isa PlanNode ? op.val : op
     init = init isa PlanNode ? init.val : init
     if isnothing(init)
@@ -110,10 +110,10 @@ function merge_tensor_stats(op::PlanNode, all_stats::Vararg{ST}) where {ST<:Tens
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::Union{Vector{PlanNode},OrderedSet{PlanNode}}, stats::ST
+    op, init, reduce_indices::Union{Vector{PlanNode},StableSet{PlanNode}}, stats::ST
 ) where {ST<:TensorStats}
     return reduce_tensor_stats(
-        op, init, OrderedSet{IndexExpr}([idx.name for idx in reduce_indices]), stats
+        op, init, StableSet{IndexExpr}([idx.name for idx in reduce_indices]), stats
     )
 end
 
@@ -154,7 +154,7 @@ function merge_tensor_stats_union(op, new_def::TensorDef, all_stats::Vararg{Naiv
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::NaiveStats
+    op, init, reduce_indices::StableSet{IndexExpr}, stats::NaiveStats
 )
     if length(reduce_indices) == 0
         return copy_stats(stats)
@@ -227,7 +227,7 @@ function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{DCSta
         new_def,
         final_idx_2_int,
         final_int_2_idx,
-        OrderedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dc_dict),
+        StableSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dc_dict),
     )
     return new_stats
 end
@@ -284,19 +284,19 @@ function merge_tensor_stats_union(op, new_def::TensorDef, all_stats::Vararg{DCSt
     #=
         for Y in subsets(collect(get_index_set(new_def)))
             proj_dc_key = (X=BitSet(), Y=idxs_to_bitset(final_idx_2_int, Y))
-            new_dcs[proj_dc_key] = min(get(new_dcs, proj_dc_key, typemax(UInt)/2), get_dim_space_size(new_def, OrderedSet(Y)))
+            new_dcs[proj_dc_key] = min(get(new_dcs, proj_dc_key, typemax(UInt)/2), get_dim_space_size(new_def, StableSet(Y)))
         end
      =#
     return DCStats(
         new_def,
         final_idx_2_int,
         final_int_2_idx,
-        OrderedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dcs),
+        StableSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dcs),
     )
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::DCStats
+    op, init, reduce_indices::StableSet{IndexExpr}, stats::DCStats
 )
     if length(reduce_indices) == 0
         return copy_stats(stats)
