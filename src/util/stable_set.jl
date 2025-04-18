@@ -1,6 +1,6 @@
 struct StableSet{T} <: AbstractSet{T}
     data::OrderedSet{T}
-    StableSet{T}(arg) where {T} = StableSet{T}(OrderedSet(arg))
+    StableSet{T}(arg) where {T} = new(OrderedSet(arg))
 end
 
 StableSet(arg) = StableSet(OrderedSet(arg))
