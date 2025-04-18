@@ -12,7 +12,7 @@ const DenseAllocateCost = 0.5
 const SparseAllocateCost = 60
 
 # We estimate the prefix cost based on the number of iterations in that prefix.
-function get_loop_lookups(vars::OrderedSet{IndexExpr}, rel_conjuncts, rel_disjuncts)
+function get_loop_lookups(vars::StableSet{IndexExpr}, rel_conjuncts, rel_disjuncts)
     # This tensor stats doesn't actually correspond to a particular place in the expr tree,
     # so we unfortunately have to mangle the statistics interface a bit.
     rel_conjuncts = map(stat -> set_fill_value!(stat, false), rel_conjuncts)
@@ -45,7 +45,7 @@ function get_prefix_cost(
     new_prefix::Vector{IndexExpr}, output_vars, conjunct_stats, disjunct_stats
 )
     new_var = new_prefix[end]
-    prefix_set = OrderedSet(new_prefix)
+    prefix_set = StableSet(new_prefix)
     rel_conjuncts = [
         stat for stat in conjunct_stats if !isempty(get_index_set(stat) ∩ prefix_set)
     ]

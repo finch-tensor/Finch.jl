@@ -43,14 +43,14 @@ function needs_reformat(stat::TensorStats, prefix::Vector{IndexExpr})
 end
 
 function get_reformat_set(input_stats::Vector{TensorStats}, prefix::Vector{IndexExpr})
-    ref_set = OrderedSet()
+    ref_set = StableSet()
     for i in eachindex(input_stats)
         needs_reformat(input_stats[i], prefix) && push!(ref_set, i)
     end
     return ref_set
 end
 
-PLAN_CLASS = Tuple{OrderedSet{IndexExpr},OrderedSet{Int}}
+PLAN_CLASS = Tuple{StableSet{IndexExpr},StableSet{Int}}
 PLAN = Tuple{Vector{IndexExpr},Float64}
 
 function cost_of_plan_class(pc::PLAN_CLASS, reformat_costs, output_size)
@@ -98,13 +98,13 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
     reformat_costs = OrderedDict(
         i => cost_of_reformat(transposable_stats[i]) for i in eachindex(transposable_stats)
     )
-    PLAN_CLASS = Tuple{OrderedSet{IndexExpr},OrderedSet{Int}}
+    PLAN_CLASS = Tuple{StableSet{IndexExpr},StableSet{Int}}
     PLAN = Tuple{Vector{IndexExpr},Float64}
     optimal_plans = OrderedDict{PLAN_CLASS,PLAN}()
     for var in all_vars
         prefix = [var]
         rf_set = get_reformat_set(transposable_stats, prefix)
-        class = (OrderedSet(prefix), rf_set)
+        class = (StableSet(prefix), rf_set)
         cost = get_prefix_cost(prefix, output_vars, conjunct_stats, disjunct_stats)
         optimal_plans[class] = (prefix, cost)
     end
@@ -116,7 +116,7 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
             prefix = plan[1]
             cost = plan[2]
             # We only consider extensions that don't result in cross products
-            potential_vars = OrderedSet{IndexExpr}()
+            potential_vars = StableSet{IndexExpr}()
             for stat in all_stats
                 index_set = get_index_set(stat)
                 if length(∩(index_set, prefix_set)) > 0

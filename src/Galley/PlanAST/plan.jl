@@ -325,7 +325,7 @@ function Base.:(==)(a::PlanNode, b::PlanNode)
         return b.kind === Index && a.name == b.name
     elseif a.kind == Aggregate
         return b.kind === Aggregate && a.op == b.op && a.init == b.init &&
-               OrderedSet(a.idxs) == OrderedSet(b.idxs) && a.arg == b.arg
+               StableSet(a.idxs) == StableSet(b.idxs) && a.arg == b.arg
     elseif istree(a)
         return a.kind === b.kind && a.children == b.children
     else
