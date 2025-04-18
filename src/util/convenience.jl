@@ -38,7 +38,7 @@ end
 StableSet(args...) = StableSet(OrderedSet(args...))
 StableSet{T}(args...) where {T} = StableSet{T}(OrderedSet{T}(args...))
 
-Base.push!(s::StableSet, x) = push!(s.data, x)
+Base.push!(s::StableSet, x) = StableSet(push!(s.data, x))
 Base.pop!(s::StableSet) = pop!(s.data)
 Base.iterate(s::StableSet) = iterate(s.data)
 Base.iterate(s::StableSet, i) = iterate(s.data, i)
@@ -50,7 +50,7 @@ Base.union(s::StableSet, x...) = StableSet(union(s.data, x...))
 Base.setdiff(s::StableSet, x...) = StableSet(setdiff(s.data, x...))
 Base.length(s::StableSet) = length(s.data)
 Base.in(x, s::StableSet) = in(x, s.data)
-Base.delete!(s::StableSet, x) = delete!(s.data, x)
+Base.delete!(s::StableSet, x) = StableSet(delete!(s.data, x))
 Base.empty!(s::StableSet) = StableSet(empty!(s.data))
 Base.copy(s::StableSet) = StableSet(copy(s.data))
 Base.:(==)(s::StableSet, x::StableSet) = s.data == x.data
