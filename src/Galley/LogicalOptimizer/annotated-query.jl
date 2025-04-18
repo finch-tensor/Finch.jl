@@ -12,7 +12,7 @@ mutable struct AnnotatedQuery
     parent_idxs::OrderedDict{IndexExpr,Vector{IndexExpr}} # Index orders that must be respected
     original_idx::OrderedDict{IndexExpr,IndexExpr} # When an index is split into many, we track their relationship.
     connected_components::Vector{Vector{IndexExpr}}
-    connected_idxs::OrderedDict{IndexExpr,OrderedSet{IndexExpr}}
+    connected_idxs::OrderedDict{IndexExpr,SortedSet{IndexExpr}}
 end
 
 function copy_aq(aq::AnnotatedQuery)
@@ -229,7 +229,7 @@ function AnnotatedQuery(q::PlanNode, ST)
     end
 
     parent_idxs = OrderedDict(i => [] for i in reduce_idxs)
-    connected_idxs = OrderedDict(i => OrderedSet{IndexExpr}() for i in reduce_idxs)
+    connected_idxs = OrderedDict(i => SortedSet{IndexExpr}() for i in reduce_idxs)
     for idx1 in reduce_idxs
         idx1_op = idx_op[idx1]
         idx1_bottom_root = id_to_node[idx_lowest_root[idx1]]
@@ -283,8 +283,8 @@ function get_reduce_query(reduce_idx, aq)
     root_node_id = aq.idx_lowest_root[reduce_idx]
     root_node = aq.id_to_node[root_node_id]
     query_expr = nothing
-    idxs_to_be_reduced = OrderedSet([reduce_idx])
-    nodes_to_remove = OrderedSet()
+    idxs_to_be_reduced = SortedSet([reduce_idx])
+    nodes_to_remove = SortedSet()
     node_to_replace = -1
     reducible_idxs = get_reducible_idxs(aq)
     if root_node.kind === MapJoin && isdistributive(root_node.op.val, reduce_op)
@@ -343,7 +343,7 @@ function get_reduce_query(reduce_idx, aq)
             end
         end
     end
-    final_idxs_to_be_reduced = OrderedSet(
+    final_idxs_to_be_reduced = SortedSet(
         Index(aq.original_idx[idx]) for idx in idxs_to_be_reduced
     )
     reduced_idxs = idxs_to_be_reduced
@@ -356,7 +356,7 @@ function get_reduce_query(reduce_idx, aq)
     query_expr.stats = reduce_tensor_stats(
         query_expr.op.val,
         query_expr.init.val,
-        OrderedSet([idx for idx in final_idxs_to_be_reduced]),
+        SortedSet([idx for idx in final_idxs_to_be_reduced]),
         query_expr.arg.stats,
     )
     query = Query(Alias(galley_gensym("A")), query_expr)
@@ -492,7 +492,7 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
     new_idx_op = OrderedDict{IndexExpr,Any}()
     new_idx_init = OrderedDict{IndexExpr,Any}()
     new_parent_idxs = OrderedDict{IndexExpr,Vector{IndexExpr}}()
-    new_connected_idxs = OrderedDict{IndexExpr,OrderedSet{IndexExpr}}()
+    new_connected_idxs = OrderedDict{IndexExpr,SortedSet{IndexExpr}}()
     for idx in keys(aq.idx_lowest_root)
         if idx in reduced_idxs
             continue
@@ -523,7 +523,7 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
     new_components = get_idx_connected_components(new_parent_idxs, new_connected_idxs)
 
     # Here, we update the statistics for all nodes above the affected nodes
-    rel_child_nodes = OrderedSet{Int}(n for n in nodes_to_remove)
+    rel_child_nodes = SortedSet{Int}(n for n in nodes_to_remove)
     push!(rel_child_nodes, node_to_replace)
     for n in PostOrderDFS(new_point_expr)
         if n.node_id == node_to_replace
@@ -571,7 +571,7 @@ end
 
 # Given a node in the tree, return all indices which can be reduced after computing that subtree.
 function get_reducible_idxs(aq, n)
-    reduce_idxs = OrderedSet{IndexExpr}()
+    reduce_idxs = SortedSet{IndexExpr}()
     for idx in aq.reduce_idxs
         idx_root = aq.idx_lowest_root[idx]
         if intree(idx_root, n)

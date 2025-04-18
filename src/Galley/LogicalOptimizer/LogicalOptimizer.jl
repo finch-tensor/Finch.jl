@@ -123,7 +123,7 @@ function high_level_optimize_query(
     if check_dnf
         min_cost = cnf_cost
         min_query = canonicalize(plan_copy(q), false)
-        visited_queries = OrderedSet()
+        visited_queries = SortedSet()
         finished = false
         while !finished
             finished = true

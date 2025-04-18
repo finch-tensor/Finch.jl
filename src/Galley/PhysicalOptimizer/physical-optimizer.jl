@@ -113,11 +113,11 @@ function logical_query_to_physical_queries(
 
     agg_op = nothing
     agg_init = nothing
-    reduce_idxs = OrderedSet{IndexExpr}()
+    reduce_idxs = SortedSet{IndexExpr}()
     if expr.kind == Aggregate
         agg_op = expr.op
         agg_init = expr.init
-        reduce_idxs = OrderedSet{IndexExpr}([i.name for i in expr.idxs])
+        reduce_idxs = SortedSet{IndexExpr}([i.name for i in expr.idxs])
         expr = expr.arg
     end
 
