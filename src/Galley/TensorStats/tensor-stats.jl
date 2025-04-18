@@ -3,7 +3,7 @@
 # `Nothing` is considered a part of the physical definition which may be undefined for logical
 # intermediates but is required to be defined for the inputs to an executable query.
 @auto_hash_equals mutable struct TensorDef
-    index_set::OrderedSet{IndexExpr}
+    index_set::SortedSet{IndexExpr}
     dim_sizes::OrderedDict{IndexExpr,Float64}
     fill_val::Any
     level_formats::Union{Nothing,Vector{LevelFormat}}
@@ -12,7 +12,7 @@
 end
 function TensorDef(x)
     TensorDef(
-        OrderedSet{IndexExpr}(),
+        SortedSet{IndexExpr}(),
         OrderedDict{IndexExpr,Float64}(),
         x,
         IndexExpr[],
@@ -22,7 +22,7 @@ function TensorDef(x)
 end
 
 function copy_def(def::TensorDef)
-    TensorDef(OrderedSet{IndexExpr}(x for x in def.index_set),
+    TensorDef(SortedSet{IndexExpr}(x for x in def.index_set),
         OrderedDict{IndexExpr,Float64}(x for x in def.dim_sizes),
         def.fill_val,
         isnothing(def.level_formats) ? nothing : [x for x in def.level_formats],
@@ -65,7 +65,7 @@ function TensorDef(tensor::Tensor, indices)
     )
     fill_val = Finch.fill_value(tensor)
     return TensorDef(
-        OrderedSet{IndexExpr}(indices), dim_size, fill_val, level_formats, indices, nothing
+        SortedSet{IndexExpr}(indices), dim_size, fill_val, level_formats, indices, nothing
     )
 end
 
@@ -75,7 +75,7 @@ function reindex_def(indices, def::TensorDef)
     for i in eachindex(indices)
         rename_dict[def.index_order[i]] = indices[i]
     end
-    new_index_set = OrderedSet{IndexExpr}()
+    new_index_set = SortedSet{IndexExpr}()
     for idx in def.index_set
         push!(new_index_set, rename_dict[idx])
     end
@@ -206,7 +206,7 @@ end
 
 function estimate_nnz(
     stat::NaiveStats; indices=get_index_set(stat),
-    conditional_indices=OrderedSet{IndexExpr}(),
+    conditional_indices=SortedSet{IndexExpr}(),
 )
     return stat.cardinality / get_dim_space_size(stat, conditional_indices)
 end
@@ -224,7 +224,7 @@ end
 
 function NaiveStats(x)
     def = TensorDef(
-        OrderedSet{IndexExpr}(), OrderedDict{IndexExpr,Int}(), x, nothing, nothing, nothing
+        SortedSet{IndexExpr}(), OrderedDict{IndexExpr,Int}(), x, nothing, nothing, nothing
     )
     return NaiveStats(def, 1)
 end
@@ -248,8 +248,8 @@ end
 #################  DCStats Definition ######################################################
 
 struct DegreeConstraint
-    X::BitSet
-    Y::BitSet
+    X::SortedSet
+    Y::SortedSet
     d::Float64
 end
 DC = DegreeConstraint
@@ -262,7 +262,7 @@ end
     def::TensorDef
     idx_2_int::OrderedDict{IndexExpr,Int}
     int_2_idx::OrderedDict{Int,IndexExpr}
-    dcs::OrderedSet{DC}
+    dcs::SortedSet{DC}
 
     DCStats(def, idx_2_int, int_2_idx, dcs) = new(def, idx_2_int, int_2_idx, dcs)
 
@@ -273,7 +273,7 @@ end
         def = TensorDef(tensor, indices)
         idx_2_int = OrderedDict{IndexExpr,Int}()
         int_2_idx = OrderedDict{Int,IndexExpr}()
-        for (i, idx) in enumerate(OrderedSet(indices))
+        for (i, idx) in enumerate(SortedSet(indices))
             idx_2_int[idx] = i
             int_2_idx[i] = idx
         end
@@ -298,19 +298,19 @@ function copy_stats(stat::DCStats)
         copy_def(stat.def),
         copy(stat.idx_2_int),
         copy(stat.int_2_idx),
-        OrderedSet{DC}(dc for dc in stat.dcs),
+        SortedSet{DC}(dc for dc in stat.dcs),
     )
 end
 function DCStats(x)
     DCStats(
         TensorDef(x), OrderedDict{IndexExpr,Int}(), OrderedDict{Int,IndexExpr}(),
-        OrderedSet{DC}(),
+        SortedSet{DC}(),
     )
 end
 
 # Return a stats object where values have been geometrically rounded.
 function get_cannonical_stats(stat::DCStats, rel_granularity=4)
-    new_dcs = OrderedSet{DC}()
+    new_dcs = SortedSet{DC}()
     for dc in stat.dcs
         push!(new_dcs, DC(dc.X, dc.Y, geometric_round(rel_granularity, dc.d)))
     end
@@ -347,16 +347,16 @@ end
 
 get_def(stat::DCStats) = stat.def
 function get_index_bitset(stat::DCStats)
-    BitSet(Int[stat.idx_2_int[x] for x in get_index_set(stat)])
+    SortedSet(Int[stat.idx_2_int[x] for x in get_index_set(stat)])
 end
 
 idxs_to_bitset(stat::DCStats, indices) = idxs_to_bitset(stat.idx_2_int, indices)
 function idxs_to_bitset(idx_2_int::OrderedDict{IndexExpr,Int}, indices)
-    BitSet(Int[idx_2_int[idx] for idx in indices])
+    SortedSet(Int[idx_2_int[idx] for idx in indices])
 end
 bitset_to_idxs(stat::DCStats, bitset) = bitset_to_idxs(stat.int_2_idx, bitset)
 function bitset_to_idxs(int_2_idx::OrderedDict{Int,IndexExpr}, bitset)
-    OrderedSet{IndexExpr}(int_2_idx[idx] for idx in bitset)
+    SortedSet{IndexExpr}(int_2_idx[idx] for idx in bitset)
 end
 
 function add_dummy_idx!(stats::DCStats, i::IndexExpr; idx_pos=-1)
@@ -364,28 +364,28 @@ function add_dummy_idx!(stats::DCStats, i::IndexExpr; idx_pos=-1)
     new_idx_int = maximum(values(stats.idx_2_int); init=0) + 1
     stats.idx_2_int[i] = new_idx_int
     stats.int_2_idx[new_idx_int] = i
-    Y = idxs_to_bitset(stats, OrderedSet([i]))
-    push!(stats.dcs, DC(BitSet(), Y, 1))
+    Y = idxs_to_bitset(stats, SortedSet([i]))
+    push!(stats.dcs, DC(SortedSet(), Y, 1))
 end
 
 function fix_cardinality!(stat::DCStats, card)
     had_dc = false
-    new_dcs = OrderedSet{DC}()
+    new_dcs = SortedSet{DC}()
     for dc in stat.dcs
         if length(dc.X) == 0 && dc.Y == get_index_bitset(stat)
-            push!(new_dcs, DC(BitSet(), get_index_bitset(stat), min(card, dc.d)))
+            push!(new_dcs, DC(SortedSet(), get_index_bitset(stat), min(card, dc.d)))
             had_dc = true
         else
             push!(new_dcs, dc)
         end
     end
     if !had_dc
-        push!(new_dcs, DC(BitSet(), get_index_bitset(stat), card))
+        push!(new_dcs, DC(SortedSet(), get_index_bitset(stat), card))
     end
     stat.dcs = new_dcs
 end
 
-DCKey = NamedTuple{(:X, :Y),Tuple{BitSet,BitSet}}
+DCKey = NamedTuple{(:X, :Y),Tuple{SortedSet,SortedSet}}
 
 function infer_dc(l, ld, r, rd, all_dcs, new_dcs)
     if l.Y ⊇ r.X
@@ -400,7 +400,7 @@ end
 
 # When we're only attempting to infer for nnz estimation, we only need to consider
 # left dcs which have X = {}.
-function _infer_dcs(dcs::OrderedSet{DC}; timeout=Inf, strength=0)
+function _infer_dcs(dcs::SortedSet{DC}; timeout=Inf, strength=0)
     all_dcs = OrderedDict{DCKey,Float64}()
     for dc in dcs
         all_dcs[(X=dc.X, Y=dc.Y)] = dc.d
@@ -447,7 +447,7 @@ function _infer_dcs(dcs::OrderedSet{DC}; timeout=Inf, strength=0)
             finished = true
         end
     end
-    final_dcs = OrderedSet{DC}()
+    final_dcs = SortedSet{DC}()
     for (dc_key, dc) in all_dcs
         push!(final_dcs, DC(dc_key.X, dc_key.Y, dc))
     end
@@ -480,7 +480,7 @@ function condense_stats!(stat::DCStats; timeout=100000, cheap=false)
         )
     end
 
-    end_dcs = OrderedSet{DC}()
+    end_dcs = SortedSet{DC}()
     for (dc_key, d) in min_dcs
         push!(end_dcs, DC(dc_key.X, dc_key.Y, d))
     end
@@ -489,21 +489,21 @@ function condense_stats!(stat::DCStats; timeout=100000, cheap=false)
 end
 
 function estimate_nnz(
-    stat::DCStats; indices=get_index_set(stat), conditional_indices=OrderedSet{IndexExpr}()
+    stat::DCStats; indices=get_index_set(stat), conditional_indices=SortedSet{IndexExpr}()
 )
     if length(indices) == 0
         return 1
     end
     indices_bitset = idxs_to_bitset(stat, indices)
     conditional_indices_bitset = idxs_to_bitset(stat, conditional_indices)
-    current_weights = OrderedDict{BitSet,Float64}(
-        conditional_indices_bitset => 1, BitSet() => 1
+    current_weights = OrderedDict{SortedSet,Float64}(
+        conditional_indices_bitset => 1, SortedSet() => 1
     )
-    frontier = OrderedSet{BitSet}([BitSet(), conditional_indices_bitset])
+    frontier = SortedSet{SortedSet}([SortedSet(), conditional_indices_bitset])
     finished = false
     while !finished
         current_bound::Float64 = get(current_weights, indices_bitset, typemax(Float64))
-        new_frontier = OrderedSet{BitSet}()
+        new_frontier = SortedSet{SortedSet}()
         finished = true
         for x in frontier
             weight = current_weights[x]
@@ -542,10 +542,10 @@ function estimate_nnz(
     return min_weight
 end
 
-DCStats() = DCStats(TensorDef(), OrderedSet())
+DCStats() = DCStats(TensorDef(), SortedSet())
 
 function _calc_dc_from_structure(
-    X::OrderedSet{IndexExpr}, Y::OrderedSet{IndexExpr}, indices::Vector{IndexExpr},
+    X::SortedSet{IndexExpr}, Y::SortedSet{IndexExpr}, indices::Vector{IndexExpr},
     s::Tensor,
 )
     Z = [i for i in indices if i ∉ ∪(X, Y)] # Indices that we want to project out before counting
@@ -577,7 +577,7 @@ function _vector_structure_to_dcs(indices::Vector{Int}, s::Tensor)
             d_i[] += s[i]
         end
     end
-    return OrderedSet{DC}([DC(BitSet(), BitSet(indices), d_i[])])
+    return SortedSet{DC}([DC(SortedSet(), SortedSet(indices), d_i[])])
 end
 
 function _matrix_structure_to_dcs(indices::Vector{Int}, s::Tensor)
@@ -622,11 +622,11 @@ function _matrix_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     end
     i = indices[2]
     j = indices[1]
-    return OrderedSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
-        DC(BitSet(), BitSet([j]), d_j[]),
-        DC(BitSet([i]), BitSet([j]), d_i_j[]),
-        DC(BitSet([j]), BitSet([i]), d_j_i[]),
-        DC(BitSet(), BitSet([i, j]), d_ij[]),
+    return SortedSet{DC}([DC(SortedSet(), SortedSet([i]), d_i[]),
+        DC(SortedSet(), SortedSet([j]), d_j[]),
+        DC(SortedSet([i]), SortedSet([j]), d_i_j[]),
+        DC(SortedSet([j]), SortedSet([i]), d_j_i[]),
+        DC(SortedSet(), SortedSet([i, j]), d_ij[]),
     ])
 end
 
@@ -693,13 +693,13 @@ function _3d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     i = indices[3]
     j = indices[2]
     k = indices[1]
-    return OrderedSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
-        DC(BitSet(), BitSet([j]), d_j[]),
-        DC(BitSet(), BitSet([k]), d_k[]),
-        DC(BitSet([i]), BitSet([j, k]), d_i_jk[]),
-        DC(BitSet([j]), BitSet([i, k]), d_j_ik[]),
-        DC(BitSet([k]), BitSet([i, j]), d_k_ij[]),
-        DC(BitSet(), BitSet([i, j, k]), d_ijk[]),
+    return SortedSet{DC}([DC(SortedSet(), SortedSet([i]), d_i[]),
+        DC(SortedSet(), SortedSet([j]), d_j[]),
+        DC(SortedSet(), SortedSet([k]), d_k[]),
+        DC(SortedSet([i]), SortedSet([j, k]), d_i_jk[]),
+        DC(SortedSet([j]), SortedSet([i, k]), d_j_ik[]),
+        DC(SortedSet([k]), SortedSet([i, j]), d_k_ij[]),
+        DC(SortedSet(), SortedSet([i, j, k]), d_ijk[]),
     ])
 end
 
@@ -783,15 +783,15 @@ function _4d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     j = indices[3]
     k = indices[2]
     l = indices[1]
-    return OrderedSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
-        DC(BitSet(), BitSet([j]), d_j[]),
-        DC(BitSet(), BitSet([k]), d_k[]),
-        DC(BitSet(), BitSet([l]), d_l[]),
-        DC(BitSet([i]), BitSet([j, k, l]), d_i_jkl[]),
-        DC(BitSet([j]), BitSet([i, k, l]), d_j_ikl[]),
-        DC(BitSet([k]), BitSet([i, j, l]), d_k_ijl[]),
-        DC(BitSet([l]), BitSet([i, j, k]), d_l_ijk[]),
-        DC(BitSet(), BitSet([i, j, k, l]), d_ijkl[]),
+    return SortedSet{DC}([DC(SortedSet(), SortedSet([i]), d_i[]),
+        DC(SortedSet(), SortedSet([j]), d_j[]),
+        DC(SortedSet(), SortedSet([k]), d_k[]),
+        DC(SortedSet(), SortedSet([l]), d_l[]),
+        DC(SortedSet([i]), SortedSet([j, k, l]), d_i_jkl[]),
+        DC(SortedSet([j]), SortedSet([i, k, l]), d_j_ikl[]),
+        DC(SortedSet([k]), SortedSet([i, j, l]), d_k_ijl[]),
+        DC(SortedSet([l]), SortedSet([i, j, k]), d_l_ijk[]),
+        DC(SortedSet(), SortedSet([i, j, k, l]), d_ijkl[]),
     ])
 end
 
@@ -805,11 +805,11 @@ function _structure_to_dcs(int_2_idx, indices::Vector{Int}, s::Tensor)
     elseif length(indices) == 4
         return _4d_structure_to_dcs(indices, s)
     end
-    dcs = OrderedSet{DC}()
+    dcs = SortedSet{DC}()
     # Calculate DCs for all combinations of X and Y
     for X in subsets(indices)
-        X = BitSet(X)
-        Y = BitSet(setdiff(indices, X))
+        X = SortedSet(X)
+        Y = SortedSet(setdiff(indices, X))
         isempty(Y) && continue # Anything to the empty set has degree 1
         d = _calc_dc_from_structure(
             bitset_to_idxs(int_2_idx, X),
@@ -820,26 +820,26 @@ function _structure_to_dcs(int_2_idx, indices::Vector{Int}, s::Tensor)
         push!(dcs, DC(X, Y, d))
 
         d = _calc_dc_from_structure(
-            OrderedSet{IndexExpr}(),
+            SortedSet{IndexExpr}(),
             bitset_to_idxs(int_2_idx, Y),
             [int_2_idx[i] for i in indices],
             s,
         )
-        push!(dcs, DC(BitSet(), Y, d))
+        push!(dcs, DC(SortedSet(), Y, d))
     end
     return dcs
 end
 
 function dense_dcs(def, int_2_idx, indices::Vector{Int})
-    dcs = OrderedSet()
+    dcs = SortedSet()
     for X in subsets(indices)
         Y = setdiff(indices, X)
         for Z in subsets(Y)
             push!(
                 dcs,
                 DC(
-                    BitSet(X),
-                    BitSet(Z),
+                    SortedSet(X),
+                    SortedSet(Z),
                     get_dim_space_size(def, bitset_to_idxs(int_2_idx, Z)),
                 ),
             )

@@ -10,7 +10,7 @@ function merge_tensor_stats_union(op, all_stats::Vararg{TensorStats})
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::TensorStats
+    op, init, reduce_indices::SortedSet{IndexExpr}, stats::TensorStats
 )
     throw(error("reduce_tensor_stats not implemented for: ", typeof(stats)))
 end
@@ -38,7 +38,7 @@ function merge_tensor_def(op, all_defs::Vararg{TensorDef})
     )
 end
 
-function reduce_tensor_def(op, init, reduce_indices::OrderedSet{IndexExpr}, def::TensorDef)
+function reduce_tensor_def(op, init, reduce_indices::SortedSet{IndexExpr}, def::TensorDef)
     op = op isa PlanNode ? op.val : op
     init = init isa PlanNode ? init.val : init
     if isnothing(init)
@@ -110,10 +110,10 @@ function merge_tensor_stats(op::PlanNode, all_stats::Vararg{ST}) where {ST<:Tens
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::Union{Vector{PlanNode},OrderedSet{PlanNode}}, stats::ST
+    op, init, reduce_indices::Union{Vector{PlanNode},SortedSet{PlanNode}}, stats::ST
 ) where {ST<:TensorStats}
     return reduce_tensor_stats(
-        op, init, OrderedSet{IndexExpr}([idx.name for idx in reduce_indices]), stats
+        op, init, SortedSet{IndexExpr}([idx.name for idx in reduce_indices]), stats
     )
 end
 
@@ -154,7 +154,7 @@ function merge_tensor_stats_union(op, new_def::TensorDef, all_stats::Vararg{Naiv
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::NaiveStats
+    op, init, reduce_indices::SortedSet{IndexExpr}, stats::NaiveStats
 )
     if length(reduce_indices) == 0
         return copy_stats(stats)
@@ -200,7 +200,7 @@ function unify_dc_ints(all_stats, new_def)
     final_idx_2_int, final_int_2_idx
 end
 
-convert_bitset(int_to_int, b) = BitSet([int_to_int[x] for x in b])
+convert_bitset(int_to_int, b) = SortedSet([int_to_int[x] for x in b])
 
 function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{DCStats})
     if length(all_stats) == 1
@@ -215,8 +215,8 @@ function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{DCSta
     new_dc_dict = OrderedDict{DCKey,Float64}()
     for stats in all_stats
         for dc in stats.dcs
-            dc_key = (X=BitSet(Int[final_idx_2_int[stats.int_2_idx[x]] for x in dc.X]),
-                Y=BitSet(Int[final_idx_2_int[stats.int_2_idx[y]] for y in dc.Y]))
+            dc_key = (X=SortedSet(Int[final_idx_2_int[stats.int_2_idx[x]] for x in dc.X]),
+                Y=SortedSet(Int[final_idx_2_int[stats.int_2_idx[y]] for y in dc.Y]))
             current_dc = get(new_dc_dict, dc_key, Inf)
             if dc.d < current_dc
                 new_dc_dict[dc_key] = dc.d
@@ -227,7 +227,7 @@ function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{DCSta
         new_def,
         final_idx_2_int,
         final_int_2_idx,
-        OrderedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dc_dict),
+        SortedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dc_dict),
     )
     return new_stats
 end
@@ -251,8 +251,8 @@ function merge_tensor_stats_union(op, new_def::TensorDef, all_stats::Vararg{DCSt
         Z_dimension_space_size = get_dim_space_size(new_def, Z)
         for dc in stats.dcs
             new_key::DCKey = (
-                X=BitSet(Int[final_idx_2_int[stats.int_2_idx[x]] for x in dc.X]),
-                Y=BitSet(Int[final_idx_2_int[stats.int_2_idx[y]] for y in dc.Y]))
+                X=SortedSet(Int[final_idx_2_int[stats.int_2_idx[x]] for x in dc.X]),
+                Y=SortedSet(Int[final_idx_2_int[stats.int_2_idx[y]] for y in dc.Y]))
             dcs[new_key] = dc.d
             inc!(dc_keys, new_key)
             ext_dc_key = (X=new_key.X, Y=(∪(new_key.Y, idxs_to_bitset(final_idx_2_int, Z))))
@@ -283,20 +283,20 @@ function merge_tensor_stats_union(op, new_def::TensorDef, all_stats::Vararg{DCSt
 
     #=
         for Y in subsets(collect(get_index_set(new_def)))
-            proj_dc_key = (X=BitSet(), Y=idxs_to_bitset(final_idx_2_int, Y))
-            new_dcs[proj_dc_key] = min(get(new_dcs, proj_dc_key, typemax(UInt)/2), get_dim_space_size(new_def, OrderedSet(Y)))
+            proj_dc_key = (X=SortedSet(), Y=idxs_to_bitset(final_idx_2_int, Y))
+            new_dcs[proj_dc_key] = min(get(new_dcs, proj_dc_key, typemax(UInt)/2), get_dim_space_size(new_def, SortedSet(Y)))
         end
      =#
     return DCStats(
         new_def,
         final_idx_2_int,
         final_int_2_idx,
-        OrderedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dcs),
+        SortedSet{DC}(DC(key.X, key.Y, d) for (key, d) in new_dcs),
     )
 end
 
 function reduce_tensor_stats(
-    op, init, reduce_indices::OrderedSet{IndexExpr}, stats::DCStats
+    op, init, reduce_indices::SortedSet{IndexExpr}, stats::DCStats
 )
     if length(reduce_indices) == 0
         return copy_stats(stats)
