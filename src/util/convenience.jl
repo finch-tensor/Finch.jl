@@ -55,4 +55,10 @@ Base.empty!(s::StableSet) = StableSet(empty!(s.data))
 Base.copy(s::StableSet) = StableSet(copy(s.data))
 Base.:(==)(s::StableSet, x::StableSet) = s.data == x.data
 Base.isequal(s::StableSet, x::StableSet) = isequal(s.data, x.data)
-Base.hash(s::StableSet, h::UInt) = hash(Set(s.data), h)
+function Base.hash(s::StableSet{T}, h::UInt) where {T}
+    h_2 = UInt(0)
+    for k in s.data
+        h_2 ⊻= hash(k, h)
+    end
+    h_2
+end
