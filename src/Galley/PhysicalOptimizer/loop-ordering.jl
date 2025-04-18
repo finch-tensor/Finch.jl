@@ -98,7 +98,7 @@ function get_join_loop_order_bounded(disjunct_and_conjunct_stats,
     reformat_costs = OrderedDict(
         i => cost_of_reformat(transposable_stats[i]) for i in eachindex(transposable_stats)
     )
-    PLAN_CLASS = Tuple{OrderedSet{IndexExpr},OrderedSet{Int}}
+    PLAN_CLASS = Tuple{Set{IndexExpr},Set{Int}}
     PLAN = Tuple{Vector{IndexExpr},Float64}
     optimal_plans = OrderedDict{PLAN_CLASS,PLAN}()
     for var in all_vars
