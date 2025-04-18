@@ -50,7 +50,7 @@ function get_reformat_set(input_stats::Vector{TensorStats}, prefix::Vector{Index
     return ref_set
 end
 
-PLAN_CLASS = Tuple{OrderedSet{IndexExpr},OrderedSet{Int}}
+PLAN_CLASS = Tuple{Set{IndexExpr},Set{Int}}
 PLAN = Tuple{Vector{IndexExpr},Float64}
 
 function cost_of_plan_class(pc::PLAN_CLASS, reformat_costs, output_size)
