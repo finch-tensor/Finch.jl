@@ -83,7 +83,7 @@ function _insert_statistics!(
         expr.stats = reduce_tensor_stats(
             expr.op.val,
             expr.init.val,
-            SortedSet{IndexExpr}([idx.name for idx in expr.idxs]),
+            OrderedSet{IndexExpr}([idx.name for idx in expr.idxs]),
             expr.arg.stats,
         )
     elseif expr.kind === Materialize

@@ -11,7 +11,7 @@ function get_input_indices(n::PlanNode)
     elseif n.kind == Alias
         get_index_set(n.stats)
     elseif n.kind == Value
-        SortedSet{IndexExpr}()
+        OrderedSet{IndexExpr}()
     elseif n.kind == Aggregate
         get_input_indices(n.arg)
     elseif n.kind == MapJoin
@@ -121,9 +121,9 @@ function validate_physical_query(q::PlanNode)
         end
         @assert idx_dim[idx] == dim "idx:$idx dim:$dim query:$q "
     end
-    output_indices = SortedSet([idx.name for idx in q.expr.idx_order])
-    @assert input_indices ∪ output_indices == SortedSet([idx.name for idx in q.loop_order])
-    @assert SortedSet(output_indices) == SortedSet([idx.name for idx in q.expr.idx_order])
+    output_indices = OrderedSet([idx.name for idx in q.expr.idx_order])
+    @assert input_indices ∪ output_indices == OrderedSet([idx.name for idx in q.loop_order])
+    @assert OrderedSet(output_indices) == OrderedSet([idx.name for idx in q.expr.idx_order])
     check_sorted_inputs(q.expr, [idx.name for idx in q.loop_order])
     check_protocols(q.expr)
     check_formats(q.expr)

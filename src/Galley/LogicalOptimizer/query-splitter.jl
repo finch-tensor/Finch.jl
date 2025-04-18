@@ -1,5 +1,5 @@
 function count_index_occurences(nodes)
-    vars = SortedSet()
+    vars = OrderedSet()
     occurences = 0
     for n in nodes
         for c in PostOrderDFS(n)
@@ -89,7 +89,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     while cur_occurences > max_kernel_size
         nodes_to_remove = nothing
         new_query = nothing
-        new_agg_idxs = SortedSet()
+        new_agg_idxs = OrderedSet()
         min_cost = Inf
         for node in PostOrderDFS(pe)
             if node.kind in (Value, Input, Alias, Index) ||
@@ -127,7 +127,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
                     cache_key = sort([n.node_id for n in s])
                     if !haskey(cost_cache, cache_key)
                         s_stat = merge_tensor_stats(node.op.val, [n.stats for n in s]...)
-                        s_reduce_idxs = SortedSet{IndexExpr}()
+                        s_reduce_idxs = OrderedSet{IndexExpr}()
                         for idx in n_reduce_idxs
                             if !any([
                                 idx ∈ get_index_set(n.stats) for n in setdiff(node.args, s)
