@@ -1,7 +1,7 @@
 name = "Finch"
 uuid = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
 authors = ["Willow Ahrens"]
-version = "1.2.4"
+version = "1.2.5"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"

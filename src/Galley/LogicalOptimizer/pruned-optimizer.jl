@@ -8,15 +8,15 @@ function branch_and_bound(
 )
     input_aq = copy_aq(input_aq)
     PLAN_AND_COST = Tuple{Vector{IndexExpr},Vector{PlanNode},AnnotatedQuery,Float64}
-    optimal_orders = OrderedDict{Set{IndexExpr},PLAN_AND_COST}(
-        Set{IndexExpr}() => (PlanNode[], PlanNode[], input_aq, 0)
+    optimal_orders = OrderedDict{StableSet{IndexExpr},PLAN_AND_COST}(
+        StableSet{IndexExpr}() => (PlanNode[], PlanNode[], input_aq, 0)
     )
     prev_new_optimal_orders = optimal_orders
     # To speed up inference, we cache cost calculations for each set of already reduced idxs
     # and proposed reduction index.
     for _ in 1:length(component)
         best_idx_ext = OrderedDict{
-            Set{IndexExpr},
+            StableSet{IndexExpr},
             Tuple{AnnotatedQuery,IndexExpr,Vector{IndexExpr},Vector{PlanNode},Float64},
         }()
         for (vars, pc) in prev_new_optimal_orders
@@ -47,13 +47,13 @@ function branch_and_bound(
         num_to_keep = Int(min(k, length(best_idx_ext)))
         # At each step, we only keep 'k' options for the next index.
         top_k_idx_ext = OrderedDict{
-            Set{IndexExpr},
+            StableSet{IndexExpr},
             Tuple{AnnotatedQuery,IndexExpr,Vector{IndexExpr},Vector{PlanNode},Float64},
         }(
             sort(collect(best_idx_ext); by=(v_p) -> v_p[2][5])[1:num_to_keep]
         )
 
-        new_optimal_orders = OrderedDict{Set{IndexExpr},PLAN_AND_COST}()
+        new_optimal_orders = OrderedDict{StableSet{IndexExpr},PLAN_AND_COST}()
         for (new_vars, idx_ext_info) in top_k_idx_ext
             aq, idx, old_order, old_queries, cost = idx_ext_info
             new_aq = copy_aq(aq)
@@ -71,14 +71,14 @@ function branch_and_bound(
 
     # During the greedy pass, we compute upper bounds on the cost of each subquery which
     # will be used in the pruned pass.
-    optimal_subquery_costs = OrderedDict{Set{IndexExpr},Float64}()
+    optimal_subquery_costs = OrderedDict{StableSet{IndexExpr},Float64}()
     if k == 1
         for vars in keys(optimal_orders)
             optimal_subquery_costs[vars] = optimal_orders[vars][4]
         end
     end
-    if haskey(optimal_orders, Set{IndexExpr}([i for i in component]))
-        return optimal_orders[Set{IndexExpr}([i for i in component])],
+    if haskey(optimal_orders, StableSet{IndexExpr}([i for i in component]))
+        return optimal_orders[StableSet{IndexExpr}([i for i in component])],
         optimal_subquery_costs,
         cost_cache
     else
