@@ -23,7 +23,7 @@ function relative_sort(indices::Vector{IndexExpr}, index_order; rev=false)
     end
 end
 
-function relative_sort(indices::OrderedSet{IndexExpr}, index_order; rev=false)
+function relative_sort(indices::SortedSet{IndexExpr}, index_order; rev=false)
     return relative_sort(collect(indices), index_order; rev=rev)
 end
 
@@ -157,11 +157,11 @@ end
 
 # This function determines whether any ordering of the `l_set` is a prefix of `r_vec`.
 # If r_vec is smaller than l_set, we just check whether r_vec is a subset of l_set.
-function set_compat_with_loop_prefix(tensor_order::OrderedSet, loop_prefix::Vector)
+function set_compat_with_loop_prefix(tensor_order::SortedSet, loop_prefix::Vector)
     if length(tensor_order) > length(loop_prefix)
-        return OrderedSet(loop_prefix) ⊆ tensor_order
+        return SortedSet(loop_prefix) ⊆ tensor_order
     else
-        return tensor_order == OrderedSet(loop_prefix[1:length(tensor_order)])
+        return tensor_order == SortedSet(loop_prefix[1:length(tensor_order)])
     end
 end
 
