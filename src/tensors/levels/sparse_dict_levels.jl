@@ -220,7 +220,7 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     tbl
     pool
     shape
-    qos_alloc
+    qos_stop
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseDictLevel)
@@ -244,7 +244,7 @@ function virtualize(
     val = freshen(ctx, tag, :_val)
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -255,13 +255,13 @@ function virtualize(
             $val = $tag.val
             $tbl = $tag.tbl
             $pool = $tag.pool
-            $qos_alloc = length($tbl)
+            $qos_stop = length($tbl)
             $stop = $tag.shape
         end,
     )
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_alloc)
+    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -290,7 +290,7 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl, arch, style),
         lvl.pool,
         lvl.shape,
-        lvl.qos_alloc,
+        lvl.qos_stop,
     )
 end
 
@@ -308,7 +308,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
             lvl.tbl,
             lvl.pool,
             lvl.shape,
-            lvl.qos_alloc,
+            lvl.qos_stop,
         ),
     )
 end
@@ -342,7 +342,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos,
             empty!($(lvl.tbl))
             empty!($(lvl.pool))
             $qos = $(Tp(0))
-            $(lvl.qos_alloc) = 0
+            $(lvl.qos_stop) = 0
         end,
     )
     lvl.lvl = declare_level!(ctx, lvl.lvl, value(qos, Tp), init)
@@ -359,7 +359,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
     Tp = postype(lvl)
     Ti = lvl.Ti
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     p = freshen(ctx, :p)
     q = freshen(ctx, :q)
     r = freshen(ctx, :r)
@@ -403,10 +403,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
                 $(lvl.val)[$r] = $val_tmp[$q]
                 $ptr_2[$p] += 1
             end
-            $qos_alloc = $(lvl.ptr)[$(ctx(pos_stop)) + 1] - 1
+            $qos_stop = $(lvl.ptr)[$(ctx(pos_stop)) + 1] - 1
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
 
@@ -416,10 +416,10 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_alloc) = $(lvl.ptr)[$(ctx(pos_stop)) + 1] - 1
+            $(lvl.qos_stop) = $(lvl.ptr)[$(ctx(pos_stop)) + 1] - 1
         end,
     )
-    lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_alloc))
+    lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
     return lvl
 end
 
@@ -528,7 +528,7 @@ function unfurl(
     tag = lvl.tag
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
-    qos_alloc = lvl.qos_alloc
+    qos_stop = lvl.qos_stop
     dirty = freshen(ctx, tag, :_dirty)
 
     Thunk(;
@@ -544,11 +544,11 @@ function unfurl(
                             $qos = pop!($(lvl.pool))
                         else
                             $qos = length($(lvl.tbl)) + 1
-                            if $qos > $qos_alloc
-                                $qos_alloc = max($qos_alloc << 1, 1)
-                                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_alloc, Tp)), ctx))
-                                Finch.resize_if_smaller!($(lvl.val), $qos_alloc)
-                                Finch.fill_range!($(lvl.val), 0, $qos, $qos_alloc)
+                            if $qos > $qos_stop
+                                $qos_stop = max($qos_stop << 1, 1)
+                                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)), ctx))
+                                Finch.resize_if_smaller!($(lvl.val), $qos_stop)
+                                Finch.fill_range!($(lvl.val), 0, $qos, $qos_stop)
                             end
                         end
                         $(lvl.tbl)[($(ctx(pos)), $(ctx(idx)))] = $qos

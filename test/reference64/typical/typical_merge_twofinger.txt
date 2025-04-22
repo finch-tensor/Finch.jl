@@ -23,7 +23,7 @@ quote
     y_lvl_2 = y_lvl.lvl
     y_lvl_2_val = y_lvl_2.val
     y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
-    z_lvl_qos_alloc = 0
+    z_lvl_qos_stop = 0
     Finch.resize_if_smaller!(z_lvl_ptr, 1 + 1)
     Finch.fill_range!(z_lvl_ptr, 0, 1 + 1, 1 + 1)
     z_lvl_qos = 0 + 1
@@ -58,11 +58,11 @@ quote
             if y_lvl_i == phase_stop_2 && x_lvl_i == phase_stop_2
                 x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
                 y_lvl_2_val_2 = y_lvl_2_val[y_lvl_q]
-                if z_lvl_qos > z_lvl_qos_alloc
-                    z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                if z_lvl_qos > z_lvl_qos_stop
+                    z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                 end
                 z_lvl_2_val[z_lvl_qos] = y_lvl_2_val_2 + x_lvl_2_val_2
                 z_lvl_idx[z_lvl_qos] = phase_stop_2
@@ -71,11 +71,11 @@ quote
                 x_lvl_q += 1
             elseif x_lvl_i == phase_stop_2
                 x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
-                if z_lvl_qos > z_lvl_qos_alloc
-                    z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                if z_lvl_qos > z_lvl_qos_stop
+                    z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                 end
                 z_lvl_2_val[z_lvl_qos] = x_lvl_2_val_2
                 z_lvl_idx[z_lvl_qos] = phase_stop_2
@@ -83,11 +83,11 @@ quote
                 x_lvl_q += 1
             elseif y_lvl_i == phase_stop_2
                 y_lvl_2_val_2 = y_lvl_2_val[y_lvl_q]
-                if z_lvl_qos > z_lvl_qos_alloc
-                    z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                if z_lvl_qos > z_lvl_qos_stop
+                    z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                 end
                 z_lvl_2_val[z_lvl_qos] = y_lvl_2_val_2
                 z_lvl_idx[z_lvl_qos] = phase_stop_2
@@ -107,11 +107,11 @@ quote
             x_lvl_i = x_lvl_idx[x_lvl_q]
             if x_lvl_i < phase_stop_3
                 x_lvl_2_val_3 = x_lvl_2_val[x_lvl_q]
-                if z_lvl_qos > z_lvl_qos_alloc
-                    z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                if z_lvl_qos > z_lvl_qos_stop
+                    z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                 end
                 z_lvl_2_val[z_lvl_qos] = x_lvl_2_val_3
                 z_lvl_idx[z_lvl_qos] = x_lvl_i
@@ -121,11 +121,11 @@ quote
                 phase_stop_5 = min(x_lvl_i, phase_stop_3)
                 if x_lvl_i == phase_stop_5
                     x_lvl_2_val_3 = x_lvl_2_val[x_lvl_q]
-                    if z_lvl_qos > z_lvl_qos_alloc
-                        z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                        Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                        Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                        Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                    if z_lvl_qos > z_lvl_qos_stop
+                        z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                        Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                        Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                        Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                     end
                     z_lvl_2_val[z_lvl_qos] = x_lvl_2_val_3
                     z_lvl_idx[z_lvl_qos] = phase_stop_5
@@ -146,11 +146,11 @@ quote
             y_lvl_i = y_lvl_idx[y_lvl_q]
             if y_lvl_i < phase_stop_6
                 y_lvl_2_val_3 = y_lvl_2_val[y_lvl_q]
-                if z_lvl_qos > z_lvl_qos_alloc
-                    z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                if z_lvl_qos > z_lvl_qos_stop
+                    z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                    Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                    Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                    Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                 end
                 z_lvl_2_val[z_lvl_qos] = y_lvl_2_val_3
                 z_lvl_idx[z_lvl_qos] = y_lvl_i
@@ -160,11 +160,11 @@ quote
                 phase_stop_8 = min(y_lvl_i, phase_stop_6)
                 if y_lvl_i == phase_stop_8
                     y_lvl_2_val_3 = y_lvl_2_val[y_lvl_q]
-                    if z_lvl_qos > z_lvl_qos_alloc
-                        z_lvl_qos_alloc = max(z_lvl_qos_alloc << 1, 1)
-                        Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_alloc)
-                        Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_alloc)
-                        Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_alloc)
+                    if z_lvl_qos > z_lvl_qos_stop
+                        z_lvl_qos_stop = max(z_lvl_qos_stop << 1, 1)
+                        Finch.resize_if_smaller!(z_lvl_idx, z_lvl_qos_stop)
+                        Finch.resize_if_smaller!(z_lvl_2_val, z_lvl_qos_stop)
+                        Finch.fill_range!(z_lvl_2_val, 0.0, z_lvl_qos, z_lvl_qos_stop)
                     end
                     z_lvl_2_val[z_lvl_qos] = y_lvl_2_val_3
                     z_lvl_idx[z_lvl_qos] = phase_stop_8
@@ -180,9 +180,9 @@ quote
     for p = 1:1
         z_lvl_ptr[p + 1] += z_lvl_ptr[p]
     end
-    qos_alloc = z_lvl_ptr[1 + 1] - 1
-    resize!(z_lvl_idx, qos_alloc)
-    resize!(z_lvl_2_val, qos_alloc)
+    qos_stop = z_lvl_ptr[1 + 1] - 1
+    resize!(z_lvl_idx, qos_stop)
+    resize!(z_lvl_2_val, qos_stop)
     (z = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(z_lvl_2_val), y_lvl_stop, z_lvl_ptr, z_lvl_idx)),)
 end
 julia> @finch begin

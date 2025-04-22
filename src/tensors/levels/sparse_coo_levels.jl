@@ -214,8 +214,8 @@ mutable struct VirtualSparseCOOLevel <: AbstractVirtualLevel
     tbl
     Lvl
     shape
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
     prev_pos
 end
 
@@ -235,8 +235,8 @@ function virtualize(
     ctx, ex, ::Type{SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}, tag=:lvl
 ) where {N,TI,Ptr,Tbl,Lvl}
     tag = freshen(ctx, tag)
-    qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = map(n -> freshen(ctx, tag, :_tbl, n), 1:N)
     stop = map(n -> freshen(ctx, tag, :_stop, n), 1:N)
@@ -261,7 +261,7 @@ function virtualize(
     prev_pos = freshen(ctx, tag, :_prev_pos)
     prev_coord = map(n -> freshen(ctx, tag, :_prev_coord_, n), 1:N)
     VirtualSparseCOOLevel(
-        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_used, qos_alloc, prev_pos
+        tag, lvl_2, N, TI, ptr, tbl, Lvl, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, ::DefaultStyle)
@@ -287,8 +287,8 @@ function distribute_level(
         map(idx -> distribute_buffer(ctx, idx, arch, style), lvl.tbl),
         lvl.Lvl,
         lvl.shape,
-        lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_fill,
+        lvl.qos_stop,
         lvl.prev_pos,
     )
 end
@@ -306,8 +306,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, diff)
             lvl.tbl,
             lvl.Lvl,
             lvl.shape,
-            lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_fill,
+            lvl.qos_stop,
             lvl.prev_pos,
         ),
     )
@@ -341,8 +341,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos, 
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_used) = $(Tp(0))
-            $(lvl.qos_alloc) = $(Tp(0))
+            $(lvl.qos_fill) = $(Tp(0))
+            $(lvl.qos_stop) = $(Tp(0))
         end,
     )
     if issafe(get_mode_flag(ctx))
@@ -369,7 +369,7 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
@@ -377,13 +377,13 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseCOOLevel, pos_st
             for $p in 2:($pos_stop + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            $qos_alloc = $(lvl.ptr)[$pos_stop + 1] - 1
+            $qos_stop = $(lvl.ptr)[$pos_stop + 1] - 1
             $(Expr(:block, map(1:(lvl.N)) do n
-                :(resize!($(lvl.tbl[n]), $qos_alloc))
+                :(resize!($(lvl.tbl[n]), $qos_stop))
             end...))
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
 struct SparseCOOWalkTraversal
@@ -533,14 +533,14 @@ function unfurl(
     tag = lvl.tag
     TI = lvl.TI
     Tp = postype(lvl)
-    qos_used = lvl.qos_used
-    qos_alloc = lvl.qos_alloc
+    qos_fill = lvl.qos_fill
+    qos_stop = lvl.qos_stop
 
     qos = freshen(ctx, tag, :_q)
     prev_coord = freshen(ctx, tag, :_prev_coord)
     Thunk(;
         preamble = quote
-            $qos = $qos_used + 1
+            $qos = $qos_fill + 1
             $(if issafe(get_mode_flag(ctx))
                 quote
                     $(lvl.prev_pos) < $(ctx(pos)) || throw(FinchProtocolError("SparseCOOLevels cannot be updated multiple times"))
@@ -550,15 +550,15 @@ function unfurl(
         end,
         body     = (ctx) -> unfurl(ctx, SparseCOOExtrudeTraversal(lvl, qos, fbr.dirty, [], prev_coord), ext, mode, proto),
         epilogue = quote
-            $(lvl.ptr)[$(ctx(pos)) + 1] = $qos - $qos_used - 1
+            $(lvl.ptr)[$(ctx(pos)) + 1] = $qos - $qos_fill - 1
             $(if issafe(get_mode_flag(ctx))
                 quote
-                    if $qos - $qos_used - 1 > 0
+                    if $qos - $qos_fill - 1 > 0
                         $(lvl.prev_pos) = $(ctx(pos))
                     end
                 end
             end)
-            $qos_used = $qos - 1
+            $qos_fill = $qos - 1
         end,
     )
 end
@@ -573,8 +573,8 @@ function unfurl(
     (lvl, qos, fbr_dirty, coords) = (trv.lvl, trv.qos, trv.fbr_dirty, trv.coords)
     TI = lvl.TI
     Tp = postype(lvl)
-    qos_used = lvl.qos_used
-    qos_alloc = lvl.qos_alloc
+    qos_fill = lvl.qos_fill
+    qos_stop = lvl.qos_stop
     if length(coords) + 1 < lvl.N
         Lookup(;
             body=(ctx, i) -> instantiate(
@@ -590,12 +590,12 @@ function unfurl(
         Lookup(;
             body=(ctx, idx) -> Thunk(;
                 preamble = quote
-                    if $qos > $qos_alloc
-                        $qos_alloc = max($qos_alloc << 1, 1)
+                    if $qos > $qos_stop
+                        $qos_stop = max($qos_stop << 1, 1)
                         $(Expr(:block, map(1:(lvl.N)) do n
-                            :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_alloc))
+                            :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_stop))
                         end...))
-                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_alloc, Tp)), ctx))
+                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)), ctx))
                     end
                     $dirty = false
                 end,

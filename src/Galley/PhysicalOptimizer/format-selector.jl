@@ -2,10 +2,10 @@
 function modify_plan_formats!(plan::PlanNode, alias_to_loop_order, alias_stats)
     for query in plan.queries
         if query.expr.kind === Aggregate
-            loop_order_when_used = alias_to_loop_order[query.name.name]
+            loop_order_when_fill = alias_to_loop_order[query.name.name]
             output_stats = query.expr.stats
             output_order = relative_sort(
-                get_index_set(output_stats), loop_order_when_used; rev=true
+                get_index_set(output_stats), loop_order_when_fill; rev=true
             )
             loop_order_when_built = IndexExpr[idx.name for idx in query.loop_order]
             # Determine the optimal output format & add a further query to reformat if necessary.

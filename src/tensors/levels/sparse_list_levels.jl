@@ -166,8 +166,8 @@ mutable struct VirtualSparseListLevel <: AbstractVirtualLevel
     ptr
     idx
     shape
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
     prev_pos
 end
 
@@ -201,11 +201,11 @@ function virtualize(
     )
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     prev_pos = freshen(ctx, tag, :_prev_pos)
     VirtualSparseListLevel(
-        tag, lvl_2, Ti, ptr, idx, shape, qos_used, qos_alloc, prev_pos
+        tag, lvl_2, Ti, ptr, idx, shape, qos_fill, qos_stop, prev_pos
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, ::DefaultStyle)
@@ -229,8 +229,8 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.shape,
-        lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_fill,
+        lvl.qos_stop,
         lvl.prev_pos,
     )
 end
@@ -246,8 +246,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, diff)
             lvl.ptr,
             lvl.idx,
             lvl.shape,
-            lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_fill,
+            lvl.qos_stop,
             lvl.prev_pos,
         ),
     )
@@ -278,8 +278,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos,
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_used) = $(Tp(0))
-            $(lvl.qos_alloc) = $(Tp(0))
+            $(lvl.qos_fill) = $(Tp(0))
+            $(lvl.qos_stop) = $(Tp(0))
         end,
     )
     if issafe(get_mode_flag(ctx))
@@ -306,7 +306,7 @@ end
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
@@ -314,30 +314,30 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_s
             for $p in 1:($pos_stop)
                 $(lvl.ptr)[$p + 1] += $(lvl.ptr)[$p]
             end
-            $qos_alloc = $(lvl.ptr)[$pos_stop + 1] - 1
-            resize!($(lvl.idx), $qos_alloc)
+            $qos_stop = $(lvl.ptr)[$pos_stop + 1] - 1
+            resize!($(lvl.idx), $qos_stop)
         end,
     )
-    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_alloc))
+    lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_stop)
     p = freshen(ctx, :p)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_used) = $(lvl.ptr)[$pos_stop + 1] - 1
-            $(lvl.qos_alloc) = $(lvl.qos_used)
-            $qos_alloc = $(lvl.qos_used)
+            $(lvl.qos_fill) = $(lvl.ptr)[$pos_stop + 1] - 1
+            $(lvl.qos_stop) = $(lvl.qos_fill)
+            $qos_stop = $(lvl.qos_fill)
             $(
                 if issafe(get_mode_flag(ctx))
                     quote
                         $(lvl.prev_pos) =
                             Finch.scansearch(
-                                $(lvl.ptr), $(lvl.qos_alloc) + 1, 1, $pos_stop
+                                $(lvl.ptr), $(lvl.qos_stop) + 1, 1, $pos_stop
                             ) - 1
                     end
                 end
@@ -347,7 +347,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_sto
             end
         end,
     )
-    lvl.lvl = thaw_level!(ctx, lvl.lvl, value(qos_alloc))
+    lvl.lvl = thaw_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
 
@@ -508,13 +508,13 @@ function unfurl(
     tag = lvl.tag
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
-    qos_used = lvl.qos_used
-    qos_alloc = lvl.qos_alloc
+    qos_fill = lvl.qos_fill
+    qos_stop = lvl.qos_stop
     dirty = freshen(ctx, tag, :dirty)
 
     Thunk(;
         preamble = quote
-            $qos = $qos_used + 1
+            $qos = $qos_fill + 1
             $(if issafe(get_mode_flag(ctx))
                 quote
                     $(lvl.prev_pos) < $(ctx(pos)) || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
@@ -524,10 +524,10 @@ function unfurl(
         body     = (ctx) -> Lookup(;
         body=(ctx, idx) -> Thunk(;
         preamble = quote
-            if $qos > $qos_alloc
-                $qos_alloc = max($qos_alloc << 1, 1)
-                Finch.resize_if_smaller!($(lvl.idx), $qos_alloc)
-                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_alloc, Tp)), ctx))
+            if $qos > $qos_stop
+                $qos_stop = max($qos_stop << 1, 1)
+                Finch.resize_if_smaller!($(lvl.idx), $qos_stop)
+                $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)), ctx))
             end
             $dirty = false
         end,
@@ -547,8 +547,8 @@ function unfurl(
     )
     ),
         epilogue = quote
-            $(lvl.ptr)[$(ctx(pos)) + 1] += $qos - $qos_used - 1
-            $qos_used = $qos - 1
+            $(lvl.ptr)[$(ctx(pos)) + 1] += $qos - $qos_fill - 1
+            $qos_fill = $qos - 1
         end,
     )
 end

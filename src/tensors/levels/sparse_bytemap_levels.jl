@@ -188,8 +188,8 @@ mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     tbl
     srt
     shape
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseByteMapLevel)
@@ -209,8 +209,8 @@ function virtualize(
 ) where {Ti,Ptr,Tbl,Srt,Lvl}
     tag = freshen(ctx, tag)
     shape = value(:($tag.shape), Int)
-    qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     ptr = freshen(ctx, tag, :_ptr)
     tbl = freshen(ctx, tag, :_tbl)
     srt = freshen(ctx, tag, :_srt)
@@ -222,13 +222,13 @@ function virtualize(
             $ptr = $tag.ptr
             $tbl = $tag.tbl
             $srt = $tag.srt
-            $qos_alloc = $qos_used = length($tag.srt)
+            $qos_stop = $qos_fill = length($tag.srt)
             $stop = $tag.shape
         end,
     )
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualSparseByteMapLevel(tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_used, qos_alloc)
+    VirtualSparseByteMapLevel(tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultStyle)
     quote
@@ -253,8 +253,8 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl, arch, style),
         distribute_buffer(ctx, lvl.srt, arch, style),
         lvl.shape,
-        lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_fill,
+        lvl.qos_stop,
     )
 end
 
@@ -270,8 +270,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, dif
             lvl.tbl,
             lvl.srt,
             lvl.shape,
-            lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_fill,
+            lvl.qos_stop,
         ),
     )
 end
@@ -304,7 +304,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
     push_preamble!(
         ctx,
         quote
-            for $r in 1:($(lvl.qos_used))
+            for $r in 1:($(lvl.qos_fill))
                 $p = first($(lvl.srt)[$r])
                 $(lvl.ptr)[$p] = $(Tp(0))
                 $(lvl.ptr)[$p + 1] = $(Tp(0))
@@ -319,9 +319,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
                     ))
                 end
             end
-            $(lvl.qos_used) = 0
+            $(lvl.qos_fill) = 0
             if $(!supports_reassembly(lvl.lvl))
-                $(lvl.qos_alloc) = $(Tp(0))
+                $(lvl.qos_stop) = $(Tp(0))
             end
             $(lvl.ptr)[1] = 1
         end,
@@ -385,10 +385,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
         quote
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
-            resize!($(lvl.srt), $(lvl.qos_used))
+            resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
             $p_prev = $(Tp(0))
-            for $r in 1:($(lvl.qos_used))
+            for $r in 1:($(lvl.qos_fill))
                 $p = first($(lvl.srt)[$r])
                 if $p != $p_prev
                     $(lvl.ptr)[$p_prev + 1] = $r
@@ -396,8 +396,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
                 end
                 $p_prev = $p
             end
-            $(lvl.ptr)[$p_prev + 1] = $(lvl.qos_used) + 1
-            $(lvl.qos_alloc) = $(lvl.qos_used)
+            $(lvl.ptr)[$p_prev + 1] = $(lvl.qos_fill) + 1
+            $(lvl.qos_stop) = $(lvl.qos_fill)
         end,
     )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, call(*, pos_stop, lvl.shape))
@@ -586,12 +586,12 @@ function unfurl(
                         $(fbr.dirty) = true
                         if !$(lvl.tbl)[$my_q]
                             $(lvl.tbl)[$my_q] = true
-                            $(lvl.qos_used) += 1
-                            if $(lvl.qos_used) > $(lvl.qos_alloc)
-                                $(lvl.qos_alloc) = max($(lvl.qos_alloc) << 1, 1)
-                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_alloc))
+                            $(lvl.qos_fill) += 1
+                            if $(lvl.qos_fill) > $(lvl.qos_stop)
+                                $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
+                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
                             end
-                            $(lvl.srt)[$(lvl.qos_used)] = ($(ctx(pos)), $(ctx(idx)))
+                            $(lvl.srt)[$(lvl.qos_fill)] = ($(ctx(pos)), $(ctx(idx)))
                         end
                     end
                 end,

@@ -20,7 +20,7 @@ begin
     arr_2_lvl_2_val = arr_2_lvl_2.val
     arr_2_lvl_stop1 == fmt_lvl_2_stop || throw(DimensionMismatch("mismatched dimension limits ($(arr_2_lvl_stop1) != $(fmt_lvl_2_stop))"))
     arr_2_lvl_stop2 == fmt_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(arr_2_lvl_stop2) != $(fmt_lvl_stop))"))
-    fmt_lvl_2_qos_alloc = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
+    fmt_lvl_2_qos_stop = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
     arr_2_lvl_q = arr_2_lvl_ptr[1]
     arr_2_lvl_q_stop = arr_2_lvl_ptr[1 + 1]
     if arr_2_lvl_q < arr_2_lvl_q_stop
@@ -62,12 +62,12 @@ begin
                                     fmt_lvl_2_qos = pop!(fmt_lvl_2_pool)
                                 else
                                     fmt_lvl_2_qos = length(fmt_lvl_2_tbl) + 1
-                                    if fmt_lvl_2_qos > fmt_lvl_2_qos_alloc
-                                        fmt_lvl_2_qos_alloc = max(fmt_lvl_2_qos_alloc << 1, 1)
-                                        Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_alloc)
-                                        Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_alloc)
-                                        Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_alloc)
-                                        Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_alloc)
+                                    if fmt_lvl_2_qos > fmt_lvl_2_qos_stop
+                                        fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
+                                        Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                        Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                        Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                        Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
                                     end
                                 end
                                 fmt_lvl_2_tbl[(fmt_lvl_q, arr_2_lvl_i_2)] = fmt_lvl_2_qos
@@ -85,12 +85,12 @@ begin
                                         fmt_lvl_2_qos = pop!(fmt_lvl_2_pool)
                                     else
                                         fmt_lvl_2_qos = length(fmt_lvl_2_tbl) + 1
-                                        if fmt_lvl_2_qos > fmt_lvl_2_qos_alloc
-                                            fmt_lvl_2_qos_alloc = max(fmt_lvl_2_qos_alloc << 1, 1)
-                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_alloc)
-                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_alloc)
-                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_alloc)
-                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_alloc)
+                                        if fmt_lvl_2_qos > fmt_lvl_2_qos_stop
+                                            fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
+                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
                                         end
                                     end
                                     fmt_lvl_2_tbl[(fmt_lvl_q, phase_stop_5)] = fmt_lvl_2_qos
@@ -129,12 +129,12 @@ begin
                                         fmt_lvl_2_qos_2 = pop!(fmt_lvl_2_pool)
                                     else
                                         fmt_lvl_2_qos_2 = length(fmt_lvl_2_tbl) + 1
-                                        if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_alloc
-                                            fmt_lvl_2_qos_alloc = max(fmt_lvl_2_qos_alloc << 1, 1)
-                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_alloc)
-                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_alloc)
-                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_alloc)
-                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_alloc)
+                                        if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_stop
+                                            fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
+                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
                                         end
                                     end
                                     fmt_lvl_2_tbl[(fmt_lvl_q, arr_2_lvl_i_3)] = fmt_lvl_2_qos_2
@@ -152,12 +152,12 @@ begin
                                             fmt_lvl_2_qos_2 = pop!(fmt_lvl_2_pool)
                                         else
                                             fmt_lvl_2_qos_2 = length(fmt_lvl_2_tbl) + 1
-                                            if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_alloc
-                                                fmt_lvl_2_qos_alloc = max(fmt_lvl_2_qos_alloc << 1, 1)
-                                                Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_alloc)
-                                                Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_alloc)
-                                                Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_alloc)
-                                                Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_alloc)
+                                            if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_stop
+                                                fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
+                                                Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                                Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                                Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                                Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
                                             end
                                         end
                                         fmt_lvl_2_tbl[(fmt_lvl_q, phase_stop_10)] = fmt_lvl_2_qos_2
@@ -209,7 +209,7 @@ begin
         fmt_lvl_2_val[r] = val_tmp[q]
         ptr_2[p_3] += 1
     end
-    qos_alloc = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
-    resize!(fmt_lvl_3_val, qos_alloc)
+    qos_stop = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
+    resize!(fmt_lvl_3_val, qos_stop)
     result
 end

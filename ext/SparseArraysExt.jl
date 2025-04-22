@@ -84,8 +84,8 @@ end
     ptr
     idx
     val
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
     prev_pos
 end
 
@@ -127,14 +127,14 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) w
             $val = $tag.nzval
         end,
     )
-    qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     prev_pos = freshen(ctx, tag, :_prev_pos)
     shape = [
         VirtualExtent(literal(1), value(m, Ti)), VirtualExtent(literal(1), value(n, Ti))
     ]
     VirtualSparseMatrixCSC(
-        tag, Tv, Ti, shape, ptr, idx, val, qos_used, qos_alloc, prev_pos
+        tag, Tv, Ti, shape, ptr, idx, val, qos_fill, qos_stop, prev_pos
     )
 end
 
@@ -149,8 +149,8 @@ function distribute(
         distribute_buffer(ctx, arr.ptr, arch, style),
         distribute_buffer(ctx, arr.idx, arch, style),
         distribute_buffer(ctx, arr.val, arch, style),
-        arr.qos_used,
-        arr.qos_alloc,
+        arr.qos_fill,
+        arr.qos_stop,
         arr.prev_pos,
     )
 end
@@ -166,8 +166,8 @@ function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init
     push_preamble!(
         ctx,
         quote
-            $(arr.qos_used) = $(Tp(0))
-            $(arr.qos_alloc) = $(Tp(0))
+            $(arr.qos_fill) = $(Tp(0))
+            $(arr.qos_stop) = $(Tp(0))
             resize!($(arr.ptr), $pos_stop + 1)
             fill_range!($(arr.ptr), $(Tp(0)), 1, $pos_stop + 1)
             $(arr.ptr)[1] = $(Tp(1))
@@ -187,7 +187,7 @@ end
 function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     p = freshen(ctx, :p)
     pos_stop = ctx(getstop(virtual_size(ctx, arr)[2]))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
@@ -195,9 +195,9 @@ function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
             for $p in 1:($pos_stop)
                 $(arr.ptr)[$p + 1] += $(arr.ptr)[$p]
             end
-            $qos_alloc = $(arr.ptr)[$pos_stop + 1] - 1
-            resize!($(arr.idx), $qos_alloc)
-            resize!($(arr.val), $qos_alloc)
+            $qos_stop = $(arr.ptr)[$pos_stop + 1] - 1
+            resize!($(arr.idx), $qos_stop)
+            resize!($(arr.val), $qos_stop)
         end,
     )
     return arr
@@ -206,19 +206,19 @@ end
 function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     p = freshen(ctx, :p)
     pos_stop = ctx(getstop(virtual_size(ctx, arr)[2]))
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
-            $(arr.qos_used) = $(arr.ptr)[$pos_stop + 1] - 1
-            $(arr.qos_alloc) = $(arr.qos_used)
-            $qos_alloc = $(arr.qos_used)
+            $(arr.qos_fill) = $(arr.ptr)[$pos_stop + 1] - 1
+            $(arr.qos_stop) = $(arr.qos_fill)
+            $qos_stop = $(arr.qos_fill)
             $(
                 if issafe(get_mode_flag(ctx))
                     quote
                         $(arr.prev_pos) =
                             Finch.scansearch(
-                                $(arr.ptr), $(arr.qos_alloc) + 1, 1, $pos_stop
+                                $(arr.ptr), $(arr.qos_stop) + 1, 1, $pos_stop
                             ) - 1
                     end
                 end
@@ -350,12 +350,12 @@ function Finch.unfurl(
     j = tns.j
     Tp = arr.Ti
     qos = freshen(ctx, tag, :_qos)
-    qos_used = arr.qos_used
-    qos_alloc = arr.qos_alloc
+    qos_fill = arr.qos_fill
+    qos_stop = arr.qos_stop
     dirty = freshen(ctx, tag, :dirty)
     Thunk(;
         preamble = quote
-            $qos = $qos_used + 1
+            $qos = $qos_fill + 1
             $(if issafe(get_mode_flag(ctx))
                 quote
                     $(arr.prev_pos) < $(ctx(j)) || throw(FinchProtocolError("SparseMatrixCSCs cannot be updated multiple times"))
@@ -365,10 +365,10 @@ function Finch.unfurl(
         body     = (ctx) -> Lookup(;
         body=(ctx, idx) -> Thunk(;
         preamble = quote
-            if $qos > $qos_alloc
-                $qos_alloc = max($qos_alloc << 1, 1)
-                Finch.resize_if_smaller!($(arr.idx), $qos_alloc)
-                Finch.resize_if_smaller!($(arr.val), $qos_alloc)
+            if $qos > $qos_stop
+                $qos_stop = max($qos_stop << 1, 1)
+                Finch.resize_if_smaller!($(arr.idx), $qos_stop)
+                Finch.resize_if_smaller!($(arr.val), $qos_stop)
             end
             $dirty = false
         end,
@@ -387,8 +387,8 @@ function Finch.unfurl(
     )
     ),
         epilogue = quote
-            $(arr.ptr)[$(ctx(j)) + 1] += $qos - $qos_used - 1
-            $qos_used = $qos - 1
+            $(arr.ptr)[$(ctx(j)) + 1] += $qos - $qos_fill - 1
+            $qos_fill = $qos - 1
         end,
     )
 end
@@ -429,8 +429,8 @@ end
     shape
     idx
     val
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
 end
 
 function Finch.virtual_size(ctx::AbstractCompiler, arr::VirtualSparseVector)
@@ -460,9 +460,9 @@ function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) wher
             $val = $tag.nzval
         end,
     )
-    qos_used = freshen(ctx, tag, :_qos_used)
-    qos_alloc = freshen(ctx, tag, :_qos_alloc)
-    VirtualSparseVector(tag, Tv, Ti, shape, idx, val, qos_used, qos_alloc)
+    qos_fill = freshen(ctx, tag, :_qos_fill)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
+    VirtualSparseVector(tag, Tv, Ti, shape, idx, val, qos_fill, qos_stop)
 end
 
 function distribute(
@@ -475,8 +475,8 @@ function distribute(
         arr.shape,
         distribute_buffer(ctx, arr.idx, arch, style),
         distribute_buffer(ctx, arr.val, arch, style),
-        arr.qos_used,
-        arr.qos_alloc,
+        arr.qos_fill,
+        arr.qos_stop,
     )
 end
 
@@ -490,8 +490,8 @@ function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
     push_preamble!(
         ctx,
         quote
-            $(arr.qos_used) = $(Tp(0))
-            $(arr.qos_alloc) = $(Tp(0))
+            $(arr.qos_fill) = $(Tp(0))
+            $(arr.qos_stop) = $(Tp(0))
         end,
     )
     return arr
@@ -499,13 +499,13 @@ end
 
 function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     p = freshen(ctx, :p)
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
-            $qos_alloc = $(ctx(arr.qos_used))
-            resize!($(arr.idx), $qos_alloc)
-            resize!($(arr.val), $qos_alloc)
+            $qos_stop = $(ctx(arr.qos_fill))
+            resize!($(arr.idx), $qos_stop)
+            resize!($(arr.val), $qos_stop)
         end,
     )
     return arr
@@ -513,13 +513,13 @@ end
 
 function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     p = freshen(ctx, :p)
-    qos_alloc = freshen(ctx, :qos_alloc)
+    qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
         ctx,
         quote
-            $(arr.qos_used) = length($(arr.idx))
-            $(arr.qos_alloc) = $(arr.qos_used)
-            $qos_alloc = $(arr.qos_used)
+            $(arr.qos_fill) = length($(arr.idx))
+            $(arr.qos_stop) = $(arr.qos_fill)
+            $qos_stop = $(arr.qos_fill)
         end,
     )
     return arr
@@ -593,23 +593,23 @@ function Finch.unfurl(
     tag = arr.tag
     Tp = arr.Ti
     qos = freshen(ctx, tag, :_qos)
-    qos_used = arr.qos_used
-    qos_alloc = arr.qos_alloc
+    qos_fill = arr.qos_fill
+    qos_stop = arr.qos_stop
     dirty = freshen(ctx, tag, :dirty)
 
     Unfurled(;
         arr=arr,
         body=Thunk(;
             preamble = quote
-                $qos = $qos_used + 1
+                $qos = $qos_fill + 1
             end,
             body     = (ctx) -> Lookup(;
             body=(ctx, idx) -> Thunk(;
             preamble = quote
-                if $qos > $qos_alloc
-                    $qos_alloc = max($qos_alloc << 1, 1)
-                    Finch.resize_if_smaller!($(arr.idx), $qos_alloc)
-                    Finch.resize_if_smaller!($(arr.val), $qos_alloc)
+                if $qos > $qos_stop
+                    $qos_stop = max($qos_stop << 1, 1)
+                    Finch.resize_if_smaller!($(arr.idx), $qos_stop)
+                    Finch.resize_if_smaller!($(arr.val), $qos_stop)
                 end
                 $dirty = false
             end,
@@ -623,7 +623,7 @@ function Finch.unfurl(
         )
         ),
             epilogue = quote
-                $qos_used = $qos - 1
+                $qos_fill = $qos - 1
             end,
         ),
     )

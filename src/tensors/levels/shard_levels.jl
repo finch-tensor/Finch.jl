@@ -201,9 +201,9 @@ function transfer(device, lvl::ShardLevel)
     lvl_2 = transfer(device, lvl.lvl) #TODO unclear
     ptr_2 = transfer(device, lvl.ptr)
     task_2 = transfer(device, lvl.task)
-    qos_used_2 = transfer(device, lvl.used)
-    qos_alloc_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl_2, ptr_2, task_2, qos_used_2, qos_alloc_2)
+    qos_fill_2 = transfer(device, lvl.used)
+    qos_stop_2 = transfer(device, lvl.alloc)
+    return ShardLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2)
 end
 
 function pattern!(lvl::ShardLevel)
@@ -323,8 +323,8 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     task
     used
     alloc
-    qos_used
-    qos_alloc
+    qos_fill
+    qos_stop
     Tv
     Device
     Lvl
@@ -367,8 +367,8 @@ function virtualize(
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
-    used = freshen(ctx, tag, :_qos_used)
-    alloc = freshen(ctx, tag, :_qos_alloc)
+    used = freshen(ctx, tag, :_qos_fill)
+    alloc = freshen(ctx, tag, :_qos_stop)
 
     push_preamble!(
         ctx,
@@ -411,8 +411,8 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         distribute_buffer(ctx, lvl.task, arch, style),
         distribute_buffer(ctx, lvl.used, arch, style),
         distribute_buffer(ctx, lvl.alloc, arch, style),
-        lvl.qos_used,
-        lvl.qos_alloc,
+        lvl.qos_fill,
+        lvl.qos_stop,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -429,29 +429,29 @@ function distribute_level(
     Tp = postype(lvl)
     tag = lvl.tag
     if true #get_device(arch) == lvl.device
-        qos_used = freshen(ctx, tag, :_qos_used)
-        qos_alloc = freshen(ctx, tag, :_qos_alloc)
+        qos_fill = freshen(ctx, tag, :_qos_fill)
+        qos_stop = freshen(ctx, tag, :_qos_stop)
         tid = ctx(get_task_num(arch))
         push_preamble!(
             ctx,
             quote
-                $qos_used = $(lvl.used)[$tid]
-                $qos_alloc = $(lvl.alloc)[$tid]
+                $qos_fill = $(lvl.used)[$tid]
+                $qos_stop = $(lvl.alloc)[$tid]
             end,
         )
         dev = get_device(arch)
         multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
-        lvl_2 = thaw_level!(ctx, lvl_2, value(qos_alloc, Tp))
+        lvl_2 = thaw_level!(ctx, lvl_2, value(qos_stop, Tp))
         push_epilogue!(
             ctx,
             contain(ctx) do ctx_2
                 quote
-                    $(lvl.used)[$tid] = $qos_used
-                    $(lvl.alloc)[$tid] = $qos_alloc
+                    $(lvl.used)[$tid] = $qos_fill
+                    $(lvl.alloc)[$tid] = $qos_stop
                 end
-                freeze_level!(ctx_2, lvl_2, qos_alloc)
+                freeze_level!(ctx_2, lvl_2, qos_stop)
             end,
         )
         diff[lvl.tag] = VirtualShardLevel(
@@ -462,8 +462,8 @@ function distribute_level(
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
             distribute_buffer(ctx, lvl.alloc, arch, style),
-            qos_used,
-            qos_alloc,
+            qos_fill,
+            qos_stop,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -481,8 +481,8 @@ function distribute_level(
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
             distribute_buffer(ctx, lvl.alloc, arch, style),
-            lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_fill,
+            lvl.qos_stop,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -506,8 +506,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.task,
             lvl.used,
             lvl.alloc,
-            lvl.qos_used,
-            lvl.qos_alloc,
+            lvl.qos_fill,
+            lvl.qos_stop,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -652,17 +652,17 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
             $tid = $(ctx(get_task_num(ctx)))
             if $qos == 0
                 #this task will always own this position forever, even if we don't write to it.
-                $qos = $(lvl.qos_used) += 1
+                $qos = $(lvl.qos_fill) += 1
                 $(lvl.task)[$(ctx(pos))] = $tid
-                $(lvl.ptr)[$(ctx(pos))] = $(lvl.qos_used)
-                if $(lvl.qos_used) > $(lvl.qos_alloc)
-                    $(lvl.qos_alloc) = max($(lvl.qos_alloc) << 1, 1)
+                $(lvl.ptr)[$(ctx(pos))] = $(lvl.qos_fill)
+                if $(lvl.qos_fill) > $(lvl.qos_stop)
+                    $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
                     $(contain(
                         ctx_2 -> assemble_level!(
                             ctx_2,
                             lvl.lvl,
-                            value(lvl.qos_used, Tp),
-                            value(lvl.qos_alloc, Tp),
+                            value(lvl.qos_fill, Tp),
+                            value(lvl.qos_stop, Tp),
                         ),
                         ctx,
                     ))

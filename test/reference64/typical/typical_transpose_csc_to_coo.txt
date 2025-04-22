@@ -39,10 +39,10 @@ quote
     A_lvl_3_val = A_lvl_3.val
     empty!(B_lvl_tbl)
     empty!(B_lvl_pool)
-    B_lvl_qos_alloc = 0
+    B_lvl_qos_stop = 0
     empty!(B_lvl_2_tbl)
     empty!(B_lvl_2_pool)
-    B_lvl_2_qos_alloc = 0
+    B_lvl_2_qos_stop = 0
     for j_4 = 1:A_lvl_stop
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
         A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
@@ -67,10 +67,10 @@ quote
                             B_lvl_qos = pop!(B_lvl_pool)
                         else
                             B_lvl_qos = length(B_lvl_tbl) + 1
-                            if B_lvl_qos > B_lvl_qos_alloc
-                                B_lvl_qos_alloc = max(B_lvl_qos_alloc << 1, 1)
-                                Finch.resize_if_smaller!(B_lvl_val, B_lvl_qos_alloc)
-                                Finch.fill_range!(B_lvl_val, 0, B_lvl_qos, B_lvl_qos_alloc)
+                            if B_lvl_qos > B_lvl_qos_stop
+                                B_lvl_qos_stop = max(B_lvl_qos_stop << 1, 1)
+                                Finch.resize_if_smaller!(B_lvl_val, B_lvl_qos_stop)
+                                Finch.fill_range!(B_lvl_val, 0, B_lvl_qos, B_lvl_qos_stop)
                             end
                         end
                         B_lvl_tbl[(1, A_lvl_2_i)] = B_lvl_qos
@@ -82,12 +82,12 @@ quote
                             B_lvl_2_qos = pop!(B_lvl_2_pool)
                         else
                             B_lvl_2_qos = length(B_lvl_2_tbl) + 1
-                            if B_lvl_2_qos > B_lvl_2_qos_alloc
-                                B_lvl_2_qos_alloc = max(B_lvl_2_qos_alloc << 1, 1)
-                                Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_alloc)
-                                Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_alloc)
-                                Finch.resize_if_smaller!(B_lvl_2_val, B_lvl_2_qos_alloc)
-                                Finch.fill_range!(B_lvl_2_val, 0, B_lvl_2_qos, B_lvl_2_qos_alloc)
+                            if B_lvl_2_qos > B_lvl_2_qos_stop
+                                B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
+                                Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_stop)
+                                Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_stop)
+                                Finch.resize_if_smaller!(B_lvl_2_val, B_lvl_2_qos_stop)
+                                Finch.fill_range!(B_lvl_2_val, 0, B_lvl_2_qos, B_lvl_2_qos_stop)
                             end
                         end
                         B_lvl_2_tbl[(B_lvl_qos, j_4)] = B_lvl_2_qos
@@ -112,10 +112,10 @@ quote
                                 B_lvl_qos = pop!(B_lvl_pool)
                             else
                                 B_lvl_qos = length(B_lvl_tbl) + 1
-                                if B_lvl_qos > B_lvl_qos_alloc
-                                    B_lvl_qos_alloc = max(B_lvl_qos_alloc << 1, 1)
-                                    Finch.resize_if_smaller!(B_lvl_val, B_lvl_qos_alloc)
-                                    Finch.fill_range!(B_lvl_val, 0, B_lvl_qos, B_lvl_qos_alloc)
+                                if B_lvl_qos > B_lvl_qos_stop
+                                    B_lvl_qos_stop = max(B_lvl_qos_stop << 1, 1)
+                                    Finch.resize_if_smaller!(B_lvl_val, B_lvl_qos_stop)
+                                    Finch.fill_range!(B_lvl_val, 0, B_lvl_qos, B_lvl_qos_stop)
                                 end
                             end
                             B_lvl_tbl[(1, phase_stop_3)] = B_lvl_qos
@@ -127,12 +127,12 @@ quote
                                 B_lvl_2_qos_2 = pop!(B_lvl_2_pool)
                             else
                                 B_lvl_2_qos_2 = length(B_lvl_2_tbl) + 1
-                                if B_lvl_2_qos_2 > B_lvl_2_qos_alloc
-                                    B_lvl_2_qos_alloc = max(B_lvl_2_qos_alloc << 1, 1)
-                                    Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_alloc)
-                                    Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos_2, B_lvl_2_qos_alloc)
-                                    Finch.resize_if_smaller!(B_lvl_2_val, B_lvl_2_qos_alloc)
-                                    Finch.fill_range!(B_lvl_2_val, 0, B_lvl_2_qos_2, B_lvl_2_qos_alloc)
+                                if B_lvl_2_qos_2 > B_lvl_2_qos_stop
+                                    B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
+                                    Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_stop)
+                                    Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos_2, B_lvl_2_qos_stop)
+                                    Finch.resize_if_smaller!(B_lvl_2_val, B_lvl_2_qos_stop)
+                                    Finch.fill_range!(B_lvl_2_val, 0, B_lvl_2_qos_2, B_lvl_2_qos_stop)
                                 end
                             end
                             B_lvl_2_tbl[(B_lvl_qos, j_4)] = B_lvl_2_qos_2
@@ -185,10 +185,10 @@ quote
         B_lvl_val[r] = val_tmp[q]
         ptr_2[p_2] += 1
     end
-    qos_alloc = B_lvl_ptr[1 + 1] - 1
-    resize!(B_lvl_2_ptr, qos_alloc + 1)
+    qos_stop = B_lvl_ptr[1 + 1] - 1
+    resize!(B_lvl_2_ptr, qos_stop + 1)
     B_lvl_2_ptr[1] = 1
-    Finch.fill_range!(B_lvl_2_ptr, 0, 2, qos_alloc + 1)
+    Finch.fill_range!(B_lvl_2_ptr, 0, 2, qos_stop + 1)
     pdx_tmp_2 = Vector{Int64}(undef, length(B_lvl_2_tbl))
     resize!(B_lvl_2_idx, length(B_lvl_2_tbl))
     resize!(B_lvl_2_val, length(B_lvl_2_tbl))
@@ -206,7 +206,7 @@ quote
         pdx_tmp_2[q_2] = p_4
         B_lvl_2_ptr[p_4 + 1] += 1
     end
-    for p_4 = 2:qos_alloc + 1
+    for p_4 = 2:qos_stop + 1
         B_lvl_2_ptr[p_4] += B_lvl_2_ptr[p_4 - 1]
     end
     perm_2 = sortperm(idx_tmp_2)
@@ -218,8 +218,8 @@ quote
         B_lvl_2_val[r_2] = val_tmp_2[q_2]
         ptr_3[p_4] += 1
     end
-    qos_alloc_2 = B_lvl_2_ptr[qos_alloc + 1] - 1
-    resize!(B_lvl_3_val, qos_alloc_2)
+    qos_stop_2 = B_lvl_2_ptr[qos_stop + 1] - 1
+    resize!(B_lvl_3_val, qos_stop_2)
     (B = Tensor((SparseDictLevel){Int64}((SparseDictLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_3_val), A_lvl_stop, B_lvl_2_ptr, B_lvl_2_idx, B_lvl_2_val, B_lvl_2_tbl, B_lvl_2_pool), A_lvl_2_stop, B_lvl_ptr, B_lvl_idx, B_lvl_val, B_lvl_tbl, B_lvl_pool)),)
 end
 julia> @finch mode = :fast begin
