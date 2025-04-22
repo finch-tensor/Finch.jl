@@ -41,17 +41,6 @@ begin
     Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-<<<<<<< HEAD
-                                x_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), x_lvl_2_val_2)
-                                A_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_3_val_2)
-                                A_lvl_2_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_2_ptr_2)
-                                A_lvl_2_idx_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), A_lvl_2_idx_2)
-                                y_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), y_lvl_3_val_2)
-                                y_lvl_2_locks_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), y_lvl_2_locks_2)
-                                diag_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), SerialTask()), diag_lvl_2_val_2)
-                                phase_start_2 = max(1, 1 + fld(x_lvl_stop * (tid + -1), Threads.nthreads()))
-                                phase_stop_2 = min(x_lvl_stop, fld(x_lvl_stop * tid, Threads.nthreads()))
-=======
                                 x_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), x_lvl_2_val_2)
                                 A_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_3_val_2)
                                 A_lvl_2_ptr_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_2_ptr_2)
@@ -61,7 +50,6 @@ begin
                                 diag_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), diag_lvl_2_val_2)
                                 phase_start_2 = max(1, 1 + fld(x_lvl_stop * (tid + -1), n))
                                 phase_stop_2 = min(x_lvl_stop, fld(x_lvl_stop * tid, n))
->>>>>>> main
                                 if phase_stop_2 >= phase_start_2
                                     for j_8 = phase_start_2:phase_stop_2
                                         x_lvl_q = (1 - 1) * x_lvl_stop + j_8

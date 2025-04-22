@@ -29,19 +29,11 @@ begin
     Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-<<<<<<< HEAD
-                                tmp_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, cpu, SerialTask()), tmp_lvl_2_val_2)
-                                input_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, SerialTask()), input_lvl_3_val_2)
-                                output_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, cpu, SerialTask()), output_lvl_3_val_2)
-                                phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), cpu.n))
-                                phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, cpu.n))
-=======
                                 tmp_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), tmp_lvl_2_val_2)
                                 input_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), input_lvl_3_val_2)
                                 output_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), output_lvl_3_val_2)
                                 phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
                                 phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
->>>>>>> main
                                 if phase_stop_2 >= phase_start_2
                                     for y_8 = phase_start_2:phase_stop_2
                                         input_lvl_q_2 = (1 - 1) * input_lvl_stop + y_8
