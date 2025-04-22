@@ -47,8 +47,7 @@ function transfer(device, lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp}
     return ElementLevel{Vf,Tv,Tp}(transfer(device, lvl.val))
 end
 
-pattern!(lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
-    Pattern{Tp}()
+pattern!(lvl::ElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} = Pattern{Tp}()
 function set_fill_value!(lvl::ElementLevel{Vf,Tv,Tp}, init) where {Vf,Tv,Tp}
     ElementLevel{init,Tv,Tp}(lvl.val)
 end
@@ -69,8 +68,7 @@ function Base.show(io::IO, lvl::ElementLevel{Vf,Tv,Tp,Val}) where {Vf,Tv,Tp,Val}
     print(io, ")")
 end
 
-labelled_show(io::IO, fbr::SubFiber{<:ElementLevel}) =
-    print(io, fbr.lvl.val[fbr.pos])
+labelled_show(io::IO, fbr::SubFiber{<:ElementLevel}) = print(io, fbr.lvl.val[fbr.pos])
 
 @inline level_ndims(::Type{<:ElementLevel}) = 0
 @inline level_size(::ElementLevel) = ()

@@ -53,7 +53,7 @@ julia> C = max.(A, B)
  3.0  4.0
 
 julia> D = sum(C; dims=2)
-2 Tensor{DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+2×1 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  3.0
  7.0
 

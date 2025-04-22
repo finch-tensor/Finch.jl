@@ -25,7 +25,7 @@ function SmallBitSet(ints::Vector{Int})
     return s
 end
 
-function SmallBitSet(ints::Set{Int})
+function SmallBitSet(ints::StableSet{Int})
     s = SmallBitSet()
     for i in ints
         s = _setint(s, i, true)

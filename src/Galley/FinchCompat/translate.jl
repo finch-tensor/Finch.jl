@@ -15,8 +15,8 @@ function push_relabels(prgm)
                             arg_idxs = Finch.getfields(arg)
                             arg_relabel_idxs = filter((i) -> i ∉ idxs1, arg_idxs)
                             relabel_dict = merge(
-                                Dict(i => i for i in idxs1),
-                                Dict(
+                                OrderedDict(i => i for i in idxs1),
+                                OrderedDict(
                                     arg_relabel_idxs[i] => idxs2[i] for
                                     i in eachindex(idxs2)
                                 ),
@@ -32,7 +32,7 @@ function push_relabels(prgm)
                         relabel(~arg, ~idxs_2...)),
                     (@rule relabel(reorder(~arg, ~idxs_1...), ~idxs_2...) => begin
                         idxs_3 = getfields(arg)
-                        reidx = Dict(map(Pair, idxs_1, idxs_2)...)
+                        reidx = OrderedDict(map(Pair, idxs_1, idxs_2)...)
                         idxs_4 = map(idx -> get(reidx, idx, idx), idxs_3)
                         reorder(relabel(arg, idxs_4...), idxs_2...)
                     end),
@@ -120,13 +120,13 @@ function remove_reorders(prgm::LogicNode)
         )(
             expr
         )
-        bc_idxs = Set()
+        bc_idxs = StableSet()
         for n in PostOrderDFS(expr)
             if n.kind == reorder
                 bc_idxs = bc_idxs ∪ setdiff(n.idxs, getfields(n.arg))
             end
         end
-        table_idxs = Set()
+        table_idxs = StableSet()
         for n in PostOrderDFS(expr)
             if n.kind == table
                 table_idxs = table_idxs ∪ n.idxs

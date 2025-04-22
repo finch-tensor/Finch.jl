@@ -286,8 +286,9 @@ dimension of virtual tensor `tns`. `ext` is the extent of the looplet. `proto`
 is the protocol that should be used for this index, but one doesn't need to
 unfurl all the indices at once.
 """
-unfurl(ctx, tns, ext, mode, proto) =
+function unfurl(ctx, tns, ext, mode, proto)
     throw(FinchProtocolError("$tns does not support $mode with protocol $proto"))
+end
 
 function lower_loop(ctx, root, ext)
     contain(ctx) do ctx_2
@@ -314,11 +315,13 @@ function lower_loop(ctx, root, ext)
 end
 
 function lower_loop(ctx, root, ext::VirtualParallelDimension)
-    lower_parallel_loop(ctx, root, ext, ext.device)
+    lower_parallel_loop(ctx, root, ext, ext.schedule)
 end
-function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::VirtualCPU)
-    root = ensure_concurrent(root, ctx)
 
+distribute_host(f, ctx, body, device) = distribute_helper(f, ctx, body, device, true)
+distribute_device(f, ctx, body, subtask) = distribute_helper(f, ctx, body, subtask, false)
+
+function distribute_helper(f, ctx, body, object, on_host)
     decl_in_scope = unique(
         filter(
             !isnothing,
@@ -326,7 +329,7 @@ function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::V
                     if @capture(node, declare(~tns, ~init, ~op))
                         tns
                     end
-                end, PostOrderDFS(root.body)),
+                end, PostOrderDFS(body)),
         ),
     )
 
@@ -337,68 +340,62 @@ function lower_parallel_loop(ctx, root, ext::VirtualParallelDimension, device::V
                     if @capture(node, access(~tns, ~mode, ~idxs...))
                         getroot(tns)
                     end
-                end, PostOrderDFS(root.body)),
+                end, PostOrderDFS(body)),
         ),
     )
 
     contain(ctx) do ctx_2
         diff = Dict()
+        if on_host
+            helper_local = host_local
+            helper_shared = host_shared
+            helper_global = host_global
+        else
+            helper_local = device_local
+            helper_shared = device_shared
+            helper_global = device_global
+        end
+
         for tns in intersect(used_in_scope, decl_in_scope)
             set_binding!(
-                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, host_local)
+                ctx_2, tns,
+                distribute(ctx_2, resolve(ctx_2, tns), object, diff, helper_local),
             )
         end
         for tns in setdiff(used_in_scope, decl_in_scope)
-            style = get_tensor_mode(ctx, tns).kind === reader ? host_global : host_shared
+            style =
+                get_tensor_mode(ctx_2, tns).kind === reader ? helper_global : helper_shared
             set_binding!(
-                ctx, tns, distribute(ctx, resolve(ctx, tns), device, diff, style)
+                ctx_2, tns, distribute(ctx_2, resolve(ctx_2, tns), object, diff, style)
             )
         end
-        body = redistribute(ctx, root.body, diff)
+        body_2 = redistribute(ctx_2, body, diff)
+        f(ctx_2, body_2)
+    end
+end
 
-        virtual_parallel_region(ctx_2, device) do ctx_3
+function lower_parallel_loop(
+    ctx, root, ext::VirtualParallelDimension, schedule::AbstractVirtualSchedule
+)
+    root = ensure_concurrent(root, ctx)
+    device = ext.device
+
+    distribute_host(ctx, root.body, device) do ctx_2, body_2
+        virtual_parallel_region(ctx_2, ext, device, schedule) do f, ctx_3, i_lo, i_hi
             subtask = get_task(ctx_3)
-            tid = get_task_num(subtask)
             open_scope(ctx_3) do ctx_4
-                contain(ctx_4) do ctx_5
-                    diff = Dict()
-                    for tns in intersect(used_in_scope, decl_in_scope)
-                        set_binding!(
-                            ctx_5,
-                            tns,
-                            distribute(
-                                ctx_5, resolve(ctx_5, tns), subtask, diff, device_local
+                distribute_device(ctx_4, root.body, subtask) do ctx_5, body_3
+                    root_2 = loop(root.idx, ext.ext,
+                        sieve(
+                            access(
+                                VirtualBandMaskColumn(i_lo, i_hi),
+                                reader(),
+                                root.idx,
                             ),
-                        )
-                    end
-                    for tns in setdiff(used_in_scope, decl_in_scope)
-                        style = if get_tensor_mode(ctx, tns).kind === reader
-                            device_global
-                        else
-                            device_shared
-                        end
-                        set_binding!(
-                            ctx_5,
-                            tns,
-                            distribute(ctx_5, resolve(ctx_5, tns), subtask, diff, style),
-                        )
-                    end
-                    body = redistribute(ctx_5, body, diff)
-                    i = index(freshen(ctx, :i))
-                    root_2 = loop(i, VirtualExtent(tid, tid),
-                        loop(root.idx, ext.ext,
-                            sieve(
-                                access(
-                                    VirtualSplitMask(getstop(ext.ext), device.n),
-                                    reader(),
-                                    root.idx,
-                                    i,
-                                ), #=TODO correct only for 1:n ranges =#
-                                body,
-                            ),
+                            body_3,
                         ),
                     )
-                    ctx_5(instantiate!(ctx_5, root_2))
+                    f(ctx_5(instantiate!(ctx_5, root_2)))
                 end
             end
         end

@@ -159,15 +159,14 @@ function push_fields(root)
                     (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
                         mapjoin(op, map(arg -> reorder(arg, ~idxs...), args)...)),
                     (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
-                        begin
-                            #TODO it should be correct to write this, but subsequent phases interpret singleton dimensions as canonical ones when we do this.
-                            #aggregate(op, init, reorder(arg, idxs_2..., idxs...), idxs...)
-                            aggregate(
-                                op,
-                                init,
-                                reorder(arg, intersect(getfields(arg), idxs_2)..., idxs...),
-                                idxs...,
-                            )
+                        if !issubsequence(intersect(getfields(arg), idxs_2), idxs_2)
+                            reorder(
+                                aggregate(
+                                    op,
+                                    init,
+                                    reorder(arg, intersect(idxs_2)..., idxs...),
+                                    idxs...,
+                                ), idxs_2...)
                         end),
                     (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
                         reorder(~arg, ~idxs_2...)),
@@ -613,7 +612,8 @@ function normalize_names(ex)
             end
             freshen(spc, sym)
         end
-    Rewrite(Postwalk(@rule ~a::isalias => alias(normname(a.name))))(ex)
+    ex = Rewrite(Postwalk(@rule ~a::isalias => alias(normname(a.name))))(ex)
+    Rewrite(Postwalk(@rule ~a::isfield => field(normname(a.name))))(ex)
 end
 
 function toposort(chains::Vector{Vector{T}}) where {T}

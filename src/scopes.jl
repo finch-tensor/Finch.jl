@@ -35,15 +35,17 @@ set_binding!(ctx::ScopeContext, var, val) = ctx.bindings[var] = val
 
 Get the binding of a variable in the context, or return a default value.
 """
-get_binding(ctx::AbstractCompiler, var, val) =
+function get_binding(ctx::AbstractCompiler, var, val)
     has_binding(ctx, var) ? get_binding(ctx, var) : val
+end
 """
     get_binding!(ctx, var, val)
 
 Get the binding of a variable in the context, or set it to a default value.
 """
-get_binding!(ctx::AbstractCompiler, var, val) =
+function get_binding!(ctx::AbstractCompiler, var, val)
     has_binding(ctx, var) ? get_binding(ctx, var) : set_binding!(ctx, var, val)
+end
 
 """
     set_declared!(ctx, var, val, op)

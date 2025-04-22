@@ -126,9 +126,13 @@ end
 @inline level_size(lvl::SparsePointLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparsePointLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
-    level_eltype(Lvl)
+    level_eltype(
+        Lvl
+    )
 @inline level_fill_value(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
-    level_fill_value(Lvl)
+    level_fill_value(
+        Lvl
+    )
 function data_rep_level(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl}
     SparseData(data_rep_level(Lvl))
 end
@@ -306,16 +310,16 @@ function unfurl(
                 body=(ctx, ext) -> truncate(
                     ctx,
                     Spike(;
-                        body = FillLeaf(virtual_level_fill_value(lvl)),
-                        tail = instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
+                        body=FillLeaf(virtual_level_fill_value(lvl)),
+                        tail=instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode),
                     ),
                     similar_extent(ext, getstart(ext), value(my_i)),
                     ext,
                 ),
             ),
             Phase(;
-                stop = (ctx, ext) -> lvl.shape,
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+                stop=(ctx, ext) -> lvl.shape,
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
             ),
         ]),
     )
@@ -347,15 +351,17 @@ function unfurl(
 
     Lookup(;
         body=(ctx, idx) -> Thunk(;
-            preamble = quote
+            preamble=quote
                 $dirty = false
             end,
-            body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
-            epilogue = quote
+            body=(ctx) ->
+                instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
+            epilogue=quote
                 if $dirty
                     $(fbr.dirty) = true
                     if $(issafe(get_mode_flag(ctx)))
-                        @assert $(lvl.idx)[$(ctx(pos))] == 0 || $(lvl.idx)[$(ctx(pos))] == $(ctx(idx))
+                        @assert $(lvl.idx)[$(ctx(pos))] == 0 ||
+                            $(lvl.idx)[$(ctx(pos))] == $(ctx(idx))
                     end
                     $(lvl.idx)[$(ctx(pos))] = $(ctx(idx))
                 end

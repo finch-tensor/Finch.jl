@@ -54,6 +54,10 @@ macro staged(def)
             $(Base.invokelatest)(($@__MODULE__).$name_eval_invokelatest, $(args...))
         end
 
+        function $(Symbol(name, :_code))($(args...))
+            code = $name_generator($(map((arg) -> :(typeof($arg)), args)...))
+        end
+
         @generated function $name($(args...))
             # Taken from https://github.com/NHDaly/StagedFunctions.jl/blob/6fafbc560421f70b05e3df330b872877db0bf3ff/src/StagedFunctions.jl#L116
             body_2 =
@@ -89,6 +93,7 @@ should only be called at global scope, and never during precompilation.
 """
 function refresh()
     for def in staged_defs
+        println(def)
         @eval $def
     end
 end

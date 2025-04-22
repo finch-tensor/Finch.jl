@@ -170,10 +170,13 @@ end
 @inline level_ndims(::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,Lvl} =
     N + level_ndims(Lvl)
 @inline level_size(lvl::SparseCOOLevel) = (level_size(lvl.lvl)..., lvl.shape...)
-@inline level_axes(lvl::SparseCOOLevel) =
-    (level_axes(lvl.lvl)..., map(Base.OneTo, lvl.shape)...)
+@inline level_axes(lvl::SparseCOOLevel) = (
+    level_axes(lvl.lvl)..., map(Base.OneTo, lvl.shape)...
+)
 @inline level_eltype(::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,Lvl} =
-    level_eltype(Lvl)
+    level_eltype(
+        Lvl
+    )
 @inline level_fill_value(
     ::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}
 ) where {N,TI,Ptr,Tbl,Lvl} = level_fill_value(Lvl)
@@ -441,45 +444,69 @@ function unfurl(
         end,
         body=(ctx) -> Sequence([
             Phase(;
-                stop = (ctx, ext) -> value(my_i_stop),
-                body = (ctx, ext) ->
-                if R == 1
-                    Stepper(;
-                    seek=(ctx, ext) -> quote
-                        if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch($(lvl.tbl[R]), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
-                        end
+                stop=(ctx, ext) -> value(my_i_stop),
+                body=(ctx, ext) ->
+                    if R == 1
+                        Stepper(;
+                            seek=(ctx, ext) -> quote
+                                if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
+                                    $my_q = Finch.scansearch(
+                                        $(lvl.tbl[R]),
+                                        $(ctx(getstart(ext))),
+                                        $my_q,
+                                        $my_q_stop - 1,
+                                    )
+                                end
+                            end,
+                            preamble=:($my_i = $(lvl.tbl[R])[$my_q]),
+                            stop=(ctx, ext) -> value(my_i),
+                            chunk=Spike(;
+                                body=FillLeaf(virtual_level_fill_value(lvl)),
+                                tail=instantiate(ctx, VirtualSubFiber(lvl.lvl, my_q), mode),
+                            ),
+                            next=(ctx, ext) -> :($my_q += $(Tp(1))),
+                        )
+                    else
+                        Stepper(;
+                            seek=(ctx, ext) -> quote
+                                if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
+                                    $my_q = Finch.scansearch(
+                                        $(lvl.tbl[R]),
+                                        $(ctx(getstart(ext))),
+                                        $my_q,
+                                        $my_q_stop - 1,
+                                    )
+                                end
+                            end,
+                            preamble=quote
+                                $my_i = $(lvl.tbl[R])[$my_q]
+                                $my_q_step = $my_q
+                                if $(lvl.tbl[R])[$my_q_step] == $my_i
+                                    $my_q_step = Finch.scansearch(
+                                        $(lvl.tbl[R]),
+                                        $my_i + 1,
+                                        $my_q_step,
+                                        $my_q_stop - 1,
+                                    )
+                                end
+                            end,
+                            stop=(ctx, ext) -> value(my_i),
+                            chunk=Spike(;
+                                body=FillLeaf(virtual_level_fill_value(lvl)),
+                                tail=instantiate(
+                                    ctx,
+                                    SparseCOOWalkTraversal(
+                                        lvl,
+                                        R - 1,
+                                        value(my_q, Tp),
+                                        value(my_q_step, Tp),
+                                    ),
+                                    mode,
+                                ),
+                            ),
+                            next=(ctx, ext) -> :($my_q = $my_q_step),
+                        )
                     end,
-                    preamble=:($my_i = $(lvl.tbl[R])[$my_q]),
-                    stop=(ctx, ext) -> value(my_i),
-                    chunk=Spike(;
-                    body = FillLeaf(virtual_level_fill_value(lvl)),
-                    tail = instantiate(ctx, VirtualSubFiber(lvl.lvl, my_q), mode)
-            ),
-                    next=(ctx, ext) -> :($my_q += $(Tp(1)))
-            )
-                else
-                    Stepper(;
-                    seek=(ctx, ext) -> quote
-                        if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch($(lvl.tbl[R]), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
-                        end
-                    end,
-                    preamble=quote
-                        $my_i = $(lvl.tbl[R])[$my_q]
-                        $my_q_step = $my_q
-                        if $(lvl.tbl[R])[$my_q_step] == $my_i
-                            $my_q_step = Finch.scansearch($(lvl.tbl[R]), $my_i + 1, $my_q_step, $my_q_stop - 1)
-                        end
-                    end,
-                    stop=(ctx, ext) -> value(my_i),
-                    chunk=Spike(;
-                    body = FillLeaf(virtual_level_fill_value(lvl)),
-                    tail = instantiate(ctx, SparseCOOWalkTraversal(lvl, R - 1, value(my_q, Tp), value(my_q_step, Tp)), mode)
-            ),
-                    next=(ctx, ext) -> :($my_q = $my_q_step)
-            )
-                end,
             ),
             Phase(;
                 body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl)))
@@ -539,25 +566,39 @@ function unfurl(
     qos = freshen(ctx, tag, :_q)
     prev_coord = freshen(ctx, tag, :_prev_coord)
     Thunk(;
-        preamble = quote
+        preamble=quote
             $qos = $qos_fill + 1
-            $(if issafe(get_mode_flag(ctx))
-                quote
-                    $(lvl.prev_pos) < $(ctx(pos)) || throw(FinchProtocolError("SparseCOOLevels cannot be updated multiple times"))
-                    $prev_coord = ()
-                end
-            end)
-        end,
-        body     = (ctx) -> unfurl(ctx, SparseCOOExtrudeTraversal(lvl, qos, fbr.dirty, [], prev_coord), ext, mode, proto),
-        epilogue = quote
-            $(lvl.ptr)[$(ctx(pos)) + 1] = $qos - $qos_fill - 1
-            $(if issafe(get_mode_flag(ctx))
-                quote
-                    if $qos - $qos_fill - 1 > 0
-                        $(lvl.prev_pos) = $(ctx(pos))
+            $(
+                if issafe(get_mode_flag(ctx))
+                    quote
+                        $(lvl.prev_pos) < $(ctx(pos)) || throw(
+                            FinchProtocolError(
+                                "SparseCOOLevels cannot be updated multiple times"
+                            ),
+                        )
+                        $prev_coord = ()
                     end
                 end
-            end)
+            )
+        end,
+        body=(ctx) -> unfurl(
+            ctx,
+            SparseCOOExtrudeTraversal(lvl, qos, fbr.dirty, [], prev_coord),
+            ext,
+            mode,
+            proto,
+        ),
+        epilogue=quote
+            $(lvl.ptr)[$(ctx(pos)) + 1] = $qos - $qos_fill - 1
+            $(
+                if issafe(get_mode_flag(ctx))
+                    quote
+                        if $qos - $qos_fill - 1 > 0
+                            $(lvl.prev_pos) = $(ctx(pos))
+                        end
+                    end
+                end
+            )
             $qos_fill = $qos - 1
         end,
     )
@@ -589,29 +630,45 @@ function unfurl(
         dirty = freshen(ctx, :dirty)
         Lookup(;
             body=(ctx, idx) -> Thunk(;
-                preamble = quote
+                preamble=quote
                     if $qos > $qos_stop
                         $qos_stop = max($qos_stop << 1, 1)
-                        $(Expr(:block, map(1:(lvl.N)) do n
-                            :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_stop))
-                        end...))
-                        $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)), ctx))
+                        $(Expr(
+                            :block,
+                            map(1:(lvl.N)) do n
+                                :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_stop))
+                            end...,
+                        ))
+                        $(contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2, lvl.lvl, value(qos, Tp), value(qos_stop, Tp)
+                            ),
+                            ctx,
+                        ))
                     end
                     $dirty = false
                 end,
-                body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty), mode),
-                epilogue = begin
+                body=(ctx) -> instantiate(
+                    ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty), mode
+                ),
+                epilogue=begin
                     coords_2 = map(ctx, (idx, coords...))
                     quote
                         if $dirty
-                            $(if issafe(get_mode_flag(ctx))
-                                quote
-                                    $(trv.prev_coord) < ($(reverse(coords_2)...),) || begin
-                                        throw(FinchProtocolError("SparseCOOLevels cannot be updated multiple times"))
+                            $(
+                                if issafe(get_mode_flag(ctx))
+                                    quote
+                                        $(trv.prev_coord) < ($(reverse(coords_2)...),) || begin
+                                            throw(
+                                                FinchProtocolError(
+                                                    "SparseCOOLevels cannot be updated multiple times"
+                                                ),
+                                            )
+                                        end
+                                        $(trv.prev_coord) = ($(reverse(coords_2)...),)
                                     end
-                                    $(trv.prev_coord) = ($(reverse(coords_2)...),)
                                 end
-                            end)
+                            )
                             $(fbr_dirty) = true
                             $(Expr(:block, map(enumerate(coords_2)) do (n, i)
                                 :($(lvl.tbl[n])[$qos] = $i)

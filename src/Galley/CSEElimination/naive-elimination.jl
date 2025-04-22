@@ -1,7 +1,7 @@
 function naive_cse!(plan::PlanNode)
-    hash_to_alias = Dict()
-    alias_to_hash = Dict()
-    cannonical_alias = Dict()
+    hash_to_alias = OrderedDict()
+    alias_to_hash = OrderedDict()
+    cannonical_alias = OrderedDict()
     cse_queries = PlanNode[]
     for query in plan.queries
         for n in PostOrderDFS(query.expr)

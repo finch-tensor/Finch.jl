@@ -3,8 +3,7 @@ struct WindowedArray{Dims<:Tuple,Body} <: AbstractCombinator
     dims::Dims
 end
 
-Base.show(io::IO, ex::WindowedArray) =
-    print(io, "WindowedArray($(ex.body), $(ex.dims))")
+Base.show(io::IO, ex::WindowedArray) = print(io, "WindowedArray($(ex.body), $(ex.dims))")
 
 function labelled_show(io::IO, ex::WindowedArray)
     print(io, "WindowedArray [$(join(ex.dims, ", "))]")

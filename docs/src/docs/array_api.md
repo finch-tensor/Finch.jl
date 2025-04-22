@@ -169,3 +169,14 @@ julia> fused((A, B, C) -> C .* (A * B), A, B, C; tag=:very_dense_sddmm);
 
 By distinguishing between the two uses of the same function, Galley can make
 better decisions about how to optimize each computation separately.
+
+## Fusable Functions
+
+The following functions can be fused:
+
+`+`, `-`, `*`, `/`, `broadcast`, any of the `Base.Broadcast` operators (e.g.
+`.+`, `.&`, `.min`,), `reduce`, `map`, `sum`, `prod`, `any`, `all`, `mapreduce`,
+`maximum`, `minimum`, `extrema`, `Statistics.mean`, `Statistics.std`,
+`Statistics.var`, `Statistics.stdm`, `Statistics.varm`, `LinearAlgebra.norm`,
+`argmax`, `argmin`, `transpose`, `permutedims`, `Finch.tensordot`, `Finch.@einsum`,
+`dropdims`, `Finch.expanddims`.

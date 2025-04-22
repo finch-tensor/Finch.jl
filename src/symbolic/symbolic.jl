@@ -203,12 +203,13 @@ collapsed(alg, idx, ext, lhs, f::FinchNode, rhs) = collapsed(alg, idx, ext, lhs,
 
 Return collapsed expression with respect to f.
 """
-collapsed(alg, idx, ext, lhs, f::Any, rhs) =
+function collapsed(alg, idx, ext, lhs, f::Any, rhs)
     if isidempotent(alg, f)
         sieve(call(>=, measure(ext), get_smallest_measure(ext)), assign(lhs, f, rhs)) # Hmm.. Why do we need sieve for  only idempotent?
     else
         nothing # Hmm.. Why do we need sieve for  only idempotent?
     end # Hmm.. Why do we need sieve for  only idempotent?
+end # Hmm.. Why do we need sieve for  only idempotent?
 
 function collapsed(alg, idx, ext, lhs, f::typeof(-), rhs)
     assign(lhs, f, call(*, measure(ext), rhs))

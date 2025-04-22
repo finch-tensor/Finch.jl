@@ -61,6 +61,8 @@ export fill_value, AsArray, expanddims, tensor_tree
 export parallelAnalysis, ParallelAnalysisResults
 export parallel, extent, auto
 export Serial, SerialMemory, CPU, CPULocalArray, CPULocalMemory
+export static_schedule, greedy_schedule, julia_schedule
+export serial, cpu
 
 export Limit, Eps
 
@@ -256,7 +258,7 @@ COOFormat(N, z=0.0, T=typeof(z)) = SparseCOOLevel{N}(ElementLevel{z,T}())
 
 include("postprocess.jl")
 
-export fsparse, fsparse!, fsprand, fspzeros, ffindnz, fread, fwrite, countstored
+export fsparse, fsparse!, fsprand, fspzeros, fspeye, ffindnz, fread, fwrite, countstored
 
 export bspread, bspwrite
 export ftnsread, ftnswrite, fttread, fttwrite

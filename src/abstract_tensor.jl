@@ -32,11 +32,13 @@ function freeze! end
 Thaw the read-only virtual tensor `tns` in the context `ctx` and return it. Afterwards,
 the tensor is update-only.
 """
-thaw!(ctx, tns) = throw(
-    FinchProtocolError(
-        "cannot modify $(typeof(tns)) in place (forgot to declare with .= ?)"
-    ),
-)
+function thaw!(ctx, tns)
+    throw(
+        FinchProtocolError(
+            "cannot modify $(typeof(tns)) in place (forgot to declare with .= ?)"
+        ),
+    )
+end
 
 """
     fill_value(arr)

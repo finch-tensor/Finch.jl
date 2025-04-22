@@ -19,32 +19,33 @@ begin
     B_lvl_stop2 = (((ex.bodies[1]).bodies[2]).body.body.body.rhs.args[2]).tns.bind.lvl.shape[2]
     B_lvl_2 = B_lvl.lvl
     B_lvl_2_val = B_lvl_2.val
+    n = (Base.Threads).nthreads()
     B_lvl_stop1 == A_lvl_stop2 || throw(DimensionMismatch("mismatched dimension limits ($(B_lvl_stop1) != $(A_lvl_stop2))"))
     @warn "Performance Warning: non-concordant traversal of A[i, k] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
     pos_stop = A_lvl_stop1 * B_lvl_stop2
     Finch.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
     Finch.fill_range!(Ct_lvl_3_val, 0x00000000, 1, pos_stop)
-    Ct_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), Ct_lvl_3_val)
-    B_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_2_val)
-    B_lvl_ptr_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_ptr)
-    B_lvl_tbl1_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_tbl1)
-    B_lvl_tbl2_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), B_lvl_tbl2)
-    A_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_2_val)
-    A_lvl_ptr_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_ptr)
-    A_lvl_tbl1_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_tbl1)
-    A_lvl_tbl2_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_tbl2)
-    Threads.@threads for tid = 1:Threads.nthreads()
+    Ct_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), Ct_lvl_3_val)
+    B_lvl_2_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), B_lvl_2_val)
+    B_lvl_ptr_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), B_lvl_ptr)
+    B_lvl_tbl1_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), B_lvl_tbl1)
+    B_lvl_tbl2_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), B_lvl_tbl2)
+    A_lvl_2_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_2_val)
+    A_lvl_ptr_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_ptr)
+    A_lvl_tbl1_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_tbl1)
+    A_lvl_tbl2_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_tbl2)
+    Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                Ct_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), Ct_lvl_3_val_2)
-                                B_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_2_val_2)
-                                B_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_ptr_2)
-                                B_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl1_2)
-                                B_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), B_lvl_tbl2_2)
-                                A_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_val_2)
-                                A_lvl_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_ptr_2)
-                                A_lvl_tbl1_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl1_2)
-                                A_lvl_tbl2_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_tbl2_2)
+                                Ct_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), Ct_lvl_3_val_2)
+                                B_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), B_lvl_2_val_2)
+                                B_lvl_ptr_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), B_lvl_ptr_2)
+                                B_lvl_tbl1_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), B_lvl_tbl1_2)
+                                B_lvl_tbl2_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), B_lvl_tbl2_2)
+                                A_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_2_val_2)
+                                A_lvl_ptr_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_ptr_2)
+                                A_lvl_tbl1_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_tbl1_2)
+                                A_lvl_tbl2_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_tbl2_2)
                                 B_lvl_q = B_lvl_ptr_3[1]
                                 B_lvl_q_stop = B_lvl_ptr_3[1 + 1]
                                 if B_lvl_q < B_lvl_q_stop
@@ -52,8 +53,8 @@ begin
                                 else
                                     B_lvl_i_stop = 0
                                 end
-                                phase_start_2 = max(1, 1 + fld(B_lvl_stop2 * (tid + -1), Threads.nthreads()))
-                                phase_stop_2 = min(B_lvl_stop2, B_lvl_i_stop, fld(B_lvl_stop2 * tid, Threads.nthreads()))
+                                phase_start_2 = max(1, 1 + fld(B_lvl_stop2 * (tid + -1), n))
+                                phase_stop_2 = min(B_lvl_stop2, B_lvl_i_stop, fld(B_lvl_stop2 * tid, n))
                                 if phase_stop_2 >= phase_start_2
                                     if B_lvl_tbl2_3[B_lvl_q] < phase_start_2
                                         B_lvl_q = Finch.scansearch(B_lvl_tbl2_3, phase_start_2, B_lvl_q, B_lvl_q_stop - 1)
@@ -66,8 +67,8 @@ begin
                                         end
                                         if B_lvl_i < phase_stop_2
                                             Ct_lvl_q = (1 - 1) * B_lvl_stop2 + B_lvl_i
-                                            for i_7 = 1:A_lvl_stop1
-                                                Ct_lvl_2_q = (Ct_lvl_q - 1) * A_lvl_stop1 + i_7
+                                            for i_5 = 1:A_lvl_stop1
+                                                Ct_lvl_2_q = (Ct_lvl_q - 1) * A_lvl_stop1 + i_5
                                                 A_lvl_q = A_lvl_ptr_3[1]
                                                 A_lvl_q_stop = A_lvl_ptr_3[1 + 1]
                                                 if A_lvl_q < A_lvl_q_stop
@@ -106,10 +107,10 @@ begin
                                                             else
                                                                 A_lvl_i_stop_2 = 0
                                                             end
-                                                            phase_stop_6 = min(i_7, A_lvl_i_stop_2)
-                                                            if phase_stop_6 >= i_7
-                                                                if A_lvl_tbl1_3[A_lvl_q] < i_7
-                                                                    A_lvl_q_2 = Finch.scansearch(A_lvl_tbl1_3, i_7, A_lvl_q, A_lvl_q_step - 1)
+                                                            phase_stop_6 = min(i_5, A_lvl_i_stop_2)
+                                                            if phase_stop_6 >= i_5
+                                                                if A_lvl_tbl1_3[A_lvl_q] < i_5
+                                                                    A_lvl_q_2 = Finch.scansearch(A_lvl_tbl1_3, i_5, A_lvl_q, A_lvl_q_step - 1)
                                                                 end
                                                                 while true
                                                                     A_lvl_i_2 = A_lvl_tbl1_3[A_lvl_q_2]
@@ -144,8 +145,8 @@ begin
                                             phase_stop_13 = min(phase_stop_2, B_lvl_i)
                                             if B_lvl_i == phase_stop_13
                                                 Ct_lvl_q = (1 - 1) * B_lvl_stop2 + phase_stop_13
-                                                for i_9 = 1:A_lvl_stop1
-                                                    Ct_lvl_2_q_2 = (Ct_lvl_q - 1) * A_lvl_stop1 + i_9
+                                                for i_7 = 1:A_lvl_stop1
+                                                    Ct_lvl_2_q_2 = (Ct_lvl_q - 1) * A_lvl_stop1 + i_7
                                                     A_lvl_q_3 = A_lvl_ptr_3[1]
                                                     A_lvl_q_stop_3 = A_lvl_ptr_3[1 + 1]
                                                     if A_lvl_q_3 < A_lvl_q_stop_3
@@ -184,10 +185,10 @@ begin
                                                                 else
                                                                     A_lvl_i_stop_4 = 0
                                                                 end
-                                                                phase_stop_16 = min(i_9, A_lvl_i_stop_4)
-                                                                if phase_stop_16 >= i_9
-                                                                    if A_lvl_tbl1_3[A_lvl_q_3] < i_9
-                                                                        A_lvl_q_4 = Finch.scansearch(A_lvl_tbl1_3, i_9, A_lvl_q_3, A_lvl_q_step_3 - 1)
+                                                                phase_stop_16 = min(i_7, A_lvl_i_stop_4)
+                                                                if phase_stop_16 >= i_7
+                                                                    if A_lvl_tbl1_3[A_lvl_q_3] < i_7
+                                                                        A_lvl_q_4 = Finch.scansearch(A_lvl_tbl1_3, i_7, A_lvl_q_3, A_lvl_q_step_3 - 1)
                                                                     end
                                                                     while true
                                                                         A_lvl_i_4 = A_lvl_tbl1_3[A_lvl_q_4]
@@ -223,7 +224,7 @@ begin
                                         end
                                     end
                                 end
-                                phase_start_23 = max(1, 1 + fld(B_lvl_stop2 * tid, Threads.nthreads()), 1 + B_lvl_i_stop)
+                                phase_start_23 = max(1, 1 + fld(B_lvl_stop2 * tid, n), 1 + B_lvl_i_stop)
                                 if B_lvl_stop2 >= phase_start_23
                                     B_lvl_stop2 + 1
                                 end

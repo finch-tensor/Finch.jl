@@ -108,72 +108,78 @@ maxby(a, b) = a[1] < b[1] ? b : a
 
 Returns `rem(x, y)` normally, returns zero and issues a warning if `y` is zero.
 """
-rem_nothrow(x, y) =
+function rem_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in rem"); zero(promote_type(typeof(x), typeof(y))))
     else
         rem(x, y)
     end
+end
 
 """
     mod_nothrow(x, y)
 
 Returns `mod(x, y)` normally, returns zero and issues a warning if `y` is zero.
 """
-mod_nothrow(x, y) =
+function mod_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in mod"); zero(promote_type(typeof(x), typeof(y))))
     else
         mod(x, y)
     end
+end
 
 """
     mod1_nothrow(x, y)
 
 Returns `mod1(x, y)` normally, returns one and issues a warning if `y` is zero.
 """
-mod1_nothrow(x, y) =
+function mod1_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in mod1"); one(promote_type(typeof(x), typeof(y))))
     else
         mod1(x, y)
     end
+end
 
 """
     fld_nothrow(x, y)
 
 Returns `fld(x, y)` normally, returns zero and issues a warning if `y` is zero.
 """
-fld_nothrow(x, y) =
+function fld_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in fld"); zero(promote_type(typeof(x), typeof(y))))
     else
         fld(x, y)
     end
+end
 
 """
     fld1_nothrow(x, y)
 
 Returns `fld1(x, y)` normally, returns one and issues a warning if `y` is zero.
 """
-fld1_nothrow(x, y) =
+function fld1_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in fld1"); one(promote_type(typeof(x), typeof(y))))
     else
         fld1(x, y)
     end
+end
 
 """
     cld_nothrow(x, y)
 
 Returns `cld(x, y)` normally, returns zero and issues a warning if `y` is zero.
 """
-cld_nothrow(x, y) =
+function cld_nothrow(x, y)
     if iszero(y)
         (@warn("Division by zero in cld"); zero(promote_type(typeof(x), typeof(y))))
     else
         cld(x, y)
     end
+end
 
 struct InitMin{D} end
 (f::InitMin{D})(x) where {D} = x

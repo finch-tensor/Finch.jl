@@ -180,11 +180,13 @@ A = Tensor(
     fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
 )
 B = Tensor(Dense(SparseList(Element(0.0)))) #DO NOT DO THIS, B has the wrong fill value
-@finch (B .= 0;
-for j in _, i in _
-    B[i, j] = A[i, j] + 1
-end;
-return B)
+@finch begin
+    B .= 0
+    for j in _, i in _
+        B[i, j] = A[i, j] + 1
+    end
+    return B
+end
 countstored(B)
 
 # output
@@ -200,11 +202,13 @@ A = Tensor(
     fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
 )
 B = Tensor(Dense(SparseList(Element(1.0))))
-@finch (B .= 1;
-for j in _, i in _
-    B[i, j] = A[i, j] + 1
-end;
-return B)
+@finch begin
+    B .= 1
+    for j in _, i in _
+        B[i, j] = A[i, j] + 1
+    end
+    return B
+end
 countstored(B)
 
 # output
@@ -225,11 +229,13 @@ A = Tensor(
 )
 B = Tensor(Dense(SparseList(Element(1.0))))
 x = 1 #DO NOT DO THIS, Finch cannot see the value of x anymore
-@finch (B .= 1;
-for j in _, i in _
-    B[i, j] = A[i, j] + x
-end;
-return B)
+@finch begin
+    B .= 1
+    for j in _, i in _
+        B[i, j] = A[i, j] + x
+    end
+    return B
+end
 countstored(B)
 
 # output
@@ -242,11 +248,13 @@ However, there are some situations where you may want a value to be dynamic. For
 ```julia
 function saxpy(x, a, y)
     z = Tensor(SparseList(Element(0.0)))
-    @finch (z .= 0;
-    for i in _
-        z[i] = a * x[i] + y[i]
-    end;
-    return z)
+    @finch begin
+        z .= 0
+        for i in _
+            z[i] = a * x[i] + y[i]
+        end
+        return z
+    end
 end
 ```
 
@@ -263,11 +271,13 @@ A = Tensor(
 B = ones(4, 3)
 C = Scalar(0.0)
 f(x, y) = x * y # DO NOT DO THIS, Obscures *
-@finch (C .= 0;
-for j in _, i in _
-    C[] += f(A[i, j], B[i, j])
-end;
-return C)
+@finch begin
+    C .= 0
+    for j in _, i in _
+        C[] += f(A[i, j], B[i, j])
+    end
+    return C
+end
 
 # output
 
@@ -277,11 +287,13 @@ return C)
 Checking the generated code, we see that this code is indeed densifying (notice the for-loop which repeatedly evaluates `f(B[i, j], 0.0)`).
 
 ```jldoctest example1
-@finch_code (C .= 0;
-for j in _, i in _
-    C[] += f(A[i, j], B[i, j])
-end;
-return C)
+@finch_code begin
+    C .= 0
+    for j in _, i in _
+        C[] += f(A[i, j], B[i, j])
+    end
+    return C
+end
 
 # output
 

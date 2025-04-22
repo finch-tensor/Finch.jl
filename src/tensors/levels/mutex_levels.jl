@@ -60,8 +60,7 @@ function Base.show(io::IO, lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl}
     print(io, ")")
 end
 
-labelled_show(io::IO, ::SubFiber{<:MutexLevel}) =
-    print(io, "Mutex -> ")
+labelled_show(io::IO, ::SubFiber{<:MutexLevel}) = print(io, "Mutex -> ")
 
 function labelled_children(fbr::SubFiber{<:MutexLevel})
     lvl = fbr.lvl
@@ -74,7 +73,9 @@ end
 @inline level_axes(lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} =
-    level_fill_value(Lvl)
+    level_fill_value(
+        Lvl
+    )
 data_rep_level(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = data_rep_level(Lvl)
 
 function isstructequal(a::T, b::T) where {T<:Mutex}

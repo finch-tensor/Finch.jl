@@ -68,8 +68,7 @@ function Base.show(io::IO, lvl::SeparateLevel{Lvl,Val}) where {Lvl,Val}
     print(io, ")")
 end
 
-labelled_show(io::IO, ::SubFiber{<:SeparateLevel}) =
-    print(io, "Pointer -> ")
+labelled_show(io::IO, ::SubFiber{<:SeparateLevel}) = print(io, "Pointer -> ")
 
 function labelled_children(fbr::SubFiber{<:SeparateLevel})
     lvl = fbr.lvl
@@ -83,7 +82,9 @@ end
 @inline level_axes(lvl::SeparateLevel{Lvl,Val}) where {Lvl,Val} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{SeparateLevel{Lvl,Val}}) where {Lvl,Val} = level_eltype(Lvl)
 @inline level_fill_value(::Type{<:SeparateLevel{Lvl,Val}}) where {Lvl,Val} =
-    level_fill_value(Lvl)
+    level_fill_value(
+        Lvl
+    )
 data_rep_level(::Type{<:SeparateLevel{Lvl,Val}}) where {Lvl,Val} = data_rep_level(Lvl)
 
 function (fbr::SubFiber{<:SeparateLevel})(idxs...)

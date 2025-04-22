@@ -64,8 +64,9 @@ end
 @inline level_size(lvl::DenseLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::DenseLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(::Type{<:DenseLevel{Ti,Lvl}}) where {Ti,Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:DenseLevel{Ti,Lvl}}) where {Ti,Lvl} =
-    level_fill_value(Lvl)
+@inline level_fill_value(::Type{<:DenseLevel{Ti,Lvl}}) where {Ti,Lvl} = level_fill_value(
+    Lvl
+)
 data_rep_level(::Type{<:DenseLevel{Ti,Lvl}}) where {Ti,Lvl} = DenseData(data_rep_level(Lvl))
 
 function isstructequal(a::T, b::T) where {T<:Dense}

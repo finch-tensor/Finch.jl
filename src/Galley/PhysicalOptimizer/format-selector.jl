@@ -45,13 +45,13 @@ function select_output_format(output_stats::TensorStats,
         approx_sparsity = approx_nnz_per / get_dim_size(output_stats, prefix[1])
         dense_memory_footprint = prev_nnz * get_dim_size(output_stats, prefix[1])
         if approx_sparsity > 0.5 && dense_memory_footprint < 3 * 10^10
-            #            if get_dim_space_size(output_stats, Set(prefix)) > 10^10
+            #            if get_dim_space_size(output_stats, StableSet(prefix)) > 10^10
             #                throw(OutOfMemoryError())
             #            end
             push!(formats, t_dense)
         elseif approx_sparsity > 0.05 && dense_memory_footprint < 3 * 10^10 &&
             (length(formats) == 0 ? true : formats[end] != t_bytemap) # TODO: Check out finch double bytemap bug
-            #            if get_dim_space_size(output_stats, Set(prefix)) > 10^10
+            #            if get_dim_space_size(output_stats, StableSet(prefix)) > 10^10
             #                throw(OutOfMemoryError())
             #            end
             push!(formats, t_bytemap)

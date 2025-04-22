@@ -4,19 +4,19 @@ const ID = 4
 
 @enum LogicNodeKind begin
     immediate = 0ID
-    deferred  = 1ID
-    field     = 2ID
-    alias     = 3ID
-    table     = 4ID | IS_TREE
-    mapjoin   = 5ID | IS_TREE
+    deferred = 1ID
+    field = 2ID
+    alias = 3ID
+    table = 4ID | IS_TREE
+    mapjoin = 5ID | IS_TREE
     aggregate = 6ID | IS_TREE
-    reorder   = 7ID | IS_TREE
-    relabel   = 8ID | IS_TREE
-    reformat  = 9ID | IS_TREE
-    subquery  = 10ID | IS_TREE
-    query     = 11ID | IS_TREE | IS_STATEFUL
-    produces  = 12ID | IS_TREE | IS_STATEFUL
-    plan      = 13ID | IS_TREE | IS_STATEFUL
+    reorder = 7ID | IS_TREE
+    relabel = 8ID | IS_TREE
+    reformat = 9ID | IS_TREE
+    subquery = 10ID | IS_TREE
+    query = 11ID | IS_TREE | IS_STATEFUL
+    produces = 12ID | IS_TREE | IS_STATEFUL
+    plan = 13ID | IS_TREE | IS_STATEFUL
 end
 
 """
@@ -75,7 +75,9 @@ aggregate
 
 Logical AST statement that reorders the dimensions of `arg` to be `idxs...`.
 Dimensions known to be length 1 may be dropped. Dimensions that do not exist in
-`arg` may be added.
+`arg` may be added. Dimensions added in this way are known as "extruded"
+dimensions. These dimensions have length 1, but may be broadcasted along
+dimensions which are not 1 in a mapjoin.
 """
 reorder
 
@@ -478,6 +480,46 @@ function propagate_fields(node::LogicNode, fields=Dict{LogicNode,Any}())
         similarterm(
             node, operation(node), map(x -> propagate_fields(x, fields), arguments(node))
         )
+    else
+        node
+    end
+end
+
+function getextrudes(ex, extrudes, fields)
+    if ex.kind === alias
+        return extrudes[ex]
+    elseif @capture ex table(~tns, ~idxs...)
+        return []
+    elseif @capture ex mapjoin(~f, ~args...)
+        return intersect(map(arg -> getextrudes(arg, extrudes, fields), args)...)
+    elseif @capture ex aggregate(~op, ~init, ~arg, ~idxs...)
+        return setdiff(getextrudes(arg, extrudes, fields), idxs)
+    elseif @capture ex reorder(~arg, ~idxs...)
+        idxs_2 = getfields(arg, fields)
+        exts_2 = getextrudes(arg, extrudes, fields)
+        return union(intersect(exts_2, idxs), setdiff(idxs, idxs_2))
+    elseif @capture ex relabel(~arg, ~idxs...)
+        idxs_2 = getfields(arg, fields)
+        reidx = Dict(map(Pair, idxs_2, idxs)...)
+        return map(idx -> reidx[idx], getextrudes(arg, extrudes, fields))
+    elseif @capture ex reformat(~tns, ~arg)
+        getextrudes(arg, extrudes, fields)
+    else
+        []
+    end
+end
+
+function propagate_extrudes(node::LogicNode, extrudes=Dict(), fields=Dict())
+    if @capture node plan(~stmts...)
+        stmts = map(stmts) do stmt
+            propagate_extrudes(stmt, extrudes)
+        end
+        plan(stmts...)
+    elseif @capture node query(~lhs, ~rhs)
+        extrudes[lhs] = compute_extrudes(rhs, extrudes)
+        fields[lhs] = getfields(rhs, fields)
+        #Rewrite(Postwalk(@rule ~a::isalias => )
+        node
     else
         node
     end

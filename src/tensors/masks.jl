@@ -38,12 +38,12 @@ function unfurl(ctx, arr::VirtualDiagMaskColumn, ext, mode, proto::typeof(defaul
     j = arr.j
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> value(:($(ctx(j)) - 1)),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
-            stop = (ctx, ext) -> j,
-            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
+            stop=(ctx, ext) -> j,
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
@@ -89,8 +89,8 @@ function unfurl(ctx, arr::VirtualUpTriMaskColumn, ext, mode, proto::typeof(defau
     j = arr.j
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> value(:($(ctx(j)))),
-            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
+            stop=(ctx, ext) -> value(:($(ctx(j)))),
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(;
             body=(ctx, ext) -> Run(; body=FillLeaf(false))
@@ -138,8 +138,8 @@ function unfurl(ctx, arr::VirtualLoTriMaskColumn, ext, mode, proto::typeof(defau
     j = arr.j
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> value(:($(ctx(j)) - 1)),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
             body=(ctx, ext) -> Run(; body=FillLeaf(true))
@@ -180,6 +180,7 @@ struct VirtualBandMaskColumn
 end
 
 FinchNotation.finch_leaf(x::VirtualBandMaskColumn) = virtual(x)
+Finch.virtual_size(ctx, ::VirtualBandMaskColumn) = (auto,)
 
 function unfurl(ctx, arr::VirtualBandMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
@@ -199,12 +200,12 @@ end
 function unfurl(ctx, arr::VirtualBandMaskColumn, ext, mode, proto::typeof(defaultread))
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> value(:($(ctx(j)) - 1)),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> call(-, arr.j_lo, 1),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
-            stop = (ctx, ext) -> k,
-            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
+            stop=(ctx, ext) -> arr.j_hi,
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(;
             body=(ctx, ext) -> Run(; body=FillLeaf(false))
@@ -299,12 +300,12 @@ function unfurl(ctx, arr::VirtualSplitMaskColumn, ext_2, mode, proto::typeof(def
     P = arr.arr.P
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> call(fld, call(*, arr.arr.stop, call(-, j, 1)), P),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> call(fld, call(*, arr.arr.stop, call(-, j, 1)), P),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
-            stop = (ctx, ext) -> call(fld, call(*, arr.arr.stop, j), P),
-            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
+            stop=(ctx, ext) -> call(fld, call(*, arr.arr.stop, j), P),
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
@@ -397,10 +398,10 @@ function unfurl(ctx, arr::VirtualChunkMask, ext, mode, proto::typeof(defaultread
         arr=arr,
         body=Sequence([
             Phase(;
-                stop = (ctx, ext) -> call(cld, arr.stop, arr.b),
-                body = (ctx, ext) -> Lookup(;
-                body=(ctx, j) -> VirtualChunkMaskColumn(arr, j)
-            ),
+                stop=(ctx, ext) -> call(cld, arr.stop, arr.b),
+                body=(ctx, ext) -> Lookup(;
+                    body=(ctx, j) -> VirtualChunkMaskColumn(arr, j)
+                ),
             ),
             Phase(;
                 body=(ctx, ext) -> Run(;
@@ -415,12 +416,12 @@ function unfurl(ctx, arr::VirtualChunkMaskColumn, ext, mode, proto::typeof(defau
     j = arr.j
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> call(*, arr.arr.b, call(-, j, 1)),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> call(*, arr.arr.b, call(-, j, 1)),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
-            stop = (ctx, ext) -> call(*, arr.arr.b, j),
-            body = (ctx, ext) -> Run(; body=FillLeaf(true)),
+            stop=(ctx, ext) -> call(*, arr.arr.b, j),
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
         ),
         Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
     ])
@@ -431,8 +432,8 @@ function unfurl(
 )
     Sequence([
         Phase(;
-            stop = (ctx, ext) -> call(*, call(fld, arr.arr.stop, arr.arr.b), arr.arr.b),
-            body = (ctx, ext) -> Run(; body=FillLeaf(false)),
+            stop=(ctx, ext) -> call(*, call(fld, arr.arr.stop, arr.arr.b), arr.arr.b),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
         ),
         Phase(;
             body=(ctx, ext) -> Run(; body=FillLeaf(true))

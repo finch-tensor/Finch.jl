@@ -72,7 +72,7 @@ function get_stats_list(ctx::GalleyOptimizer, prgm)
     deferred_prgm = Finch.defer_tables(:prgm, prgm)
     stats_list = Vector{TensorStats}()
     idx_counter = 0
-    cannonical_idx = Dict{IndexExpr,IndexExpr}()
+    cannonical_idx = OrderedDict{IndexExpr,IndexExpr}()
     for node in PostOrderDFS(deferred_prgm)
         if node.kind == table
             cannonical_idxs = Symbol[]
@@ -123,7 +123,7 @@ function Finch.set_options(
 end
 
 StatsList = Vector{TensorStats}
-galley_codes = Dict{
+galley_codes = OrderedDict{
     Tuple{GalleyOptimizer,Number,LogicNode},Vector{Tuple{StatsList,Tuple{Function,Expr}}}
 }()
 function (ctx::AdaptiveExecutor)(prgm)

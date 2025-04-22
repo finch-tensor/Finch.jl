@@ -181,8 +181,7 @@ function get_spike_tail(ctx, node::VirtualOffsetArray, ext, ext_2)
     )
 end
 
-visit_fill_leaf_leaf(node, tns::VirtualOffsetArray) =
-    visit_fill_leaf_leaf(node, tns.body)
+visit_fill_leaf_leaf(node, tns::VirtualOffsetArray) = visit_fill_leaf_leaf(node, tns.body)
 function visit_simplify(node::VirtualOffsetArray)
     VirtualOffsetArray(visit_simplify(node.body), node.delta)
 end

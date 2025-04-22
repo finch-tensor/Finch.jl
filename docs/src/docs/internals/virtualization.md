@@ -22,10 +22,13 @@ julia> A = Tensor(SparseList(Element(0)), [0, 2, 0, 0, 3]);
 
 julia> B = Tensor(Dense(Element(0)), [11, 12, 13, 14, 15]);
 
-julia> @finch (C .= 0;
-       for i in _
-           C[i] = A[i] * B[i]
-       end);
+julia> @finch begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+       end
+(C = Tensor(SparseList{Int64}(Element{0, Int64, Int64}([24, 45]), 5, [1, 3], [2, 5])),)
 
 julia> C
 5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
@@ -49,16 +52,20 @@ happens when we use the `@finch` macro (we've stripped line numbers from the
 result to clean it up):
 
 ```jldoctest example1; filter=r"Finch.(FinchNotation.)?"
-julia> Finch.regensym(Finch.striplines((@macroexpand @finch (C .= 0;
-       for i in _
-           C[i] = A[i] * B[i]
-       end))))
+julia> Finch.regensym(Finch.striplines(@macroexpand @finch begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+       end))
 quote
-    _res_1 = (Finch.execute)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.declare_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), literal_instance(0), (Finch.FinchNotation.literal_instance)(Finch.auto)), begin
-                        let i = index_instance(i)
-                            (Finch.FinchNotation.loop_instance)(i, Finch.FinchNotation.Auto(), (Finch.FinchNotation.assign_instance)((Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), (Finch.FinchNotation.updater_instance)((Finch.FinchNotation.literal_instance)((Finch.FinchNotation.initwrite)((Finch.fill_value)(C)))), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.literal_instance)((Finch.FinchNotation.initwrite)((Finch.fill_value)(C))), (Finch.FinchNotation.call_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:*), (Finch.FinchNotation.finch_leaf_instance)(*)), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:A), (Finch.FinchNotation.finch_leaf_instance)(A)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:B), (Finch.FinchNotation.finch_leaf_instance)(B)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))))))
-                        end
-                    end), (Finch.FinchNotation.yieldbind_instance)(variable_instance(:C))); )
+    _res_1 = (Finch.execute)(begin
+                (Finch.FinchNotation.block_instance)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.declare_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), literal_instance(0), (Finch.FinchNotation.literal_instance)(Finch.auto)), begin
+                            let i = index_instance(i)
+                                (Finch.FinchNotation.loop_instance)(i, Finch.FinchNotation.Auto(), (Finch.FinchNotation.assign_instance)((Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), (Finch.FinchNotation.updater_instance)((Finch.FinchNotation.literal_instance)((initwrite)((fill_value)(C)))), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.literal_instance)((initwrite)((fill_value)(C))), (Finch.FinchNotation.call_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:*), (Finch.FinchNotation.finch_leaf_instance)(*)), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:A), (Finch.FinchNotation.finch_leaf_instance)(A)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:B), (Finch.FinchNotation.finch_leaf_instance)(B)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))))))
+                            end
+                        end), (Finch.FinchNotation.yieldbind_instance)(variable_instance(:C)))
+            end; )
     begin
         C = _res_1[:C]
     end
@@ -77,11 +84,13 @@ convenient to use the unexported macro `Finch.finch_program_instance`:
 ```jldoctest example1
 julia> using Finch: @finch_program_instance
 
-julia> prgm = Finch.@finch_program_instance (C .= 0;
-       for i in _
-           C[i] = A[i] * B[i]
-       end;
-       return C)
+julia> prgm = Finch.@finch_program_instance begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+           return C
+       end
 Finch program instance: begin
   tag(C, Tensor(SparseList(Element(0)))) .= 0
   for i = Auto()
@@ -130,11 +139,13 @@ julia> function pointwise_sum(As...)
            for A_var in A_vars
                ex = @finch_program_instance $A_var[i] + $ex
            end
-           prgm = @finch_program_instance (B .= 0;
-           for i in _
-               B[i] = $ex
-           end;
-           return B)
+           prgm = @finch_program_instance begin
+               B .= 0
+               for i in _
+                   B[i] = $ex
+               end
+               return B
+           end
            return Finch.execute(prgm).B
        end
 pointwise_sum (generic function with 1 method)

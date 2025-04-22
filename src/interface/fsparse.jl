@@ -306,3 +306,45 @@ function ffindnz(src)
     val = tmp.lvl.lvl.val
     (ntuple(n -> tbl[n][1:nnz], ndims(src))..., val[1:nnz])
 end
+
+"""
+    fspeye(dims...)
+
+Return a Boolean identity matrix of size `dims`, in COO format.
+
+See also: (`mat.speye`)(https://www.mathworks.com/help/matlab/ref/speye.html)
+"""
+function fspeye(dims...)
+    idx = collect(1:min(dims...))
+    Tensor(
+        SparseCOOLevel{length(dims)}(
+            Pattern(), dims, [1, length(idx) + 1], ((idx for _ in dims)...,)
+        ),
+    )
+end
+
+"""
+    eye_python(m, n, k, z)
+
+Return a matrix of size `m` by `n`, in COO format with a diagonal offset by `k`, with fill value z.
+
+See also: (`python.eye`)(https://data-apis.org/array-api/latest/API_specification/generated/array_api.eye.html)
+"""
+function eye_python(m, n, k, z)
+    if k > 0
+        i_idx = collect(1:min(m, n - k))
+        j_idx = collect((1 + k):min(n, m + k))
+    elseif k == 0
+        i_idx = collect(1:min(m, n))
+        j_idx = i_idx
+    elseif k < 0
+        i_idx = collect((1 - k):min(m, n - k))
+        j_idx = collect(1:min(n, m + k))
+    end
+    val = [typeof(z)(true) for _ in i_idx]
+    Tensor(
+        SparseCOOLevel{2}(
+            ElementLevel{z}(val), (m, n), [1, length(i_idx) + 1], (i_idx, j_idx)
+        ),
+    )
+end

@@ -79,6 +79,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
             if length(idx_2) == arr.ndims
                 val = freshen(ctx, :val)
                 if mode.kind === reader
+                    #=We don't know what init is, but it won't be used here =#
                     Thunk(;
                         preamble=quote
                             $val = $(arr.data)[$(map(ctx, idx_2)...)]
@@ -89,9 +90,10 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                                 nothing, nothing, arr.eltype, nothing, gensym(), val
                             ),
                             mode,
-                        ), #=We don't know what init is, but it won't be used here =#
+                        ),
                     )
                 else
+                    #=We don't know what init is, but it won't be used here =#
                     Thunk(;
                         body=(ctx,) -> instantiate(
                             ctx,
@@ -104,7 +106,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                                 :($(arr.data)[$(map(ctx, idx_2)...)]),
                             ),
                             mode,
-                        ), #=We don't know what init is, but it won't be used here=#
+                        ),
                     )
                 end
             else
@@ -125,6 +127,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
     if arr.ndims == 0
         val = freshen(ctx, :val)
         if mode.kind === reader
+            #=We don't know what init is, but it won't be used here =#
             Thunk(;
                 preamble=quote
                     $val = $(arr.data)[]
@@ -133,9 +136,10 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
                     ctx,
                     VirtualScalar(nothing, nothing, arr.eltype, nothing, gensym(), val),
                     mode,
-                ), #=We don't know what init is, but it won't be used here =#
+                ),
             )
         else
+            #=We don't know what init is, but it won't be used here =#
             Thunk(;
                 body=(ctx,) -> instantiate(
                     ctx,
@@ -144,7 +148,7 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
                         :($(arr.data)[]),
                     ),
                     mode,
-                ), #=We don't know what init is, but it won't be used here=#
+                ),
             )
         end
     else
@@ -201,9 +205,9 @@ function Base.summary(io::IO, arr::AsArray)
     #summary(io, arr.fbr)
 end
 
-Base.size(arr::AsArray)                                            = size(arr.fbr)
-Base.getindex(arr::AsArray{T,N}, i::Vararg{Int,N}) where {T,N}     = arr.fbr[i...]
-Base.getindex(arr::AsArray{T,N}, i::Vararg{Any,N}) where {T,N}     = arr.fbr[i...]
+Base.size(arr::AsArray) = size(arr.fbr)
+Base.getindex(arr::AsArray{T,N}, i::Vararg{Int,N}) where {T,N} = arr.fbr[i...]
+Base.getindex(arr::AsArray{T,N}, i::Vararg{Any,N}) where {T,N} = arr.fbr[i...]
 Base.setindex!(arr::AsArray{T,N}, v, i::Vararg{Int,N}) where {T,N} = arr.fbr[i...] = v
 Base.setindex!(arr::AsArray{T,N}, v, i::Vararg{Any,N}) where {T,N} = arr.fbr[i...] = v
 

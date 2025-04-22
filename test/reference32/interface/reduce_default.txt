@@ -6,30 +6,26 @@ julia> A = Tensor(Dense(SparseList(Element(0.0))), [0.0 0.0 4.4; 1.1 0.0 0.0; 2.
  2.2  0.0  5.5
  3.3  0.0  0.0
 julia> reduce(+, A, dims = (1,))
-3 Tensor{DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}:
- 6.6
- 0.0
- 9.9
+1×3 Tensor{DenseLevel{Int32, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
+ 6.6  0.0  9.9
 julia> reduce(+, A, dims = 1)
-3 Tensor{DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}:
- 6.6
- 0.0
- 9.9
+1×3 Tensor{DenseLevel{Int32, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
+ 6.6  0.0  9.9
 julia> reduce(+, A, dims = (2,))
-4 Tensor{SparseDictLevel{Int32, Vector{Int32}, Vector{Int32}, Vector{Int32}, Dict{Tuple{Int32, Int32}, Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}:
+4×1 Tensor{DenseLevel{Int32, SparseDictLevel{Int32, Vector{Int32}, Vector{Int32}, Vector{Int32}, Dict{Tuple{Int32, Int32}, Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  4.4
  1.1
  7.7
  3.3
 julia> reduce(+, A, dims = 2)
-4 Tensor{SparseDictLevel{Int32, Vector{Int32}, Vector{Int32}, Vector{Int32}, Dict{Tuple{Int32, Int32}, Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}:
+4×1 Tensor{DenseLevel{Int32, SparseDictLevel{Int32, Vector{Int32}, Vector{Int32}, Vector{Int32}, Dict{Tuple{Int32, Int32}, Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  4.4
  1.1
  7.7
  3.3
 julia> reduce(+, A, dims = (1, 2))
- Tensor{ElementLevel{0.0, Float64, Int32, Vector{Float64}}}:
-16.5
+1×1 Tensor{DenseLevel{Int32, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
+ 16.5
 julia> reduce(+, A, dims = (:))
 16.5
 

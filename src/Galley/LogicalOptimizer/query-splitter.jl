@@ -1,5 +1,5 @@
 function count_index_occurences(nodes)
-    vars = Set()
+    vars = StableSet()
     occurences = 0
     for n in nodes
         for c in PostOrderDFS(n)
@@ -78,7 +78,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     agg_init = has_agg ? aq.idx_init[first(aq.reduce_idxs)] : nothing
     node_id_counter = maximum([n.node_id for n in PostOrderDFS(pe)]) + 1
     queries = []
-    cost_cache = Dict()
+    cost_cache = OrderedDict()
     cur_occurences = count_index_occurences([pe])
     if verbose > 2 && cur_occurences > max_kernel_size
         println(
@@ -89,7 +89,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     while cur_occurences > max_kernel_size
         nodes_to_remove = nothing
         new_query = nothing
-        new_agg_idxs = Set()
+        new_agg_idxs = StableSet()
         min_cost = Inf
         for node in PostOrderDFS(pe)
             if node.kind in (Value, Input, Alias, Index) ||
@@ -127,7 +127,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
                     cache_key = sort([n.node_id for n in s])
                     if !haskey(cost_cache, cache_key)
                         s_stat = merge_tensor_stats(node.op.val, [n.stats for n in s]...)
-                        s_reduce_idxs = Set{IndexExpr}()
+                        s_reduce_idxs = StableSet{IndexExpr}()
                         for idx in n_reduce_idxs
                             if !any([
                                 idx ∈ get_index_set(n.stats) for n in setdiff(node.args, s)
@@ -193,7 +193,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
     return queries
 end
 
-function split_queries(ST, max_kernel_size, p::PlanNode; alias_stats=Dict(), verbose)
+function split_queries(ST, max_kernel_size, p::PlanNode; alias_stats=OrderedDict(), verbose)
     new_queries = []
     for query in p.queries
         append!(new_queries, split_query(query, ST, max_kernel_size, alias_stats, verbose))

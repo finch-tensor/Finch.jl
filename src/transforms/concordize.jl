@@ -17,7 +17,7 @@ function (ctx::DepthCalculatorVisitor)(node::FinchNode)
     if node.kind === loop
         ctx(node.ext)
         ctx.rec[node.idx] = ctx.depth
-        ctx_2 = DepthCalculatorVisitor(; depth=ctx.depth + 1, rec=ctx.rec)
+        ctx_2 = DepthCalculatorVisitor(; depth=(ctx.depth + 1), rec=ctx.rec)
         ctx_2(node.body)
     elseif node.kind === define
         ctx.rec[node.lhs] = ctx.depth

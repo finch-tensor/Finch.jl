@@ -182,14 +182,14 @@ end
 # TODO: use loop_order to label indexes
 function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_prgm)
     tensor_counter = [0]
-    index_sym_dict = Dict{IndexExpr,IndexExpr}()
+    index_sym_dict = OrderedDict{IndexExpr,IndexExpr}()
     name = q.name.name
     mat_expr = q.expr
     loop_order = [idx.name for idx in q.loop_order]
     output_formats = [f.val for f in mat_expr.formats]
     output_idx_order = [idx.name for idx in mat_expr.idx_order]
     agg_expr = mat_expr.expr
-    output_default = get_default_value(agg_expr.stats)
+    output_fill_value = get_fill_value(agg_expr.stats)
     output_dimensions = [get_dim_size(mat_expr.stats, idx) for idx in output_idx_order]
     agg_op = agg_expr.op.val
     rhs_expr = agg_expr.arg
@@ -199,7 +199,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
 
     output_tensor = initialize_tensor(output_formats,
         output_dimensions,
-        output_default)
+        output_fill_value)
     output_name = cannonicalize ? :output_tensor : name
     output_access = initialize_access(output_name,
         output_tensor,
@@ -209,7 +209,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
         read=false,
         cannonicalize=cannonicalize)
     dec_instance = declare_instance(variable_instance(output_name),
-        literal_instance(output_default), literal_instance(auto))
+        literal_instance(output_fill_value), literal_instance(auto))
 
     prgm_instance = assign_instance(output_access, literal_instance(agg_op), rhs_instance)
     loop_order = [
@@ -239,7 +239,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
 
     if return_prgm
         output_tensor_init = tensor_initializer(
-            output_formats, output_dimensions, output_default
+            output_formats, output_dimensions, output_fill_value
         )
         return :($output_name = $output_tensor_init), prgm_instance
     end
@@ -247,12 +247,12 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
     Finch.execute(prgm_instance; mode=:fast)
     verbose >= 2 && println("Kernel Execution Took: ", time() - start_time)
     verbose >= 2 && println("Stored Entries: ", count_stored(output_tensor))
-    verbose >= 2 && println("Non Default Entries: ", count_non_default(output_tensor))
+    verbose >= 2 && println("Non fill Entries: ", count_non_fill(output_tensor))
     alias_dict[name] = output_tensor
 end
 
 function execute_plan(cse_plan::PlanNode, verbose)
-    alias_result = Dict{IndexExpr,Any}()
+    alias_result = OrderedDict{IndexExpr,Any}()
     for query in cse_plan.queries
         verbose > 2 && println("--------------- Computing: $(query.name) ---------------")
         verbose > 2 && println(query)
@@ -266,7 +266,7 @@ function get_execute_code(cse_plan::PlanNode, verbose)
     tensor_inits = []
     bodies = []
     for query in cse_plan.queries
-        tensor_init, body = execute_query(Dict(), query, verbose, false, true)
+        tensor_init, body = execute_query(OrderedDict(), query, verbose, false, true)
         push!(tensor_inits, tensor_init)
         push!(bodies, body)
     end

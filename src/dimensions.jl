@@ -208,21 +208,26 @@ function checklim(ctx::AbstractCompiler, a::FinchNode, b::FinchNode)
     end
 end
 
-@kwdef struct ParallelDimension{Ext,Device} <: AbstractExtent
+@kwdef struct ParallelDimension{Ext,Device,Schedule} <: AbstractExtent
     ext::Ext
     device::Device
+    schedule::Schedule
 end
 
 @kwdef struct VirtualParallelDimension <: AbstractVirtualExtent
     ext
     device
+    schedule
 end
 
 FinchNotation.finch_leaf(x::VirtualParallelDimension) = virtual(x)
-function virtualize(ctx, ex, ::Type{ParallelDimension{Ext,Device}}) where {Ext,Device}
+function virtualize(
+    ctx, ex, ::Type{ParallelDimension{Ext,Device,Schedule}}
+) where {Ext,Device,Schedule}
     VirtualParallelDimension(
         virtualize(ctx, :($ex.ext), Ext),
         virtualize(ctx, :($ex.device), Device),
+        virtualize(ctx, :($ex.schedule), Schedule),
     )
 end
 function lower(ctx, ex::VirtualParallelDimension)
@@ -230,23 +235,28 @@ function lower(ctx, ex::VirtualParallelDimension)
 end
 
 """
-    parallel(ext, device=CPU(nthreads()))
+parallel(ext, device=CPU(nthreads()), schedule=static_schedule())
 
-A dimension `ext` that is parallelized over `device`. The `ext` field is usually
+A dimension `ext` that is parallelized over `device` using the `schedule`. The `ext` field is usually
 `_`, or dimensionless, but can be any standard dimension argument.
 """
-parallel(dim, device=CPU(Threads.nthreads())) = ParallelDimension(dim, device)
-
-function virtual_call_def(ctx, alg, ::typeof(parallel), ::Any, ext)
-    ext = resolve(ctx, ext)
-    n = cache!(ctx, :n, value(:(Threads.nthreads()), Int))
-    virtual_call(ctx, parallel, ext, finch_leaf(VirtualCPU(nothing, n)))
+function parallel(dim, device=cpu(Threads.nthreads()), schedule=static_schedule())
+    ParallelDimension(dim, device, schedule)
 end
 
-function virtual_call_def(ctx, alg, ::typeof(parallel), ::Any, ext, device)
+function virtual_call_def(
+    ctx,
+    alg,
+    ::typeof(parallel),
+    ::Any,
+    ext,
+    device=finch_leaf(virtual_call(ctx, cpu)),
+    schedule=finch_leaf(VirtualFinchStaticSchedule(:dynamic)),
+)
     ext = resolve(ctx, ext)
     device = resolve(ctx, device)
-    VirtualParallelDimension(ext, device)
+    schedule = resolve(ctx, schedule)
+    VirtualParallelDimension(ext, device, schedule)
 end
 
 Base.:(==)(a::VirtualParallelDimension, b::VirtualParallelDimension) = a.ext == b.ext
@@ -255,19 +265,20 @@ getstart(ext::VirtualParallelDimension) = getstart(ext.ext)
 getstop(ext::VirtualParallelDimension) = getstop(ext.ext)
 
 function combinedim(ctx, a::VirtualParallelDimension, b::VirtualExtent)
-    VirtualParallelDimension(resultdim(ctx, a.ext, b), a.device)
+    VirtualParallelDimension(resultdim(ctx, a.ext, b), a.device, a.schedule)
 end
 combinedim(ctx, a::VirtualParallelDimension, b::VirtualSuggestedExtent) = a
 function combinedim(ctx, a::VirtualParallelDimension, b::VirtualParallelDimension)
     @assert a.device == b.device
-    VirtualParallelDimension(combinedim(ctx, a.ext, b.ext), a.device)
+    @assert a.schedule == b.schedule
+    VirtualParallelDimension(combinedim(ctx, a.ext, b.ext), a.device, a.schedule)
 end
 
 function resolvedim(ext::VirtualParallelDimension)
-    VirtualParallelDimension(resolvedim(ext.ext), ext.device)
+    VirtualParallelDimension(resolvedim(ext.ext), ext.device, ext.schedule)
 end
 function cache_dim!(ctx, tag, ext::VirtualParallelDimension)
-    VirtualParallelDimension(cache_dim!(ctx, tag, ext.ext), ext.device)
+    VirtualParallelDimension(cache_dim!(ctx, tag, ext.ext), ext.device, ext.schedule)
 end
 
 promote_rule(::Type{VirtualExtent}, ::Type{VirtualExtent}) = VirtualExtent
@@ -287,7 +298,7 @@ end
 
 shiftdim(ext::Auto, delta) = auto
 function shiftdim(ext::VirtualParallelDimension, delta)
-    VirtualParallelDimension(ext, shiftdim(ext.ext, delta), ext.device)
+    VirtualParallelDimension(ext, shiftdim(ext.ext, delta), ext.device, ext.schedule)
 end
 
 function shiftdim(ext::FinchNode, body)
@@ -313,7 +324,7 @@ end
 
 scaledim(ext::Auto, scale) = auto
 function scaledim(ext::VirtualParallelDimension, scale)
-    VirtualParallelDimension(ext, scaledim(ext.ext, scale), ext.device)
+    VirtualParallelDimension(ext, scaledim(ext.ext, scale), ext.device, ext.schedule)
 end
 
 function scaledim(ext::FinchNode, body)
@@ -421,7 +432,7 @@ end
 
 combinedim(ctx, a::VirtualSuggestedExtent, b::VirtualContinuousExtent) = b
 
-is_continuous_extent(x::VirtualParallelDimension) = is_continuous_extent(x.dim)
+is_continuous_extent(x::VirtualParallelDimension) = is_continuous_extent(x.ext)
 
 function virtual_intersect(ctx, a::VirtualContinuousExtent, b::VirtualContinuousExtent)
     VirtualContinuousExtent(;

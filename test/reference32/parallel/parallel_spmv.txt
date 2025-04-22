@@ -14,24 +14,25 @@ begin
     A_lvl_2_stop = A_lvl_2.shape
     A_lvl_3 = A_lvl_2.lvl
     A_lvl_3_val = A_lvl_3.val
+    n = (Base.Threads).nthreads()
     A_lvl_2_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_2_stop) != $(x_lvl_stop))"))
     Finch.resize_if_smaller!(y_lvl_2_val, A_lvl_stop)
     Finch.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_stop)
-    y_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), y_lvl_2_val)
-    A_lvl_3_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_3_val)
-    A_lvl_2_ptr_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_2_ptr)
-    A_lvl_2_idx_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), A_lvl_2_idx)
-    x_lvl_2_val_2 = (Finch).transfer(CPUSharedMemory(CPU(Threads.nthreads())), x_lvl_2_val)
-    Threads.@threads for tid = 1:Threads.nthreads()
+    y_lvl_2_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), y_lvl_2_val)
+    A_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_3_val)
+    A_lvl_2_ptr_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_2_ptr)
+    A_lvl_2_idx_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), A_lvl_2_idx)
+    x_lvl_2_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), x_lvl_2_val)
+    Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                y_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), y_lvl_2_val_2)
-                                A_lvl_3_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_3_val_2)
-                                A_lvl_2_ptr_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_ptr_2)
-                                A_lvl_2_idx_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), A_lvl_2_idx_2)
-                                x_lvl_2_val_3 = (Finch).transfer(CPUThread(tid, CPU(Threads.nthreads()), Serial()), x_lvl_2_val_2)
-                                phase_start_2 = max(1, 1 + fld(A_lvl_stop * (tid + -1), Threads.nthreads()))
-                                phase_stop_2 = min(A_lvl_stop, fld(A_lvl_stop * tid, Threads.nthreads()))
+                                y_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), y_lvl_2_val_2)
+                                A_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_3_val_2)
+                                A_lvl_2_ptr_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_2_ptr_2)
+                                A_lvl_2_idx_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), A_lvl_2_idx_2)
+                                x_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), x_lvl_2_val_2)
+                                phase_start_2 = max(1, 1 + fld(A_lvl_stop * (tid + -1), n))
+                                phase_stop_2 = min(A_lvl_stop, fld(A_lvl_stop * tid, n))
                                 if phase_stop_2 >= phase_start_2
                                     for j_6 = phase_start_2:phase_stop_2
                                         y_lvl_q = (1 - 1) * A_lvl_stop + j_6
@@ -71,7 +72,7 @@ begin
                                         end
                                     end
                                 end
-                                phase_start_6 = max(1, 1 + fld(A_lvl_stop * tid, Threads.nthreads()))
+                                phase_start_6 = max(1, 1 + fld(A_lvl_stop * tid, n))
                                 if A_lvl_stop >= phase_start_6
                                     A_lvl_stop + 1
                                 end

@@ -180,7 +180,7 @@ end
 function data_rep_level(
     ::Type{<:RunListLevel{Ti,Ptr,Right,merge,Lvl}}
 ) where {Ti,Ptr,Right,merge,Lvl}
-    DenseData(data_rep_level(Lvl))
+    RepeatData(data_rep_level(Lvl))
 end
 
 function isstructequal(a::T, b::T) where {T<:RunList}
@@ -279,7 +279,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualRunListLevel, ::DefaultStyle)
             $(lvl.ptr),
             $(lvl.right),
             $(ctx(lvl.buf));
-            merge=$(lvl.merge),
+            merge=($(lvl.merge)),
         )
     end
 end
@@ -715,7 +715,7 @@ function unfurl(
             end,
             body=(ctx) -> AcceptRun(;
                 body=(ctx, ext) -> Thunk(;
-                    preamble = quote
+                    preamble=quote
                         $qos_3 = $qos + ($(local_i_prev) < ($(ctx(getstart(ext))) - $unit))
                         if $qos_3 > $qos_stop
                             $qos_2 = $qos_stop + 1
@@ -723,13 +723,27 @@ function unfurl(
                                 $qos_stop = max($qos_stop << 1, 1)
                             end
                             Finch.resize_if_smaller!($(lvl.right), $qos_stop)
-                            Finch.fill_range!($(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop)
-                            $(contain(ctx_2 -> assemble_level!(ctx_2, lvl.buf, value(qos_2, Tp), value(qos_stop, Tp)), ctx))
+                            Finch.fill_range!(
+                                $(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop
+                            )
+                            $(contain(
+                                ctx_2 -> assemble_level!(
+                                    ctx_2,
+                                    lvl.buf,
+                                    value(qos_2, Tp),
+                                    value(qos_stop, Tp),
+                                ),
+                                ctx,
+                            ))
                         end
                         $dirty = false
                     end,
-                    body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty), mode),
-                    epilogue = quote
+                    body=(ctx) -> instantiate(
+                        ctx,
+                        VirtualHollowSubFiber(lvl.buf, value(qos_3, Tp), dirty),
+                        mode,
+                    ),
+                    epilogue=quote
                         if $dirty
                             $(lvl.right)[$qos] = $(ctx(getstart(ext))) - $unit
                             $(lvl.right)[$qos_3] = $(ctx(getstop(ext)))

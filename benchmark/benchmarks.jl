@@ -205,7 +205,8 @@ C = Tensor(Dense(SparseList(Element(0.0))))
 @finch (C .= 0; for i=_, j=_, k=_; C[j, i] += A[k, i] * B[k, i] end)
 """
 cmd = pipeline(
-    `$(Base.julia_cmd()) --project=$(Base.active_project()) --eval $code`; stdout=IOBuffer()
+    `$(Base.julia_cmd()) --project=$(Base.active_project()) --eval $code`;
+    stdout=IOBuffer(),
 )
 
 SUITE["compile"]["time_to_first_SpGeMM"] = @benchmarkable run(cmd)
@@ -220,13 +221,13 @@ let
         Finch.execute_code(
             :ex,
             typeof(
-                Finch.@finch_program_instance (
-                    C .= 0;
+                Finch.@finch_program_instance begin
+                    C .= 0
                     for i in _, j in _, k in _
                         C[j, i] += A[k, i] * B[k, j]
-                    end;
+                    end
                     return C
-                )
+                end
             ),
         )
     end
@@ -238,11 +239,13 @@ let
 
     SUITE["compile"]["compile_pretty_triangle"] = @benchmarkable begin
         A, c = ($A, $c)
-        @finch_code (c .= 0;
-        for i in _, j in _, k in _
-            c[] += A[i, j] * A[j, k] * A[i, k]
-        end;
-        return c)
+        @finch_code begin
+            c .= 0
+            for i in _, j in _, k in _
+                c[] += A[i, j] * A[j, k] * A[i, k]
+            end
+            return c
+        end
     end
 end
 
@@ -292,10 +295,12 @@ SUITE["indices"] = BenchmarkGroup()
 
 function spmv32(A, x)
     y = Tensor(Dense{Int32}(Element{0.0,Float64,Int32}()))
-    @finch (y .= 0;
-    for i in _, j in _
-        y[i] += A[j, i] * x[j]
-    end)
+    @finch begin
+        y .= 0
+        for i in _, j in _
+            y[i] += A[j, i] * x[j]
+        end
+    end
     return y
 end
 
@@ -309,10 +314,12 @@ end
 
 function spmv_p1(A, x)
     y = Tensor(Dense(Element(0.0)))
-    @finch (y .= 0;
-    for i in _, j in _
-        y[i] += A[j, i] * x[j]
-    end)
+    @finch begin
+        y .= 0
+        for i in _, j in _
+            y[i] += A[j, i] * x[j]
+        end
+    end
     return y
 end
 
@@ -336,10 +343,12 @@ end
 
 function spmv64(A, x)
     y = Tensor(Dense{Int64}(Element{0.0,Float64,Int64}()))
-    @finch (y .= 0;
-    for i in _, j in _
-        y[i] += A[j, i] * x[j]
-    end)
+    @finch begin
+        y .= 0
+        for i in _, j in _
+            y[i] += A[j, i] * x[j]
+        end
+    end
     return y
 end
 

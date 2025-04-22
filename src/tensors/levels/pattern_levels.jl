@@ -24,8 +24,7 @@ similar_level(::PatternLevel, ::Any, ::Type, ::Vararg) = PatternLevel()
 
 countstored_level(lvl::PatternLevel, pos) = pos
 
-labelled_show(io::IO, ::SubFiber{<:PatternLevel}) =
-    print(io, true)
+labelled_show(io::IO, ::SubFiber{<:PatternLevel}) = print(io, true)
 
 Base.resize!(lvl::PatternLevel) = lvl
 

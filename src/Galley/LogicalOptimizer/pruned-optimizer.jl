@@ -4,19 +4,19 @@ function branch_and_bound(
     k,
     max_subquery_costs,
     alias_hash,
-    cost_cache=Dict{UInt,Float64}(),
+    cost_cache=OrderedDict{UInt,Float64}(),
 )
     input_aq = copy_aq(input_aq)
     PLAN_AND_COST = Tuple{Vector{IndexExpr},Vector{PlanNode},AnnotatedQuery,Float64}
-    optimal_orders = Dict{Set{IndexExpr},PLAN_AND_COST}(
-        Set{IndexExpr}() => (PlanNode[], PlanNode[], input_aq, 0)
+    optimal_orders = OrderedDict{StableSet{IndexExpr},PLAN_AND_COST}(
+        StableSet{IndexExpr}() => (PlanNode[], PlanNode[], input_aq, 0)
     )
     prev_new_optimal_orders = optimal_orders
     # To speed up inference, we cache cost calculations for each set of already reduced idxs
     # and proposed reduction index.
     for _ in 1:length(component)
-        best_idx_ext = Dict{
-            Set{IndexExpr},
+        best_idx_ext = OrderedDict{
+            StableSet{IndexExpr},
             Tuple{AnnotatedQuery,IndexExpr,Vector{IndexExpr},Vector{PlanNode},Float64},
         }()
         for (vars, pc) in prev_new_optimal_orders
@@ -46,14 +46,14 @@ function branch_and_bound(
         end
         num_to_keep = Int(min(k, length(best_idx_ext)))
         # At each step, we only keep 'k' options for the next index.
-        top_k_idx_ext = Dict{
-            Set{IndexExpr},
+        top_k_idx_ext = OrderedDict{
+            StableSet{IndexExpr},
             Tuple{AnnotatedQuery,IndexExpr,Vector{IndexExpr},Vector{PlanNode},Float64},
         }(
             sort(collect(best_idx_ext); by=(v_p) -> v_p[2][5])[1:num_to_keep]
         )
 
-        new_optimal_orders = Dict{Set{IndexExpr},PLAN_AND_COST}()
+        new_optimal_orders = OrderedDict{StableSet{IndexExpr},PLAN_AND_COST}()
         for (new_vars, idx_ext_info) in top_k_idx_ext
             aq, idx, old_order, old_queries, cost = idx_ext_info
             new_aq = copy_aq(aq)
@@ -71,14 +71,14 @@ function branch_and_bound(
 
     # During the greedy pass, we compute upper bounds on the cost of each subquery which
     # will be used in the pruned pass.
-    optimal_subquery_costs = Dict{Set{IndexExpr},Float64}()
+    optimal_subquery_costs = OrderedDict{StableSet{IndexExpr},Float64}()
     if k == 1
         for vars in keys(optimal_orders)
             optimal_subquery_costs[vars] = optimal_orders[vars][4]
         end
     end
-    if haskey(optimal_orders, Set{IndexExpr}([i for i in component]))
-        return optimal_orders[Set{IndexExpr}([i for i in component])],
+    if haskey(optimal_orders, StableSet{IndexExpr}([i for i in component]))
+        return optimal_orders[StableSet{IndexExpr}([i for i in component])],
         optimal_subquery_costs,
         cost_cache
     else
@@ -91,8 +91,8 @@ end
 
 function pruned_query_to_plan(
     input_aq::AnnotatedQuery,
-    cost_cache::Dict{UInt,Float64},
-    alias_hash::Dict{IndexExpr,UInt};
+    cost_cache::OrderedDict{UInt,Float64},
+    alias_hash::OrderedDict{IndexExpr,UInt};
     use_greedy=false,
 )
     total_cost = 0
@@ -106,7 +106,7 @@ function pruned_query_to_plan(
         end
 
         (greedy_order, greedy_queries, greedy_aq, greedy_cost), greedy_subquery_costs, cost_cache = branch_and_bound(
-            cur_aq, component, 1, Dict(), alias_hash, cost_cache
+            cur_aq, component, 1, OrderedDict(), alias_hash, cost_cache
         )
         if length(component) >= 10 || use_greedy
             append!(elimination_order, greedy_order)
@@ -172,7 +172,7 @@ function exact_query_to_plan(input_aq::AnnotatedQuery, cost_cache, alias_hash)
     elimination_order = []
     for component in input_aq.connected_components
         (exact_order, exact_queries, exact_aq, exact_cost), exact_subquery_costs, cost_cache = branch_and_bound(
-            input_aq, component, Inf, Dict(), alias_hash, cost_cache
+            input_aq, component, Inf, OrderedDict(), alias_hash, cost_cache
         )
         append!(elimination_order, exact_order)
         total_cost += exact_cost

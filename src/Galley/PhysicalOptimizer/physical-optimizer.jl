@@ -1,5 +1,5 @@
 function get_input_stats(expr::PlanNode; include_aliases=true)
-    input_stats = Dict{Int,TensorStats}()
+    input_stats = OrderedDict{Int,TensorStats}()
     for n in PostOrderDFS(expr)
         if n.kind == Input || (include_aliases && n.kind == Alias)
             input_stats[n.node_id] = n.stats
@@ -12,7 +12,7 @@ function reorder_input(input, expr, loop_order::Vector{IndexExpr})
     input_order = get_index_order(input.stats)
     fixed_order = relative_sort(input_order, loop_order; rev=true)
     agg_expr = Aggregate(
-        initwrite(get_default_value(input.stats)), get_default_value(input.stats), input
+        initwrite(get_fill_value(input.stats)), get_fill_value(input.stats), input
     )
     agg_expr.stats = input.stats
     formats = select_output_format(agg_expr.stats, reverse(input_order), fixed_order)
@@ -38,7 +38,7 @@ function split_plan_to_physical_plan(
     split_plan::PlanNode,
     ST,
     alias_to_loop_order,
-    alias_stats::Dict{IndexExpr,TensorStats};
+    alias_stats::OrderedDict{IndexExpr,TensorStats};
     only_add_loop_order=true,
     transpose_aliases=false,
     verbose=0,
@@ -80,7 +80,7 @@ end
 function logical_query_to_physical_queries(
     query::PlanNode,
     ST,
-    alias_stats::Dict{IndexExpr,TensorStats};
+    alias_stats::OrderedDict{IndexExpr,TensorStats};
     only_add_loop_order=true,
     transpose_aliases=false,
     verbose=0,
@@ -96,7 +96,7 @@ function logical_query_to_physical_queries(
     end
     insert_statistics!(ST, query; bindings=alias_stats)
     insert_node_ids!(query)
-    id_to_node = Dict()
+    id_to_node = OrderedDict()
     for node in PreOrderDFS(query)
         id_to_node[node.node_id] = node
     end
@@ -113,11 +113,11 @@ function logical_query_to_physical_queries(
 
     agg_op = nothing
     agg_init = nothing
-    reduce_idxs = Set{IndexExpr}()
+    reduce_idxs = StableSet{IndexExpr}()
     if expr.kind == Aggregate
         agg_op = expr.op
         agg_init = expr.init
-        reduce_idxs = Set{IndexExpr}([i.name for i in expr.idxs])
+        reduce_idxs = StableSet{IndexExpr}([i.name for i in expr.idxs])
         expr = expr.arg
     end
 
@@ -130,13 +130,13 @@ function logical_query_to_physical_queries(
     disjunct_and_conjunct_stats = (
         conjuncts=[s.stats for s in disjuncts_and_conjuncts.conjuncts],
         disjuncts=[s.stats for s in disjuncts_and_conjuncts.disjuncts])
-    agg_op = isnothing(agg_op) ? initwrite(get_default_value(expr.stats)) : agg_op
+    agg_op = isnothing(agg_op) ? initwrite(get_fill_value(expr.stats)) : agg_op
 
     output_stats = reduce_tensor_stats(agg_op, agg_init, reduce_idxs, expr.stats)
     if !isnothing(output_order)
         for idx in output_order
             if idx ∉ get_index_set(output_stats)
-                dummy_stat = ST(get_default_value(output_stats))
+                dummy_stat = ST(get_fill_value(output_stats))
                 add_dummy_idx!(dummy_stat, idx; idx_pos=1)
                 push!(disjunct_and_conjunct_stats.conjuncts, dummy_stat)
             end
@@ -189,8 +189,8 @@ function logical_query_to_physical_queries(
             alias_expr = Alias(intermediate_query.name.name)
             alias_expr.stats = reorder_stats
             result_expr = Aggregate(
-                initwrite(get_default_value(alias_expr.stats)),
-                get_default_value(alias_expr.stats),
+                initwrite(get_fill_value(alias_expr.stats)),
+                get_fill_value(alias_expr.stats),
                 alias_expr,
             )
             result_expr.stats = reorder_stats

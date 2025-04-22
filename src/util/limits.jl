@@ -201,8 +201,9 @@ limit_types = [
 ]
 for S in limit_types
     @eval begin
-        @inline Base.promote_rule(::Type{Limit{T}}, ::Type{$S}) where {T} =
-            Limit{promote_type(T, $S)}
+        @inline Base.promote_rule(::Type{Limit{T}}, ::Type{$S}) where {T} = Limit{
+            promote_type(T, $S)
+        }
         Base.convert(::Type{Limit{T}}, i::$S) where {T} = limit(convert(T, i))
         Limit(i::$S) = Limit{$S}(i, tiny_zero())
         (::Type{$S})(i::Limit{T}) where {T} = convert($S, i.val)

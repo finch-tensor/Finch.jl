@@ -553,14 +553,14 @@
             # Computes a horizontal blur a row at a time
             input = Tensor(Dense(Dense(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
-            cpu = CPU(Threads.nthreads())
-            tmp = transfer(CPULocalMemory(cpu), Tensor(Dense(Element(0))))
+            Cpu = cpu(Threads.nthreads())
+            tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
                 "parallel/parallel_blur.jl",
                 @finch_code begin
                     output .= 0
-                    for y in parallel(_, cpu)
+                    for y in parallel(_, Cpu)
                         tmp .= 0
                         for x in _
                             tmp[x] += input[x - 1, y] + input[x, y] + input[x + 1, y]
@@ -578,14 +578,14 @@
             # Computes a horizontal blur a row at a time
             input = Tensor(Dense(SparseList(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
-            cpu = CPU(Threads.nthreads())
-            tmp = transfer(CPULocalMemory(cpu), Tensor(Dense(Element(0))))
+            Cpu = cpu(Threads.nthreads())
+            tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
                 "parallel/parallel_blur_sparse.jl",
                 @finch_code begin
                     output .= 0
-                    for y in parallel(_, cpu)
+                    for y in parallel(_, Cpu)
                         tmp .= 0
                         for x in _
                             tmp[x] += input[x - 1, y] + input[x, y] + input[x + 1, y]
@@ -685,6 +685,117 @@
             end
 
             @test norm(y - permutedims(A) * x) / norm(permutedims(A) * x) < 1e-10
+        end
+
+        # Check that passing static_schedule() as argument to parallel is working
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), static_schedule())
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+        end
+
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), static_schedule(:dynamic))
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+        end
+
+        # Check that passing greedy_schedule as argument to parallel is working
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), greedy_schedule(4))
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+        end
+
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), greedy_schedule(4, :dynamic))
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+        end
+
+        # Check that passing julia_schedule as argument to parallel is working
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), julia_schedule(4))
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+        end
+
+        let
+            A = Tensor(Dense(SparseList(Element(0.0))), fsprand(UInt, 42, 42, 0.1))
+            x = Tensor(Dense(Element(0.0)), rand(UInt, 42))
+            y = Tensor(Dense(Element(0.0)))
+
+            @finch begin
+                y .= 0
+                for j in parallel(_, cpu(Threads.nthreads()), julia_schedule(4, :dynamic))
+                    for i in _
+                        y[j] += A[i, j] * x[i]
+                    end
+                end
+            end
+
+            y_ref = swizzle(A, 2, 1) * x
+            @test norm(y - y_ref) / norm(y_ref) < 1e-10
         end
     end
 end

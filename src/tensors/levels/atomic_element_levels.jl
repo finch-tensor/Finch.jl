@@ -44,8 +44,7 @@ function transfer(lvl::AtomicElementLevel{Vf,Tv,Tp}, device, style) where {Vf,Tv
     return AtomicElementLevel{Vf,Tv,Tp}(transfer(device, lvl.val))
 end
 
-pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} =
-    Pattern{Tp}()
+pattern!(lvl::AtomicElementLevel{Vf,Tv,Tp}) where {Vf,Tv,Tp} = Pattern{Tp}()
 function set_fill_value!(lvl::AtomicElementLevel{Vf,Tv,Tp}, init) where {Vf,Tv,Tp}
     AtomicElementLevel{init,Tv,Tp}(lvl.val)
 end
@@ -63,8 +62,7 @@ function Base.show(io::IO, lvl::AtomicElementLevel{Vf,Tv,Tp,Val}) where {Vf,Tv,T
     print(io, ")")
 end
 
-labelled_show(io::IO, fbr::SubFiber{<:AtomicElementLevel}) =
-    print(io, fbr.lvl.val[fbr.pos])
+labelled_show(io::IO, fbr::SubFiber{<:AtomicElementLevel}) = print(io, fbr.lvl.val[fbr.pos])
 
 @inline level_ndims(::Type{<:AtomicElementLevel}) = 0
 @inline level_size(::AtomicElementLevel) = ()

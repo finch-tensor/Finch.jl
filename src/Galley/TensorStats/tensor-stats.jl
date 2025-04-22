@@ -3,17 +3,17 @@
 # `Nothing` is considered a part of the physical definition which may be undefined for logical
 # intermediates but is required to be defined for the inputs to an executable query.
 @auto_hash_equals mutable struct TensorDef
-    index_set::Set{IndexExpr}
-    dim_sizes::Dict{IndexExpr,UInt128}
-    default_value::Any
+    index_set::StableSet{IndexExpr}
+    dim_sizes::OrderedDict{IndexExpr,Float64}
+    fill_val::Any
     level_formats::Union{Nothing,Vector{LevelFormat}}
     index_order::Union{Nothing,Vector{IndexExpr}}
     index_protocols::Union{Nothing,Vector{AccessProtocol}}
 end
 function TensorDef(x)
     TensorDef(
-        Set{IndexExpr}(),
-        Dict{IndexExpr,UInt128}(),
+        StableSet{IndexExpr}(),
+        OrderedDict{IndexExpr,Float64}(),
         x,
         IndexExpr[],
         IndexExpr[],
@@ -22,9 +22,9 @@ function TensorDef(x)
 end
 
 function copy_def(def::TensorDef)
-    TensorDef(Set{IndexExpr}(x for x in def.index_set),
-        Dict{IndexExpr,UInt128}(x for x in def.dim_sizes),
-        def.default_value,
+    TensorDef(StableSet{IndexExpr}(x for x in def.index_set),
+        OrderedDict{IndexExpr,Float64}(x for x in def.dim_sizes),
+        def.fill_val,
         isnothing(def.level_formats) ? nothing : [x for x in def.level_formats],
         isnothing(def.index_order) ? nothing : [x for x in def.index_order],
         isnothing(def.index_protocols) ? nothing : [x for x in def.index_protocols])
@@ -60,27 +60,27 @@ end
 function TensorDef(tensor::Tensor, indices)
     shape_tuple = size(tensor)
     level_formats = get_tensor_formats(tensor::Tensor)
-    dim_size = Dict{IndexExpr,UInt128}(
+    dim_size = OrderedDict{IndexExpr,Float64}(
         indices[i] => shape_tuple[i] for i in 1:length(size(tensor))
     )
-    default_value = Finch.fill_value(tensor)
+    fill_val = Finch.fill_value(tensor)
     return TensorDef(
-        Set{IndexExpr}(indices), dim_size, default_value, level_formats, indices, nothing
+        StableSet{IndexExpr}(indices), dim_size, fill_val, level_formats, indices, nothing
     )
 end
 
 function reindex_def(indices, def::TensorDef)
     @assert length(indices) == length(def.index_order)
-    rename_dict = Dict{IndexExpr,IndexExpr}()
+    rename_dict = OrderedDict{IndexExpr,IndexExpr}()
     for i in eachindex(indices)
         rename_dict[def.index_order[i]] = indices[i]
     end
-    new_index_set = Set{IndexExpr}()
+    new_index_set = StableSet{IndexExpr}()
     for idx in def.index_set
         push!(new_index_set, rename_dict[idx])
     end
 
-    new_dim_sizes = Dict{IndexExpr,UInt128}()
+    new_dim_sizes = OrderedDict{IndexExpr,Float64}()
     for (idx, size) in def.dim_sizes
         new_dim_sizes[rename_dict[idx]] = size
     end
@@ -88,9 +88,20 @@ function reindex_def(indices, def::TensorDef)
     return TensorDef(
         new_index_set,
         new_dim_sizes,
-        def.default_value,
+        def.fill_val,
         def.level_formats,
         indices,
+        def.index_protocols,
+    )
+end
+
+function set_fill_value!(def::TensorDef, fill_val)
+    TensorDef(
+        def.index_set,
+        def.dim_sizes,
+        fill_val,
+        def.level_formats,
+        def.index_order,
         def.index_protocols,
     )
 end
@@ -125,7 +136,7 @@ get_dim_sizes(def::TensorDef) = def.dim_sizes
 get_dim_size(def::TensorDef, idx::IndexExpr) = def.dim_sizes[idx]
 get_index_set(def::TensorDef) = def.index_set
 get_index_order(def::TensorDef) = def.index_order
-get_default_value(def::TensorDef) = def.default_value
+get_fill_value(def::TensorDef) = def.fill_val
 function get_index_format(def::TensorDef, idx::IndexExpr)
     def.level_formats[findfirst(x -> x == idx, def.index_order)]
 end
@@ -136,12 +147,12 @@ end
 get_index_protocols(def::TensorDef) = def.index_protocols
 
 function get_dim_space_size(def::TensorDef, indices)
-    dim_space_size::UInt128 = 1
+    dim_space_size::Float64 = 1
     for idx in indices
         dim_space_size *= def.dim_sizes[idx]
     end
     if dim_space_size == 0 || dim_space_size > typemax(Int)
-        return UInt128(typemax(Int))^(sizeof(Int) * 8 - 1)
+        return Float64(typemax(Int))^(sizeof(Int) * 8 - 1)
     end
     return dim_space_size
 end
@@ -153,7 +164,7 @@ get_dim_sizes(stat::TensorStats) = get_dim_sizes(get_def(stat))
 get_dim_size(stat::TensorStats, idx::IndexExpr) = get_dim_size(get_def(stat), idx)
 get_index_set(stat::TensorStats) = get_index_set(get_def(stat))
 get_index_order(stat::TensorStats) = get_index_order(get_def(stat))
-get_default_value(stat::TensorStats) = get_default_value(get_def(stat))
+get_fill_value(stat::TensorStats) = get_fill_value(get_def(stat))
 get_index_format(stat::TensorStats, idx::IndexExpr) = get_index_format(get_def(stat), idx)
 get_index_formats(stat::TensorStats) = get_index_formats(get_def(stat))
 function get_index_protocol(stat::TensorStats, idx::IndexExpr)
@@ -194,7 +205,8 @@ function issimilar(stat1::NaiveStats, stat2::NaiveStats, rel_granularity)
 end
 
 function estimate_nnz(
-    stat::NaiveStats; indices=get_index_set(stat), conditional_indices=Set{IndexExpr}()
+    stat::NaiveStats; indices=get_index_set(stat),
+    conditional_indices=StableSet{IndexExpr}(),
 )
     return stat.cardinality / get_dim_space_size(stat, conditional_indices)
 end
@@ -206,17 +218,23 @@ end
 
 copy_stats(stat::NaiveStats) = NaiveStats(copy_def(stat.def), stat.cardinality)
 
-function NaiveStats(index_set, dim_sizes, cardinality, default_value)
-    NaiveStats(TensorDef(index_set, dim_sizes, default_value, nothing), cardinality)
+function NaiveStats(index_set, dim_sizes, cardinality, fill_val)
+    NaiveStats(TensorDef(index_set, dim_sizes, fill_val, nothing), cardinality)
 end
 
 function NaiveStats(x)
-    def = TensorDef(Set{IndexExpr}(), Dict{IndexExpr,Int}(), x, nothing, nothing, nothing)
+    def = TensorDef(
+        StableSet{IndexExpr}(), OrderedDict{IndexExpr,Int}(), x, nothing, nothing, nothing
+    )
     return NaiveStats(def, 1)
 end
 
 function reindex_stats(stat::NaiveStats, indices)
     return NaiveStats(reindex_def(indices, stat.def), stat.cardinality)
+end
+
+function set_fill_value!(stat::NaiveStats, fill_val)
+    return NaiveStats(set_fill_value!(stat.def, fill_val), stat.cardinality)
 end
 
 function relabel_index!(stats::NaiveStats, i::IndexExpr, j::IndexExpr)
@@ -230,9 +248,9 @@ end
 #################  DCStats Definition ######################################################
 
 struct DegreeConstraint
-    X::SmallBitSet
-    Y::SmallBitSet
-    d::UInt128
+    X::BitSet
+    Y::BitSet
+    d::Float64
 end
 DC = DegreeConstraint
 
@@ -242,9 +260,9 @@ end
 
 @auto_hash_equals mutable struct DCStats <: TensorStats
     def::TensorDef
-    idx_2_int::Dict{IndexExpr,Int}
-    int_2_idx::Dict{Int,IndexExpr}
-    dcs::Set{DC}
+    idx_2_int::OrderedDict{IndexExpr,Int}
+    int_2_idx::OrderedDict{Int,IndexExpr}
+    dcs::StableSet{DC}
 
     DCStats(def, idx_2_int, int_2_idx, dcs) = new(def, idx_2_int, int_2_idx, dcs)
 
@@ -253,9 +271,9 @@ end
             tensor = Tensor(tensor)
         end
         def = TensorDef(tensor, indices)
-        idx_2_int = Dict{IndexExpr,Int}()
-        int_2_idx = Dict{Int,IndexExpr}()
-        for (i, idx) in enumerate(Set(indices))
+        idx_2_int = OrderedDict{IndexExpr,Int}()
+        int_2_idx = OrderedDict{Int,IndexExpr}()
+        for (i, idx) in enumerate(StableSet(indices))
             idx_2_int[idx] = i
             int_2_idx[i] = idx
         end
@@ -280,14 +298,19 @@ function copy_stats(stat::DCStats)
         copy_def(stat.def),
         copy(stat.idx_2_int),
         copy(stat.int_2_idx),
-        Set{DC}(dc for dc in stat.dcs),
+        StableSet{DC}(dc for dc in stat.dcs),
     )
 end
-DCStats(x) = DCStats(TensorDef(x), Dict{IndexExpr,Int}(), Dict{Int,IndexExpr}(), Set{DC}())
+function DCStats(x)
+    DCStats(
+        TensorDef(x), OrderedDict{IndexExpr,Int}(), OrderedDict{Int,IndexExpr}(),
+        StableSet{DC}(),
+    )
+end
 
 # Return a stats object where values have been geometrically rounded.
 function get_cannonical_stats(stat::DCStats, rel_granularity=4)
-    new_dcs = Set{DC}()
+    new_dcs = StableSet{DC}()
     for dc in stat.dcs
         push!(new_dcs, DC(dc.X, dc.Y, geometric_round(rel_granularity, dc.d)))
     end
@@ -307,7 +330,7 @@ function issimilar(stat1::DCStats, stat2::DCStats, rel_granularity)
             end
         end
     else
-        dc_dict = Dict{DCKey}()
+        dc_dict = OrderedDict{DCKey}()
         for dc1 in stat1.dcs
             dc_dict[get_dc_key(dc1)] = dc1.d
         end
@@ -324,16 +347,16 @@ end
 
 get_def(stat::DCStats) = stat.def
 function get_index_bitset(stat::DCStats)
-    SmallBitSet(Int[stat.idx_2_int[x] for x in get_index_set(stat)])
+    BitSet(Int[stat.idx_2_int[x] for x in get_index_set(stat)])
 end
 
 idxs_to_bitset(stat::DCStats, indices) = idxs_to_bitset(stat.idx_2_int, indices)
-function idxs_to_bitset(idx_2_int::Dict{IndexExpr,Int}, indices)
-    SmallBitSet(Int[idx_2_int[idx] for idx in indices])
+function idxs_to_bitset(idx_2_int::OrderedDict{IndexExpr,Int}, indices)
+    BitSet(Int[idx_2_int[idx] for idx in indices])
 end
 bitset_to_idxs(stat::DCStats, bitset) = bitset_to_idxs(stat.int_2_idx, bitset)
-function bitset_to_idxs(int_2_idx::Dict{Int,IndexExpr}, bitset)
-    Set{IndexExpr}(int_2_idx[idx] for idx in bitset)
+function bitset_to_idxs(int_2_idx::OrderedDict{Int,IndexExpr}, bitset)
+    StableSet{IndexExpr}(int_2_idx[idx] for idx in bitset)
 end
 
 function add_dummy_idx!(stats::DCStats, i::IndexExpr; idx_pos=-1)
@@ -341,28 +364,28 @@ function add_dummy_idx!(stats::DCStats, i::IndexExpr; idx_pos=-1)
     new_idx_int = maximum(values(stats.idx_2_int); init=0) + 1
     stats.idx_2_int[i] = new_idx_int
     stats.int_2_idx[new_idx_int] = i
-    Y = idxs_to_bitset(stats, Set([i]))
-    push!(stats.dcs, DC(SmallBitSet(), Y, 1))
+    Y = idxs_to_bitset(stats, StableSet([i]))
+    push!(stats.dcs, DC(BitSet(), Y, 1))
 end
 
 function fix_cardinality!(stat::DCStats, card)
     had_dc = false
-    new_dcs = Set{DC}()
+    new_dcs = StableSet{DC}()
     for dc in stat.dcs
         if length(dc.X) == 0 && dc.Y == get_index_bitset(stat)
-            push!(new_dcs, DC(SmallBitSet(), get_index_bitset(stat), min(card, dc.d)))
+            push!(new_dcs, DC(BitSet(), get_index_bitset(stat), min(card, dc.d)))
             had_dc = true
         else
             push!(new_dcs, dc)
         end
     end
     if !had_dc
-        push!(new_dcs, DC(SmallBitSet(), get_index_bitset(stat), card))
+        push!(new_dcs, DC(BitSet(), get_index_bitset(stat), card))
     end
     stat.dcs = new_dcs
 end
 
-DCKey = NamedTuple{(:X, :Y),Tuple{SmallBitSet,SmallBitSet}}
+DCKey = NamedTuple{(:X, :Y),Tuple{BitSet,BitSet}}
 
 function infer_dc(l, ld, r, rd, all_dcs, new_dcs)
     if l.Y ⊇ r.X
@@ -377,8 +400,8 @@ end
 
 # When we're only attempting to infer for nnz estimation, we only need to consider
 # left dcs which have X = {}.
-function _infer_dcs(dcs::Set{DC}; timeout=Inf, strength=0)
-    all_dcs = Dict{DCKey,UInt128}()
+function _infer_dcs(dcs::StableSet{DC}; timeout=Inf, strength=0)
+    all_dcs = OrderedDict{DCKey,Float64}()
     for dc in dcs
         all_dcs[(X=dc.X, Y=dc.Y)] = dc.d
     end
@@ -390,7 +413,7 @@ function _infer_dcs(dcs::Set{DC}; timeout=Inf, strength=0)
         if strength <= 0
             max_dc_size = maximum([length(x.Y) for x in keys(prev_new_dcs)]; init=0)
         end
-        new_dcs = Dict{DCKey,UInt128}()
+        new_dcs = OrderedDict{DCKey,Float64}()
 
         for (l, ld) in all_dcs
             strength <= 1 && length(l.X) > 0 && continue
@@ -414,7 +437,7 @@ function _infer_dcs(dcs::Set{DC}; timeout=Inf, strength=0)
             time > timeout && break
         end
 
-        prev_new_dcs = Dict{DCKey,UInt128}()
+        prev_new_dcs = OrderedDict{DCKey,Float64}()
         for (dc_key, dc) in new_dcs
             strength <= 0 && length(dc_key.Y) < max_dc_size && continue
             all_dcs[dc_key] = dc
@@ -424,7 +447,7 @@ function _infer_dcs(dcs::Set{DC}; timeout=Inf, strength=0)
             finished = true
         end
     end
-    final_dcs = Set{DC}()
+    final_dcs = StableSet{DC}()
     for (dc_key, dc) in all_dcs
         push!(final_dcs, DC(dc_key.X, dc_key.Y, dc))
     end
@@ -440,7 +463,7 @@ function condense_stats!(stat::DCStats; timeout=100000, cheap=false)
         inferred_dcs = _infer_dcs(stat.dcs; timeout=min(timeout, 10000), strength=1)
         inferred_dcs = _infer_dcs(inferred_dcs; timeout=max(timeout - 10000, 0), strength=0)
     end
-    min_dcs = Dict{DCKey,Float64}()
+    min_dcs = OrderedDict{DCKey,Float64}()
     for dc in inferred_dcs
         valid = true
         for x in dc.X
@@ -457,7 +480,7 @@ function condense_stats!(stat::DCStats; timeout=100000, cheap=false)
         )
     end
 
-    end_dcs = Set{DC}()
+    end_dcs = StableSet{DC}()
     for (dc_key, d) in min_dcs
         push!(end_dcs, DC(dc_key.X, dc_key.Y, d))
     end
@@ -466,28 +489,28 @@ function condense_stats!(stat::DCStats; timeout=100000, cheap=false)
 end
 
 function estimate_nnz(
-    stat::DCStats; indices=get_index_set(stat), conditional_indices=Set{IndexExpr}()
+    stat::DCStats; indices=get_index_set(stat), conditional_indices=StableSet{IndexExpr}()
 )
     if length(indices) == 0
         return 1
     end
     indices_bitset = idxs_to_bitset(stat, indices)
     conditional_indices_bitset = idxs_to_bitset(stat, conditional_indices)
-    current_weights = Dict{SmallBitSet,UInt128}(
-        conditional_indices_bitset => 1, SmallBitSet() => 1
+    current_weights = OrderedDict{BitSet,Float64}(
+        conditional_indices_bitset => 1, BitSet() => 1
     )
-    frontier = Set{SmallBitSet}([SmallBitSet(), conditional_indices_bitset])
+    frontier = StableSet{BitSet}([BitSet(), conditional_indices_bitset])
     finished = false
     while !finished
-        current_bound::UInt128 = get(current_weights, indices_bitset, typemax(UInt128))
-        new_frontier = Set{SmallBitSet}()
+        current_bound::Float64 = get(current_weights, indices_bitset, typemax(Float64))
+        new_frontier = StableSet{BitSet}()
         finished = true
         for x in frontier
             weight = current_weights[x]
             for dc in stat.dcs
                 if x ⊇ dc.X
                     y = ∪(x, dc.Y)
-                    if min(current_bound, get(current_weights, y, typemax(UInt128))) >
+                    if min(current_bound, get(current_weights, y, typemax(Float64))) >
                        weight * dc.d && !((
                         (weight > (2^(sizeof(UInt) * 8 - 2))) ||
                         (dc.d > (2^(sizeof(UInt) * 8 - 2)))
@@ -498,7 +521,7 @@ function estimate_nnz(
                                 (weight > (2^(sizeof(UInt) * 8 - 2))) ||
                                 (dc.d > (2^(sizeof(UInt) * 8 - 2)))
                             )
-                                UInt128(2)^(sizeof(UInt) * 8)
+                                Float64(2)^(sizeof(UInt) * 8)
                             else
                                 (weight * dc.d)
                             end
@@ -519,10 +542,11 @@ function estimate_nnz(
     return min_weight
 end
 
-DCStats() = DCStats(TensorDef(), Set())
+DCStats() = DCStats(TensorDef(), StableSet())
 
 function _calc_dc_from_structure(
-    X::Set{IndexExpr}, Y::Set{IndexExpr}, indices::Vector{IndexExpr}, s::Tensor
+    X::StableSet{IndexExpr}, Y::StableSet{IndexExpr}, indices::Vector{IndexExpr},
+    s::Tensor,
 )
     Z = [i for i in indices if i ∉ ∪(X, Y)] # Indices that we want to project out before counting
     XY_ordered = [i for i in indices if i ∉ Z]
@@ -553,7 +577,7 @@ function _vector_structure_to_dcs(indices::Vector{Int}, s::Tensor)
             d_i[] += s[i]
         end
     end
-    return Set{DC}([DC(SmallBitSet(), SmallBitSet(indices), d_i[])])
+    return StableSet{DC}([DC(BitSet(), BitSet(indices), d_i[])])
 end
 
 function _matrix_structure_to_dcs(indices::Vector{Int}, s::Tensor)
@@ -598,11 +622,11 @@ function _matrix_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     end
     i = indices[2]
     j = indices[1]
-    return Set{DC}([DC(SmallBitSet(), SmallBitSet([i]), d_i[]),
-        DC(SmallBitSet(), SmallBitSet([j]), d_j[]),
-        DC(SmallBitSet([i]), SmallBitSet([j]), d_i_j[]),
-        DC(SmallBitSet([j]), SmallBitSet([i]), d_j_i[]),
-        DC(SmallBitSet(), SmallBitSet([i, j]), d_ij[]),
+    return StableSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
+        DC(BitSet(), BitSet([j]), d_j[]),
+        DC(BitSet([i]), BitSet([j]), d_i_j[]),
+        DC(BitSet([j]), BitSet([i]), d_j_i[]),
+        DC(BitSet(), BitSet([i, j]), d_ij[]),
     ])
 end
 
@@ -669,13 +693,13 @@ function _3d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     i = indices[3]
     j = indices[2]
     k = indices[1]
-    return Set{DC}([DC(SmallBitSet(), SmallBitSet([i]), d_i[]),
-        DC(SmallBitSet(), SmallBitSet([j]), d_j[]),
-        DC(SmallBitSet(), SmallBitSet([k]), d_k[]),
-        DC(SmallBitSet([i]), SmallBitSet([j, k]), d_i_jk[]),
-        DC(SmallBitSet([j]), SmallBitSet([i, k]), d_j_ik[]),
-        DC(SmallBitSet([k]), SmallBitSet([i, j]), d_k_ij[]),
-        DC(SmallBitSet(), SmallBitSet([i, j, k]), d_ijk[]),
+    return StableSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
+        DC(BitSet(), BitSet([j]), d_j[]),
+        DC(BitSet(), BitSet([k]), d_k[]),
+        DC(BitSet([i]), BitSet([j, k]), d_i_jk[]),
+        DC(BitSet([j]), BitSet([i, k]), d_j_ik[]),
+        DC(BitSet([k]), BitSet([i, j]), d_k_ij[]),
+        DC(BitSet(), BitSet([i, j, k]), d_ijk[]),
     ])
 end
 
@@ -759,15 +783,15 @@ function _4d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     j = indices[3]
     k = indices[2]
     l = indices[1]
-    return Set{DC}([DC(SmallBitSet(), SmallBitSet([i]), d_i[]),
-        DC(SmallBitSet(), SmallBitSet([j]), d_j[]),
-        DC(SmallBitSet(), SmallBitSet([k]), d_k[]),
-        DC(SmallBitSet(), SmallBitSet([l]), d_l[]),
-        DC(SmallBitSet([i]), SmallBitSet([j, k, l]), d_i_jkl[]),
-        DC(SmallBitSet([j]), SmallBitSet([i, k, l]), d_j_ikl[]),
-        DC(SmallBitSet([k]), SmallBitSet([i, j, l]), d_k_ijl[]),
-        DC(SmallBitSet([l]), SmallBitSet([i, j, k]), d_l_ijk[]),
-        DC(SmallBitSet(), SmallBitSet([i, j, k, l]), d_ijkl[]),
+    return StableSet{DC}([DC(BitSet(), BitSet([i]), d_i[]),
+        DC(BitSet(), BitSet([j]), d_j[]),
+        DC(BitSet(), BitSet([k]), d_k[]),
+        DC(BitSet(), BitSet([l]), d_l[]),
+        DC(BitSet([i]), BitSet([j, k, l]), d_i_jkl[]),
+        DC(BitSet([j]), BitSet([i, k, l]), d_j_ikl[]),
+        DC(BitSet([k]), BitSet([i, j, l]), d_k_ijl[]),
+        DC(BitSet([l]), BitSet([i, j, k]), d_l_ijk[]),
+        DC(BitSet(), BitSet([i, j, k, l]), d_ijkl[]),
     ])
 end
 
@@ -781,11 +805,11 @@ function _structure_to_dcs(int_2_idx, indices::Vector{Int}, s::Tensor)
     elseif length(indices) == 4
         return _4d_structure_to_dcs(indices, s)
     end
-    dcs = Set{DC}()
+    dcs = StableSet{DC}()
     # Calculate DCs for all combinations of X and Y
     for X in subsets(indices)
-        X = SmallBitSet(X)
-        Y = SmallBitSet(setdiff(indices, X))
+        X = BitSet(X)
+        Y = BitSet(setdiff(indices, X))
         isempty(Y) && continue # Anything to the empty set has degree 1
         d = _calc_dc_from_structure(
             bitset_to_idxs(int_2_idx, X),
@@ -796,26 +820,26 @@ function _structure_to_dcs(int_2_idx, indices::Vector{Int}, s::Tensor)
         push!(dcs, DC(X, Y, d))
 
         d = _calc_dc_from_structure(
-            Set{IndexExpr}(),
+            StableSet{IndexExpr}(),
             bitset_to_idxs(int_2_idx, Y),
             [int_2_idx[i] for i in indices],
             s,
         )
-        push!(dcs, DC(SmallBitSet(), Y, d))
+        push!(dcs, DC(BitSet(), Y, d))
     end
     return dcs
 end
 
 function dense_dcs(def, int_2_idx, indices::Vector{Int})
-    dcs = Set()
+    dcs = StableSet()
     for X in subsets(indices)
         Y = setdiff(indices, X)
         for Z in subsets(Y)
             push!(
                 dcs,
                 DC(
-                    SmallBitSet(X),
-                    SmallBitSet(Z),
+                    BitSet(X),
+                    BitSet(Z),
                     get_dim_space_size(def, bitset_to_idxs(int_2_idx, Z)),
                 ),
             )
@@ -826,8 +850,10 @@ end
 
 function reindex_stats(stats::DCStats, indices)
     new_def = reindex_def(indices, stats.def)
-    rename_dict = Dict(get_index_order(stats)[i] => indices[i] for i in eachindex(indices))
-    new_idx_to_int = Dict{IndexExpr,Int}()
+    rename_dict = OrderedDict(
+        get_index_order(stats)[i] => indices[i] for i in eachindex(indices)
+    )
+    new_idx_to_int = OrderedDict{IndexExpr,Int}()
     for (idx, int) in stats.idx_2_int
         if haskey(rename_dict, idx)
             new_idx_to_int[rename_dict[idx]] = int
@@ -835,11 +861,17 @@ function reindex_stats(stats::DCStats, indices)
             new_idx_to_int[idx] = int
         end
     end
-    new_int_to_idx = Dict{Int,IndexExpr}()
+    new_int_to_idx = OrderedDict{Int,IndexExpr}()
     for (idx, int) in new_idx_to_int
         new_int_to_idx[int] = idx
     end
     return DCStats(new_def, new_idx_to_int, new_int_to_idx, copy(stats.dcs))
+end
+
+function set_fill_value!(stats::DCStats, fill_val)
+    return DCStats(
+        set_fill_value!(stats.def, fill_val), stats.idx_2_int, stats.int_2_idx, stats.dcs
+    )
 end
 
 function relabel_index!(stats::DCStats, i::IndexExpr, j::IndexExpr)

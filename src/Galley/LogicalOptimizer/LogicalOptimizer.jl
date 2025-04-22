@@ -80,8 +80,8 @@ function high_level_optimize(
     faq_optimizer::FAQ_OPTIMIZERS,
     input_plan::PlanNode,
     ST,
-    alias_stats::Dict{IndexExpr,TensorStats},
-    alias_hash::Dict{IndexExpr,UInt},
+    alias_stats::OrderedDict{IndexExpr,TensorStats},
+    alias_hash::OrderedDict{IndexExpr,UInt},
     verbose,
 )
     logical_plan = PlanNode[]
@@ -102,8 +102,8 @@ function high_level_optimize_query(
     faq_optimizer::FAQ_OPTIMIZERS,
     q::PlanNode,
     ST,
-    alias_stats::Dict{IndexExpr,TensorStats},
-    alias_hash::Dict{IndexExpr,UInt},
+    alias_stats::OrderedDict{IndexExpr,TensorStats},
+    alias_hash::OrderedDict{IndexExpr,UInt},
     verbose,
 )
     insert_statistics!(ST, q; bindings=alias_stats)
@@ -118,12 +118,12 @@ function high_level_optimize_query(
     q_non_dnf = canonicalize(plan_copy(q), false)
     input_aq = AnnotatedQuery(q_non_dnf, ST)
     logical_queries, cnf_cost, cost_cache = high_level_optimize_annotated_query(
-        faq_optimizer, input_aq, alias_hash, Dict{UInt,Float64}(), verbose
+        faq_optimizer, input_aq, alias_hash, OrderedDict{UInt,Float64}(), verbose
     )
     if check_dnf
         min_cost = cnf_cost
         min_query = canonicalize(plan_copy(q), false)
-        visited_queries = Set()
+        visited_queries = StableSet()
         finished = false
         while !finished
             finished = true
@@ -164,8 +164,8 @@ end
 function high_level_optimize_annotated_query(
     faq_optimizer::FAQ_OPTIMIZERS,
     aq::AnnotatedQuery,
-    alias_hash::Dict{IndexExpr,UInt},
-    cost_cache::Dict{UInt,Float64},
+    alias_hash::OrderedDict{IndexExpr,UInt},
+    cost_cache::OrderedDict{UInt,Float64},
     verbose,
 )
     if faq_optimizer == greedy

@@ -267,14 +267,11 @@ function Base.show(io::IO, fbr::Tensor)
     print(io, "Tensor(", fbr.lvl, ")")
 end
 
-labelled_show(io::IO, fbr::Tensor) =
-    print(io, join(size(fbr), "×"), "-Tensor")
+labelled_show(io::IO, fbr::Tensor) = print(io, join(size(fbr), "×"), "-Tensor")
 
-labelled_children(fbr::Tensor) =
-    [LabelledTree(SubFiber(fbr.lvl, 1))]
+labelled_children(fbr::Tensor) = [LabelledTree(SubFiber(fbr.lvl, 1))]
 
-Base.summary(io::IO, fbr::Tensor) =
-    print(io, "Tensor($(summary(fbr.lvl)))")
+Base.summary(io::IO, fbr::Tensor) = print(io, "Tensor($(summary(fbr.lvl)))")
 
 function Base.show(io::IO, mime::MIME"text/plain", fbr::VirtualFiber)
     if get(io, :compact, false)
@@ -356,8 +353,7 @@ Base.:(==)(a::Structure, b::Structure) = isstructequal(a.t, b.t)
 
 isstructequal(a, b) = a === b
 
-isstructequal(a::T, b::T) where {T<:Tensor} =
-    isstructequal(a.lvl, b.lvl)
+isstructequal(a::T, b::T) where {T<:Tensor} = isstructequal(a.lvl, b.lvl)
 
 function isstructequal(a::T, b::T) where {T<:Finch.SubFiber}
     isstructequal(a.lvl, b.lvl) &&

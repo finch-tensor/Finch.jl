@@ -6,16 +6,16 @@ const IS_STATEFUL = 2
 const ID = 4
 
 @enum PlanNodeKind begin
-    Value       = 1ID             #  Value(x::Any)
-    Index       = 2ID             #  Index(x::Union{String, Symbol})
-    Alias       = 3ID             #  Alias(x::Union{String, Symbol})
-    Input       = 4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
-    MapJoin     = 5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
-    Aggregate   = 6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
+    Value = 1ID             #  Value(x::Any)
+    Index = 2ID             #  Index(x::Union{String, Symbol})
+    Alias = 3ID             #  Alias(x::Union{String, Symbol})
+    Input = 4ID | IS_TREE   #  Input(tns::Union{Tensor, Number}, idxs...::{TI})
+    MapJoin = 5ID | IS_TREE   #  MapJoin(op::Value, args..::PlanNode)
+    Aggregate = 6ID | IS_TREE   #  Aggregate(op::Value, idxs...::Index, arg::PlanNode)
     Materialize = 7ID | IS_TREE   #  Materialize(formats::Vector{Formats}, idx_order::Vector{TI}, arg:PlanNode)
-    Query       = 8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
-    Outputs     = 9ID | IS_TREE   #  Outputs(args...::TI)
-    Plan        = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
+    Query = 8ID | IS_TREE   #  Query(name::Alias, expr::PlanNode)
+    Outputs = 9ID | IS_TREE   #  Outputs(args...::TI)
+    Plan = 10ID | IS_TREE   #  Plan(Queries..., Outputs)
 end
 Mat = Materialize
 Agg = Aggregate
@@ -35,7 +35,7 @@ function PlanNode(kind::PlanNodeKind, children::Vector, val::Any, stats::Any)
 end
 
 function freshen_idxs!(p::PlanNode)
-    idx_dict = Dict()
+    idx_dict = OrderedDict()
     for n in PostOrderDFS(p)
         if n.kind == Index
             if !haskey(idx_dict, n.val)
@@ -76,7 +76,7 @@ function PlanNode(kind::PlanNodeKind, args::Vector)
                 internal_expr = mat_expr.expr
                 old_idxs = [idx for idx in mat_expr.idx_order]
                 @assert length(new_idxs) == length(old_idxs)
-                new_idx_translate = Dict(
+                new_idx_translate = OrderedDict(
                     old_idxs[i].name => new_idxs[i].name for i in eachindex(old_idxs)
                 )
                 for (i, j) in new_idx_translate
@@ -325,7 +325,7 @@ function Base.:(==)(a::PlanNode, b::PlanNode)
         return b.kind === Index && a.name == b.name
     elseif a.kind == Aggregate
         return b.kind === Aggregate && a.op == b.op && a.init == b.init &&
-               Set(a.idxs) == Set(b.idxs) && a.arg == b.arg
+               StableSet(a.idxs) == StableSet(b.idxs) && a.arg == b.arg
     elseif istree(a)
         return a.kind === b.kind && a.children == b.children
     else
@@ -501,7 +501,7 @@ function is_disjunctive(n::PlanNode)
         if node.kind === MapJoin
             map_op = node.op.val
             all_conjuncts = all([
-                isannihilator(map_op, get_default_value(arg.stats)) for arg in node.args
+                isannihilator(map_op, get_fill_value(arg.stats)) for arg in node.args
             ])
             if !all_conjuncts
                 return true
@@ -521,7 +521,7 @@ function get_conjunctive_and_disjunctive_inputs(n::PlanNode, disjunct_branch=fal
         conjuncts = []
         disjuncts = []
         for arg in n.args
-            arg_results = if isannihilator(map_op, get_default_value(arg.stats))
+            arg_results = if isannihilator(map_op, get_fill_value(arg.stats))
                 get_conjunctive_and_disjunctive_inputs(arg, disjunct_branch)
             else
                 get_conjunctive_and_disjunctive_inputs(arg, true)

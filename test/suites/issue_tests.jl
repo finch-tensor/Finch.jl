@@ -101,7 +101,7 @@
             end
         end
 
-        ref = sum(arr_1 .+ arr_2; dims=1)
+        ref = dropdims(sum(arr_1 .+ arr_2; dims=1); dims=1)
         @test size(fmt) == size(ref)
         @test axes(fmt) == axes(ref)
         @test ndims(fmt) == ndims(ref)
@@ -1084,8 +1084,8 @@
         A_tns = Tensor(Dense(Dense(Element(0.0))), A)
         A_sw = swizzle(A_tns, 2, 1)
 
-        @test prod(A_t; dims=2)[:, 1] == prod(A_sw; dims=2)
-        @test prod(A_t; dims=1)[1, :] == prod(A_sw; dims=1)
+        @test prod(A_t; dims=2) == prod(A_sw; dims=2)
+        @test prod(A_t; dims=1) == prod(A_sw; dims=1)
         @test prod(A_t) == prod(A_sw)
 
         @test tensordot(A_sw, A_sw, (2, 1)) == transpose(A * A)

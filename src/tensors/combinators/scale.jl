@@ -3,8 +3,7 @@ struct ScaleArray{Scale<:Tuple,Body} <: AbstractCombinator
     scale::Scale
 end
 
-Base.show(io::IO, ex::ScaleArray) =
-    print(io, "ScaleArray($(ex.body), $(ex.scale))")
+Base.show(io::IO, ex::ScaleArray) = print(io, "ScaleArray($(ex.body), $(ex.scale))")
 
 function labelled_show(io::IO, ex::ScaleArray)
     print(io, "ScaleArray [$(join(map(s -> ":*$s", ex.scale), ", "))]")

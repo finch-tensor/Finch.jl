@@ -180,19 +180,19 @@ macro finch(opts_ex...)
         throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
     (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
-    prgm = :(
-    $(FinchNotation.block_instance)(
-        $prgm,
-        $(FinchNotation.yieldbind_instance)(
-            $(
-                map(
-                    FinchNotation.variable_instance,
-                    FinchNotation.finch_parse_default_yieldbind(ex),
-                )...
+    prgm = quote
+        $(FinchNotation.block_instance)(
+            $prgm,
+            $(FinchNotation.yieldbind_instance)(
+                $(
+                    map(
+                        FinchNotation.variable_instance,
+                        FinchNotation.finch_parse_default_yieldbind(ex),
+                    )...
+                ),
             ),
-        ),
-    )
-)
+        )
+    end
     res = esc(:res)
     thunk = quote
         res = $execute($prgm, ; $(map(esc, opts)...))
@@ -229,19 +229,19 @@ macro finch_code(opts_ex...)
         throw(ArgumentError("Expected at least one argument to @finch(opts..., ex)"))
     (opts, ex) = (opts_ex[1:(end - 1)], opts_ex[end])
     prgm = FinchNotation.finch_parse_instance(ex)
-    prgm = :(
-    $(FinchNotation.block_instance)(
-        $prgm,
-        $(FinchNotation.yieldbind_instance)(
-            $(
-                map(
-                    FinchNotation.variable_instance,
-                    FinchNotation.finch_parse_default_yieldbind(ex),
-                )...
+    prgm = quote
+        $(FinchNotation.block_instance)(
+            $prgm,
+            $(FinchNotation.yieldbind_instance)(
+                $(
+                    map(
+                        FinchNotation.variable_instance,
+                        FinchNotation.finch_parse_default_yieldbind(ex),
+                    )...
+                ),
             ),
-        ),
-    )
-)
+        )
+    end
     return quote
         unquote_literals(
             dataflow(

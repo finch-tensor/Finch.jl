@@ -145,8 +145,9 @@ end
     ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
 ) where {Ti,Left,Right,Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseIntervalLevel) = (level_size(lvl.lvl)..., lvl.shape)
-@inline level_axes(lvl::SparseIntervalLevel) =
-    (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
+@inline level_axes(lvl::SparseIntervalLevel) = (
+    level_axes(lvl.lvl)..., Base.OneTo(lvl.shape)
+)
 @inline level_eltype(
     ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
 ) where {Ti,Left,Right,Lvl} = level_eltype(Lvl)
@@ -360,12 +361,14 @@ function unfurl(
                 body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
             ),
             Phase(;
-                stop = (ctx, ext) -> value(my_i_stop, lvl.Ti),
-                body = (ctx, ext) -> Run(Simplify(instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode))),
+                stop=(ctx, ext) -> value(my_i_stop, lvl.Ti),
+                body=(ctx, ext) -> Run(
+                    Simplify(instantiate(ctx, VirtualSubFiber(lvl.lvl, pos), mode))
+                ),
             ),
             Phase(;
-                stop = (ctx, ext) -> lvl.shape,
-                body = (ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
+                stop=(ctx, ext) -> lvl.shape,
+                body=(ctx, ext) -> Run(FillLeaf(virtual_level_fill_value(lvl))),
             ),
         ]),
     )
@@ -399,22 +402,30 @@ function unfurl(
     Thunk(;
         body=(ctx) -> AcceptRun(;
             body=(ctx, ext) -> Thunk(;
-                preamble = quote
+                preamble=quote
                     $dirty = false
                 end,
-                body     = (ctx) -> instantiate(ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode),
-                epilogue = quote
+                body=(ctx) -> instantiate(
+                    ctx, VirtualHollowSubFiber(lvl.lvl, pos, dirty), mode
+                ),
+                epilogue=quote
                     if $dirty
                         $(fbr.dirty) = true
                         $(lvl.left)[$(ctx(pos))] < $(lvl.right)[$(ctx(pos))] &&
-                        throw(FinchProtocolError("SparseIntervalLevels can only be updated once"))
+                            throw(
+                                FinchProtocolError(
+                                    "SparseIntervalLevels can only be updated once"
+                                ),
+                            )
                         $(lvl.left)[$(ctx(pos))] = $(ctx(getstart(ext)))
                         $(lvl.right)[$(ctx(pos))] = $(ctx(getstop(ext)))
-                        $(if issafe(get_mode_flag(ctx))
-                            quote
-                                $(lvl.prev_pos) = $(ctx(pos))
+                        $(
+                            if issafe(get_mode_flag(ctx))
+                                quote
+                                    $(lvl.prev_pos) = $(ctx(pos))
+                                end
                             end
-                        end)
+                        )
                     end
                 end,
             ),

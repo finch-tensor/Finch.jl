@@ -109,7 +109,9 @@ function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ::Defau
     end
 end
 
-function Finch.virtualize(ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns) where {Tv,Ti}
+function Finch.virtualize(
+    ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns
+) where {Tv,Ti}
     tag = freshen(ctx, tag)
     m = freshen(ctx, tag, :_m)
     n = freshen(ctx, tag, :_n)
@@ -272,28 +274,33 @@ function Finch.unfurl(
         end,
         body=(ctx) -> Sequence([
             Phase(;
-                stop = (ctx, ext) -> value(my_i1),
-                body = (ctx, ext) -> Stepper(;
-                seek=(ctx, ext) -> quote
-                    if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
-                        $my_q = Finch.scansearch($(arr.idx), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
-                    end
-                end,
-                preamble=:($my_i = $(arr.idx)[$my_q]),
-                stop=(ctx, ext) -> value(my_i),
-                chunk=Spike(;
-                body = FillLeaf(zero(arr.Tv)),
-                tail = Thunk(;
-                preamble=quote
-                    $my_val = $(arr.val)[$my_q]
-                end,
-                body=(ctx) -> FillLeaf(value(my_val, arr.Tv))
-            )
-            ),
-                next=(ctx, ext) -> quote
-                    $my_q += $(Ti(1))
-                end
-            ),
+                stop=(ctx, ext) -> value(my_i1),
+                body=(ctx, ext) -> Stepper(;
+                    seek=(ctx, ext) -> quote
+                        if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
+                            $my_q = Finch.scansearch(
+                                $(arr.idx),
+                                $(ctx(getstart(ext))),
+                                $my_q,
+                                $my_q_stop - 1,
+                            )
+                        end
+                    end,
+                    preamble=:($my_i = $(arr.idx)[$my_q]),
+                    stop=(ctx, ext) -> value(my_i),
+                    chunk=Spike(;
+                        body=FillLeaf(zero(arr.Tv)),
+                        tail=Thunk(;
+                            preamble=quote
+                                $my_val = $(arr.val)[$my_q]
+                            end,
+                            body=(ctx) -> FillLeaf(value(my_val, arr.Tv)),
+                        ),
+                    ),
+                    next=(ctx, ext) -> quote
+                        $my_q += $(Ti(1))
+                    end,
+                ),
             ),
             Phase(;
                 body=(ctx, ext) -> Run(FillLeaf(zero(arr.Tv)))
@@ -354,39 +361,59 @@ function Finch.unfurl(
     qos_stop = arr.qos_stop
     dirty = freshen(ctx, tag, :dirty)
     Thunk(;
-        preamble = quote
+        preamble=quote
             $qos = $qos_fill + 1
-            $(if issafe(get_mode_flag(ctx))
-                quote
-                    $(arr.prev_pos) < $(ctx(j)) || throw(FinchProtocolError("SparseMatrixCSCs cannot be updated multiple times"))
-                end
-            end)
-        end,
-        body     = (ctx) -> Lookup(;
-        body=(ctx, idx) -> Thunk(;
-        preamble = quote
-            if $qos > $qos_stop
-                $qos_stop = max($qos_stop << 1, 1)
-                Finch.resize_if_smaller!($(arr.idx), $qos_stop)
-                Finch.resize_if_smaller!($(arr.val), $qos_stop)
-            end
-            $dirty = false
-        end,
-        body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
-        epilogue = quote
-            if $dirty
-                $(arr.idx)[$qos] = $(ctx(idx))
-                $qos += $(Tp(1))
-                $(if issafe(get_mode_flag(ctx))
+            $(
+                if issafe(get_mode_flag(ctx))
                     quote
-                        $(arr.prev_pos) = $(ctx(j))
+                        $(arr.prev_pos) < $(ctx(j)) || throw(
+                            FinchProtocolError(
+                                "SparseMatrixCSCs cannot be updated multiple times"
+                            ),
+                        )
                     end
-                end)
-            end
-        end
-    )
-    ),
-        epilogue = quote
+                end
+            )
+        end,
+        body=(ctx) -> Lookup(;
+            body=(ctx, idx) -> Thunk(;
+                preamble=quote
+                    if $qos > $qos_stop
+                        $qos_stop = max($qos_stop << 1, 1)
+                        Finch.resize_if_smaller!($(arr.idx), $qos_stop)
+                        Finch.resize_if_smaller!($(arr.val), $qos_stop)
+                    end
+                    $dirty = false
+                end,
+                body=(ctx) -> Finch.instantiate(
+                    ctx,
+                    Finch.VirtualSparseScalar(
+                        nothing,
+                        nothing,
+                        arr.Tv,
+                        zero(arr.Tv),
+                        gensym(),
+                        :($(arr.val)[$(ctx(qos))]),
+                        dirty,
+                    ),
+                    mode,
+                ),
+                epilogue=quote
+                    if $dirty
+                        $(arr.idx)[$qos] = $(ctx(idx))
+                        $qos += $(Tp(1))
+                        $(
+                            if issafe(get_mode_flag(ctx))
+                                quote
+                                    $(arr.prev_pos) = $(ctx(j))
+                                end
+                            end
+                        )
+                    end
+                end,
+            ),
+        ),
+        epilogue=quote
             $(arr.ptr)[$(ctx(j)) + 1] += $qos - $qos_fill - 1
             $qos_fill = $qos - 1
         end,
@@ -556,28 +583,33 @@ function Finch.unfurl(
             end,
             body=(ctx) -> Sequence([
                 Phase(;
-                    stop = (ctx, ext) -> value(my_i1),
-                    body = (ctx, ext) -> Stepper(;
-                    seek=(ctx, ext) -> quote
-                        if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch($(arr.idx), $(ctx(getstart(ext))), $my_q, $my_q_stop - 1)
-                        end
-                    end,
-                    preamble=:($my_i = $(arr.idx)[$my_q]),
-                    stop=(ctx, ext) -> value(my_i),
-                    chunk=Spike(;
-                    body = FillLeaf(zero(arr.Tv)),
-                    tail = Thunk(;
-                    preamble=quote
-                        $my_val = $(arr.val)[$my_q]
-                    end,
-                    body=(ctx) -> FillLeaf(value(my_val, arr.Tv))
-                )
-                ),
-                    next=(ctx, ext) -> quote
-                        $my_q += $(Ti(1))
-                    end
-                ),
+                    stop=(ctx, ext) -> value(my_i1),
+                    body=(ctx, ext) -> Stepper(;
+                        seek=(ctx, ext) -> quote
+                            if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
+                                $my_q = Finch.scansearch(
+                                    $(arr.idx),
+                                    $(ctx(getstart(ext))),
+                                    $my_q,
+                                    $my_q_stop - 1,
+                                )
+                            end
+                        end,
+                        preamble=:($my_i = $(arr.idx)[$my_q]),
+                        stop=(ctx, ext) -> value(my_i),
+                        chunk=Spike(;
+                            body=FillLeaf(zero(arr.Tv)),
+                            tail=Thunk(;
+                                preamble=quote
+                                    $my_val = $(arr.val)[$my_q]
+                                end,
+                                body=(ctx) -> FillLeaf(value(my_val, arr.Tv)),
+                            ),
+                        ),
+                        next=(ctx, ext) -> quote
+                            $my_q += $(Ti(1))
+                        end,
+                    ),
                 ),
                 Phase(;
                     body=(ctx, ext) -> Run(FillLeaf(zero(arr.Tv)))
@@ -600,29 +632,41 @@ function Finch.unfurl(
     Unfurled(;
         arr=arr,
         body=Thunk(;
-            preamble = quote
+            preamble=quote
                 $qos = $qos_fill + 1
             end,
-            body     = (ctx) -> Lookup(;
-            body=(ctx, idx) -> Thunk(;
-            preamble = quote
-                if $qos > $qos_stop
-                    $qos_stop = max($qos_stop << 1, 1)
-                    Finch.resize_if_smaller!($(arr.idx), $qos_stop)
-                    Finch.resize_if_smaller!($(arr.val), $qos_stop)
-                end
-                $dirty = false
-            end,
-            body     = (ctx) -> Finch.instantiate(ctx, Finch.VirtualSparseScalar(nothing, nothing, arr.Tv, zero(arr.Tv), gensym(), :($(arr.val)[$(ctx(qos))]), dirty), mode),
-            epilogue = quote
-                if $dirty
-                    $(arr.idx)[$qos] = $(ctx(idx))
-                    $qos += $(Tp(1))
-                end
-            end
-        )
-        ),
-            epilogue = quote
+            body=(ctx) -> Lookup(;
+                body=(ctx, idx) -> Thunk(;
+                    preamble=quote
+                        if $qos > $qos_stop
+                            $qos_stop = max($qos_stop << 1, 1)
+                            Finch.resize_if_smaller!($(arr.idx), $qos_stop)
+                            Finch.resize_if_smaller!($(arr.val), $qos_stop)
+                        end
+                        $dirty = false
+                    end,
+                    body=(ctx) -> Finch.instantiate(
+                        ctx,
+                        Finch.VirtualSparseScalar(
+                            nothing,
+                            nothing,
+                            arr.Tv,
+                            zero(arr.Tv),
+                            gensym(),
+                            :($(arr.val)[$(ctx(qos))]),
+                            dirty,
+                        ),
+                        mode,
+                    ),
+                    epilogue=quote
+                        if $dirty
+                            $(arr.idx)[$qos] = $(ctx(idx))
+                            $qos += $(Tp(1))
+                        end
+                    end,
+                ),
+            ),
+            epilogue=quote
                 $qos_fill = $qos - 1
             end,
         ),

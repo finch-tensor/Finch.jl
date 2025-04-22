@@ -4,25 +4,25 @@ const IS_CONST = 4
 const ID = 8
 
 @enum FinchNodeKind begin
-    literal   = 0ID | IS_CONST
-    value     = 1ID | IS_CONST
-    index     = 2ID
-    variable  = 3ID
-    virtual   = 4ID
-    tag       = 5ID | IS_TREE
-    call      = 6ID | IS_TREE
-    access    = 7ID | IS_TREE
-    reader    = 8ID | IS_TREE
-    updater   = 9ID | IS_TREE
-    cached    = 10ID | IS_TREE
-    assign    = 11ID | IS_TREE | IS_STATEFUL
-    loop      = 12ID | IS_TREE | IS_STATEFUL
-    sieve     = 13ID | IS_TREE | IS_STATEFUL
-    define    = 14ID | IS_TREE | IS_STATEFUL
-    declare   = 15ID | IS_TREE | IS_STATEFUL
-    thaw      = 16ID | IS_TREE | IS_STATEFUL
-    freeze    = 17ID | IS_TREE | IS_STATEFUL
-    block     = 18ID | IS_TREE | IS_STATEFUL
+    literal = 0ID | IS_CONST
+    value = 1ID | IS_CONST
+    index = 2ID
+    variable = 3ID
+    virtual = 4ID
+    tag = 5ID | IS_TREE
+    call = 6ID | IS_TREE
+    access = 7ID | IS_TREE
+    reader = 8ID | IS_TREE
+    updater = 9ID | IS_TREE
+    cached = 10ID | IS_TREE
+    assign = 11ID | IS_TREE | IS_STATEFUL
+    loop = 12ID | IS_TREE | IS_STATEFUL
+    sieve = 13ID | IS_TREE | IS_STATEFUL
+    define = 14ID | IS_TREE | IS_STATEFUL
+    declare = 15ID | IS_TREE | IS_STATEFUL
+    thaw = 16ID | IS_TREE | IS_STATEFUL
+    freeze = 17ID | IS_TREE | IS_STATEFUL
+    block = 18ID | IS_TREE | IS_STATEFUL
     yieldbind = 19ID | IS_TREE | IS_STATEFUL
 end
 

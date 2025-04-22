@@ -11,7 +11,7 @@ function get_input_indices(n::PlanNode)
     elseif n.kind == Alias
         get_index_set(n.stats)
     elseif n.kind == Value
-        Set{IndexExpr}()
+        StableSet{IndexExpr}()
     elseif n.kind == Aggregate
         get_input_indices(n.arg)
     elseif n.kind == MapJoin
@@ -114,16 +114,16 @@ function validate_physical_query(q::PlanNode)
     q = plan_copy(q)
     input_indices = get_input_indices(q.expr)
     indices_and_dims = get_input_indices_and_dims(q.expr)
-    idx_dim = Dict()
+    idx_dim = OrderedDict()
     for (idx, dim) in indices_and_dims
         if !haskey(idx_dim, idx)
             idx_dim[idx] = dim
         end
         @assert idx_dim[idx] == dim "idx:$idx dim:$dim query:$q "
     end
-    output_indices = Set([idx.name for idx in q.expr.idx_order])
-    @assert input_indices ∪ output_indices == Set([idx.name for idx in q.loop_order])
-    @assert Set(output_indices) == Set([idx.name for idx in q.expr.idx_order])
+    output_indices = StableSet([idx.name for idx in q.expr.idx_order])
+    @assert input_indices ∪ output_indices == StableSet([idx.name for idx in q.loop_order])
+    @assert StableSet(output_indices) == StableSet([idx.name for idx in q.expr.idx_order])
     check_sorted_inputs(q.expr, [idx.name for idx in q.loop_order])
     check_protocols(q.expr)
     check_formats(q.expr)
