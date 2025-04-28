@@ -1,3 +1,16 @@
+@generated function fsparse_lt(I::NTuple{N}, i, j) where {N}
+    res = :(I[1][j] < I[1][j])
+    for n in 2:N
+        res = :(I[$n][i] < I[$n][j] || I[$n][i] == I[$n][j] && $res)
+    end
+    return res
+end
+
+@generated function fsparse_f(I::NTuple{N}, i) where {N}
+    res = :(tuple($(map(n -> :(I[N - $n + 1][i]), 1:N)...)))
+    return res
+end
+
 """
     fsparse(I::Tuple, V,[ M::Tuple, combine]; fill_value=zero(eltype(V)))
 
@@ -36,23 +49,24 @@ function fsparse_parse(I, V::AbstractVector, m::Tuple, combine; kwargs...)
     fsparse_impl(I, V, m, combine; kwargs...)
 end
 function fsparse_impl(
-    I::Tuple,
+    I::NTuple{N},
     V::Vector,
     shape=map(maximum, I),
     combine=eltype(V) isa Bool ? (|) : (+);
     fill_value=zero(eltype(V)),
-)
-    C = map(tuple, reverse(I)...)
+) where {N}
     dirty = false
-    if !issorted(C)
-        P = sortperm(C)
-        C = C[P]
+    f(i) = fsparse_f(I, i)
+    lt(i, j) = fsparse_lt(I, i, j)
+    if !issorted(1:length(V); lt=lt)
+        P = sort(1:length(V); lt=lt)
+        I = ntuple(n -> I[n][P], length(I))
         V = V[P]
         dirty = true
     end
-    if !allunique(C)
-        P = unique(p -> C[p], 1:length(C))
-        C = C[P]
+    if !allunique(f, 1:length(V))
+        P = unique(f, 1:length(V))
+        I = ntuple(n -> I[n][P], length(I))
         push!(P, length(I[1]) + 1)
         V = map(
             (start, stop) -> foldl(combine, @view V[start:(stop - 1)]),
@@ -61,11 +75,7 @@ function fsparse_impl(
         )
         dirty = true
     end
-    if dirty
-        I = map(i -> similar(i, length(C)), I)
-        foreach(((p, c),) -> ntuple(n -> I[n][p] = c[n], length(I)), enumerate(C))
-        I = reverse(I)
-    else
+    if !dirty
         I = map(copy, I)
     end
     return fsparse!(I..., V, shape; fill_value=fill_value)
@@ -85,7 +95,27 @@ fsparse!_parse(I, V::AbstractVector; kwargs...) = fsparse!_impl(I, V; kwargs...)
 function fsparse!_parse(I, V::AbstractVector, M::Tuple; kwargs...)
     fsparse!_impl(I, V, M; kwargs...)
 end
-function fsparse!_impl(I::Tuple, V, shape=map(maximum, I); fill_value=zero(eltype(V)))
+
+function fsparse!_impl(
+    I::NTuple{N}, V, shape=map(maximum, I); fill_value=zero(eltype(V))
+) where {N}
+    f(i) = fsparse_f(I, i)
+    lt(i, j) = fsparse_lt(I, i, j)
+    if !issorted(1:length(V); lt=lt)
+        P = sort(1:length(V); lt=lt)
+        I = ntuple(n -> I[n][P], length(I))
+        V = V[P]
+    end
+    if !allunique(f, 1:length(V))
+        P = unique(f, 1:length(V))
+        I = ntuple(n -> I[n][P], length(I))
+        push!(P, length(I[1]) + 1)
+        V = map(
+            (start, stop) -> foldl(combine, @view V[start:(stop - 1)]),
+            P[1:(end - 1)],
+            P[2:end],
+        )
+    end
     return Tensor(
         SparseCOO{length(I),Tuple{map(eltype, I)...}}(
             Element{fill_value,eltype(V),Int}(V), shape, [1, length(V) + 1], I
@@ -304,7 +334,17 @@ function ffindnz(src)
     nnz = tmp.lvl.ptr[2] - 1
     tbl = tmp.lvl.tbl
     val = tmp.lvl.lvl.val
-    (ntuple(n -> tbl[n][1:nnz], ndims(src))..., val[1:nnz])
+    (ntuple(n -> tbl[n], ndims(src))..., val)
+end
+
+ffindnz!(src) = ffindnz(src)
+function ffindnz!(src::Tensor{<:SparseCOOLevel{<:Any,<:Any,<:Any,<:Any,<:ElementLevel}})
+    (src.lvl.tbl..., src.lvl.lvl.val)
+end
+
+function ffindnz!(src::Tensor{<:SparseCOOLevel{<:Any,<:Any,<:Any,<:Any,<:PatternLevel}})
+    tbl = src.lvl.tbl
+    (src.lvl.tbl..., fill(true, length(tbl[1])))
 end
 
 """
