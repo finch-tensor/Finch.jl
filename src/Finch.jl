@@ -258,7 +258,8 @@ COOFormat(N, z=0.0, T=typeof(z)) = SparseCOOLevel{N}(ElementLevel{z,T}())
 
 include("postprocess.jl")
 
-export fsparse, fsparse!, fsprand, fspzeros, fspeye, ffindnz, fread, fwrite, countstored
+export fsparse,
+    fsparse!, fsprand, fspzeros, fspeye, ffindnz, ffindnz!, fread, fwrite, countstored
 
 export bspread, bspwrite
 export ftnsread, ftnswrite, fttread, fttwrite

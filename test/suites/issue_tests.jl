@@ -1239,4 +1239,10 @@
         end
         @test C_follow == C_walk
     end
+
+    #fast nnz
+    let
+        A = Tensor(COOFormat(2, 0.0), fsprand(4, 4, 0.9))
+        @test ffindnz!(A)[1] === A.lvl.tbl[1]
+    end
 end

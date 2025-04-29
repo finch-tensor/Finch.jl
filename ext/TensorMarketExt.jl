@@ -9,7 +9,7 @@ function Finch.fttread(filename::AbstractString, infoonly=false, retcoord=false)
     out = ttread(filename, false, retcoord)
     if out isa Tuple
         (I, V, shape, coords...) = out
-        A = fsparse(I..., V, shape)
+        A = fsparse!(I..., V, shape)
         if retcoord
             (A, coords...)
         else
@@ -29,7 +29,12 @@ end
 
 function Finch.ftnsread(filename::AbstractString)
     (I, V) = tnsread(filename)
-    fsparse(I..., V)
+    IR = (reverse(I)...,)
+    if issorted(1:length(V); lt=(i, j) -> Finch.fsparse_lt(IR, i, j))
+        swizzle(fsparse!(IR..., V), reverse(1:length(I))...)
+    else
+        fsparse!(I..., V)
+    end
 end
 
 function Finch.ftnswrite(filename::AbstractString, A)
