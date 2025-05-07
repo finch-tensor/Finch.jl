@@ -158,16 +158,6 @@ function push_fields(root)
                 Chain([
                     (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
                         mapjoin(op, map(arg -> reorder(arg, ~idxs...), args)...)),
-                    (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
-                        if !issubsequence(intersect(getfields(arg), idxs_2), idxs_2)
-                            reorder(
-                                aggregate(
-                                    op,
-                                    init,
-                                    reorder(arg, intersect(idxs_2)..., idxs...),
-                                    idxs...,
-                                ), idxs_2...)
-                        end),
                     (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
                         reorder(~arg, ~idxs_2...)),
                 ]),
