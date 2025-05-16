@@ -172,14 +172,15 @@ function push_fields(root)
                         idxs...,
                     )),
                 (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
-                    if !issubsequence(intersect(getfields(arg), idxs_2), idxs_2)
-                        reorder(
+                        begin
+                            #TODO it should be correct to write this, but subsequent phases interpret singleton dimensions as canonical ones when we do this.
+                            #aggregate(op, init, reorder(arg, idxs_2..., idxs...), idxs...)
                             aggregate(
                                 op,
                                 init,
-                                reorder(arg, withsubsequence(idxs_2, getfields(arg))...),
+                                reorder(arg, intersect(getfields(arg), idxs_2)..., idxs...),
                                 idxs...,
-                            ), idxs_2...)
+                            )
                     end),
             ]),
         ),
