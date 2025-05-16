@@ -254,8 +254,8 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl, arch, style),
         distribute_buffer(ctx, lvl.srt, arch, style),
         lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
+        distribute_buffer(ctx, lvl.qos_fill, arch, style),
+        distribute_buffer(ctx, lvl.qos_stop, arch, style),
     )
 end
 
