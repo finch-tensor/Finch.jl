@@ -94,6 +94,53 @@ function pretty_labels(root)
     )
 end
 
+function lift_broadcasts(root)
+    root = Rewrite(
+        Postwalk(
+            Chain([
+                (@rule aggregate(~op, ~init, reorder(~arg, ~idxs...), ~idxs_2...) => begin
+                    bc_idxs = setdiff(idxs, getfields(arg))
+                    if length(bc_idxs) > 0
+                        reorder(aggregate(op, init, reorder(arg, setdiff(idxs, bc_idxs)...), setdiff(idxs_2, bc_idxs)...), setdiff(idxs, idxs_2)...)
+                    end
+                end),
+                (@rule mapjoin(~op, ~args...) => begin
+                    arg_bc_idxs = map(args) do arg
+                        if @capture arg reorder(~arg_2, ~idxs...)
+                            setdiff(idxs, getfields(arg_2))
+                        else
+                            []
+                        end
+                    end
+                    arg_real_idxs = map(args) do arg
+                        if @capture arg reorder(~arg_2, ~idxs...)
+                            intersect(idxs, getfields(arg_2))
+                        else
+                            getfields(arg)
+                        end
+                    end
+                    bc_idxs = setdiff(union(arg_bc_idxs...), union(arg_real_idxs...))
+                    if length(bc_idxs) > 0
+                        args_2 = map(args) do arg
+                            if @capture arg reorder(~arg_2, ~idxs...)
+                                reorder(arg_2, setdiff(idxs, bc_idxs)...)
+                            else
+                                arg
+                            end
+                        end
+                        reorder(mapjoin(op, args_2...), getfields(mapjoin(op, args...))...)
+                    end
+                end),
+                (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) => begin
+                    reorder(arg, idxs_2...)
+                end),
+            ])
+        ),
+    )(
+        root
+    )
+end
+
 """
 push_fields(node)
 
