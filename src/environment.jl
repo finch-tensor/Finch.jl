@@ -44,7 +44,7 @@ variable names in the generated code of the executing environment.
     namespace::Namespace = Namespace()
     preamble::Vector{Any} = []
     epilogue::Vector{Any} = []
-    task = VirtualSerial()
+    task = VirtualSerialTask()
 end
 
 """

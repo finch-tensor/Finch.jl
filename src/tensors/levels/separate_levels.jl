@@ -96,7 +96,7 @@ countstored_level(lvl::SeparateLevel, pos) = pos
 
 mutable struct VirtualSeparateLevel <: AbstractVirtualLevel
     tag
-    lvl  # stand in for the sublevel for virutal resize, etc.
+    lvl  # stand in for the sublevel for virtual resize, etc.
     val
     Tv
     Lvl
