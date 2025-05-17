@@ -267,9 +267,11 @@
             mapjoin(*,
                 reorder(relabel(table(A, i, j, k), j, i, k), k, j, i)))
         expr_out = mapjoin(+,
-            mapjoin(*,
-                reorder(table(A, j, k, i), j, i, k),
-                reorder(table(A, k, i, j), j, i, k)),
+            reorder(
+                mapjoin(*,
+                    reorder(table(A, j, k, i), j, i, k),
+                    reorder(table(A, k, i, j), j, i, k),
+                ), j, i, k),
             mapjoin(*,
                 reorder(table(A, j, i, k), k, j, i)))
         @test Finch.push_fields(expr_in) == expr_out

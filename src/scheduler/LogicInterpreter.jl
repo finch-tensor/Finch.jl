@@ -5,10 +5,11 @@ using Finch.FinchNotation: block_instance, declare_instance, call_instance, loop
 @kwdef struct PointwiseMachineLowerer
     ctx
     bound_idxs = []
+    loop_idxs = []
 end
 
-function lower_pointwise_logic(ctx, ex)
-    ctx = PointwiseMachineLowerer(; ctx=ctx)
+function lower_pointwise_logic(ctx, ex, loop_idxs=[])
+    ctx = PointwiseMachineLowerer(; ctx=ctx, loop_idxs=loop_idxs)
     code = ctx(ex)
     return (code, ctx.bound_idxs)
 end
@@ -16,10 +17,10 @@ end
 function (ctx::PointwiseMachineLowerer)(ex)
     if @capture ex mapjoin(~op, ~args...)
         call_instance(literal_instance(op.val), map(ctx, args)...)
-    elseif (@capture ex reorder(relabel(~arg::isalias, ~idxs_1...), ~idxs_2...))
+    elseif (@capture ex relabel(~arg::isalias, ~idxs_1...))
         append!(ctx.bound_idxs, idxs_1)
         idxs_3 = map(enumerate(idxs_1)) do (n, idx)
-            if idx in idxs_2
+            if idx in ctx.loop_idxs
                 index_instance(idx.name)
             else
                 first(axes(ctx.ctx.scope[arg])[n])
@@ -32,6 +33,8 @@ function (ctx::PointwiseMachineLowerer)(ex)
         )
     elseif (@capture ex reorder(~arg::isimmediate, ~idxs...))
         literal_instance(arg.val)
+    elseif (@capture ex reorder(~arg, ~idxs...))
+        ctx(arg)
     elseif ex.kind === immediate
         literal_instance(ex.val)
     else
@@ -63,8 +66,7 @@ function (ctx::LogicMachine)(ex)
             res, updater_instance(auto), map(idx -> index_instance(idx.name), lhs_idxs)...
         )
         (rhs, rhs_idxs) = lower_pointwise_logic(
-            ctx, reorder(relabel(arg, idxs_1...), idxs_2...)
-        )
+            ctx, relabel(arg, idxs_1...), idxs_2)
         body = assign_instance(lhs, literal_instance(initwrite(fill_value(tns.val))), rhs)
         for idx in loop_idxs
             if idx in rhs_idxs
@@ -91,17 +93,24 @@ function (ctx::LogicMachine)(ex)
             display(body)
         end
         execute(body; mode=ctx.mode).res
-    elseif @capture ex reformat(~tns, mapjoin(~args...))
+    elseif @capture ex reformat(~tns, reorder(mapjoin(~args...), ~idxs...))
         z = fill_value(tns.val)
-        ctx(reformat(tns, aggregate(initwrite(z), immediate(z), mapjoin(args...))))
-    elseif @capture ex reformat(~tns, aggregate(~op, ~init, ~arg, ~idxs_1...))
-        loop_idxs = getfields(arg)
-        lhs_idxs = setdiff(getfields(arg), idxs_1)
+        ctx(
+            reformat(
+                tns,
+                aggregate(initwrite(z), immediate(z), reorder(mapjoin(args...), idxs...)),
+            ),
+        )
+    elseif @capture ex reformat(
+        ~tns, aggregate(~op, ~init, reorder(~arg, ~idxs_2...), ~idxs_1...)
+    )
+        loop_idxs = idxs_2
+        lhs_idxs = setdiff(idxs_2, idxs_1)
         res = tag_instance(variable_instance(:res), tns.val)
         lhs = access_instance(
             res, updater_instance(auto), map(idx -> index_instance(idx.name), lhs_idxs)...
         )
-        (rhs, rhs_idxs) = lower_pointwise_logic(ctx, arg)
+        (rhs, rhs_idxs) = lower_pointwise_logic(ctx, arg, loop_idxs)
         body = assign_instance(lhs, literal_instance(op.val), rhs)
         for idx in loop_idxs
             if idx in rhs_idxs
@@ -136,6 +145,8 @@ function (ctx::LogicMachine)(ex)
                     ctx.scope[tns], [findfirst(isequal(idx), idxs_1) for idx in idxs_2]...
                 )
             elseif @capture(arg, reorder(~tns::isalias, ~idxs...))
+                ctx.scope[tns]
+            elseif @capture(arg, relabel(~tns::isalias, ~idxs...))
                 ctx.scope[tns]
             elseif isalias(arg)
                 ctx.scope[arg]

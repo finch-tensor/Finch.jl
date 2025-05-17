@@ -59,6 +59,8 @@ table
 
 Logical AST expression for mapping the function `op` across `args...`.
 The order of fields in the mapjoin is `unique(vcat(map(getfields, args)...))`
+Dimensions of fields from different arguments must match, and fields which are
+missing from an argument are broadcasted.
 """
 mapjoin
 
@@ -75,9 +77,7 @@ aggregate
 
 Logical AST statement that reorders the dimensions of `arg` to be `idxs...`.
 Dimensions known to be length 1 may be dropped. Dimensions that do not exist in
-`arg` may be added. Dimensions added in this way are known as "extruded"
-dimensions. These dimensions have length 1, but may be broadcasted along
-dimensions which are not 1 in a mapjoin.
+`arg` may be added, also with length 1.
 """
 reorder
 
@@ -307,7 +307,7 @@ function Base.show(io::IO, mime::MIME"text/plain", node::LogicNode)
         if isstateful(node)
             display_statement(io, mime, node, 0)
         else
-            display_expression(io, mime, node)
+            display_expression(io, mime, node, 0)
         end
     catch
         println(io, "error showing: ", node)
@@ -317,9 +317,9 @@ end
 
 function display_statement(io, mime, node, indent)
     if operation(node) == query
-        display_expression(io, mime, node.lhs)
+        display_expression(io, mime, node.lhs, indent)
         print(io, " = ")
-        display_expression(io, mime, node.rhs)
+        display_expression(io, mime, node.rhs, indent)
     elseif operation(node) == plan
         println(io, "plan")
         for body in node.bodies
@@ -331,11 +331,11 @@ function display_statement(io, mime, node, indent)
     elseif operation(node) == produces
         print(io, "return (")
         for arg in node.args[1:(end - 1)]
-            display_expression(io, mime, arg)
+            display_expression(io, mime, arg, indent)
             print(io, ", ")
         end
         if length(node.args) > 0
-            display_expression(io, mime, node.args[end])
+            display_expression(io, mime, node.args[end], indent)
         end
         print(io, ")")
     else
@@ -343,7 +343,7 @@ function display_statement(io, mime, node, indent)
     end
 end
 
-function display_expression(io, mime, node)
+function display_expression(io, mime, node, indent)
     if operation(node) === immediate
         print(io, node.val)
     elseif operation(node) === deferred
@@ -356,18 +356,20 @@ function display_expression(io, mime, node)
         print(io, node.name)
     elseif operation(node) == subquery
         print(io, "(")
-        display_expression(io, mime, node.lhs)
+        display_expression(io, mime, node.lhs, indent)
         print(io, " = ")
-        display_expression(io, mime, node.arg)
+        display_expression(io, mime, node.arg, indent)
         print(io, ")")
     elseif istree(node)
-        print(io, operation(node), "(")
+        println(io, operation(node), "(")
         for child in node.children[1:(end - 1)]
-            display_expression(io, mime, child)
-            print(io, ", ")
+            print(io, " "^(indent + 2))
+            display_expression(io, mime, child, indent + 2)
+            println(io, ", ")
         end
         if length(node.children) > 0
-            display_expression(io, mime, node.children[end])
+            print(io, " "^(indent + 2))
+            display_expression(io, mime, node.children[end], indent + 2)
         end
         print(io, ")")
     else
@@ -480,46 +482,6 @@ function propagate_fields(node::LogicNode, fields=Dict{LogicNode,Any}())
         similarterm(
             node, operation(node), map(x -> propagate_fields(x, fields), arguments(node))
         )
-    else
-        node
-    end
-end
-
-function getextrudes(ex, extrudes, fields)
-    if ex.kind === alias
-        return extrudes[ex]
-    elseif @capture ex table(~tns, ~idxs...)
-        return []
-    elseif @capture ex mapjoin(~f, ~args...)
-        return intersect(map(arg -> getextrudes(arg, extrudes, fields), args)...)
-    elseif @capture ex aggregate(~op, ~init, ~arg, ~idxs...)
-        return setdiff(getextrudes(arg, extrudes, fields), idxs)
-    elseif @capture ex reorder(~arg, ~idxs...)
-        idxs_2 = getfields(arg, fields)
-        exts_2 = getextrudes(arg, extrudes, fields)
-        return union(intersect(exts_2, idxs), setdiff(idxs, idxs_2))
-    elseif @capture ex relabel(~arg, ~idxs...)
-        idxs_2 = getfields(arg, fields)
-        reidx = Dict(map(Pair, idxs_2, idxs)...)
-        return map(idx -> reidx[idx], getextrudes(arg, extrudes, fields))
-    elseif @capture ex reformat(~tns, ~arg)
-        getextrudes(arg, extrudes, fields)
-    else
-        []
-    end
-end
-
-function propagate_extrudes(node::LogicNode, extrudes=Dict(), fields=Dict())
-    if @capture node plan(~stmts...)
-        stmts = map(stmts) do stmt
-            propagate_extrudes(stmt, extrudes)
-        end
-        plan(stmts...)
-    elseif @capture node query(~lhs, ~rhs)
-        extrudes[lhs] = compute_extrudes(rhs, extrudes)
-        fields[lhs] = getfields(rhs, fields)
-        #Rewrite(Postwalk(@rule ~a::isalias => )
-        node
     else
         node
     end

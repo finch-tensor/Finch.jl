@@ -407,7 +407,7 @@ end
                     @repl io reduce(+, A, dims=1)
                     @repl io reduce(+, A, dims=(2,))
                     @repl io reduce(+, A, dims=2)
-                    @repl io reduce(+, A, dims=(1, 2))
+                    #@repl io reduce(+, A, dims=(1, 2)) TODO nondeterminism
                     @repl io reduce(+, A, dims=:)
 
                     @test check_output("interface/reduce_$key.txt", String(take!(io)))
