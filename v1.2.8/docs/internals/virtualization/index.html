@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Virtualization · Finch.jl</title><meta name="title" content="Virtualization · Finch.jl"/><meta property="og:title" content="Virtualization · Finch.jl"/><meta property="twitter:title" content="Virtualization · Finch.jl"/><meta name="description" content="Documentation for Finch.jl."/><meta property="og:description" content="Documentation for Finch.jl."/><meta property="twitter:description" content="Documentation for Finch.jl."/><meta property="og:url" content="https://finch-tensor.github.io/Finch.jl/docs/internals/virtualization/"/><meta property="twitter:url" content="https://finch-tensor.github.io/Finch.jl/docs/internals/virtualization/"/><link rel="canonical" href="https://finch-tensor.github.io/Finch.jl/docs/internals/virtualization/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script><link href="../../../assets/favicon.ico" rel="icon" type="image/x-icon"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="Finch.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">Finch.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../getting_started/">Getting Started</a></li><li><span class="tocitem">Documentation</span><ul><li><a class="tocitem" href="../../tensor_formats/">Tensor Formats</a></li><li><a class="tocitem" href="../../array_api/">High-Level Array API</a></li><li><a class="tocitem" href="../../sparse_utils/">Sparse and Structured Utilities</a></li><li><a class="tocitem" href="../../user-defined_functions/">User-Defined Functions</a></li><li><a class="tocitem" href="../../fileio/">FileIO</a></li><li><input class="collapse-toggle" id="menuitem-3-6" type="checkbox"/><label class="tocitem" for="menuitem-3-6"><span class="docs-label">Advanced: Finch Language</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../language/calling_finch/">Calling Finch</a></li><li><a class="tocitem" href="../../language/finch_language/">The Finch Language</a></li><li><a class="tocitem" href="../../language/dimensionalization/">Dimensionalization</a></li><li><a class="tocitem" href="../../language/index_sugar/">Index Sugar</a></li><li><a class="tocitem" href="../../language/mask_sugar/">Mask Sugar</a></li><li><a class="tocitem" href="../../language/iteration_protocols/">Iteration Protocols</a></li><li><a class="tocitem" href="../../language/parallelization/">Parallelization</a></li><li><a class="tocitem" href="../../language/interoperability/">Interoperability</a></li><li><a class="tocitem" href="../../language/optimization_tips/">Optimization Tips</a></li><li><a class="tocitem" href="../../language/benchmarking_tips/">Benchmarking Tips</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-3-7" type="checkbox" checked/><label class="tocitem" for="menuitem-3-7"><span class="docs-label">Developers: Internal Details</span><i class="docs-chevron"></i></label><ul class="collapsed"><li class="is-active"><a class="tocitem" href>Virtualization</a><ul class="internal"><li><a class="tocitem" href="#Virtualization"><span>Virtualization</span></a></li><li><a class="tocitem" href="#Working-with-Finch-IR"><span>Working with Finch IR</span></a></li></ul></li><li><a class="tocitem" href="../tensor_interface/">Tensor Interface</a></li><li><a class="tocitem" href="../compiler_interface/">Compiler Interfaces</a></li><li><a class="tocitem" href="../finch_notation/">Finch Notation</a></li><li><a class="tocitem" href="../finch_logic/">Finch Logic</a></li></ul></li></ul></li><li><a class="tocitem" href="../../../CONTRIBUTING/">Community and Contributions</a></li><li><span class="tocitem">Appendices and Additional Resources</span><ul><li><a class="tocitem" href="../../../appendices/directory_structure/">Directory Structure</a></li><li><a class="tocitem" href="../../../appendices/directory_structure/">Code Listing</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Documentation</a></li><li><a class="is-disabled">Developers: Internal Details</a></li><li class="is-active"><a href>Virtualization</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Virtualization</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/finch-tensor/Finch.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/finch-tensor/Finch.jl/blob/main/docs/src/docs/internals/virtualization.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h3 id="Program-Instances"><a class="docs-heading-anchor" href="#Program-Instances">Program Instances</a><a id="Program-Instances-1"></a><a class="docs-heading-anchor-permalink" href="#Program-Instances" title="Permalink"></a></h3><p>Finch relies heavily on Julia&#39;s <a href="https://docs.julialang.org/en/v1/manual/metaprogramming/">metaprogramming capabilities</a> ( <a href="https://docs.julialang.org/en/v1/manual/metaprogramming/#Macros">macros</a> and <a href="https://docs.julialang.org/en/v1/manual/metaprogramming/#Generated-functions">generated functions</a> in particular) to produce code. To review briefly, a macro allows us to inspect the syntax of it&#39;s arguments and generate replacement syntax. A generated function allows us to inspect the type of the function arguments and produce code for a function body.</p><p>In normal Finch usage, we might call Finch as follows:</p><pre><code class="language-julia-repl hljs">julia&gt; C = Tensor(SparseList(Element(0)));
+
+julia&gt; A = Tensor(SparseList(Element(0)), [0, 2, 0, 0, 3]);
+
+julia&gt; B = Tensor(Dense(Element(0)), [11, 12, 13, 14, 15]);
+
+julia&gt; @finch begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+       end
+(C = Tensor(SparseList{Int64}(Element{0, Int64, Int64}([24, 45]), 5, [1, 3], [2, 5])),)
+
+julia&gt; C
+5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
+  0
+ 24
+  0
+  0
+ 45
+
+julia&gt; tensor_tree(C)
+5-Tensor
+└─ SparseList (0) [1:5]
+   ├─ [2]: 24
+   └─ [5]: 45</code></pre><p>The <a href="https://docs.julialang.org/en/v1/base/base/#Base.macroexpand"><code>@macroexpand</code></a> macro allows us to see the result of applying a macro. Let&#39;s examine what happens when we use the <code>@finch</code> macro (we&#39;ve stripped line numbers from the result to clean it up):</p><pre><code class="language-julia-repl hljs">julia&gt; Finch.regensym(Finch.striplines(@macroexpand @finch begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+       end))
+quote
+    _res_1 = (Finch.execute)(begin
+                (Finch.FinchNotation.block_instance)((Finch.FinchNotation.block_instance)((Finch.FinchNotation.declare_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), literal_instance(0), (Finch.FinchNotation.literal_instance)(Finch.auto)), begin
+                            let i = index_instance(i)
+                                (Finch.FinchNotation.loop_instance)(i, Finch.FinchNotation.Auto(), (Finch.FinchNotation.assign_instance)((Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:C), (Finch.FinchNotation.finch_leaf_instance)(C)), (Finch.FinchNotation.updater_instance)((Finch.FinchNotation.literal_instance)((initwrite)((fill_value)(C)))), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.literal_instance)((initwrite)((fill_value)(C))), (Finch.FinchNotation.call_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:*), (Finch.FinchNotation.finch_leaf_instance)(*)), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:A), (Finch.FinchNotation.finch_leaf_instance)(A)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))), (Finch.FinchNotation.access_instance)((Finch.FinchNotation.tag_instance)(variable_instance(:B), (Finch.FinchNotation.finch_leaf_instance)(B)), (Finch.FinchNotation.reader_instance)(), (Finch.FinchNotation.tag_instance)(variable_instance(:i), (Finch.FinchNotation.finch_leaf_instance)(i))))))
+                            end
+                        end), (Finch.FinchNotation.yieldbind_instance)(variable_instance(:C)))
+            end; )
+    begin
+        C = _res_1[:C]
+    end
+    begin
+        _res_1
+    end
+end</code></pre><p>In the above output, <code>@finch</code> creates an AST of program instances, then calls <code>Finch.execute</code> on it. A program instance is a struct that contains the program to be executed along with its arguments. Although we can use the above constructors (e.g. <code>loop_instance</code>) to make our own program instance, it is most convenient to use the unexported macro <code>Finch.finch_program_instance</code>:</p><pre><code class="language-julia-repl hljs">julia&gt; using Finch: @finch_program_instance
+
+julia&gt; prgm = Finch.@finch_program_instance begin
+           C .= 0
+           for i in _
+               C[i] = A[i] * B[i]
+           end
+           return C
+       end
+Finch program instance: begin
+  tag(C, Tensor(SparseList(Element(0)))) .= 0
+  for i = Auto()
+    tag(C, Tensor(SparseList(Element(0))))[tag(i, i)] &lt;&lt;Finch.FinchNotation.InitWriter{0}()&gt;&gt;= tag(*, *)(tag(A, Tensor(SparseList(Element(0))))[tag(i, i)], tag(B, Tensor(Dense(Element(0))))[tag(i, i)])
+  end
+  return (tag(C, Tensor(SparseList(Element(0)))))
+end</code></pre><p>As we can see, our program instance contains not only the AST to be executed, but also the data to execute the program with. The type of the program instance contains only the program portion; there may be many program instances with different inputs, but the same program type. We can run our program using <code>Finch.execute</code>, which returns a <code>NamedTuple</code> of outputs.</p><pre><code class="language-julia-repl hljs">julia&gt; typeof(prgm)
+Finch.FinchNotation.BlockInstance{Tuple{Finch.FinchNotation.DeclareInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.LiteralInstance{0}, Finch.FinchNotation.LiteralInstance{Finch.FinchNotation.Auto()}}, Finch.FinchNotation.LoopInstance{Finch.FinchNotation.IndexInstance{:i}, Finch.FinchNotation.Auto, Finch.FinchNotation.AssignInstance{Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.UpdaterInstance{Finch.FinchNotation.LiteralInstance{Finch.FinchNotation.InitWriter{0}()}}, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}, Finch.FinchNotation.LiteralInstance{Finch.FinchNotation.InitWriter{0}()}, Finch.FinchNotation.CallInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:*}, Finch.FinchNotation.LiteralInstance{*}}, Tuple{Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:A}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.ReaderInstance, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}, Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:B}, Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.ReaderInstance, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}}}}}, Finch.FinchNotation.YieldBindInstance{Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:C}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}}}}}
+
+julia&gt; C = Finch.execute(prgm).C
+5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
+  0
+ 24
+  0
+  0
+ 45</code></pre><p>This functionality is sufficient for building finch kernels programatically. For example, if we wish to define a function <code>pointwise_sum()</code> that takes the pointwise sum of a variable number of vector inputs, we might implement it as follows:</p><pre><code class="language-julia-repl hljs">julia&gt; function pointwise_sum(As...)
+           B = Tensor(Dense(Element(0)))
+           isempty(As) &amp;&amp; return B
+           i = Finch.FinchNotation.index_instance(:i)
+           A_vars = [
+               Finch.FinchNotation.tag_instance(
+                   Finch.FinchNotation.variable_instance(Symbol(:A, n)), As[n]
+               ) for n in 1:length(As)
+           ]
+           #create a list of variable instances with different names to hold the input tensors
+           ex = @finch_program_instance 0
+           for A_var in A_vars
+               ex = @finch_program_instance $A_var[i] + $ex
+           end
+           prgm = @finch_program_instance begin
+               B .= 0
+               for i in _
+                   B[i] = $ex
+               end
+               return B
+           end
+           return Finch.execute(prgm).B
+       end
+pointwise_sum (generic function with 1 method)
+
+julia&gt; pointwise_sum([1, 2], [3, 4])
+2 Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}:
+ 4
+ 6</code></pre><h2 id="Virtualization"><a class="docs-heading-anchor" href="#Virtualization">Virtualization</a><a id="Virtualization-1"></a><a class="docs-heading-anchor-permalink" href="#Virtualization" title="Permalink"></a></h2><p>Finch generates different code depending on the types of the arguments to the program. For example, in the following program, Finch generates different code depending on the types of <code>A</code> and <code>B</code>. In order to execute a program, Finch builds a typed AST (Abstract Syntax Tree), then calls <code>Finch.execute</code> on it. The AST object is just an instance of a program to execute, and contains the program to execute along with the data to execute it.  The type of the program instance contains only the program portion; there may be many program instances with different inputs, but the same program type. During compilation, Finch uses the type of the program to construct a more ergonomic representation, which is then used to generate code. This process is called &quot;virtualization&quot;.  All of the Finch AST nodes have both instance and virtual representations. For example, the literal <code>42</code> is represented as <code>Finch.FinchNotation.LiteralInstance(42)</code> and then virtualized to <code>literal(42)</code>.  The virtualization process is implemented by the <code>virtualize</code> function.</p><pre><code class="language-julia-repl hljs">julia&gt; A = Tensor(SparseList(Element(0)), [0, 2, 0, 0, 3]);
+
+julia&gt; B = Tensor(Dense(Element(0)), [11, 12, 13, 14, 15]);
+
+julia&gt; s = Scalar(0);
+
+julia&gt; typeof(A)
+Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}
+
+julia&gt; typeof(B)
+Tensor{DenseLevel{Int64, ElementLevel{0, Int64, Int64, Vector{Int64}}}}
+
+julia&gt; inst = Finch.@finch_program_instance begin
+           for i in _
+               s[] += A[i]
+           end
+       end
+Finch program instance: for i = Auto()
+  tag(s, Scalar{0, Int64})[] &lt;&lt;tag(+, +)&gt;&gt;= tag(A, Tensor(SparseList(Element(0))))[tag(i, i)]
+end
+
+julia&gt; typeof(inst)
+Finch.FinchNotation.LoopInstance{Finch.FinchNotation.IndexInstance{:i}, Finch.FinchNotation.Auto, Finch.FinchNotation.AssignInstance{Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:s}, Scalar{0, Int64}}, Finch.FinchNotation.UpdaterInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:+}, Finch.FinchNotation.LiteralInstance{+}}}, Tuple{}}, Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:+}, Finch.FinchNotation.LiteralInstance{+}}, Finch.FinchNotation.AccessInstance{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:A}, Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0, Int64, Int64, Vector{Int64}}}}}, Finch.FinchNotation.ReaderInstance, Tuple{Finch.FinchNotation.TagInstance{Finch.FinchNotation.VariableInstance{:i}, Finch.FinchNotation.IndexInstance{:i}}}}}}
+
+julia&gt; Finch.virtualize(Finch.JuliaContext(), :inst, typeof(inst))
+Finch program: for i = virtual(Finch.FinchNotation.Auto)
+  tag(s, virtual(Finch.VirtualScalar))[] &lt;&lt;tag(+, +)&gt;&gt;= tag(A, virtual(Finch.VirtualFiber{Finch.VirtualSparseListLevel}))[tag(i, i)]
+end
+
+julia&gt; @finch_code begin
+           for i in _
+               s[] += A[i]
+           end
+       end
+quote
+    s_data = (ex.bodies[1]).body.lhs.tns.bind
+    s_val = s_data.val
+    A_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
+    A_lvl_ptr = A_lvl.ptr
+    A_lvl_idx = A_lvl.idx
+    A_lvl_stop = A_lvl.shape
+    A_lvl_2 = A_lvl.lvl
+    A_lvl_2_val = A_lvl_2.val
+    A_lvl_q = A_lvl_ptr[1]
+    A_lvl_q_stop = A_lvl_ptr[1 + 1]
+    if A_lvl_q &lt; A_lvl_q_stop
+        A_lvl_i1 = A_lvl_idx[A_lvl_q_stop - 1]
+    else
+        A_lvl_i1 = 0
+    end
+    phase_stop = min(A_lvl_i1, A_lvl_stop)
+    if phase_stop &gt;= 1
+        if A_lvl_idx[A_lvl_q] &lt; 1
+            A_lvl_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_q, A_lvl_q_stop - 1)
+        end
+        while true
+            A_lvl_i = A_lvl_idx[A_lvl_q]
+            if A_lvl_i &lt; phase_stop
+                A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
+                s_val = A_lvl_2_val_2 + s_val
+                A_lvl_q += 1
+            else
+                phase_stop_3 = min(phase_stop, A_lvl_i)
+                if A_lvl_i == phase_stop_3
+                    A_lvl_2_val_2 = A_lvl_2_val[A_lvl_q]
+                    s_val += A_lvl_2_val_2
+                    A_lvl_q += 1
+                end
+                break
+            end
+        end
+    end
+    result = ()
+    s_data.val = s_val
+    result
+end
+
+julia&gt; @finch_code begin
+           for i in _
+               s[] += B[i]
+           end
+       end
+quote
+    s_data = (ex.bodies[1]).body.lhs.tns.bind
+    s_val = s_data.val
+    B_lvl = (ex.bodies[1]).body.rhs.tns.bind.lvl
+    B_lvl_stop = B_lvl.shape
+    B_lvl_2 = B_lvl.lvl
+    B_lvl_2_val = B_lvl_2.val
+    for i_3 = 1:B_lvl_stop
+        B_lvl_q = (1 - 1) * B_lvl_stop + i_3
+        B_lvl_2_val_2 = B_lvl_2_val[B_lvl_q]
+        s_val = B_lvl_2_val_2 + s_val
+    end
+    result = ()
+    s_data.val = s_val
+    result
+end</code></pre><h3 id="The-&quot;virtual&quot;-IR-Node"><a class="docs-heading-anchor" href="#The-&quot;virtual&quot;-IR-Node">The &quot;virtual&quot; IR Node</a><a id="The-&quot;virtual&quot;-IR-Node-1"></a><a class="docs-heading-anchor-permalink" href="#The-&quot;virtual&quot;-IR-Node" title="Permalink"></a></h3><p>Users can also create their own virtual nodes to represent their custom types. While most calls to virtualize result in a Finch IR Node, some objects, such as tensors and dimensions, are virtualized to a <code>virtual</code> object, which holds the custom virtual type.  These types may contain constants and other virtuals, as well as reference variables in the scope of the executing context. Any aspect of virtuals visible to Finch should be considered immutable, but virtuals may reference mutable variables in the scope of the executing context.</p><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Finch.virtualize" href="#Finch.virtualize"><code>Finch.virtualize</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">virtualize(ctx, ex, T, [tag])</code></pre><p>Return the virtual program corresponding to the Julia expression <code>ex</code> of type <code>T</code> in the <code>JuliaContext</code> <code>ctx</code>. Implementaters may support the optional <code>tag</code> argument is used to name the resulting virtual variable.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/finch-tensor/Finch.jl/blob/9d5f092ac80fee0c098b5261e3db8cc580a0bdb0/src/environment.jl#L75-L81">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Finch.FinchNotation.virtual" href="#Finch.FinchNotation.virtual"><code>Finch.FinchNotation.virtual</code></a> — <span class="docstring-category">Constant</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">virtual(val)</code></pre><p>Finch AST expression for an object <code>val</code> which has special meaning to the compiler. This type is typically used for tensors, as it allows users to specify the tensor&#39;s shape and data type.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/finch-tensor/Finch.jl/blob/9d5f092ac80fee0c098b5261e3db8cc580a0bdb0/src/FinchNotation/nodes.jl#L60-L66">source</a></section></article><h3 id="Virtual-Methods"><a class="docs-heading-anchor" href="#Virtual-Methods">Virtual Methods</a><a id="Virtual-Methods-1"></a><a class="docs-heading-anchor-permalink" href="#Virtual-Methods" title="Permalink"></a></h3><p>Many methods have analogues we can call on the virtual version of the object. For example, we can call <code>size</code> an an array, and <code>virtual_size</code> on a virtual array. The virtual methods are used to generate code, so if they are pure they may return an expression which computes the results, and if they have side effects they may accept a context argument into which they can emit their side-effecting code.</p><p>In addition to the special compiler methods which are prefixed <code>virtual_</code>, there is also a function <code>virtual_call</code>, which is used to evaluate function calls on Finch IR when it would result in a virtual object. The behavior should mirror the concrete behavior of the corresponding function.</p><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Finch.virtual_call" href="#Finch.virtual_call"><code>Finch.virtual_call</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">virtual_call(ctx, f, args...)</code></pre><p>Given the virtual arguments <code>args...</code>, and a literal function <code>f</code>, return a virtual object representing the result of the function call. If the function is not foldable, return nothing. This function is used so that we can call e.g. tensor wrapper constructors and dimension constructors in finch code. Implementations should overload <code>virtual_call_def</code> to provide the actual implementation.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/finch-tensor/Finch.jl/blob/9d5f092ac80fee0c098b5261e3db8cc580a0bdb0/src/transforms/evaluate.jl#L124-L132">source</a></section></article><h2 id="Working-with-Finch-IR"><a class="docs-heading-anchor" href="#Working-with-Finch-IR">Working with Finch IR</a><a id="Working-with-Finch-IR-1"></a><a class="docs-heading-anchor-permalink" href="#Working-with-Finch-IR" title="Permalink"></a></h2><p>Calling print on a finch program or program instance will print the structure of the program as one would call constructors to build it. For example,</p><pre><code class="language-julia-repl hljs">julia&gt; prgm_inst = Finch.@finch_program_instance for i in _
+           s[] += A[i]
+       end;
+
+julia&gt; println(prgm_inst)
+loop_instance(index_instance(i), Finch.FinchNotation.Auto(), assign_instance(access_instance(tag_instance(variable_instance(:s), Scalar{0, Int64}(0)), updater_instance(tag_instance(variable_instance(:+), literal_instance(+)))), tag_instance(variable_instance(:+), literal_instance(+)), access_instance(tag_instance(variable_instance(:A), Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))), reader_instance(), tag_instance(variable_instance(:i), index_instance(i)))))
+
+julia&gt; prgm_inst
+Finch program instance: for i = Auto()
+  tag(s, Scalar{0, Int64})[] &lt;&lt;tag(+, +)&gt;&gt;= tag(A, Tensor(SparseList(Element(0))))[tag(i, i)]
+end
+
+julia&gt; prgm = Finch.@finch_program for i in _
+           s[] += A[i]
+       end;
+
+julia&gt; println(prgm)
+loop(index(i), virtual(Finch.FinchNotation.Auto()), assign(access(literal(Scalar{0, Int64}(0)), updater(literal(+))), literal(+), access(literal(Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))), reader(), index(i))))
+
+julia&gt; prgm
+Finch program: for i = virtual(Finch.FinchNotation.Auto)
+  Scalar{0, Int64}(0)[] &lt;&lt;+&gt;&gt;= Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))[i]
+end</code></pre><p>Both the virtual and instance representations of Finch IR define <a href="https://github.com/willow-ahrens/SyntaxInterface.jl">SyntaxInterface.jl</a> and <a href="https://github.com/JuliaCollections/AbstractTrees.jl">AbstractTrees.jl</a> representations, so you can use the standard <code>operation</code>, <code>arguments</code>, <code>istree</code>, and <code>children</code> functions to inspect the structure of the program, as well as the rewriters defined by <a href="https://github.com/willow-ahrens/RewriteTools.jl">RewriteTools.jl</a></p><pre><code class="language-julia-repl hljs">julia&gt; using Finch.FinchNotation;
+
+julia&gt; PostOrderDFS(prgm)
+PostOrderDFS{FinchNode}(loop(index(i), virtual(Auto()), assign(access(literal(Scalar{0, Int64}(0)), updater(literal(+))), literal(+), access(literal(Tensor(SparseList{Int64}(Element{0, Int64, Int64}([2, 3]), 5, [1, 3], [2, 5]))), reader(), index(i)))))
+
+julia&gt; (@capture prgm loop(~idx, ~ext, ~val))
+true
+
+julia&gt; idx
+Finch program: i</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../language/benchmarking_tips/">« Benchmarking Tips</a><a class="docs-footer-nextpage" href="../tensor_interface/">Tensor Interface »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.11.4 on <span class="colophon-date" title="Sunday 18 May 2025 10:50">Sunday 18 May 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
