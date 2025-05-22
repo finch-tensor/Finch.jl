@@ -316,9 +316,9 @@ function lift_fields(prgm)
                     idxs = getfields(rhs)
                     query(lhs, reorder(rhs, idxs...))
                 end),
-                (@rule query(~lhs, reformat(~arg)) => if arg.kind === mapjoin
+                (@rule query(~lhs, reformat(~tns, ~arg)) => if arg.kind === mapjoin
                     idxs = getfields(arg)
-                    query(lhs, reformat(reorder(arg, idxs...)))
+                    query(lhs, reformat(tns, reorder(arg, idxs...)))
                 end),
             ]),
         ),
