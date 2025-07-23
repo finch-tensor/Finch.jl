@@ -32,14 +32,7 @@ function isdistributive(f, g)
     if typeof(f) == PlanNode && typeof(g) == PlanNode
         throw(error("Can't check distributivity of plan nodes!"))
     end
-    #    distributes = Finch.isdistributive(Finch.DefaultAlgebra(), f, g)
-    distributes = ((f == +) && ((g == max) || (g == min)))
-    distributes = distributes || ((f == choose(false)) && (g == |))
-    distributes = distributes || ((f == |) && (g == choose(false)))
-    distributes = distributes || ((f == &) && (g == choose(false)))
-    distributes = distributes || ((f == &) && (g == |))
-    distributes = distributes || ((f == *) && (g == +))
-    return distributes
+    return Finch.isdistributive(Finch.DefaultAlgebra(), f, g)
 end
 
 function cansplitpush(f, g)

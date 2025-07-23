@@ -149,7 +149,7 @@ function get_simplify_rules(alg, shash)
             end), (@rule call(-, ~a, ~b) => call(+, a, call(-, b))),
         (@rule call(/, ~a, ~b) => call(*, a, call(inv, b))),
         (@rule call(~f::isinvolution(alg), call(~f, ~a)) => a),
-        (@rule call(~f, ~a..., call(~g, ~b), ~c...) => if isdistributive(alg, g, f)
+        (@rule call(~f, ~a..., call(~g, ~b), ~c...) => if isdistributive(alg, f, g)
             call(g, call(f, a..., b, c...))
         end), (@rule call(/, ~a) => call(inv, a)), (@rule sieve(true, ~a) => a),
         (@rule sieve(false, ~a) => block()), #TODO should add back skipvisitor
