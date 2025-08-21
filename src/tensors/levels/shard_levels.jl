@@ -141,7 +141,7 @@ Stacktrace:
    @ none:1
 ```
 """
-struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule, Extent} <: AbstractLevel
+struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
@@ -149,7 +149,6 @@ struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule, Extent} <: AbstractLe
     used::Used
     alloc::Alloc
     schedule::Scheduler
-    extent::Extent
 end
 const Shard = ShardLevel
 
