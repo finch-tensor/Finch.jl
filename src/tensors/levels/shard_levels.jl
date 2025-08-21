@@ -141,13 +141,15 @@ Stacktrace:
    @ none:1
 ```
 """
-struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc} <: AbstractLevel
+struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule, Extent} <: AbstractLevel
     device::Device
     lvl::Lvl
     ptr::Ptr
     task::Task
     used::Used
     alloc::Alloc
+    schedule::Scheduler
+    extent::Extent
 end
 const Shard = ShardLevel
 
@@ -158,6 +160,7 @@ function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     used = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     alloc = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     lvl = transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl)
+    schedule = FinchStaticSchedule{:dynamic}()
     ShardLevel{Device}(
         device,
         transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl),
@@ -165,13 +168,14 @@ function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
         task,
         used,
         alloc,
+        schedule
     )
 end
 
 function ShardLevel{Device}(
-    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
-    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}(device, lvl, ptr, task, used, alloc)
+    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc, schedule::Schedule
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}(device, lvl, ptr, task, used, alloc, schedule)
 end
 
 function Base.summary(
@@ -323,6 +327,7 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     task
     used
     alloc
+    schedule
     qos_fill
     qos_stop
     Tv
@@ -332,6 +337,7 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     Task
     Used
     Alloc
+    Schedule
 end
 
 postype(lvl::VirtualShardLevel) = postype(lvl.lvl)
@@ -362,13 +368,14 @@ function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
 end
 
 function virtualize(
-    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}, tag=:lvl
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}, tag=:lvl
+) where {Device,Lvl,Ptr,Task,Used,Alloc, Schedule}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
     used = freshen(ctx, tag, :_qos_fill)
     alloc = freshen(ctx, tag, :_qos_stop)
+    schedule = freshen(ctx, tag, :_schedule)
 
     push_preamble!(
         ctx,
@@ -378,10 +385,12 @@ function virtualize(
             $task = $tag.task
             $used = $tag.used
             $alloc = $tag.alloc
+            $schedule = $tag.schedule
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
+    schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
     VirtualShardLevel(
         tag,
         device_2,
@@ -390,6 +399,7 @@ function virtualize(
         task,
         used,
         alloc,
+        schedule_2,
         nothing,
         nothing,
         typeof(level_fill_value(Lvl)),
@@ -399,6 +409,7 @@ function virtualize(
         Task,
         Used,
         Alloc,
+        Schedule
     )
 end
 
@@ -411,6 +422,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         distribute_buffer(ctx, lvl.task, arch, style),
         distribute_buffer(ctx, lvl.used, arch, style),
         distribute_buffer(ctx, lvl.alloc, arch, style),
+        lvl.schedule,
         lvl.qos_fill,
         lvl.qos_stop,
         lvl.Tv,
@@ -420,6 +432,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         lvl.Task,
         lvl.Used,
         lvl.Alloc,
+        lvl.Schedule
     )
 end
 
@@ -462,6 +475,7 @@ function distribute_level(
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
             distribute_buffer(ctx, lvl.alloc, arch, style),
+            lvl.schedule,
             qos_fill,
             qos_stop,
             lvl.Tv,
@@ -471,6 +485,7 @@ function distribute_level(
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
+            lvl.Schedule
         )
     else
         diff[lvl.tag] = VirtualShardLevel(
@@ -481,6 +496,7 @@ function distribute_level(
             distribute_buffer(ctx, lvl.task, arch, style),
             distribute_buffer(ctx, lvl.used, arch, style),
             distribute_buffer(ctx, lvl.alloc, arch, style),
+            lvl.schedule,
             lvl.qos_fill,
             lvl.qos_stop,
             lvl.Tv,
@@ -490,6 +506,7 @@ function distribute_level(
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
+            lvl.Schedule
         )
     end
 end
@@ -506,6 +523,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.task,
             lvl.used,
             lvl.alloc,
+            lvl.schedule,
             lvl.qos_fill,
             lvl.qos_stop,
             lvl.Tv,
@@ -515,6 +533,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
+            lvl.Schedule
         ),
     )
 end
@@ -537,7 +556,12 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
             lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
             used = distribute_buffer(ctx_2, lvl.used, lvl.device, HostShared())
             alloc = distribute_buffer(ctx_2, lvl.alloc, lvl.device, HostShared())
-            virtual_parallel_region(ctx_2, lvl.device) do ctx_3
+
+            ext = Extent(1, pos)
+            parallel_dim = ParallelDimension(ext, lvl.device, lvl.schedule)
+            vdim = virtualize(ctx, parallel_dim, typeof(parallel_dim))
+
+            virtual_parallel_region(ctx_2, vdim, lvl.device, lvl_2.schedule) do ctx_3
                 task = get_task(ctx_3)
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
