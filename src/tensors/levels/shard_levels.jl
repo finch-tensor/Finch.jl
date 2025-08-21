@@ -148,7 +148,7 @@ struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule} <: AbstractLevel
     task::Task
     used::Used
     alloc::Alloc
-    schedule::Scheduler
+    schedule::Schedule
 end
 const Shard = ShardLevel
 
