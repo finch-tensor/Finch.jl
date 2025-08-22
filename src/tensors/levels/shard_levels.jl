@@ -155,7 +155,6 @@ const Shard = ShardLevel
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     Tp = postype(lvl)
     ptr = transfer(shared_memory(device), Tp[])
-    print("Checking device ", device, " with ", get_num_tasks(device), " tasks\n")
     task = transfer(shared_memory(device), Tp[])
     used = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     alloc = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
@@ -453,6 +452,8 @@ function distribute_level(
             end,
         )
         dev = get_device(arch)
+        println("Device: ", dev)
+        println("Architecture: ", arch)
         multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
