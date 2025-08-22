@@ -413,6 +413,7 @@ function virtualize(
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
+    print("Distributing level $(lvl) on $(arch)\n")
     diff[lvl.tag] = VirtualShardLevel(
         lvl.tag,
         lvl.device,
@@ -452,8 +453,6 @@ function distribute_level(
             end,
         )
         dev = get_device(arch)
-        println("Device: ", dev)
-        println("Architecture: ", arch)
         multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
