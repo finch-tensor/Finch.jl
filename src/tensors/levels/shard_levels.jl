@@ -155,6 +155,7 @@ const Shard = ShardLevel
 function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     Tp = postype(lvl)
     ptr = transfer(shared_memory(device), Tp[])
+    print("Checking device ", device, " with ", get_num_tasks(device), " tasks\n")
     task = transfer(shared_memory(device), Tp[])
     used = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     alloc = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
