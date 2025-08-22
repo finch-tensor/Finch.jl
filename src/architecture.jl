@@ -73,6 +73,8 @@ function is_on_device(ctx::AbstractCompiler, dev)
     res = false
     task = get_task(ctx)
     while task != nothing
+        println("Checking task $(get_task_num(task)) on device $(get_device(task))")
+        println("Against device $dev")
         if get_device(task) == dev
             res = true
             break
