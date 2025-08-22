@@ -195,7 +195,7 @@ end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     :(Finch.CPU($(ctx(device.n))))
 end
-get_num_tasks(::VirtualCPU) = device.n
+get_num_tasks(device::VirtualCPU) = device.n
 Base.:(==)(::CPU, ::CPU) = true
 Base.:(==)(::VirtualCPU, ::VirtualCPU) = true #This is not strictly true. A better approach would name devices, and give them parents so that we can be sure to parallelize through the processor hierarchy.
 
