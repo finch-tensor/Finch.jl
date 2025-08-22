@@ -640,7 +640,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, Dict(), DeviceGlobal())
         instantiate(ctx, VirtualSubFiber(lvl_2, value(qos, Tp)), mode)
     else
-        # @assert is_on_device(ctx, lvl.device)
+        @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(lvl, pos, freshen(ctx, :dirty)), mode)
     end
 end
@@ -667,7 +667,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     tid = freshen(ctx, tag, :_tid)
     qos = freshen(ctx, :qos)
 
-    # @assert is_on_device(ctx, lvl.device)
+    @assert is_on_device(ctx, lvl.device)
 
     return Thunk(;
         preamble=quote
