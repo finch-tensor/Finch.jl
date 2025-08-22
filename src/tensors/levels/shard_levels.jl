@@ -413,7 +413,6 @@ function virtualize(
 end
 
 function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
-    print("Distributing level $(lvl) on $(arch)\n")
     diff[lvl.tag] = VirtualShardLevel(
         lvl.tag,
         lvl.device,
@@ -641,6 +640,10 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, Dict(), DeviceGlobal())
         instantiate(ctx, VirtualSubFiber(lvl_2, value(qos, Tp)), mode)
     else
+        task = get_task(ctx)
+        device = get_device(task)
+        println("Instantiating shard level on device $(device) for task $(get_task_num(task))\n")
+        println(lvl.device)
         @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(lvl, pos, freshen(ctx, :dirty)), mode)
     end
