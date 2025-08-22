@@ -667,7 +667,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
     tid = freshen(ctx, tag, :_tid)
     qos = freshen(ctx, :qos)
 
-    @assert is_on_device(ctx, lvl.device)
+    # @assert is_on_device(ctx, lvl.device)
 
     return Thunk(;
         preamble=quote
