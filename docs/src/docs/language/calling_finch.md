@@ -26,7 +26,7 @@ conditionals, multiple outputs, and even user-defined types and functions.
 To begin, the following program sums the rows of a sparse matrix:
 
 ```julia
-using Finch
+using Finch, SparseArrays
 A = sprand(5, 5, 0.5)
 y = zeros(5)
 @finch begin

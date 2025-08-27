@@ -12,32 +12,41 @@ end
 end
 
 """
-    fsparse(I::Tuple, V,[ M::Tuple, combine]; fill_value=zero(eltype(V)))
+    fsparse(I..., V,[ M::Tuple, combine]; fill_value=zero(eltype(V)))
 
-Create a sparse COO tensor `S` such that `size(S) == M` and `S[(i[q] for i =
-I)...] = V[q]`. The combine function is used to combine duplicates. If `M` is
-not specified, it is set to `map(maximum, I)`. If the combine function is not
-supplied, combine defaults to `+` unless the elements of V are Booleans in which
-case combine defaults to `|`. All elements of I must satisfy 1 <= I[n][q] <=
-M[n].  Numerical zeros are retained as structural nonzeros; to drop numerical
-zeros, use dropzeros!.
+Create a sparse COO tensor `S` such that `size(S) == M` and `S[(i[q] for i in
+I)...] = V[q]`. The `combine` function is used to combine duplicates. If `M` is
+not specified, it is set to `map(maximum, I)`. If the `combine` function is not
+supplied, `combine` defaults to `+` unless the elements of `V` are Booleans in which
+case `combine` defaults to `|`. All elements of `I` must satisfy `1 <= I[n][q] <=
+M[n]`.  Numerical zeros are retained as structural nonzeros; to drop numerical
+zeros use [`dropfills`](@ref).
 
 See also: [`sparse`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.sparse)
 
 # Examples
+```jldoctest setup=:(using Finch)
+julia> I = ([1, 2, 3], [1, 2, 3], [1, 2, 3]);
 
-julia> I = (
-    [1, 2, 3],
-    [1, 2, 3],
-    [1, 2, 3]);
+julia> V = [1.0, 2.0, 3.0];
 
-julia> V = [1.0; 2.0; 3.0];
+julia> fsparse(I..., V)
+3×3×3 Tensor{SparseCOOLevel{3, Tuple{Int64, Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+[:, :, 1] =
+ 1.0  0.0  0.0
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
 
-julia> fsparse(I, V)
-SparseCOO (0.0) [1:3×1:3×1:3]
-│ │ │
-└─└─└─[1, 1, 1] [2, 2, 2] [3, 3, 3]
-      1.0       2.0       3.0
+[:, :, 2] =
+ 0.0  0.0  0.0
+ 0.0  2.0  0.0
+ 0.0  0.0  0.0
+
+[:, :, 3] =
+ 0.0  0.0  0.0
+ 0.0  0.0  0.0
+ 0.0  0.0  3.0
+```
 """
 fsparse(iV::AbstractVector, args...; kwargs...) = fsparse_parse((), iV, args...; kwargs...)
 function fsparse_parse(I, i::AbstractVector, args...; kwargs...)
@@ -82,7 +91,7 @@ function fsparse_impl(
 end
 
 """
-    fsparse!(I..., V,[ M::Tuple])
+    fsparse!(I..., V,[ M::Tuple]; fill_value=zero(eltype(V)))
 
 Like [`fsparse`](@ref), but the coordinates must be sorted and unique, and memory
 is reused.
@@ -124,36 +133,41 @@ function fsparse!_impl(
 end
 
 """
-    fsprand([rng],[type], M..., p, [rfn])
+    fsprand([rng], [type], M..., p, [rfn])
 
 Create a random sparse tensor of size `m` in COO format. There are two cases:
-    - If `p` is floating point, the probability of any element being nonzero is
+
+  * If `p` is a floating point number, the probability of any element being nonzero is
     independently given by `p` (and hence the expected density of nonzeros is
     also `p`).
-    - If `p` is an integer, exactly `p` nonzeros are distributed uniformly at
+  * If `p` is an integer, exactly `p` nonzeros are distributed uniformly at
     random throughout the tensor (and hence the density of nonzeros is exactly
     `p / prod(M)`).
+
 Nonzero values are sampled from the distribution specified by `rfn` and have the
 type `type`. The uniform distribution is used in case `rfn` is not specified.
 The optional `rng` argument specifies a random number generator.
 
-See also: (`sprand`)(https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.sprand)
+See also: [`sprand`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.sprand)
 
 # Examples
-```julia
+```julia-repl
 julia> fsprand(Bool, 3, 3, 0.5)
-SparseCOO (false) [1:3,1:3]
-├─├─[1, 1]: true
-├─├─[3, 1]: true
-├─├─[2, 2]: true
-├─├─[3, 2]: true
-├─├─[3, 3]: true
+3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{false, Bool, Int64, Vector{Bool}}}}
+:
+ 0  0  0
+ 1  0  1
+ 0  0  1
 
 julia> fsprand(Float64, 2, 2, 2, 0.5)
-SparseCOO (0.0) [1:2,1:2,1:2]
-├─├─├─[2, 2, 1]: 0.6478553157718558
-├─├─├─[1, 1, 2]: 0.996665291437684
-├─├─├─[2, 1, 2]: 0.7491940599574348
+2×2×2 Tensor{SparseCOOLevel{3, Tuple{Int64, Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+[:, :, 1] =
+ 0.0       0.598969
+ 0.963969  0.0
+
+[:, :, 2] =
+ 0.337409  0.0
+ 0.0       0.0
 ```
 """
 fsprand(args...) = fsprand_parse_rng(args...)
@@ -280,13 +294,13 @@ fsprandn(args...) = fsprand(args..., randn)
 """
     fspzeros([type], M...)
 
-Create a random zero tensor of size `M`, with elements of type `type`. The
+Create a zero tensor of size `M`, with elements of type `type`. The
 tensor is in COO format.
 
-See also: (`spzeros`)(https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.spzeros)
+See also: [`spzeros`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.spzeros)
 
 # Examples
-```jldoctest
+```jldoctest setup=:(using Finch)
 julia> A = fspzeros(Bool, 3, 3)
 3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{false, Bool, Int64, Vector{Bool}}}}:
  0  0  0
@@ -324,7 +338,7 @@ V)`, where `I` are the coordinate vectors, one for each mode of `arr`, and
 `V` is a vector of corresponding nonzero values, which can be passed to
 [`fsparse`](@ref).
 
-See also: (`findnz`)(https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.findnz)
+See also: [`findnz`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.findnz)
 """
 function ffindnz(src)
     tmp = Tensor(
@@ -352,7 +366,7 @@ end
 
 Return a Boolean identity matrix of size `dims`, in COO format.
 
-See also: (`mat.speye`)(https://www.mathworks.com/help/matlab/ref/speye.html)
+See also: [`mat.speye`](https://www.mathworks.com/help/matlab/ref/speye.html)
 """
 function fspeye(dims...)
     idx = collect(1:min(dims...))
@@ -368,7 +382,7 @@ end
 
 Return a matrix of size `m` by `n`, in COO format with a diagonal offset by `k`, with fill value z.
 
-See also: (`python.eye`)(https://data-apis.org/array-api/latest/API_specification/generated/array_api.eye.html)
+See also: [`python.eye`](https://data-apis.org/array-api/latest/API_specification/generated/array_api.eye.html)
 """
 function eye_python(m, n, k, z)
     if k > 0

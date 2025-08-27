@@ -85,7 +85,7 @@ For situations where more complex operations are needed, Finch supports an `@ein
 ```julia
 julia> @einsum E[i] += A[i, j] * B[i, j]
 
-julia> @einsum F[i, k] << max >>= A[i, j] + B[j, k]
+julia> @einsum F[i, k] << max >>= A[i, j] + B[k, j]
 
 ```
 

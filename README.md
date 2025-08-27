@@ -134,6 +134,9 @@ Willow Ahrens, Teodoro Fields Collin, Radha Patel, Kyle Deeds, Changwan Hong, Sa
 [Looplets: A Language for Structured Coiteration](https://doi.org/10.1145/3579990.3580020). CGO 2023.
 Willow Ahrens, Daniel Donenfeld, Fredrik Kjolstad, Saman Amarasinghe.
 
+[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
+Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
+
 ## Beyond Finch
 
 The following research efforts use Finch:
@@ -143,9 +146,6 @@ Radha Patel, Willow Ahrens, Saman Amarasinghe.
 
 [The Continuous Tensor Abstraction: Where Indices are Real](https://arxiv.org/abs/2407.01742).
 Jaeyeon Won, Willow Ahrens, Joel S. Emer, Saman Amarasinghe.
-
-[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
-Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
 
 ## Contributing
 
