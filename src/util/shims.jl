@@ -6,6 +6,7 @@ function fill_range!(arr, v, i, j)
 end
 
 function resize_if_smaller!(arr, i)
+    println(typeof(arr))
     if length(arr) < i
         resize!(arr, i)
     end

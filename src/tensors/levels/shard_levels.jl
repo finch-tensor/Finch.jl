@@ -556,9 +556,8 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
             used = distribute_buffer(ctx_2, lvl.used, lvl.device, HostShared())
             alloc = distribute_buffer(ctx_2, lvl.alloc, lvl.device, HostShared())
 
-            ext = Extent(1, pos)
-            parallel_dim = ParallelDimension(ext, lvl.device, lvl.schedule)
-            vdim = virtualize(ctx, parallel_dim, typeof(parallel_dim))
+            ext = VirtualExtent(literal(1), pos)
+            parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
 
             virtual_parallel_region(ctx_2, vdim, lvl.device, lvl.schedule) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
