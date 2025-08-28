@@ -559,7 +559,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
             ext = VirtualExtent(literal(1), pos)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
 
-            virtual_parallel_region(ctx_2, vdim, lvl.device, lvl.schedule) do f, ctx_3, i_lo, i_hi
+            virtual_parallel_region(ctx_2, parallel_dim, lvl.device, lvl.schedule) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
