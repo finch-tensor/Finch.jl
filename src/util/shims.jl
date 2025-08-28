@@ -6,7 +6,6 @@ function fill_range!(arr, v, i, j)
 end
 
 function resize_if_smaller!(arr, i)
-    println(typeof(arr))
     if length(arr) < i
         resize!(arr, i)
     end
@@ -68,6 +67,7 @@ Wrap `ex` in a let block that captures all free variables in `ex` that are bound
 ensuring that the variables in `ex` are not mutated by the arguments.
 """
 macro barrier(args_ex...)
+    println(args_ex)
     (args, ex) = args_ex[1:(end - 1)], args_ex[end]
     f = gensym()
     esc(
