@@ -67,8 +67,11 @@ Wrap `ex` in a let block that captures all free variables in `ex` that are bound
 ensuring that the variables in `ex` are not mutated by the arguments.
 """
 macro barrier(args_ex...)
-    println(args)
     (args, ex) = args_ex[1:(end - 1)], args_ex[end]
+    println("now printing args:")
+    println(args)
+    println("now printing ex:")
+    println(ex)
     f = gensym()
     esc(
         quote
