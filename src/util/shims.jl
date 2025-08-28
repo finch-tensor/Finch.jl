@@ -6,6 +6,8 @@ function fill_range!(arr, v, i, j)
 end
 
 function resize_if_smaller!(arr, i)
+    println(arr)
+    println("HERE IN RESIZE_IF_SMALLER")
     if length(arr) < i
         resize!(arr, i)
     end
@@ -68,10 +70,6 @@ ensuring that the variables in `ex` are not mutated by the arguments.
 """
 macro barrier(args_ex...)
     (args, ex) = args_ex[1:(end - 1)], args_ex[end]
-    println("now printing args:")
-    println(args)
-    println("now printing ex:")
-    println(ex)
     f = gensym()
     esc(
         quote
