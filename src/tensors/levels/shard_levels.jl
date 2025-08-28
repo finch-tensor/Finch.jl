@@ -576,6 +576,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 quote
                     $(ctx_3(used))[$tid] = 0
                     $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)
+                    :(println("I am here!"))
                 end
             end
         end,
