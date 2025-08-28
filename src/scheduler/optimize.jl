@@ -618,7 +618,7 @@ function propagate_map_queries_backward(root)
                         aggregate(~g::isimmediate, ~init::isimmediate, ~arg, ~idxs...),
                         ~a2...,
                     ) => begin
-                        if isdistributive(DefaultAlgebra(), literal(g.val), literal(f.val)) &&
+                        if isdistributive(DefaultAlgebra(), literal(f.val), literal(g.val)) &&
                             isannihilator(
                                 DefaultAlgebra(), literal(f.val), literal(init.val)
                             ) &&

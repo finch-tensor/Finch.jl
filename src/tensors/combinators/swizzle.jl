@@ -50,11 +50,11 @@ function virtualize(ctx, ex, ::Type{SwizzleArray{dims,Body}}) where {dims,Body}
 end
 
 """
-    swizzle(tns, dims)
+    swizzle(tns, dims...)
 
 Create a `SwizzleArray` to transpose any tensor `tns` such that
 ```
-    swizzle(tns, dims)[i...] == tns[i[dims]]
+swizzle(tns, dims...)[i...] == tns[(i[d] for d in dims)...]
 ```
 """
 swizzle(body, dims...) = SwizzleArray(body, dims)

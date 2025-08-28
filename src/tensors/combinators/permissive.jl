@@ -61,12 +61,12 @@ allows all permissive dimensions to be exempt from dimension checks, and is
 useful when we need to access an array out of bounds, or for padding.
 More formally,
 ```
-    permissive(tns, dims...)[i...] =
-        if any(n -> dims[n] && !(i[n] in axes(tns)[n]))
-            missing
-        else
-            tns[i...]
-        end
+permissive(tns, dims...)[i...] =
+    if any(n -> dims[n] && !(i[n] in axes(tns)[n]))
+        missing
+    else
+        tns[i...]
+    end
 ```
 """
 permissive(body, dims...) = PermissiveArray(body, dims)

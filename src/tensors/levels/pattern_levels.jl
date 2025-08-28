@@ -54,7 +54,7 @@ end
     pattern!(fbr)
 
 Return the pattern of `fbr`. That is, return a tensor which is true wherever
-`fbr` is structurally unequal to its fill_value. May reuse memory and render the
+`fbr` is structurally unequal to its fill value. May reuse memory and render the
 original tensor unusable when modified.
 
 ```jldoctest

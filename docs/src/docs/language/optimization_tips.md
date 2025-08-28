@@ -167,7 +167,7 @@ the loop indices should be reverse alphabetical.
 
 ## Appropriate Fill Values
 
-The @finch macro requires the user to specify an output format. This is the most
+The `@finch` macro requires the user to specify an output format. This is the most
 flexibile approach, but can sometimes lead to densification unless the output
 fill value is appropriate for the computation.
 

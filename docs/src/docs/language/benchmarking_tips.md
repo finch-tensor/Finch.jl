@@ -13,8 +13,8 @@ follow the [Julia Performance Tips](https://docs.julialang.org/en/v1/manual/perf
 
 Finch is even trickier to benchmark, for a few reasons:
 
- 1. The first time an @finch function is called, it is compiled, which takes an
-    extra long time. @finch can also incur dynamic dispatch costs if the array
+ 1. The first time an `@finch` function is called, it is compiled, which takes an
+    extra long time. `@finch` can also incur dynamic dispatch costs if the array
     types are not [type
     stable](https://docs.julialang.org/en/v1/manual/faq/#man-type-stability). We
     can remedy this by using [`@finch_kernel`](@ref), which simplifies
