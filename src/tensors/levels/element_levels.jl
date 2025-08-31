@@ -153,6 +153,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
     push_preamble!(
         ctx,
         quote
+            println(lvl)
+            println(lvl.val)
+            println(typeof(lvl.val))
             resize!($(lvl.val), $(ctx(pos)))
         end,
     )

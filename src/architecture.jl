@@ -679,7 +679,6 @@ function virtual_parallel_region(
     f, ctx, ext::VirtualParallelDimension, device::VirtualCPU,
     schedule::VirtualFinchStaticSchedule,
 )
-    println("inside of virtual_parallel_region")
     tid = freshen(ctx, :tid)
     i_lo = call(
         +,
@@ -696,7 +695,7 @@ function virtual_parallel_region(
             end
         end
     end
-    println(code)
+    # println(code)
     return quote
         Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin
