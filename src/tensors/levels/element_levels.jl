@@ -150,9 +150,6 @@ function declare_level!(ctx, lvl::VirtualElementLevel, pos, init)
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
-    println(lvl)
-    println(lvl.val)
-    println(typeof(lvl.val))
     push_preamble!(
         ctx,
         quote
