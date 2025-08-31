@@ -691,12 +691,11 @@ function virtual_parallel_region(
         subtask = VirtualCPUThread(value(tid, Int), device, ctx_2.code.task)
         contain(ctx_2; task=subtask) do ctx_3
             f(ctx_3, i_lo, i_hi) do inner
-                println(inner)
                 inner
             end
         end
     end
-
+    println(code)
     return quote
         Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin
