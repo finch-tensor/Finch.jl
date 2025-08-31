@@ -679,6 +679,7 @@ function virtual_parallel_region(
     f, ctx, ext::VirtualParallelDimension, device::VirtualCPU,
     schedule::VirtualFinchStaticSchedule,
 )
+    println("inside of virtual_parallel_region")
     tid = freshen(ctx, :tid)
     i_lo = call(
         +,
