@@ -470,7 +470,7 @@ end
 FinchNotation.finch_leaf(device::VirtualCPUThread) = virtual(device)
 get_device(task::VirtualCPUThread) = task.dev
 get_parent_task(task::VirtualCPUThread) = task.parent
-get_task_num(task::VirtualCPUThread) = literal(task.tid)
+get_task_num(task::VirtualCPUThread) = task.tid
 
 struct Converter{f,T} end
 
