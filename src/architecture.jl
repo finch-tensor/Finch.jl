@@ -396,6 +396,9 @@ function distribute_buffer(ctx, buf, device, ::HostShared)
     return buf_2
 end
 
+###*******
+##Check for errors
+###*******
 function distribute_buffer(
     ctx, buf, task, style::Union{DeviceLocal,DeviceShared,DeviceGlobal}
 )
@@ -695,7 +698,7 @@ function virtual_parallel_region(
             end
         end
     end
-    # println(code)
+    println(code)
     return quote
         Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin
