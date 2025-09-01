@@ -546,11 +546,8 @@ virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lv
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
 
-
 function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
     @assert !is_on_device(ctx, lvl.device)
-    root = ensure_concurrent(lvl, ctx)
-    println("Gets past concurrent check!")
     push_preamble!(
         ctx,
         contain(ctx) do ctx_2
@@ -586,44 +583,6 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
     )
     lvl
 end
-
-# function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
-#     @assert !is_on_device(ctx, lvl.device)
-#     push_preamble!(
-#         ctx,
-#         contain(ctx) do ctx_2
-#             diff = Dict()
-#             lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
-#             used = distribute_buffer(ctx_2, lvl.used, lvl.device, HostShared())
-#             alloc = distribute_buffer(ctx_2, lvl.alloc, lvl.device, HostShared())
-
-#             ext = VirtualExtent(literal(1), pos)
-#             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
-
-#             virtual_parallel_region(ctx_2, parallel_dim, lvl.device, lvl.schedule) do f, ctx_3, i_lo, i_hi
-#                 task = get_task(ctx_3)
-#                 multi_channel_dev = VirtualMultiChannelMemory(
-#                     lvl.device, get_num_tasks(lvl.device)
-#                 )
-#                 channel_task = VirtualMemoryChannel(
-#                     get_task_num(task), multi_channel_dev, task
-#                 )
-#                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-#                 used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
-#                 alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
-#                 lvl_4 = declare_level!(ctx_3, lvl_3, literal(1), init)
-#                 freeze_level!(ctx_3, lvl_4, literal(1))
-#                 tid = ctx_3(get_task_num(ctx_3))
-#                 #This quote block gets placed into the executable.
-#                 quote
-#                     $(ctx_3(used))[$tid] = 0
-#                     $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)
-#                 end
-#             end
-#         end,
-#     )
-#     lvl
-# end
 
 function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
     @assert !is_on_device(ctx, lvl.device)

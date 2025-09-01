@@ -56,8 +56,8 @@ function contain(f, ctx::FinchCompiler; kwargs...)
 end
 
 (ctx::AbstractCompiler)(root) = ctx(root, get_style(ctx, root))
-(ctx::AbstractCompiler)(root, style) = lower(ctx, root, style)
-#(ctx::AbstractCompiler)(root, style) = (println(); println(); display(root); display(style); lower(ctx, root, style))
+# (ctx::AbstractCompiler)(root, style) = lower(ctx, root, style)
+(ctx::AbstractCompiler)(root, style) = (println(); println(); display(root); display(style); lower(ctx, root, style))
 function cache!(ctx::AbstractCompiler, var, val)
     val = finch_leaf(val)
     isconstant(val) && return val
