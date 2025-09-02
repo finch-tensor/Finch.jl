@@ -44,8 +44,8 @@ isabelian(alg) = (f) -> isabelian(alg, f)
 isabelian(alg, f) = isassociative(alg, f) && iscommutative(alg, f)
 
 isdistributive(alg) = (f, g) -> isdistributive(alg, f, g)
-function isdistributive(alg, f::FinchNode, x::FinchNode)
-    isliteral(f) && isliteral(x) && isdistributive(alg, f.val, x.val)
+function isdistributive(alg, f::FinchNode, g::FinchNode)
+    isliteral(f) && isliteral(g) && isdistributive(alg, f.val, g.val)
 end
 """
     isdistributive(algebra, f, g)
@@ -53,7 +53,16 @@ end
 Return true when `f(a, g(b, c)) = g(f(a, b), f(a, c))` in `algebra`.
 """
 isdistributive(::Any, f, g) = false
-isdistributive(::AbstractAlgebra, ::typeof(+), ::typeof(*)) = true
+isdistributive(::AbstractAlgebra, ::typeof(*), ::typeof(+)) = true
+isdistributive(::AbstractAlgebra, ::typeof(&), ::typeof(|)) = true
+isdistributive(::AbstractAlgebra, ::typeof(|), ::Chooser{false}) = true
+isdistributive(::AbstractAlgebra, ::Chooser{true}, ::typeof(&)) = true
+function isdistributive(::AbstractAlgebra, ::Chooser{Vf}, ::typeof(|)) where {Vf}
+    Vf isa Bool
+end
+function isdistributive(::AbstractAlgebra, ::typeof(&), ::Chooser{Vf}) where {Vf}
+    Vf isa Bool
+end
 
 isidempotent(alg) = (f) -> isidempotent(alg, f)
 isidempotent(alg, f::FinchNode) = f.kind === literal && isidempotent(alg, f.val)

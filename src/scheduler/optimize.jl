@@ -316,9 +316,9 @@ function lift_fields(prgm)
                     idxs = getfields(rhs)
                     query(lhs, reorder(rhs, idxs...))
                 end),
-                (@rule query(~lhs, reformat(~arg)) => if arg.kind === mapjoin
+                (@rule query(~lhs, reformat(~tns, ~arg)) => if arg.kind === mapjoin
                     idxs = getfields(arg)
-                    query(lhs, reformat(reorder(arg, idxs...)))
+                    query(lhs, reformat(tns, reorder(arg, idxs...)))
                 end),
             ]),
         ),
@@ -618,7 +618,7 @@ function propagate_map_queries_backward(root)
                         aggregate(~g::isimmediate, ~init::isimmediate, ~arg, ~idxs...),
                         ~a2...,
                     ) => begin
-                        if isdistributive(DefaultAlgebra(), literal(g.val), literal(f.val)) &&
+                        if isdistributive(DefaultAlgebra(), literal(f.val), literal(g.val)) &&
                             isannihilator(
                                 DefaultAlgebra(), literal(f.val), literal(init.val)
                             ) &&
