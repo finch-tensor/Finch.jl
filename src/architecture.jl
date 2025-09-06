@@ -3,6 +3,7 @@
 
 A datatype representing a device on which tasks can be executed.
 """
+
 abstract type AbstractDevice end
 abstract type AbstractVirtualDevice end
 
@@ -698,7 +699,6 @@ function virtual_parallel_region(
             end
         end
     end
-    println(code)
     return quote
         Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin

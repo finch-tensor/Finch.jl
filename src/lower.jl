@@ -377,7 +377,7 @@ end
 function lower_parallel_loop(
     ctx, root, ext::VirtualParallelDimension, schedule::AbstractVirtualSchedule
 )
-    root = ensure_concurrent(root, ctx)
+    # root = ensure_concurrent(root, ctx)
     device = ext.device
 
     distribute_host(ctx, root.body, device) do ctx_2, body_2

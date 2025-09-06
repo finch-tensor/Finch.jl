@@ -1,3 +1,8 @@
+###task[pos] gives the processor that owns shard in position pos. AKA which channel in the multimemory channel to access.
+###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
+###ptr[p] = 0 means unallocated.
+
+
 struct MultiChannelMemory{Device} <: AbstractDevice
     device::Device
     n::Int
@@ -102,6 +107,7 @@ end
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
     if task.device == arr.device
         temp = arr.data[task.t]
+        @assert isa(temp, Vector)
         return temp
     else
         return arr
@@ -225,11 +231,13 @@ end
 
 function Base.resize!(lvl::ShardLevel, dims...)
     ShardLevel(
+        lvl.device,
         resize!(lvl.lvl, dims...),
         lvl.ptr,
         lvl.task,
         lvl.used,
         lvl.alloc,
+        lvl.schedule
     )
 end
 
@@ -255,12 +263,17 @@ end
 
 function labelled_show(io::IO, fbr::SubFiber{<:ShardLevel})
     (lvl, pos) = (fbr.lvl, fbr.pos)
-    print(io, "shard($(lvl.task[pos])) -> ")
+    if lvl.ptr[pos] < 1
+        print(io, "shard(?) -> ?")
+    else
+        print(io, "shard($(lvl.task[pos])) -> ")
+    end
 end
 
 function labelled_children(fbr::SubFiber{<:ShardLevel})
     lvl = fbr.lvl
     pos = fbr.pos
+    lvl.ptr[pos] < 1 && return []
     pos > length(lvl.ptr) && return []
     lvl_2 = transfer(
         MemoryChannel(
@@ -362,6 +375,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
             $(ctx(lvl.task)),
             $(ctx(lvl.used)),
             $(ctx(lvl.alloc)),
+            $(lvl.tag).schedule
         )
     end
 end
