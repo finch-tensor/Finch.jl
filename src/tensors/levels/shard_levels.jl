@@ -125,6 +125,13 @@ end
 Each subfiber of a Shard level is stored in a thread-specific tensor of type
 `Lvl`, managed by MultiChannelMemory.
 
+Each processor should own a single separate level, which holds all the fibers associated with that level.
+If p is the global position in the shard level (we're looking for the pth fiber in the global level), then
+we can find that fiber at position `q = ptr[p]` in the level structure on processor `t=task[p]`.
+Levels tend to over allocate and under use memory. On processor `q`, `used[q]`
+is the number of fibers in use, and `alloc[q]` is the number of fibers
+assembled. 
+
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
 ERROR: MethodError: no method matching ShardLevel(::ElementLevel{0.0, Float64, Int64, Vector{Float64}})
