@@ -269,9 +269,6 @@ function SyntaxInterface.similarterm(::Type{FinchNode}, op::FinchNodeKind, args)
 end
 
 function FinchNode(kind::FinchNodeKind, args::Vector)
-    if (kind == literal && isa(args[1], Symbol)) 
-        throw(ArgumentError("Making literal out of Symbol"))
-    end
     if (
         kind === value || kind === literal || kind === index || kind === variable ||
         kind === virtual
