@@ -264,7 +264,7 @@ end
 function labelled_show(io::IO, fbr::SubFiber{<:ShardLevel})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if lvl.ptr[pos] < 1
-        print(io, "shard(?) -> ?")
+        print(io, "shard(?) -> 0.0")
     else
         print(io, "shard($(lvl.task[pos])) -> ")
     end
@@ -477,7 +477,7 @@ function distribute_level(
                     $(lvl.used)[$tid] = $qos_fill
                     $(lvl.alloc)[$tid] = $qos_stop
                 end
-                freeze_level!(ctx_2, lvl_2, qos_stop)
+                freeze_level!(ctx_2, lvl_2, value(qos_stop))
             end,
         )
         diff[lvl.tag] = VirtualShardLevel(
