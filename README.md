@@ -14,6 +14,10 @@ Finch is a Julia-to-Julia compiler for sparse or structured multidimensional arr
 Finch was built to make sparse and structured array programming easier and more efficient.  Finch.jl leverages compiler technology to automatically generate customized, fused sparse kernels for each specific
 use case. This allows users to write readable, high-level sparse array programs without worrying about the performance of the generated code. Finch can automatically generate efficient implementations even for unique problems that lack existing library solutions.
 
+# Documentation
+
+Check out our [documentation website](https://finch-tensor.github.io/Finch.jl/stable)! Please file an issue if you feel the docs are unclear on anything!
+
 # Installation
 
 At the [Julia](https://julialang.org/downloads/) REPL, install the latest stable version by running:
