@@ -477,7 +477,7 @@ function distribute_level(
                     $(lvl.used)[$tid] = $qos_fill
                     $(lvl.alloc)[$tid] = $qos_stop
                 end
-                freeze_level!(ctx_2, lvl_2, qos_stop)
+                freeze_level!(ctx_2, lvl_2, value(qos_stop))
             end,
         )
         diff[lvl.tag] = VirtualShardLevel(
