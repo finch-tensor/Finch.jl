@@ -163,15 +163,16 @@ transfer(device::Union{Serial,SerialMemory}, arr) = arr
 
 A device that represents a CPU with n threads.
 """
-struct CPU <: AbstractDevice
+struct CPU{id} <: AbstractDevice
     n::Int
 end
-cpu(n=Threads.nthreads()) = CPU(n)
-get_num_tasks(dev::CPU) = dev.n
+cpu(id, n=Threads.nthreads()) = CPU{id}(n)
+get_num_tasks(dev::CPU{tag}) where {tag} = dev.n
 @kwdef struct VirtualCPU <: AbstractVirtualDevice
     n
+    id
 end
-function virtualize(ctx, ex, ::Type{CPU})
+function virtualize(ctx, ex, ::Type{CPU{id}}) where {id}
     n = freshen(ctx, :n)
     push_preamble!(
         ctx,
@@ -179,7 +180,7 @@ function virtualize(ctx, ex, ::Type{CPU})
             $n = ($ex.n)
         end,
     )
-    VirtualCPU(value(n, Int))
+    VirtualCPU(value(n, Int), literal(id))
 end
 function virtual_call_def(
     ctx, alg, ::typeof(cpu), ::Any, n=value(:($(Threads.nthreads)()), Int)
@@ -194,16 +195,16 @@ function virtual_call_def(
     VirtualCPU(value(n_2, Int))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
-    :(Finch.CPU($(ctx(device.n))))
+    :(Finch.CPU($(ctx(device.id)), $(ctx(device.n))))
 end
 get_num_tasks(device::VirtualCPU) = device.n
-Base.:(==)(::CPU, ::CPU) = true
-Base.:(==)(::VirtualCPU, ::VirtualCPU) = true #This is not strictly true. A better approach would name devices, and give them parents so that we can be sure to parallelize through the processor hierarchy.
+Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1, id2} = id1 == id2
+Base.:(==)(a::VirtualCPU, b::VirtualCPU) = a.id == b.id
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
 struct CPULocalMemory
-    device::CPU
+    device::CPU{id} where {id}
 end
 struct VirtualCPULocalMemory
     device::VirtualCPU
@@ -217,17 +218,17 @@ function lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle
 end
 
 struct CPUSharedMemory
-    device::CPU
+    device::CPU{id} where {id}
 end
 struct VirtualCPUSharedMemory
     device::VirtualCPU
 end
 FinchNotation.finch_leaf(mem::VirtualCPUSharedMemory) = virtual(mem)
 function virtualize(ctx, ex, ::Type{CPUSharedMemory})
-    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU))
+    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU{ex.device.id}))
 end
 function lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle)
-    :(Finch.CPUSharedMemory($(ctx(mem.device))))
+    :(Finch.CPUSharedMemory($(ctx(mem.device{mem.device.id}))))
 end
 
 local_memory(device::CPU) = CPULocalMemory(device)
@@ -239,7 +240,7 @@ global_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 
 struct CPUThread{Parent} <: AbstractTask
     tid::Int
-    dev::CPU
+    dev::CPU{id} where {id}
     parent::Parent
 end
 get_device(task::CPUThread) = task.device
@@ -247,11 +248,11 @@ get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
 struct CPULocalArray{A}
-    device::CPU
+    device::CPU{id} where {id}
     data::Vector{A}
 end
 
-function CPULocalArray{A}(device::CPU) where {A}
+function CPULocalArray{A}(device::CPU{id}) where {A, id}
     CPULocalArray{A}(device, [A([]) for _ in 1:(device.n)])
 end
 
