@@ -348,8 +348,8 @@
         @finch begin
             B .= 0
             for j in parallel(1:4, ncpu)
-                for i in 1:4
-                    let q = j
+                let q = j
+                    for i in 1:4
                         let r = i
                             B[i, j] = q + r
                         end
@@ -358,7 +358,21 @@
             end
         end
 
-        @assert B[1, 1] == 2
-        @assert B[4, 4] == 8
+        @test B[4, 4] == 8
+
+        @finch begin
+            C .= 0
+            for j in parallel(1:4, ncpu)
+                let q = j
+                    for i in 1:4
+                        let r = i
+                            C[i,j] = B[i,j] + A[j]
+                        end
+                    end
+                end
+            end
+        end
+        
+        @test C[4,4] == 12
     end
 end
