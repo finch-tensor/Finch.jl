@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  release: { types: [published] }
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npmjs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          registry-url: "https://registry.npmjs.org"
+      - run: npm publish --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          registry-url: "https://npm.pkg.github.com"
+      - name: scope package name as required by GitHub Packages
+        run: npm init -y --scope ${{ github.repository_owner }}
+      - run: npm publish --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
