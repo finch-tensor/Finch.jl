@@ -1,0 +1,17 @@
+[project]
+name = "sam-sim"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Willow Ahrens",email = "willow.marie.ahrens@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sam @ file:///Users/willow/Projects/Finch.jl/deps/sam"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
