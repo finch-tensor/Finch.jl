@@ -3,6 +3,7 @@
 
 #include <string>
 #include <random>
+#include <algorithm>
 #include <map>
 #include <cstdlib>
 #include <ctime>
@@ -107,7 +108,9 @@ void fillVector(TensorBase& tensor, const FillMethod& fill, double fillValue) {
         positions.push_back(i);
       }
       srand(static_cast<unsigned>(time(NULL)));
-      std::random_shuffle(positions.begin(),positions.end());
+      std::random_device rd;
+      std::mt19937 g(rd());
+      std::shuffle(positions.begin(),positions.end(), g);
 
       int toFill=fillValue*vectorSize;
       for (int i=0; i<toFill; i++) {
@@ -135,14 +138,18 @@ void fillMatrix(TensorBase& tens, const FillMethod& fill, double fillValue) {
   for (int i=0; i < static_cast<int>(pos.size());i++){
     pos[i]=i;
   }
-  std::random_shuffle(pos.begin(),pos.end());
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(pos.begin(),pos.end(), g);
   std::vector<std::vector<int>> positions(tens.getOrder());
   for (int j=0; j<tens.getOrder(); j++) {
     positions.push_back(std::vector<int>(tensorSize[j]));
     for (int i=0; i<tensorSize[j]; i++)
       positions[j].push_back(i);
     srand(static_cast<unsigned>(time(NULL)));
-    std::random_shuffle(positions[j].begin(),positions[j].end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(positions[j].begin(),positions[j].end(), g);
   }
   switch (fill) {
     case FillMethod::Dense: {
@@ -167,7 +174,9 @@ void fillMatrix(TensorBase& tens, const FillMethod& fill, double fillValue) {
         for (int j=0; j<(fillValue*tensorSize[1]); j++) {
           tens.insert({positions[0][i],positions[1][j]}, unif(re));
         }
-        std::random_shuffle(positions[1].begin(),positions[1].end());
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(positions[1].begin(),positions[1].end(), g);
       }
       break;
     }
@@ -247,14 +256,18 @@ void fillTensor3(TensorBase& tens, const FillMethod& fill, double fillValue) {
   for (int i=0; i < static_cast<int>(pos.size()); i++){
     pos[i]=i;
   }
-  std::random_shuffle(pos.begin(),pos.end());
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(pos.begin(),pos.end(), g);
   std::vector<std::vector<int>> positions(tens.getOrder());
   for (int j=0; j<tens.getOrder(); j++) {
     positions.push_back(std::vector<int>(tensorSize[j]));
     for (int i=0; i<tensorSize[0]; i++)
       positions[j].push_back(i);
     srand(static_cast<unsigned>(time(0)));
-    std::random_shuffle(positions[j].begin(),positions[j].end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(positions[j].begin(),positions[j].end(), g);
   }
   switch (fill) {
     case FillMethod::Dense: {
@@ -286,9 +299,13 @@ void fillTensor3(TensorBase& tens, const FillMethod& fill, double fillValue) {
           for (int k=0; k<(fillValue*tensorSize[2]); k++) {
             tens.insert({positions[0][i],positions[1][j],positions[2][k]}, unif(re));
           }
-          std::random_shuffle(positions[2].begin(),positions[2].end());
+          std::random_device rd2;
+          std::mt19937 g2(rd2());
+          std::shuffle(positions[2].begin(),positions[2].end(), g2);
         }
-        std::random_shuffle(positions[1].begin(),positions[1].end());
+        std::random_device rd1;
+        std::mt19937 g1(rd1());
+        std::shuffle(positions[1].begin(),positions[1].end(), g1);
       }
       tens.pack();
       break;

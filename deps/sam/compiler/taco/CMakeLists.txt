@@ -99,7 +99,7 @@ endif(COVERAGE)
 
 set(C_CXX_FLAGS "${C_CXX_FLAGS}")
 set(CMAKE_C_FLAGS "${C_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${C_CXX_FLAGS} -std=c++14")
+set(CMAKE_CXX_FLAGS "${C_CXX_FLAGS} -std=c++17 -Wno-narrowing")
 
 set(TACO_PROJECT_DIR ${CMAKE_CURRENT_LIST_DIR})
 

@@ -10,11 +10,12 @@
 #include "taco/index_notation/transformations.h"
 #include "taco/lower/lower.h"
 #include "op_factory.h"
-#include <experimental/filesystem>
+#include <filesystem>
 
 #include <tuple>
 #include <ios>
 using namespace taco;
+namespace fs = std::filesystem;
 
 template<typename T>
 taco::Tensor<T> castToType(std::string name, taco::Tensor<double> tensor) {
@@ -169,8 +170,8 @@ TEST(sam, pack_other_frostt) {
         auto tensorName = taco::util::split(filename, ".")[0];
         cout << tensorName << "..." << endl;
 
-        if (std::experimental::filesystem::exists(otherPath)) {
-            for (auto &entry: std::experimental::filesystem::directory_iterator(otherPath)) {
+        if (fs::exists(otherPath)) {
+            for (auto &entry: fs::directory_iterator(otherPath)) {
                 std::string f(entry.path());
 
                 // Check that the filename ends with .mtx.
@@ -230,8 +231,8 @@ TEST(sam, pack_other_ss) {
     auto tensorName = taco::util::split(filename, ".")[0];
     cout << tensorName << "..." << endl;
 
-    if (std::experimental::filesystem::exists(otherPath)) {
-        for (auto &entry: std::experimental::filesystem::directory_iterator(otherPath)) {
+    if (fs::exists(otherPath)) {
+        for (auto &entry: fs::directory_iterator(otherPath)) {
             std::string f(entry.path());
 
             // Check that the filename ends with .mtx.
