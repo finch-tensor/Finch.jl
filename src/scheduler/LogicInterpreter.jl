@@ -14,6 +14,54 @@ function lower_pointwise_logic(ctx, ex, loop_idxs=[])
     return (code, ctx.bound_idxs)
 end
 
+function onyx_format(tns::Tensor)
+    lvl = tns.lvl
+    res = ""
+    while level_ndims(lvl) > 0
+        if lvl <: Dense
+            res *= "d"
+        elseif lvl <: Union{SparseHash, SparseList}
+            res *= "s"
+        else
+            error("Unsupported level type: $(lvl)")
+        end
+        lvl = lvl.lvl
+    end
+    return res
+end
+
+@kwdef struct PointwiseOnyxLowerer
+    ctx
+    loop_idxs = []
+    names = Dict{Symbol,String}()
+    formats = Dict{String,String}()
+end
+
+tns_names = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+
+function lower_pointwise_onyx(ctx, ex, loop_idxs=[])
+    ctx = PointwiseOnyxLowerer(; ctx=ctx, loop_idxs=loop_idxs)
+    code = ctx(ex)
+    return (code, ctx.formats, tns_names[length(ctx.names)])
+end
+
+function (ctx::PointwiseOnyxLowerer)(ex)
+    if @capture ex mapjoin(*, ~args...)
+        return join("*", map(ctx, args))
+    elseif (@capture ex relabel(~arg::isalias, ~idxs_1...))
+        tns_name = get!(ctx.names, arg.name, tns_names[length(ctx.ntns)])
+        idxs_3 = [idx.name for idx in idxs_1 if idx in ctx.loop_idxs]
+        ctx.formats[tns_name] = onyx_format(ctx.ctx.scope[arg])
+        return "$tns_name($(join(",", idxs_3)))"
+    elseif (@capture ex reorder(~arg::isimmediate, ~idxs...))
+        string(arg.val)
+    elseif ex.kind === immediate
+        String(ex.val)
+    else
+        error("Unrecognized logic: $(ex)")
+    end
+end
+
 function (ctx::PointwiseMachineLowerer)(ex)
     if @capture ex mapjoin(~op, ~args...)
         call_instance(literal_instance(op.val), map(ctx, args)...)
@@ -136,6 +184,15 @@ function (ctx::LogicMachine)(ex)
             print("Running: ")
             display(body)
         end
+        (str, formats, lhs) = lower_pointwise_onyx(ctx, reorder(arg, idxs_2...), loop_idxs)
+        println("Generated ONYX code: ")
+        lhs_idxs = [idx.name for idx in lhs_idxs]
+        format_args = []
+        for (k, v) in formats
+            push!(format_args, "--format $k:$v")
+        end
+        println("$lhs[$(join(",", lhs_idxs))] = $str ")
+        #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
         return map(args) do arg
