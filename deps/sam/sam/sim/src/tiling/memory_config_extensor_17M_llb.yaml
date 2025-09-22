@@ -1,0 +1,19 @@
+---
+clk: 1000000000 # Hz
+main_memory: "None" # Infinite 
+Glb_memory: 17100000 # Bytes
+Glb_tiles: 1 #16 # Number of tiles
+Glb_tile_bandwidth: 68.256 #25.5 #10000000000 # 25.6 # 128 # 307 # bytes per cycles per tile
+Glb_mem_mode: "Direct" # Adress for tile needed ot no? Direct - Adressing required, Alltoall - Adressing not required Also memtile mode pakced, unpacked etc
+Global_Glb_latency: 200 # 200
+Mem_memory: 70000 # Bytes
+Mem_tiles: 1 #128 # No of memtiles
+Mem_tile_bandwidth: 256 #  1000000000 #256 #256 # 32 * 8 bytes: Bandwidth to a memtiles
+Glb_Mem_latency: 1
+Bytes_per_element: 2 # Number
+
+n_levels: 3
+level_names: ["Main", "Glb", "Mem"]
+Main_tile_size: None
+Glb_tile_size: 16 # n = (nxn) elements
+Mem_tile_size: 128 # Size of one dense dimension. 8 = (8x8) 

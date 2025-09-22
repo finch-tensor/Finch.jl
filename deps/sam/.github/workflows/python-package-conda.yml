@@ -1,0 +1,55 @@
+name: Python Package using Conda
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 5
+    steps:
+    - uses: tlylt/install-graphviz@v1
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8.12
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.8.12
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install virtualenv
+        python -m virtualenv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        git clone https://github.com/cdonovick/peak.git
+        pip install -e peak
+        git clone https://github.com/StanfordAHA/lassen.git
+        pip install -e lassen
+        pip install -e .
+        echo $VIRTUAL_ENV/bin >> $GITHUB_PATH
+    - name: Test all (non SuiteSparse and Frostt) tests with pytest
+      run: |
+        export SAM_HOME=$(pwd)
+        echo $CI
+        pytest ./sam/sim/
+    - name: Test all SuiteSparse tests with pytest using data/ matrices
+      working-directory: ./sam/sim
+      run: |
+        export SUITESPARSE_FORMATTED_PATH=${GITHUB_WORKSPACE}/data/suitesparse-formatted/
+        export SUITESPARSE_PATH=${GITHUB_WORKSPACE}/data/suitesparse/
+        while read line; do
+                pytest test/final-apps/ --ssname $line --check-gold
+        done < ${GITHUB_WORKSPACE}/scripts/tensor_names/suitesparse_ci.txt
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude venv,peak,lassen
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude venv,peak,lassen
+    - name: Python style checking flake8
+      run: |
+        flake8 . --count --select=E,W --statistics --ignore=W503,W504 --max-line-length=127 --exclude venv,peak,lassen
+    - name: Check SAM Simulator generating script
+      run: |
+        make tests

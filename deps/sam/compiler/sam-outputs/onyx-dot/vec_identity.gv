@@ -1,0 +1,10 @@
+digraph SAM {
+    comment="x=s0,b=s0"
+    3 [comment="type=fiberlookup,index=i,tensor=b,mode=0,format=compressed,src=true,root=true" label="FiberLookup i: b0\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="b" mode="0" format="compressed" src="true" root="true"]
+    1 [comment="type=fiberwrite,index=i,tensor=x,mode=0,format=compressed,segsize=2,crdsize=b0_dim,sink=true" label="FiberWrite i: x0\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="x" mode="0" format="compressed" segsize="2" crdsize="b0_dim" sink="true"]
+    2 [comment="type=arrayvals,tensor=b" label="Array Vals: b" color=green2 shape=box style=filled type="arrayvals" tensor="b"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=x,size=1*b0_dim,sink=true" label="FiberWrite Vals: x" color=green3 shape=box style=filled type="fiberwrite" tensor="x" mode="vals" size="1*b0_dim" sink="true"]
+    3 -> 1 [label="crd" style=dashed type="crd" comment=""]
+    3 -> 2 [label="ref" style=bold type="ref" comment=""]
+    2 -> 0 [label="val" type="val"]
+}
