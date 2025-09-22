@@ -6,7 +6,7 @@ import numpy as np
 
 from pathlib import Path
 
-from util import FormatWriter, SuiteSparseTensor, InputCacheSuiteSparse
+from util.util import FormatWriter, SuiteSparseTensor, InputCacheSuiteSparse
 from sam.util import SUITESPARSE_FORMATTED_PATH, ScipyTensorShifter
 
 all_formats = ["coo", "cooT", "csr", "dcsr", "dcsc", "csc", "dense", "denseT"]
