@@ -1,0 +1,18 @@
+digraph SAM {
+    comment="X=sss012,B=sss012"
+    7 [comment="type=fiberlookup,index=i,tensor=B,mode=0,format=compressed,src=true,root=true" label="FiberLookup i: B0\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="B" mode="0" format="compressed" src="true" root="true"]
+    3 [comment="type=fiberwrite,index=i,tensor=X,mode=0,format=compressed,segsize=2,crdsize=B0_dim,sink=true" label="FiberWrite i: X0\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="X" mode="0" format="compressed" segsize="2" crdsize="B0_dim" sink="true"]
+    6 [comment="type=fiberlookup,index=j,tensor=B,mode=1,format=compressed,src=true,root=false" label="FiberLookup j: B1\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="j" tensor="B" mode="1" format="compressed" src="true" root="false"]
+    2 [comment="type=fiberwrite,index=j,tensor=X,mode=1,format=compressed,segsize=B0_dim+1,crdsize=B0_dim*B1_dim,sink=true" label="FiberWrite j: X1\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="j" tensor="X" mode="1" format="compressed" segsize="B0_dim+1" crdsize="B0_dim*B1_dim" sink="true"]
+    5 [comment="type=fiberlookup,index=k,tensor=B,mode=2,format=compressed,src=true,root=false" label="FiberLookup k: B2\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="k" tensor="B" mode="2" format="compressed" src="true" root="false"]
+    1 [comment="type=fiberwrite,index=k,tensor=X,mode=2,format=compressed,segsize=B0_dim*B1_dim+1,crdsize=B0_dim*B1_dim*B2_dim,sink=true" label="FiberWrite k: X2\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="k" tensor="X" mode="2" format="compressed" segsize="B0_dim*B1_dim+1" crdsize="B0_dim*B1_dim*B2_dim" sink="true"]
+    4 [comment="type=arrayvals,tensor=B" label="Array Vals: B" color=green2 shape=box style=filled type="arrayvals" tensor="B"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=X,size=1*B0_dim*B1_dim*B2_dim,sink=true" label="FiberWrite Vals: X" color=green3 shape=box style=filled type="fiberwrite" tensor="X" mode="vals" size="1*B0_dim*B1_dim*B2_dim" sink="true"]
+    7 -> 3 [label="crd" style=dashed type="crd" comment=""]
+    7 -> 6 [label="ref" style=bold type="ref" comment=""]
+    6 -> 2 [label="crd" style=dashed type="crd" comment=""]
+    6 -> 5 [label="ref" style=bold type="ref" comment=""]
+    5 -> 1 [label="crd" style=dashed type="crd" comment=""]
+    5 -> 4 [label="ref" style=bold type="ref" comment=""]
+    4 -> 0 [label="val" type="val"]
+}

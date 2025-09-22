@@ -1,0 +1,6 @@
+---
+n_levels: 3
+level_names: ["Main", "Glb", "Mem"]
+Main_tile_size: None
+Glb_tile_size: 2 # 2 = (2x2)
+Mem_tile_size: 8 # Size of one dense dimension. 8 = (8x8) 

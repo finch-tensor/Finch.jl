@@ -1,0 +1,71 @@
+# Python Cache
+__pycache__/
+*.pyc
+
+# Temporary output files
+*.swp
+*.swo
+*.swn
+*.txt
+*.out
+*.log
+
+# Generated Python Package files
+*.egg-info/
+
+# Files for MacOS and IDEs
+.DS_store
+.idea/
+cmake-build-*/
+.ipynb_checkpoints/
+
+# Generated SAM Graphs
+*.gv
+
+venv/
+
+# Generated images
+*.svg
+*.png
+*.pdf
+
+# Output data files
+*.csv
+*.json
+
+# Tensor files
+*.mtx
+*.tns
+
+# Generated formatted tensor files
+tensor_*_mode_*
+
+# Generated folders
+build/
+logs/
+results/
+results-cpu/
+suitesparse-bench/
+sam-outputs/
+compiler/benchmark/
+
+# Generated SAM simulator tests
+*/sim/test/apps/test_*.py
+
+# Tensor files
+*.mtx
+*.tns
+
+# Temporary or generated tensor directories 
+tmp_mat*/
+tiles/
+synthetic/
+
+# Generated SAM simulator tests
+*/sim/test/apps/test_*.py
+
+# Temporary scripts
+download_suitesparse_partial.sh
+
+# Network Filesystem 
+.nfs*

@@ -1,0 +1,20 @@
+digraph SAM {
+    comment="X=ss01,B=dd01"
+    5 [comment="type=fiberlookup,index=i,tensor=B,mode=0,format=dense,src=true,root=true" label="FiberLookup i: B0\ndense" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="B" mode="0" format="dense" src="true" root="true"]
+    2 [comment="type=fiberwrite,index=i,tensor=X,mode=0,format=compressed,segsize=2,crdsize=B0_dim,sink=true" label="FiberWrite i: X0\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="X" mode="0" format="compressed" segsize="2" crdsize="B0_dim" sink="true"]
+    4 [comment="type=fiberlookup,index=j,tensor=B,mode=1,format=dense,src=true,root=false" label="FiberLookup j: B1\ndense" color=green4 shape=box style=filled type="fiberlookup" index="j" tensor="B" mode="1" format="dense" src="true" root="false"]
+    1 [comment="type=fiberwrite,index=j,tensor=X,mode=1,format=compressed,segsize=B0_dim+1,crdsize=B0_dim*B1_dim,sink=true" label="FiberWrite j: X1\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="j" tensor="X" mode="1" format="compressed" segsize="B0_dim+1" crdsize="B0_dim*B1_dim" sink="true"]
+    3 [comment="type=arrayvals,tensor=B" label="Array Vals: B" color=green2 shape=box style=filled type="arrayvals" tensor="B"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=X,size=1*B0_dim*B1_dim,sink=true" label="FiberWrite Vals: X" color=green3 shape=box style=filled type="fiberwrite" tensor="X" mode="vals" size="1*B0_dim*B1_dim" sink="true"]
+    6 [comment="type=crddrop,outer=j,inner=val,mode=0" label="CrdDrop Compression j, val" color=orange style=filled type="crddrop" outer="j" inner="val" mode="0"]
+    7 [comment="type=crddrop,outer=i,inner=j" label="CrdDrop i,j" color=orange shape=box style=filled type="crddrop" outer="i" inner="j"]
+    5 -> 4 [label="ref" style=bold type="ref" comment=""]
+    4 -> 3 [label="ref" style=bold type="ref" comment=""]
+    3 -> 6 [label="val" type="val" comment="inner-val"]
+    4 -> 6 [label="crd_outer-j" style=dashed type="crd" comment="outer-j"]
+    6 -> 7 [label="crd_inner-j" style=dashed type="crd" comment="outer-j"]
+    5 -> 7 [label="crd_outer-i" style=dashed type="crd" comment="outer_i"]
+    6 -> 0 [label="val" type="val" comment="inner-val"]
+    7 -> 1 [label="crd_innner-j" style=dashed type="crd" comment="inner-j"]
+    7 -> 2 [label="crd_outer-i" style=dashed type="crd" comment="outer-i"]
+}

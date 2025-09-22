@@ -1,0 +1,22 @@
+digraph SAM {
+    comment="x=d0,b=s0,c=s0"
+    6 [comment="type=fiberlookup,index=i,tensor=b,mode=0,format=compressed,src=true,root=true" label="FiberLookup i: b0\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="b" mode="0" format="compressed" src="true" root="true"]
+    5 [comment="type=union,index=i" label="union i" color=purple shape=box style=filled type="union" index="i"]
+    1 [comment="type=fiberwrite,index=i,tensor=x,mode=0,format=dense,sink=true" label="FiberWrite i: x0\ndense" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="x" mode="0" format="dense" sink="true"]
+    3 [comment="type=arrayvals,tensor=b" label="Array Vals: b" color=green2 shape=box style=filled type="arrayvals" tensor="b"]
+    2 [comment="type=add,sub=1" label="Add
+subtract" color=brown shape=box style=filled type="add" sub="1"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=x,size=1*b0_dim,sink=true" label="FiberWrite Vals: x" color=green3 shape=box style=filled type="fiberwrite" tensor="x" mode="vals" size="1*b0_dim" sink="true"]
+    4 [comment="type=arrayvals,tensor=c" label="Array Vals: c" color=green2 shape=box style=filled type="arrayvals" tensor="c"]
+    7 [comment="type=fiberlookup,index=i,tensor=c,mode=0,format=compressed,src=true,root=true" label="FiberLookup i: c0\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="c" mode="0" format="compressed" src="true" root="true"]
+    6 -> 5 [label="crd_in-b" style=dashed type="crd" comment="in-b"]
+    5 -> 1 [label="crd" style=dashed type="crd"]
+    5 -> 3 [label="ref_out-b" style=bold type="ref" comment="out-b"]
+    3 -> 2 [label="val" type="val"]
+    2 -> 0 [label="val" type="val"]
+    5 -> 4 [label="ref_out-c" style=bold type="ref" comment="out-c"]
+    4 -> 2 [label="val" type="val"]
+    6 -> 5 [label="ref_in-b" style=bold type="ref" comment="in-b"]
+    7 -> 5 [label="crd_in-c" style=dashed type="crd" comment="in-c"]
+    7 -> 5 [label="ref_in-c" style=bold type="ref" comment="in-c"]
+}

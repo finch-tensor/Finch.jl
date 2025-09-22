@@ -1,0 +1,27 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Graphviz
+      run: sudo apt-get install graphviz
+
+    - name: Update submodules
+      run: make submodules
+            
+    - name: Build TACO
+      run: make taco/build
+      
+    - name: Build SAM graphs
+      run: make sam

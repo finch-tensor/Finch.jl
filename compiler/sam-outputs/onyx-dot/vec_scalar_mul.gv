@@ -1,0 +1,21 @@
+digraph SAM {
+    comment="x=s0,b=none,c=s0"
+    8 [comment="type=fiberlookup,index=i,tensor=c,mode=0,format=compressed,src=true,root=true" label="FiberLookup i: c0\ncompressed" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="c" mode="0" format="compressed" src="true" root="true"]
+    7 [comment="type=broadcast" shape=point style=invis type="broadcast"]
+    1 [comment="type=fiberwrite,index=i,tensor=x,mode=0,format=compressed,segsize=2,crdsize=c0_dim,sink=true" label="FiberWrite i: x0\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="x" mode="0" format="compressed" segsize="2" crdsize="c0_dim" sink="true"]
+    6 [comment="type=repsiggen,index=i" label="RepeatSignalGenerator i" color=cyan3 shape=box style=filled type="repsiggen" index="i"]
+    5 [comment="type=repeat,index=i,tensor=b,root=true" label="Repeat i: b" color=cyan2 shape=box style=filled type="repeat" index="i" tensor="b" root="true"]
+    3 [comment="type=arrayvals,tensor=b" label="Array Vals: b" color=green2 shape=box style=filled type="arrayvals" tensor="b"]
+    2 [comment="type=mul" label="Mul" color=brown shape=box style=filled type="mul"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=x,size=1*c0_dim,sink=true" label="FiberWrite Vals: x" color=green3 shape=box style=filled type="fiberwrite" tensor="x" mode="vals" size="1*c0_dim" sink="true"]
+    4 [comment="type=arrayvals,tensor=c" label="Array Vals: c" color=green2 shape=box style=filled type="arrayvals" tensor="c"]
+    8 -> 7 [label="crd" style=dashed type="crd" comment=""]
+    7 -> 1 [label="crd" style=dashed type="crd"]
+    7 -> 6 [label="crd" style=dashed type="crd"]
+    6 -> 5 [label="repsig" style=dotted type="repsig"]
+    5 -> 3 [label="ref" style=bold type="ref"]
+    3 -> 2 [label="val" type="val"]
+    2 -> 0 [label="val" type="val"]
+    8 -> 4 [label="ref" style=bold type="ref" comment=""]
+    4 -> 2 [label="val" type="val"]
+}

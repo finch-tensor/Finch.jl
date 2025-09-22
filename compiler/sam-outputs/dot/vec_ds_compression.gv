@@ -1,0 +1,14 @@
+digraph SAM {
+    comment="x=s0,b=d0"
+    4 [comment="type=crddrop,outer=i,inner=vals,vals=true" label="CrdDrop i,vals" color=orange shape=box style=filled type="crddrop" outer="i" inner="vals" vals="true"]
+    3 [comment="type=fiberlookup,index=i,tensor=b,mode=0,format=dense,src=true,root=true" label="FiberLookup i: b0\ndense" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="b" mode="0" format="dense" src="true" root="true"]
+    3 [comment="type=fiberlookup,index=i,tensor=b,mode=0,format=dense,src=true,root=true" label="FiberLookup i: b0\ndense" color=green4 shape=box style=filled type="fiberlookup" index="i" tensor="b" mode="0" format="dense" src="true" root="true"]
+    1 [comment="type=fiberwrite,index=i,tensor=x,mode=0,format=compressed,segsize=2,crdsize=b0_dim,sink=true" label="FiberWrite i: x0\ncompressed" color=green3 shape=box style=filled type="fiberwrite" index="i" tensor="x" mode="0" format="compressed" segsize="2" crdsize="b0_dim" sink="true"]
+    2 [comment="type=arrayvals,tensor=b" label="Array Vals: b" color=green2 shape=box style=filled type="arrayvals" tensor="b"]
+    0 [comment="type=fiberwrite,mode=vals,tensor=x,size=1*b0_dim,sink=true" label="FiberWrite Vals: x" color=green3 shape=box style=filled type="fiberwrite" tensor="x" mode="vals" size="1*b0_dim" sink="true"]
+    3 -> 4 [label="crd_in-i" style=dashed type="crd" comment="in-i"]
+    4 -> 1 [label="crd_outer-i" style=dashed type="crd" comment="outer-i"]
+    3 -> 2 [label="ref" style=bold type="ref" comment=""]
+    2 -> 4 [label="val_in-vals" type="val" comment="in-vals"]
+    4 -> 0 [label="val_inner-vals" type="val" comment="inner-vals"]
+}
