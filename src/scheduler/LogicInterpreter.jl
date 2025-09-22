@@ -47,7 +47,7 @@ end
 
 function (ctx::PointwiseOnyxLowerer)(ex)
     if @capture ex mapjoin(*, ~args...)
-        return join(map(ctx, args), " * ")
+        return join(map(ctx, args), "*")
     elseif (@capture ex relabel(~arg::isalias, ~idxs_1...))
         tns_name = get!(ctx.names, arg.name, tns_names[length(ctx.names) + 1])
         idxs_3 = [idx.name for idx in idxs_1 if idx in ctx.loop_idxs]
@@ -191,9 +191,9 @@ function (ctx::LogicMachine)(ex)
         lhs_idxs = [idx.name for idx in lhs_idxs]
         format_args = []
         for (k, v) in formats
-            push!(format_args, "--format $k:$v")
+            push!(format_args, "-f=$k:$v")
         end
-        println("\"$lhs[$(join(lhs_idxs, ","))] = $str\" $(join(format_args, " "))")
+        println("$lhs[$(join(lhs_idxs, ","))]=$str $(join(format_args, " "))")
         #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
