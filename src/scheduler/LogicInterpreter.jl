@@ -187,16 +187,37 @@ function (ctx::LogicMachine)(ex)
             display(body)
         end
         (str, formats, lhs) = lower_pointwise_onyx(ctx, reorder(arg, idxs_2...), loop_idxs)
-        println("Generated ONYX code: ")
         lhs_idxs = [idx.name for idx in lhs_idxs]
         format_args = []
         for (k, v) in formats
             push!(format_args, "-f=$k:$v")
         end
-        println("$lhs[$(join(lhs_idxs, ","))]=$str $(join(format_args, " "))")
-        #$taco_exe $args --print-sam-graph="$dot_dir/$name.gv"
-        #dot -Tpng $dot_dir/$name.gv -o $png_dir/$name.png
-        #echo "Generating sam for $name to $dir"
+        
+        # Define paths and create output directory
+        taco_exe = joinpath(@__DIR__, "..", "..", "deps", "sam", "compiler", "taco", "build", "bin", "taco")
+        output_dir = "sam_output"
+        mkpath(output_dir)
+        
+        # Generate unique numbered filename
+        file_counter = 1
+        while isfile(joinpath(output_dir, "graph_$file_counter.gv"))
+            file_counter += 1
+        end
+        base_name = "graph_$file_counter"
+        
+        # Prepare TACO expression and format arguments
+        taco_expr = "$lhs($(join(lhs_idxs, ",")))=$str"
+        
+        # Build the full command with proper argument separation
+        cmd_args = [taco_exe, taco_expr]
+        append!(cmd_args, format_args)
+        push!(cmd_args, "--print-sam-graph=$(joinpath(output_dir, "$base_name.gv"))")
+        
+        # Generate ONYX code and run visualization commands
+        println("Running TACO command: ", join(cmd_args, " "))
+        run(Cmd(cmd_args))
+        run(`dot -Tpng $(joinpath(output_dir, "$base_name.gv")) -o $(joinpath(output_dir, "$base_name.png"))`)
+        println("Generated SAM graph: $(joinpath(output_dir, "$base_name.gv")) and PNG: $(joinpath(output_dir, "$base_name.png"))")
         #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
