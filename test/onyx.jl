@@ -1,4 +1,5 @@
 using Finch
+using TensorMarket
 
 A = Tensor(CSCFormat(), fsprand(10, 10, 0.2))
 B = Tensor(rand(10, 10))

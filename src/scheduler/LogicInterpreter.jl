@@ -35,6 +35,22 @@ end
     loop_idxs = []
     names = Dict{Symbol,String}()
     formats = Dict{String,String}()
+    tensors = Dict{String,Any}()
+end
+
+function taco_to_sam_format(taco_format::String)
+    # Map TACO format codes to SAM format names
+    if taco_format == "dd"
+        return "dense"
+    elseif taco_format == "ds"
+        return "csr"  # dense-sparse typically corresponds to CSR
+    elseif taco_format == "sd"
+        return "csc"  # sparse-dense typically corresponds to CSC
+    elseif taco_format == "ss"
+        return "coo"  # sparse-sparse typically corresponds to COO
+    else
+        return "dense"  # default fallback
+    end
 end
 
 tns_names = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
@@ -42,7 +58,7 @@ tns_names = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N
 function lower_pointwise_onyx(ctx, ex, loop_idxs=[])
     ctx = PointwiseOnyxLowerer(; ctx=ctx, loop_idxs=loop_idxs)
     code = ctx(ex)
-    return (code, ctx.formats, tns_names[length(ctx.names) + 1])
+    return (code, ctx.formats, tns_names[length(ctx.names) + 1], ctx.tensors)
 end
 
 function (ctx::PointwiseOnyxLowerer)(ex)
@@ -52,6 +68,7 @@ function (ctx::PointwiseOnyxLowerer)(ex)
         tns_name = get!(ctx.names, arg.name, tns_names[length(ctx.names) + 1])
         idxs_3 = [idx.name for idx in idxs_1 if idx in ctx.loop_idxs]
         ctx.formats[tns_name] = onyx_format(ctx.ctx.scope[arg])
+        ctx.tensors[tns_name] = ctx.ctx.scope[arg]
         return "$tns_name($(join(idxs_3, ",")))"
     elseif (@capture ex reorder(~arg::isimmediate, ~idxs...))
         return string(arg.val)
@@ -186,7 +203,7 @@ function (ctx::LogicMachine)(ex)
             print("Running: ")
             display(body)
         end
-        (str, formats, lhs) = lower_pointwise_onyx(ctx, reorder(arg, idxs_2...), loop_idxs)
+        (str, formats, lhs, tensors) = lower_pointwise_onyx(ctx, reorder(arg, idxs_2...), loop_idxs)
         lhs_idxs = [idx.name for idx in lhs_idxs]
         format_args = []
         for (k, v) in formats
@@ -218,7 +235,94 @@ function (ctx::LogicMachine)(ex)
         run(Cmd(cmd_args))
         run(`dot -Tpng $(joinpath(output_dir, "$base_name.gv")) -o $(joinpath(output_dir, "$base_name.png"))`)
         println("Generated SAM graph: $(joinpath(output_dir, "$base_name.gv")) and PNG: $(joinpath(output_dir, "$base_name.png"))")
-        #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
+        
+        if true
+            # Write tensors to matrix market files
+            tensor_dir = joinpath(output_dir, "tensors")
+            mkpath(tensor_dir)
+            
+            tensor_files = Dict{String,String}()
+            for (name, tensor) in tensors
+                # Convert tensor to concrete format if needed
+                concrete_tensor = compute(tensor)
+                filename = joinpath(tensor_dir, "$name.mtx")
+                fwrite(filename, concrete_tensor)
+                tensor_files[name] = filename
+                println("Wrote tensor $name to $filename")
+            end
+            
+            # Run SAM datastructure conversion
+            sam_data_dir = joinpath(output_dir, "sam_data")
+            mkpath(sam_data_dir)
+            
+            sam_sim_dir = joinpath(@__DIR__, "..", "..", "deps", "sam-sim")
+            datastructure_script = joinpath(@__DIR__, "..", "..", "deps", "sam", "scripts", "datastructure_suitesparse.py")
+            
+            for (name, filepath) in tensor_files
+                taco_format = formats[name]
+                sam_format = taco_to_sam_format(taco_format)
+                abs_filepath = abspath(filepath)
+                abs_sam_data_dir = abspath(sam_data_dir)
+                println("Converting tensor $name with TACO format $taco_format -> SAM format $sam_format...")
+                run(`poetry --directory $sam_sim_dir run python $datastructure_script --input_path $abs_filepath --output_dir_path $abs_sam_data_dir -n $name --format $sam_format`)
+            end
+            
+            # Generate SAM simulator code
+            test_gen_script = joinpath(@__DIR__, "..", "..", "deps", "sam", "scripts", "gen_sam_apps", "test_generating_code.py")
+            abs_output_dir = abspath(output_dir)
+            abs_sam_graph = abspath(joinpath(output_dir, "$base_name.gv"))
+            abs_sam_data_dir = abspath(sam_data_dir)
+            
+            println("Generating SAM simulator code...")
+            try
+                # Create a directory containing only .gv files for the script
+                gv_dir = joinpath(output_dir, "gv_files") 
+                mkpath(gv_dir)
+                # Copy just the .gv file to the gv_files directory
+                cp(joinpath(output_dir, "$base_name.gv"), joinpath(gv_dir, "$base_name.gv"), force=true)
+                
+                # Create a more sensible output directory for simulator files in our sam_output
+                simulator_dir = joinpath(output_dir, "simulators")
+                mkpath(simulator_dir)
+                
+                # Create the required directory structure that the script expects for copying output files
+                apps_dir = joinpath(sam_sim_dir, "sam", "sim", "test", "apps")
+                mkpath(apps_dir)
+                
+                # The test_generating_code.py script expects --input_dir argument containing .gv files
+                abs_gv_dir = abspath(gv_dir)
+                run(`poetry --directory $sam_sim_dir run python $test_gen_script --input_dir $abs_gv_dir`)
+                
+                # Move the generated files to our preferred location
+                if isdir(apps_dir)
+                    sim_files = filter(f -> endswith(f, ".py"), readdir(apps_dir))
+                    if !isempty(sim_files)
+                        println("Moving SAM simulator files to $(simulator_dir)...")
+                        for file in sim_files
+                            src = joinpath(apps_dir, file)
+                            dst = joinpath(simulator_dir, file)
+                            mv(src, dst, force=true)
+                        end
+                        
+                        println("SAM simulator code generated successfully!")
+                        println("Generated SAM simulator files:")
+                        for file in sim_files
+                            println("  - $(joinpath(simulator_dir, file))")
+                        end
+                        
+                        # Clean up the temporary directory structure
+                        rm(joinpath(sam_sim_dir, "sam"), recursive=true, force=true)
+                    end
+                end
+            catch e
+                println("SAM simulator code generation failed: $e")
+                println("SAM data conversion completed successfully. Generated files:")
+                for file in readdir(sam_data_dir)
+                    println("  - $(joinpath(sam_data_dir, file))")
+                end
+            end
+            #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
+        end
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
         return map(args) do arg
