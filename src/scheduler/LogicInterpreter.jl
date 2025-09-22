@@ -194,6 +194,9 @@ function (ctx::LogicMachine)(ex)
             push!(format_args, "-f=$k:$v")
         end
         println("$lhs[$(join(lhs_idxs, ","))]=$str $(join(format_args, " "))")
+        #$taco_exe $args --print-sam-graph="$dot_dir/$name.gv"
+        #dot -Tpng $dot_dir/$name.gv -o $png_dir/$name.png
+        #echo "Generating sam for $name to $dir"
         #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
