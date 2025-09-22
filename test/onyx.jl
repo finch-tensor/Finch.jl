@@ -13,5 +13,5 @@ D = B * C
 E = A .* D
 
 ctx = Finch.LogicInterpreter(verbose=true)
-ctx_2 = Finch.DefaultOptimizer(ctx)
-E = compute!(E, ctx=ctx_2)
+ctx_2 = Finch.DefaultLogicOptimizer(ctx)
+E = compute(E, ctx=ctx_2)
