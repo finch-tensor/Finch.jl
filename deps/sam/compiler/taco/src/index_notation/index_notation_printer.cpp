@@ -1,0 +1,299 @@
+#include "taco/index_notation/index_notation_printer.h"
+#include "taco/index_notation/index_notation_nodes.h"
+
+using namespace std;
+
+namespace taco {
+
+IndexNotationPrinter::IndexNotationPrinter(std::ostream& os) : os(os) {
+}
+
+void IndexNotationPrinter::print(const IndexExpr& expr) {
+  parentPrecedence = Precedence::TOP;
+  expr.accept(this);
+}
+
+void IndexNotationPrinter::print(const IndexStmt& expr) {
+  parentPrecedence = Precedence::TOP;
+  expr.accept(this);
+}
+
+void IndexNotationPrinter::visit(const AccessNode* op) {
+  os << op->tensorVar.getName();
+  if (op->isAccessingStructure) {
+    os << "_struct";
+  }
+  if (op->indexVars.size() > 0) {
+    os << "(" << util::join(op->indexVars,",") << ")";
+  }
+}
+
+void IndexNotationPrinter::visit(const IndexVarNode* op) {
+  os << op->getName();
+}
+
+void IndexNotationPrinter::visit(const LiteralNode* op) {
+  switch (op->getDataType().getKind()) {
+    case Datatype::Bool:
+      os << op->getVal<bool>();
+      break;
+    case Datatype::UInt8:
+      os << op->getVal<uint8_t>();
+      break;
+    case Datatype::UInt16:
+      os << op->getVal<uint16_t>();
+      break;
+    case Datatype::UInt32:
+      os << op->getVal<uint32_t>();
+      break;
+    case Datatype::UInt64:
+      os << op->getVal<uint64_t>();
+      break;
+    case Datatype::UInt128:
+      taco_not_supported_yet;
+      break;
+    case Datatype::Int8:
+      os << op->getVal<int8_t>();
+      break;
+    case Datatype::Int16:
+      os << op->getVal<int16_t>();
+      break;
+    case Datatype::Int32:
+      os << op->getVal<int32_t>();
+      break;
+    case Datatype::Int64:
+      os << op->getVal<int64_t>();
+      break;
+    case Datatype::Int128:
+      taco_not_supported_yet;
+      break;
+    case Datatype::Float32:
+      os << op->getVal<float>();
+      break;
+    case Datatype::Float64:
+      os << op->getVal<double>();
+      break;
+    case Datatype::Complex64:
+      os << op->getVal<std::complex<float>>();
+      break;
+    case Datatype::Complex128:
+      os << op->getVal<std::complex<double>>();
+      break;
+    case Datatype::Undefined:
+      break;
+  }
+}
+
+void IndexNotationPrinter::visit(const NegNode* op) {
+  Precedence precedence = Precedence::NEG;
+  bool parenthesize =  precedence > parentPrecedence;
+  parentPrecedence = precedence;
+  if(op->getDataType().isBool()) {
+    os << "!";
+  } else {
+    os << "-";
+  }
+
+  if (parenthesize) {
+    os << "(";
+  }
+  op->a.accept(this);
+  if (parenthesize) {
+    os << ")";
+  }
+}
+
+void IndexNotationPrinter::visit(const SqrtNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << "sqrt";
+  os << "(";
+  op->a.accept(this);
+  os << ")";
+}
+
+template <typename Node>
+void IndexNotationPrinter::visitBinary(Node op, Precedence precedence) {
+  bool parenthesize =  precedence > parentPrecedence;
+  if (parenthesize) {
+    os << "(";
+  }
+  parentPrecedence = precedence;
+  op->a.accept(this);
+  os << " " << op->getOperatorString() << " ";
+  parentPrecedence = precedence;
+  op->b.accept(this);
+  if (parenthesize) {
+    os << ")";
+  }
+}
+
+void IndexNotationPrinter::visit(const AddNode* op) {
+  visitBinary(op, Precedence::ADD);
+}
+
+void IndexNotationPrinter::visit(const SubNode* op) {
+  visitBinary(op, Precedence::SUB);
+}
+
+void IndexNotationPrinter::visit(const MulNode* op) {
+  visitBinary(op, Precedence::MUL);
+}
+
+void IndexNotationPrinter::visit(const DivNode* op) {
+  visitBinary(op, Precedence::DIV);
+}
+
+void IndexNotationPrinter::visit(const CastNode* op) {
+  parentPrecedence = Precedence::CAST;
+  os << "cast<";
+  os << op->getDataType();
+  os << ">(";
+  op->a.accept(this);
+  os << ")";
+}
+
+template <class T>
+static inline void acceptJoin(IndexNotationPrinter* printer, 
+                              std::ostream& stream, const std::vector<T>& nodes, 
+                              std::string sep) {
+  if (nodes.size() > 0) {
+    nodes[0].accept(printer);
+  }
+  for (size_t i = 1; i < nodes.size(); ++i) {
+    stream << sep;
+    nodes[i].accept(printer);
+  }
+}
+
+void IndexNotationPrinter::visit(const CallNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << op->name << "(";
+  acceptJoin(this, os, op->args, ", ");
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const CallIntrinsicNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << op->func->getName();
+  os << "(";
+  acceptJoin(this, os, op->args, ", ");
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const ReductionNode* op) {
+  struct ReductionName : IndexNotationVisitor {
+    std::string reductionName;
+    std::string get(IndexExpr expr) {
+      expr.accept(this);
+      return reductionName;
+    }
+    using IndexNotationVisitor::visit;
+    void visit(const AddNode* node) {
+      reductionName = "sum";
+    }
+    void visit(const MulNode* node) {
+      reductionName = "product";
+    }
+    void visit(const BinaryExprNode* node) {
+      reductionName = "reduction(" + node->getOperatorString() + ")";
+    }
+
+    void visit(const CallNode* node) {
+      reductionName = node->name + "Reduce";
+    }
+  };
+  parentPrecedence = Precedence::REDUCTION;
+  os << ReductionName().get(op->op) << "(" << op->var << ", ";
+  op->a.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const AssignmentNode* op) {
+  struct OperatorName : IndexNotationVisitor {
+    using IndexNotationVisitor::visit;
+    std::string operatorName;
+    std::string get(IndexExpr expr) {
+      if (!expr.defined()) return "";
+      expr.accept(this);
+      return operatorName;
+    }
+    void visit(const BinaryExprNode* node) {
+      operatorName = node->getOperatorString();
+    }
+
+    void visit(const CallNode* node) {
+      operatorName = node->name;
+    }
+  };
+
+  op->lhs.accept(this);
+  os << " " << OperatorName().get(op->op) << "= ";
+  op->rhs.accept(this);
+}
+
+void IndexNotationPrinter::visit(const YieldNode* op) {
+  os << "yield(";
+  if (op->indexVars.size() > 0) {
+    os << "{" << util::join(op->indexVars,",") << "}, ";
+  }
+  op->expr.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const ForallNode* op) {
+  os << "forall(" << op->indexVar << ", ";
+  op->stmt.accept(this);
+  if (op->parallel_unit != ParallelUnit::NotParallel) {
+    os << ", " << ParallelUnit_NAMES[(int) op->parallel_unit] << ", " << OutputRaceStrategy_NAMES[(int) op->output_race_strategy];
+  }
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const WhereNode* op) {
+  os << "where(";
+  op->consumer.accept(this);
+  os << ", ";
+  op->producer.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const MultiNode* op) {
+  os << "multi(";
+  op->stmt1.accept(this);
+  os << ", ";
+  op->stmt2.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const SuchThatNode* op) {
+  os << "suchthat(";
+  op->stmt.accept(this);
+  os << ", ";
+  for (auto iter = op->predicate.begin(); iter != op->predicate.end(); ++iter) {
+    os << *iter;
+    if (iter + 1 != op->predicate.end()) {
+      os << " and ";
+    }
+  }
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const SequenceNode* op) {
+  os << "sequence(";
+  op->definition.accept(this);
+  os << ", ";
+  op->mutation.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const AssembleNode* op) {
+  os << "assemble(";
+  if (op->queries.defined()) {
+    op->queries.accept(this);
+    os << ", ";
+  }
+  op->compute.accept(this);
+  os << ")";
+}
+
+}
