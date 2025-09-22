@@ -47,18 +47,18 @@ end
 
 function (ctx::PointwiseOnyxLowerer)(ex)
     if @capture ex mapjoin(*, ~args...)
-        return join("*", map(ctx, args))
+        return join(map(ctx, args), " * ")
     elseif (@capture ex relabel(~arg::isalias, ~idxs_1...))
         tns_name = get!(ctx.names, arg.name, tns_names[length(ctx.names) + 1])
         idxs_3 = [idx.name for idx in idxs_1 if idx in ctx.loop_idxs]
         ctx.formats[tns_name] = onyx_format(ctx.ctx.scope[arg])
-        return "$tns_name($(join(",", idxs_3)))"
+        return "$tns_name($(join(idxs_3, ",")))"
     elseif (@capture ex reorder(~arg::isimmediate, ~idxs...))
-        string(arg.val)
+        return string(arg.val)
     elseif ex.kind === immediate
-        String(ex.val)
+        return String(ex.val)
     elseif (@capture ex reorder(~arg, ~idxs...))
-        ctx(arg)
+        return ctx(arg)
     else
         error("Unrecognized logic: $(ex)")
     end
@@ -193,7 +193,7 @@ function (ctx::LogicMachine)(ex)
         for (k, v) in formats
             push!(format_args, "--format $k:$v")
         end
-        println("$lhs[$(join(",", lhs_idxs))] = $str ")
+        println("\"$lhs[$(join(lhs_idxs, ","))] = $str\" $(join(format_args, " "))")
         #poetry run python ../sam/scripts/datastructure_suitesparse.py --input_path /Users/willow/Projects/Finch.jl/test/data/HB/west0132.mtx --output_dir_path . -n west0132.mtx --format csr
         execute(body; mode=ctx.mode).res
     elseif @capture ex produces(~args...)
