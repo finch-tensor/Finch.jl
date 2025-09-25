@@ -358,3 +358,87 @@ end
         end
     end
 end
+
+@testitem "representationshard" setup = [CheckOutput, RepresentationSetup] begin
+    using Finch: Structure
+
+    ncpu = cpu(1, 4)
+    fname = "representation/shard_representation.txt"
+
+    ref = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
+    tmp = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
+    res = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
+
+    @testset "init_shard" begin
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
+
+    @testset "roundtrip_shard" begin
+        @finch begin
+            ref .= 0
+            tmp .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tmp[i,j] = ref[i,j]
+                end
+            end
+        end
+
+        @finch begin
+            res .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    res[i,j] = tmp[i,j]
+                end
+            end
+        end
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+
+         @finch begin
+            res .= 0
+            for j in parallel(1:4, ncpu)
+                for i in 1:4
+                    res[i,j] = 1
+                end
+            end
+        end
+
+        @finch begin
+            ref .= 0
+            tmp .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tmp[i,j] = ref[i,j]
+                end
+            end
+        end
+
+        @finch begin
+            res .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    res[i,j] = tmp[i,j]
+                end
+            end
+        end
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+
+    end
+end

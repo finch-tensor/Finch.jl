@@ -107,7 +107,6 @@ end
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
     if task.device == arr.device
         temp = arr.data[task.t]
-        @assert isa(temp, Vector)
         return temp
     else
         return arr
@@ -587,7 +586,6 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 lvl_4 = declare_level!(ctx_3, lvl_3, literal(1), init)
                 freeze_level!(ctx_3, lvl_4, literal(1))
                 tid = ctx_3(get_task_num(ctx_3))
-                #This quote block gets placed into the executable.
                 quote
                     $(ctx_3(used))[$tid] = 0
                     $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)

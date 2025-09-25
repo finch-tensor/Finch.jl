@@ -3,7 +3,6 @@
 
 A datatype representing a device on which tasks can be executed.
 """
-
 abstract type AbstractDevice end
 abstract type AbstractVirtualDevice end
 
@@ -203,37 +202,37 @@ Base.:(==)(a::VirtualCPU, b::VirtualCPU) = a.id == b.id
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
 
-struct CPULocalMemory{id}
-    device::CPU{id}
+struct CPULocalMemory{Dev<:CPU}
+    device::Dev
 end
 struct VirtualCPULocalMemory
     device::VirtualCPU
 end
 FinchNotation.finch_leaf(mem::VirtualCPULocalMemory) = virtual(mem)
-function virtualize(ctx, ex, ::Type{CPULocalMemory{id}}) where {id}
-    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU{id}))
+function virtualize(ctx, ex, ::Type{CPULocalMemory{Dev}}) where {Dev}
+    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), Dev))
 end
 function lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle)
     :(Finch.CPULocalMemory($(ctx(mem.device))))
 end
 
-struct CPUSharedMemory{id}
-    device::CPU{id}
+struct CPUSharedMemory{Dev<:CPU}
+    device::Dev
 end
 struct VirtualCPUSharedMemory
     device::VirtualCPU
 end
 FinchNotation.finch_leaf(mem::VirtualCPUSharedMemory) = virtual(mem)
-function virtualize(ctx, ex, ::Type{CPUSharedMemory{id}}) where {id}
-    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), CPU{id}))
+function virtualize(ctx, ex, ::Type{CPUSharedMemory{Dev}}) where {Dev}
+    VirtualCPULocalMemory(virtualize(ctx, :($ex.device), Dev))
 end
 function lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle)
     :(Finch.CPUSharedMemory($(ctx(mem.device))))
 end
 
-local_memory(device::CPU{id}) where {id} = CPULocalMemory{id}(device)
-shared_memory(device::CPU{id}) where {id} = CPUSharedMemory{id}(device)
-global_memory(device::CPU{id}) where {id} = CPUSharedMemory{id}(device)
+local_memory(device::Dev) where {Dev} = CPULocalMemory{Dev}(device)
+shared_memory(device::Dev) where {Dev} = CPUSharedMemory{Dev}(device)
+global_memory(device::Dev) where {Dev} = CPUSharedMemory{Dev}(device)
 local_memory(device::VirtualCPU) = VirtualCPULocalMemory(device)
 shared_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 global_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
@@ -398,9 +397,6 @@ function distribute_buffer(ctx, buf, device, ::HostShared)
     return buf_2
 end
 
-###*******
-##Check for errors
-###*******
 function distribute_buffer(
     ctx, buf, task, style::Union{DeviceLocal,DeviceShared,DeviceGlobal}
 )
