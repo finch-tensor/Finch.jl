@@ -53,7 +53,7 @@ function (ctx::InstantiateTensors)(node::FinchNode)
 end
 
 function execute(ex; algebra=DefaultAlgebra(), mode=:safe)
-    println(execute_code(:ex, typeof(ex)))
+    # println(execute_code(:ex, typeof(ex)))
     execute_impl(ex, Val(algebra), Val(mode))
 end
 

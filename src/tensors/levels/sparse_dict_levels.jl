@@ -472,11 +472,13 @@ function unfurl(
                         $my_v = $(lvl.val)[$my_q]
                     end,
                     stop=(ctx, ext) -> value(my_i),
-                    chunk=Spike(;
-                        body=FillLeaf(virtual_level_fill_value(lvl)),
-                        tail=Simplify(
-                            instantiate(
-                                ctx, VirtualSubFiber(lvl.lvl, value(my_v, Ti)), mode
+                    chunk=Thunk(;
+                        body=(ctx) -> Spike(;
+                            body=FillLeaf(virtual_level_fill_value(lvl)),
+                            tail=Simplify(
+                                instantiate(
+                                    ctx, VirtualSubFiber(lvl.lvl, value(my_v, Ti)), mode
+                                ),
                             ),
                         ),
                     ),
