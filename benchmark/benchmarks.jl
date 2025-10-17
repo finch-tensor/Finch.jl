@@ -32,7 +32,7 @@ end
 if "FINCH_BENCHMARK_ARGS" in keys(ENV)
     ARGS = split(ENV["FINCH_BENCHMARK_ARGS"], " ")
 end
-parsed_args = parse_args(ARGS, s)
+parsed_args = parse_args([], s) # TODO https://github.com/carlobaldassi/ArgParse.jl/issues/135
 
 include(joinpath(@__DIR__, "../docs/examples/bfs.jl"))
 include(joinpath(@__DIR__, "../docs/examples/pagerank.jl"))
