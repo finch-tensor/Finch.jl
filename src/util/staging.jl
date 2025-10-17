@@ -24,7 +24,7 @@ macro staged(def)
         quote
             $(staged_maker(@__MODULE__, def))
             push!(staged_defs, (@__MODULE__, $(QuoteNode(def))))
-        end
+        end,
     )
 end
 
