@@ -52,48 +52,7 @@ function (ctx::InstantiateTensors)(node::FinchNode)
     end
 end
 
-function execute(ex; algebra=DefaultAlgebra(), mode=:safe)
-    execute_impl(ex, Val(algebra), Val(mode))
-end
-
 getvalue(::Type{Val{v}}) where {v} = v
-
-@staged function execute_impl(ex, algebra, mode)
-    code = execute_code(:ex, ex; algebra=getvalue(algebra), mode=getvalue(mode))
-    if mode === :debug
-        return quote
-            try
-                begin
-                    $(unblock(code))
-                end
-            catch
-                println("Error executing code:")
-                println($(QuoteNode(unquote_literals(pretty(code)))))
-                rethrow()
-            end
-        end
-    else
-        return quote
-            @inbounds @fastmath begin
-                $(unquote_literals(pretty(code)))
-            end
-        end
-    end
-end
-
-function execute_code(
-    ex,
-    T;
-    algebra=DefaultAlgebra(),
-    mode=:safe,
-    ctx=FinchCompiler(; algebra=algebra, mode=mode),
-)
-    code = contain(ctx) do ctx_2
-        prgm = nothing
-        prgm = virtualize(ctx_2.code, ex, T)
-        lower_global(ctx_2, prgm)
-    end
-end
 
 """
     lower_global(ctx, prgm)
@@ -123,6 +82,48 @@ function lower_global(ctx, prgm)
             $(get_result(ctx))
         end
     end
+end
+
+
+function execute_code(
+    ex,
+    T;
+    algebra=DefaultAlgebra(),
+    mode=:safe,
+    ctx=FinchCompiler(; algebra=algebra, mode=mode),
+)
+    code = contain(ctx) do ctx_2
+        prgm = nothing
+        prgm = virtualize(ctx_2.code, ex, T)
+        lower_global(ctx_2, prgm)
+    end
+end
+
+@staged function execute_impl(ex, algebra, mode)
+    code = execute_code(:ex, ex; algebra=getvalue(algebra), mode=getvalue(mode))
+    if mode === :debug
+        return quote
+            try
+                begin
+                    $(unblock(code))
+                end
+            catch
+                println("Error executing code:")
+                println($(QuoteNode(unquote_literals(pretty(code)))))
+                rethrow()
+            end
+        end
+    else
+        return quote
+            @inbounds @fastmath begin
+                $(unquote_literals(pretty(code)))
+            end
+        end
+    end
+end
+
+function execute(ex; algebra=DefaultAlgebra(), mode=:safe)
+    execute_impl(ex, Val(algebra), Val(mode))
 end
 
 """
