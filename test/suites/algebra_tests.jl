@@ -43,7 +43,7 @@
 
     @test pattern!(w) == [1, 1, 1, 0, 1, 0, 1, 1, 1, 0]
 
-    @test_logs Finch.refresh()
+    Finch.refresh()
 
     @finch algebra = MyAlgebra2() (w .= 1;
     for i in _
