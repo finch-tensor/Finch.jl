@@ -561,7 +561,7 @@
         end)
         C = Tensor(Dense(SparseList(Element(0.0))))
         D = Tensor(Dense(SparseList(Element(0.0))), fsprand(5, 5, 0.5))
-        C = copy_array(C, D).A
+        C = invokelatest(copy_array, C, D).A
         @test C == D
     end
 
@@ -925,7 +925,7 @@
             end
         end)
 
-        test(Output, Point, Kernel)
+        invokelatest(test, Output, Point, Kernel)
         Ans = Tensor(
             SparseList{Int64}(Dense{Int64}(Element{0,Int64,Int64}([1]), 1), 10, [1, 2], [1])
         )
