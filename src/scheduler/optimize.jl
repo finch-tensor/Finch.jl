@@ -751,8 +751,8 @@ function set_loop_order(node, perms=Dict(), reps=Dict())
     elseif @capture node query(~lhs, reformat(~tns, ~rhs))
         arg = alias(gensym(:A))
         set_loop_order(plan(
-                query(A, rhs),
-                query(lhs, reformat(tns, A)),
+                query(arg, rhs),
+                query(lhs, reformat(tns, arg)),
             ), perms, reps)
     elseif @capture node query(~lhs, table(~tns, ~idxs...))
         reps[lhs] = SuitableRep(reps)(node.rhs)
