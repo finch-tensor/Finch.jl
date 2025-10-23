@@ -294,7 +294,7 @@ function bspwrite_tensor(
     if haskey(bspwrite_format_lookup, desc["custom"])
         desc["format"] = bspwrite_format_lookup[desc["custom"]]
     end
-    bspwrite_header(io, json(Dict("binsparse" => desc), 4))
+    bspwrite_header(io, JSON.json(Dict("binsparse" => desc), 4))
 end
 
 function bspwrite_header end

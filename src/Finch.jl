@@ -109,8 +109,6 @@ include("transforms/dimensionalize.jl")
 include("transforms/evaluate.jl")
 include("transforms/concurrent.jl")
 
-include("execute.jl")
-
 include("symbolic/symbolic.jl")
 
 include("looplets/thunks.jl")
@@ -282,6 +280,8 @@ include("interface/fileio/fileio.jl")
 include("interface/lazy.jl")
 include("interface/eager.jl")
 include("interface/einsum.jl")
+
+include("execute.jl")
 
 include("Galley/Galley.jl")
 using .Galley

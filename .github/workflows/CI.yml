@@ -92,18 +92,18 @@ jobs:
           python-version: '3.11'
       - name: Install Poetry
         uses: snok/install-poetry@v1
-      - name: Checkout finch-tensor-python
+      - name: Checkout finch-tensor
         uses: actions/checkout@v4
         with:
-          repository: finch-tensor/finch-tensor-python
+          repository: finch-tensor/finch-tensor
           ref: 'main'
-          path: 'finch-tensor-python'
+          path: 'finch-tensor'
       - name: Install package
         run: |
-          cd finch-tensor-python
-          poetry install --with test
+          cd finch-tensor
+          poetry install --extras test
           poetry run python develop.py --path "${GITHUB_WORKSPACE}"
-      - name: Run finch-tensor-python tests
+      - name: Run finch-tensor tests
         run: |
-          cd finch-tensor-python
+          cd finch-tensor
           poetry run pytest tests/
