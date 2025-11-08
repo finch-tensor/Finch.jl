@@ -587,6 +587,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 freeze_level!(ctx_3, lvl_4, literal(1))
                 tid = ctx_3(get_task_num(ctx_3))
                 quote
+                    ###Fix me! This cannot be 0 for all the threads.
                     $(ctx_3(used))[$tid] = 0
                     $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)
                 end
