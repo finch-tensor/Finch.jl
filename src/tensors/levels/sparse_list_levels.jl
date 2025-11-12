@@ -61,7 +61,7 @@ function postype(::Type{SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl}
     return postype(Lvl)
 end
 
-function transfer(lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}, Tm, style) where {Ti,Ptr,Idx,Lvl}
+function transfer(Tm, lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}) where {Ti,Ptr,Idx,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
     idx_2 = transfer(Tm, lvl.idx)

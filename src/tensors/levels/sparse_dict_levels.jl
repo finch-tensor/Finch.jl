@@ -91,7 +91,7 @@ function Base.resize!(lvl::SparseDictLevel{Ti}, dims...) where {Ti}
 end
 
 function transfer(
-    lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}, Tm
+    Tm, lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
@@ -245,6 +245,7 @@ function virtualize(
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
     qos_stop = freshen(ctx, tag, :_qos_stop)
+    qos_stop_val = freshen(ctx, :qos_stop_temp)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -255,7 +256,7 @@ function virtualize(
             $val = $tag.val
             $tbl = $tag.tbl
             $pool = $tag.pool
-            $qos_stop = length($tbl)
+            $qos_stop = $qos_stop_val
             $stop = $tag.shape
         end,
     )
@@ -286,9 +287,9 @@ function distribute_level(
         lvl.Ti,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
-        lvl.val,
+        distribute_buffer(ctx, lvl.val, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
-        lvl.pool,
+        distribute_buffer(ctx, lvl.pool, arch, style),
         lvl.shape,
         lvl.qos_stop,
     )

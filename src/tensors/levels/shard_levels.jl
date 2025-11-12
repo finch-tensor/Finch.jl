@@ -90,6 +90,12 @@ function transfer(device::MultiChannelMemory, arr::AbstractArray)
     data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
     MultiChannelBuffer(device, data)
 end
+
+function transfer(device::MultiChannelMemory, arr::AbstractDict)
+    data = [transfer(device.device, copy(arr)) for _ in 1:device.n]
+    MultiChannelBuffer(device, data)
+end
+
 function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
     data = arr.data
     if device.device != arr.device
@@ -98,9 +104,18 @@ function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
     if arr.device.n > device.n
         MultiChannelBuffer(device, data)
     else
-        MultiChannelBuffer(
-            device, vcat(data, [transfer(device, []) for _ in 1:(device.n - arr.device.n)])
-        )
+        padding = [
+            transfer(device, Vector{eltype(data[1])}()) for _ in 1:(device.n - arr.device.n)
+        ]
+        if length(padding) > 0
+            MultiChannelBuffer(
+                device, vcat(data, padding)
+            )
+        else
+            MultiChannelBuffer(
+                device, data
+            )
+        end
     end
 end
 
@@ -587,7 +602,6 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 freeze_level!(ctx_3, lvl_4, literal(1))
                 tid = ctx_3(get_task_num(ctx_3))
                 quote
-                    ###Fix me! This cannot be 0 for all the threads.
                     $(ctx_3(used))[$tid] = 0
                     $(ctx_3(alloc))[$tid] = max($(ctx_3(alloc))[$tid], 1)
                 end
