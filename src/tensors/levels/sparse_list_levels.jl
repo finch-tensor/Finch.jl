@@ -539,7 +539,7 @@ function unfurl(
                 if issafe(get_mode_flag(ctx))
                     quote
                         $(lvl.prev_pos) < $(ctx(pos)) || throw(
-                            FinchProtocolError(
+                            $FinchProtocolError(
                                 "SparseListLevels cannot be updated multiple times"
                             ),
                         )

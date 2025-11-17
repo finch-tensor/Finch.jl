@@ -244,8 +244,6 @@ function virtualize(
     val = freshen(ctx, tag, :_val)
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
-    qos_stop = freshen(ctx, tag, :_qos_stop)
-    qos_stop_val = freshen(ctx, :qos_stop_temp)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -256,10 +254,10 @@ function virtualize(
             $val = $tag.val
             $tbl = $tag.tbl
             $pool = $tag.pool
-            $qos_stop = $qos_stop_val
             $stop = $tag.shape
         end,
     )
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
