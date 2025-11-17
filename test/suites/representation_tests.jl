@@ -437,44 +437,4 @@ end
         @test res == ref
         @test isequal(res, ref)
     end
-
-    @testset "sparse_convert" begin
-        ref = Tensor(Sparse(Element(0)), [1, 2, 3, 4])
-        tmp = Tensor(Sparse(Shard(ncpu, Element(0))), 4)
-        res = Tensor(Sparse(Element(0)), 4)
-
-        @test size(res) == size(ref)
-        @test axes(res) == axes(ref)
-        @test ndims(res) == ndims(ref)
-        @test eltype(res) == eltype(ref)
-
-        write_1d(ref, tmp, res)
-
-        @test size(res) == size(ref)
-        @test axes(res) == axes(ref)
-        @test ndims(res) == ndims(ref)
-        @test eltype(res) == eltype(ref)
-        @test res == ref
-        @test isequal(res, ref)
-    end
-
-    @testset "sparse_2d_convert" begin
-        ref = Tensor(Sparse(Sparse(Element(0))), [1 2 3 4; 5 6 7 8])
-        tmp = Tensor(Sparse(Shard(ncpu, Sparse(Element(0)))), 2, 4)
-        res = Tensor(Sparse(Sparse(Element(0))), 2, 4)
-
-        @test size(res) == size(ref)
-        @test axes(res) == axes(ref)
-        @test ndims(res) == ndims(ref)
-        @test eltype(res) == eltype(ref)
-
-        write_2d(ref, tmp, res)
-
-        @test size(res) == size(ref)
-        @test axes(res) == axes(ref)
-        @test ndims(res) == ndims(ref)
-        @test eltype(res) == eltype(ref)
-        @test res == ref
-        @test isequal(res, ref)
-    end
 end

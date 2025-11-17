@@ -151,10 +151,10 @@ ERROR: MethodError: no method matching ShardLevel(::ElementLevel{0.0, Float64, I
 The type `ShardLevel` exists, but no method is defined for this combination of argument types when trying to construct it.
 
 Closest candidates are:
-  ShardLevel(::Device, !Matched::Lvl, !Matched::Ptr, !Matched::Task, !Matched::Used, !Matched::Alloc) where {Device, Lvl, Ptr, Task, Used, Alloc}
-   @ Finch ~/Projects/Finch.jl/src/tensors/levels/shard_levels.jl:145
+  ShardLevel(::Device, !Matched::Lvl, !Matched::Ptr, !Matched::Task, !Matched::Used, !Matched::Alloc, !Matched::Schedule) where {Device, Lvl, Ptr, Task, Used, Alloc, Schedule}
+   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:165
   ShardLevel(::Device, !Matched::Lvl) where {Device, Lvl}
-   @ Finch ~/Projects/Finch.jl/src/tensors/levels/shard_levels.jl:154
+   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:175
 
 Stacktrace:
  [1] top-level scope
