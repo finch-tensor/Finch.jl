@@ -2,7 +2,6 @@
 ###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
 ###ptr[p] = 0 means unallocated.
 
-
 struct MultiChannelMemory{Device} <: AbstractDevice
     device::Device
     n::Int
@@ -92,7 +91,7 @@ function transfer(device::MultiChannelMemory, arr::AbstractArray)
 end
 
 function transfer(device::MultiChannelMemory, arr::AbstractDict)
-    data = [transfer(device.device, copy(arr)) for _ in 1:device.n]
+    data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
     MultiChannelBuffer(device, data)
 end
 
@@ -152,9 +151,9 @@ The type `ShardLevel` exists, but no method is defined for this combination of a
 
 Closest candidates are:
   ShardLevel(::Device, !Matched::Lvl, !Matched::Ptr, !Matched::Task, !Matched::Used, !Matched::Alloc, !Matched::Schedule) where {Device, Lvl, Ptr, Task, Used, Alloc, Schedule}
-   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:165
+   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:164
   ShardLevel(::Device, !Matched::Lvl) where {Device, Lvl}
-   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:175
+   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:174
 
 Stacktrace:
  [1] top-level scope
@@ -187,14 +186,16 @@ function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
         task,
         used,
         alloc,
-        schedule
+        schedule,
     )
 end
 
 function ShardLevel{Device}(
     device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc, schedule::Schedule
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}(device, lvl, ptr, task, used, alloc, schedule)
+    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}(
+        device, lvl, ptr, task, used, alloc, schedule
+    )
 end
 
 function Base.summary(
@@ -251,7 +252,7 @@ function Base.resize!(lvl::ShardLevel, dims...)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        lvl.schedule
+        lvl.schedule,
     )
 end
 
@@ -389,14 +390,14 @@ function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
             $(ctx(lvl.task)),
             $(ctx(lvl.used)),
             $(ctx(lvl.alloc)),
-            $(lvl.tag).schedule
+            $(lvl.tag).schedule,
         )
     end
 end
 
 function virtualize(
     ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}, tag=:lvl
-) where {Device,Lvl,Ptr,Task,Used,Alloc, Schedule}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
@@ -436,7 +437,7 @@ function virtualize(
         Task,
         Used,
         Alloc,
-        Schedule
+        Schedule,
     )
 end
 
@@ -459,7 +460,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
         lvl.Task,
         lvl.Used,
         lvl.Alloc,
-        lvl.Schedule
+        lvl.Schedule,
     )
 end
 
@@ -512,7 +513,7 @@ function distribute_level(
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
-            lvl.Schedule
+            lvl.Schedule,
         )
     else
         diff[lvl.tag] = VirtualShardLevel(
@@ -533,7 +534,7 @@ function distribute_level(
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
-            lvl.Schedule
+            lvl.Schedule,
         )
     end
 end
@@ -560,7 +561,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
             lvl.Task,
             lvl.Used,
             lvl.Alloc,
-            lvl.Schedule
+            lvl.Schedule,
         ),
     )
 end
@@ -587,16 +588,18 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
             ext = VirtualExtent(literal(1), pos)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
 
-            virtual_parallel_region(ctx_2, parallel_dim, lvl.device, lvl.schedule) do f, ctx_3, i_lo, i_hi
+            virtual_parallel_region(
+                ctx_2, parallel_dim, lvl.device, lvl.schedule
+            ) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
                 tid = ctx_3(get_task_num(ctx_3))
 
                 alloced_pos = freshen(ctx_3, :alloced_pos)
-                push_preamble!(ctx_3, 
-                quote
-                    $alloced_pos = $(ctx_3(alloc))[$tid]
-                end)
-                
+                push_preamble!(ctx_3,
+                    quote
+                        $alloced_pos = $(ctx_3(alloc))[$tid]
+                    end)
+
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
                 )
@@ -669,14 +672,22 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
             end,
         )
         Switch([
-            value(:($qos != 0)) => Thunk(; body=(ctx_2) -> begin
-                task = get_task(ctx_2)
-                multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
-                channel_task = VirtualMemoryChannel(value(t, Tp), multi_channel_dev, task)
-                lvl_2 = distribute_level(ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal())
-                instantiate(ctx_2, VirtualSubFiber(lvl_2, value(qos, Tp)), mode)
-            end),
-            literal(true) => FillLeaf(virtual_level_fill_value(lvl))
+            value(:($qos != 0)) => Thunk(;
+                body=(ctx_2) -> begin
+                    task = get_task(ctx_2)
+                    multi_channel_dev = VirtualMultiChannelMemory(
+                        lvl.device, get_num_tasks(lvl.device)
+                    )
+                    channel_task = VirtualMemoryChannel(
+                        value(t, Tp), multi_channel_dev, task
+                    )
+                    lvl_2 = distribute_level(
+                        ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
+                    )
+                    instantiate(ctx_2, VirtualSubFiber(lvl_2, value(qos, Tp)), mode)
+                end,
+            ),
+            literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
         ])
     else
         @assert is_on_device(ctx, lvl.device)

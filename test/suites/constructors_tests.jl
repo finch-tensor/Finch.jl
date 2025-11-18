@@ -366,13 +366,13 @@
                 let q = j
                     for i in 1:4
                         let r = i
-                            C[i,j] = B[i,j] + A[j]
+                            C[i, j] = B[i, j] + A[j]
                         end
                     end
                 end
             end
         end
-        
-        @test C[4,4] == 12
+
+        @test C[4, 4] == 12
     end
 end

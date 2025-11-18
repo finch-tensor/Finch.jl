@@ -22,7 +22,7 @@ begin
         B_lvl_q = (1 - 1) * A_lvl_stop + j_4
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
         B_lvl_2_qos = B_lvl_2_qos_fill + 1
-        B_lvl_2_prev_pos < B_lvl_q || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
+        B_lvl_2_prev_pos < B_lvl_q || throw((Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
         for i_4 = 1:A_lvl_stop
             if B_lvl_2_qos > B_lvl_2_qos_stop
                 B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)

@@ -197,7 +197,7 @@ function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     :($CPU{$(ctx(device.id))}($(ctx(device.n))))
 end
 get_num_tasks(device::VirtualCPU) = device.n
-Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1, id2} = id1 == id2
+Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1,id2} = id1 == id2
 Base.:(==)(a::VirtualCPU, b::VirtualCPU) = a.id == b.id
 
 FinchNotation.finch_leaf(device::VirtualCPU) = virtual(device)
@@ -237,7 +237,7 @@ local_memory(device::VirtualCPU) = VirtualCPULocalMemory(device)
 shared_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 global_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 
-struct CPUThread{Parent, id} <: AbstractTask
+struct CPUThread{Parent,id} <: AbstractTask
     tid::Int
     dev::CPU{id}
     parent::Parent
@@ -246,12 +246,12 @@ get_device(task::CPUThread) = task.device
 get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
-struct CPULocalArray{A, id}
+struct CPULocalArray{A,id}
     device::CPU{id}
     data::Vector{A}
 end
 
-function CPULocalArray{A}(device::CPU{id}) where {A, id}
+function CPULocalArray{A}(device::CPU{id}) where {A,id}
     CPULocalArray{A}(device, [A([]) for _ in 1:(device.n)])
 end
 

@@ -360,7 +360,6 @@ end
 end
 
 @testitem "representationshard" setup = [CheckOutput, RepresentationSetup] begin
-
     ncpu = cpu(1, 4)
 
     function write_1d(ref, tmp, res)
@@ -383,7 +382,7 @@ end
             tmp .= 0
             for j in parallel(_, ncpu)
                 for i in _
-                    tmp[i,j] = ref[i,j]
+                    tmp[i, j] = ref[i, j]
                 end
             end
         end
@@ -392,7 +391,7 @@ end
             res .= 0
             for j in _
                 for i in _
-                    res[i,j] = tmp[i,j]
+                    res[i, j] = tmp[i, j]
                 end
             end
         end
