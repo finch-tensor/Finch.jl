@@ -119,5 +119,5 @@ begin
         end
     resize!(y_lvl_2_locks_2, x_lvl_stop)
     resize!(y_lvl_3_val_2, x_lvl_stop)
-    (y = Tensor((DenseLevel){Int64}((MutexLevel){Vector{Base.Threads.SpinLock}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}(ElementLevel{0.0, Float64, Int64}(y_lvl_3_val_2), y_lvl_2_locks_2), x_lvl_stop)),)
+    (y = Tensor((DenseLevel){Int32}((MutexLevel){Vector{Base.Threads.SpinLock}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}(ElementLevel{0.0, Float64, Int32}(y_lvl_3_val_2), y_lvl_2_locks_2), x_lvl_stop)),)
 end

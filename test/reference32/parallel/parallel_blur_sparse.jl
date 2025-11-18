@@ -25,19 +25,19 @@ begin
     pos_stop = input_lvl_2_stop * input_lvl_stop
     Finch.resize_if_smaller!(output_lvl_3_val, pos_stop)
     Finch.fill_range!(output_lvl_3_val, 0.0, 1, pos_stop)
-    tmp_lvl_2_val_2 = (Finch).transfer(Finch.CPULocalMemory(Finch.CPU(n)), tmp_lvl_2_val)
-    input_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), input_lvl_3_val)
-    input_lvl_2_ptr_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), input_lvl_2_ptr)
-    input_lvl_2_idx_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), input_lvl_2_idx)
-    output_lvl_3_val_2 = (Finch).transfer(Finch.CPUSharedMemory(Finch.CPU(n)), output_lvl_3_val)
+    tmp_lvl_2_val_2 = (Finch).transfer((CPULocalMemory)((CPU){2}(n)), tmp_lvl_2_val)
+    input_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)((CPU){2}(n)), input_lvl_3_val)
+    input_lvl_2_ptr_2 = (Finch).transfer((Finch.CPUSharedMemory)((CPU){2}(n)), input_lvl_2_ptr)
+    input_lvl_2_idx_2 = (Finch).transfer((Finch.CPUSharedMemory)((CPU){2}(n)), input_lvl_2_idx)
+    output_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)((CPU){2}(n)), output_lvl_3_val)
     Threads.@threads :dynamic for tid = 1:n
             Finch.@barrier begin
                     @inbounds @fastmath(begin
-                                tmp_lvl_2_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), tmp_lvl_2_val_2)
-                                input_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), input_lvl_3_val_2)
-                                input_lvl_2_ptr_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), input_lvl_2_ptr_2)
-                                input_lvl_2_idx_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), input_lvl_2_idx_2)
-                                output_lvl_3_val_3 = (Finch).transfer(Finch.CPUThread(tid, Finch.CPU(n), Finch.Serial()), output_lvl_3_val_2)
+                                tmp_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, (CPU){2}(n), (Finch.SerialTask)()), tmp_lvl_2_val_2)
+                                input_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, (CPU){2}(n), (Finch.SerialTask)()), input_lvl_3_val_2)
+                                input_lvl_2_ptr_3 = (Finch).transfer((Finch.CPUThread)(tid, (CPU){2}(n), (Finch.SerialTask)()), input_lvl_2_ptr_2)
+                                input_lvl_2_idx_3 = (Finch).transfer((Finch.CPUThread)(tid, (CPU){2}(n), (Finch.SerialTask)()), input_lvl_2_idx_2)
+                                output_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, (CPU){2}(n), (Finch.SerialTask)()), output_lvl_3_val_2)
                                 phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
                                 phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
                                 if phase_stop_2 >= phase_start_2
