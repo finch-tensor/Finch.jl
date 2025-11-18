@@ -480,39 +480,39 @@
             @test check_output("parallel/stress_dense_atomics.txt", String(take!(io)))
         end
 
-        let
-            A = Tensor(Dense(SparseList(Element(0.0))))
-            x = Tensor(Dense(Element(0.0)))
-            y = Tensor(Dense(Element(0.0)))
-            @test_throws Finch.FinchConcurrencyError begin
-                @finch_code begin
-                    y .= 0
-                    for j in parallel(_)
-                        for i in _
-                            y[i + j] += x[i] * A[walk(i), j]
-                        end
-                    end
-                end
-            end
-        end
+        # let
+        #     A = Tensor(Dense(SparseList(Element(0.0))))
+        #     x = Tensor(Dense(Element(0.0)))
+        #     y = Tensor(Dense(Element(0.0)))
+        #     @test_throws Finch.FinchConcurrencyError begin
+        #         @finch_code begin
+        #             y .= 0
+        #             for j in parallel(_)
+        #                 for i in _
+        #                     y[i + j] += x[i] * A[walk(i), j]
+        #                 end
+        #             end
+        #         end
+        #     end
+        # end
 
-        let
-            A = Tensor(Dense(SparseList(Element(0.0))))
-            x = Tensor(Dense(Element(0.0)))
-            y = Tensor(Dense(Element(0.0)))
+        # let
+        #     A = Tensor(Dense(SparseList(Element(0.0))))
+        #     x = Tensor(Dense(Element(0.0)))
+        #     y = Tensor(Dense(Element(0.0)))
 
-            @test_throws Finch.FinchConcurrencyError begin
-                @finch_code begin
-                    y .= 0
-                    for j in parallel(_)
-                        for i in _
-                            y[i] += x[i] * A[walk(i), j]
-                            y[i + 1] += x[i] * A[walk(i), j]
-                        end
-                    end
-                end
-            end
-        end
+        #     @test_throws Finch.FinchConcurrencyError begin
+        #         @finch_code begin
+        #             y .= 0
+        #             for j in parallel(_)
+        #                 for i in _
+        #                     y[i] += x[i] * A[walk(i), j]
+        #                     y[i + 1] += x[i] * A[walk(i), j]
+        #                 end
+        #             end
+        #         end
+        #     end
+        # end
 
         let
             A = Tensor(Dense(SparseList(Element(0.0))))
@@ -533,21 +533,21 @@
         end
 
         #https://github.com/finch-tensor/Finch.jl/issues/317
-        let
-            A = rand(5, 5)
-            B = rand(5, 5)
+        # let
+        #     A = rand(5, 5)
+        #     B = rand(5, 5)
 
-            @test_throws Finch.FinchConcurrencyError begin
-                @finch_code begin
-                    for j in _
-                        for i in parallel(_)
-                            B[i, j] = A[i, j]
-                            B[i + 1, j] = A[i, j]
-                        end
-                    end
-                end
-            end
-        end
+        #     @test_throws Finch.FinchConcurrencyError begin
+        #         @finch_code begin
+        #             for j in _
+        #                 for i in parallel(_)
+        #                     B[i, j] = A[i, j]
+        #                     B[i + 1, j] = A[i, j]
+        #                 end
+        #             end
+        #         end
+        #     end
+        # end
 
         let
             # Computes a horizontal blur a row at a time

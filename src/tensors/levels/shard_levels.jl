@@ -145,19 +145,13 @@ Each subfiber of a Shard level is stored in a thread-specific tensor of type
 `Lvl`, managed by MultiChannelMemory.
 
 ```jldoctest
-julia> tensor_tree(Tensor(Dense(Shard(Element(0.0))), [1, 2, 3]))
-ERROR: MethodError: no method matching ShardLevel(::ElementLevel{0.0, Float64, Int64, Vector{Float64}})
-The type `ShardLevel` exists, but no method is defined for this combination of argument types when trying to construct it.
-
-Closest candidates are:
-  ShardLevel(::Device, !Matched::Lvl, !Matched::Ptr, !Matched::Task, !Matched::Used, !Matched::Alloc, !Matched::Schedule) where {Device, Lvl, Ptr, Task, Used, Alloc, Schedule}
-   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:164
-  ShardLevel(::Device, !Matched::Lvl) where {Device, Lvl}
-   @ Finch ~/Desktop/Finch/src/tensors/levels/shard_levels.jl:174
-
-Stacktrace:
- [1] top-level scope
-   @ none:1
+julia> tensor_tree(Tensor(Dense(Shard(cpu(1,2),Element(0.0))), 4))
+4-Tensor
+└─ Dense [1:4]
+   ├─ [1]: shard(?) -> ?
+   ├─ [2]: shard(?) -> ?
+   ├─ [3]: shard(?) -> ?
+   └─ [4]: shard(?) -> ?
 ```
 """
 struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule} <: AbstractLevel

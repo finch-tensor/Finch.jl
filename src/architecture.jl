@@ -179,7 +179,7 @@ function virtualize(ctx, ex, ::Type{CPU{id}}) where {id}
             $n = ($ex.n)
         end,
     )
-    VirtualCPU(value(n, Int), literal(id))
+    VirtualCPU(value(n, Int), value(id))
 end
 function virtual_call_def(
     ctx, alg, ::typeof(cpu), ::Any, n=value(:($(Threads.nthreads)()), Int)
@@ -191,7 +191,7 @@ function virtual_call_def(
             $n_2 = $(ctx(n))
         end,
     )
-    VirtualCPU(value(n_2, Int))
+    VirtualCPU(value(n_2, Int), literal(1))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     :($CPU{$(ctx(device.id))}($(ctx(device.n))))
@@ -246,13 +246,13 @@ get_device(task::CPUThread) = task.device
 get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
-struct CPULocalArray{A,id}
-    device::CPU{id}
+struct CPULocalArray{A,Dev<:CPU}
+    device::Dev
     data::Vector{A}
 end
 
-function CPULocalArray{A}(device::CPU{id}) where {A,id}
-    CPULocalArray{A}(device, [A([]) for _ in 1:(device.n)])
+function CPULocalArray{A}(device::Dev) where {A,Dev<:CPU}
+    CPULocalArray{A,Dev}(device, [A([]) for _ in 1:(device.n)])
 end
 
 Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
@@ -260,7 +260,7 @@ Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
 transfer(device::Union{CPUThread,CPUSharedMemory}, arr::AbstractArray) = arr
 function transfer(mem::CPULocalMemory, arr::AbstractArray)
-    CPULocalArray{typeof(arr)}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
+    CPULocalArray{typeof(arr), typeof(mem.device)}(mem.device, [copy(arr) for _ in 1:(mem.device.n)])
 end
 function transfer(task::CPUThread, arr::CPULocalArray)
     if get_device(task) == arr.device
