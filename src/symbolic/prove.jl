@@ -177,7 +177,7 @@ function get_prove_rules(alg, shash)
           end),
         =#
 
-        #(@rule call(~f, ~a..., call(~g, ~b), ~c...) => if isdistributive(alg, g, f)
+        #(@rule call(~f, ~a..., call(~g, ~b), ~c...) => if isdistributive(alg, f, g)
         #    call(g, call(f, a..., b, c...))
         #end),
     ]
