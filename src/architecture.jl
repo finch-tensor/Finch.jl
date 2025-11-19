@@ -201,7 +201,7 @@ local_memory(device::VirtualCPU) = VirtualCPULocalMemory(device)
 shared_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 global_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 
-struct CPUThread{Parent, id} <: AbstractTask
+struct CPUThread{Parent,id} <: AbstractTask
     tid::Int
     device::CPU{id}
     parent::Parent
@@ -210,13 +210,13 @@ get_device(task::CPUThread) = task.device
 get_parent_task(task::CPUThread) = task.parent
 get_task_num(task::CPUThread) = task.tid
 
-struct CPULocalArray{A, Dev<:CPU}
+struct CPULocalArray{A,Dev<:CPU}
     device::Dev
     data::Vector{A}
 end
 
-function CPULocalArray{A}(device::Dev) where {A, Dev<:CPU}
-    CPULocalArray{A, Dev}(device, [A([]) for _ in 1:(device.n)])
+function CPULocalArray{A}(device::Dev) where {A,Dev<:CPU}
+    CPULocalArray{A,Dev}(device, [A([]) for _ in 1:(device.n)])
 end
 
 Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
@@ -224,7 +224,7 @@ Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
 transfer(device::Union{CPUThread,CPUSharedMemory}, arr::AbstractArray) = arr
 function transfer(mem::CPULocalMemory, arr::AbstractArray)
-    CPULocalArray{typeof(arr), typeof(mem.device)}(
+    CPULocalArray{typeof(arr),typeof(mem.device)}(
         mem.device, [copy(arr) for _ in 1:(mem.device.n)]
     )
 end
