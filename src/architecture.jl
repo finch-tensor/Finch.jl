@@ -197,7 +197,7 @@ function virtual_call_def(
     VirtualCPU(value(n_2, Int), value(id_2))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
-    :($CPU{$(ctx(device.id))}($(ctx(device.n))))
+    :($CPU{$(QuoteNode(ctx(device.id)))}($(ctx(device.n))))
 end
 get_num_tasks(device::VirtualCPU) = device.n
 Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1,id2} = id1 == id2
