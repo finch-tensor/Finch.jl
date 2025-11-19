@@ -134,7 +134,7 @@ if parsed_args["nprocs"] == 0
                     else
                         @testset $nm failfast = $failfast begin
                             @info "Running test item: $($nm)"
-                            $(exs[end])
+                            eval($(QuoteNode(exs[end])))
                         end
                     end
                 end
