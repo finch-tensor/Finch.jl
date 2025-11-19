@@ -21,7 +21,7 @@ begin
     Finch.resize_if_smaller!(C_lvl_ptr, 1 + 1)
     Finch.fill_range!(C_lvl_ptr, 0, 1 + 1, 1 + 1)
     C_lvl_qos = 0 + 1
-    0 < 1 || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
+    0 < 1 || throw((Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
     phase_stop = min(C_lvl_stop, 0)
     if phase_stop >= 1
         for i_6 = 1:phase_stop
