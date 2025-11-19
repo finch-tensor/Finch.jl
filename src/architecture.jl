@@ -96,7 +96,7 @@ A device that represents a serial CPU execution.
 """
 struct Serial <: AbstractTask end
 serial() = Serial()
-get_device(::Serial, id=1) = CPU(id, 1)
+get_device(::Serial, id=:default) = CPU(id, 1)
 get_parent_task(::Serial) = nothing
 get_task_num(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
@@ -104,7 +104,7 @@ virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
 lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :(Finch.Serial())
 virtual_call_def(ctx, alg, ::typeof(serial), Any) = VirtualSerial()
 FinchNotation.finch_leaf(device::VirtualSerial) = virtual(device)
-get_device(::VirtualSerial, id=1) = VirtualCPU(value(id), literal(1))
+get_device(::VirtualSerial, id=:default) = VirtualCPU(literal(1), value(id))
 get_parent_task(::VirtualSerial) = nothing
 get_task_num(::VirtualSerial) = literal(1)
 
@@ -143,19 +143,21 @@ function virtualize(ctx, ex, ::Type{CPU{id}}) where {id}
             $n = ($ex.n)
         end,
     )
-    VirtualCPU(value(n, Int), value(id, Int))
+    VirtualCPU(value(n, Int), value(id))
 end
 function virtual_call_def(
-    ctx, alg, ::typeof(cpu), ::Any, n=value(:($(Threads.nthreads)()), Int)
+    ctx, alg, ::typeof(cpu), ::Any, id=value(:default), n=value(:($(Threads.nthreads)()), Int)
 )
     n_2 = freshen(ctx, :n)
+    id_2 = freshen(ctx, :id)
     push_preamble!(
         ctx,
         quote
             $n_2 = $(ctx(n))
+            $id_2 = $(ctx(id))
         end,
     )
-    VirtualCPU(value(n_2, Int), literal(1))
+    VirtualCPU(value(n_2, Int), value(id_2))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     :(Finch.CPU{$(ctx(device.id))}($(ctx(device.n))))
