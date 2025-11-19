@@ -182,16 +182,18 @@ function virtualize(ctx, ex, ::Type{CPU{id}}) where {id}
     VirtualCPU(value(n, Int), value(id))
 end
 function virtual_call_def(
-    ctx, alg, ::typeof(cpu), ::Any, n=value(:($(Threads.nthreads)()), Int)
+    ctx, alg, ::typeof(cpu), ::Any, id=value(:default), n=value(:($(Threads.nthreads)()), Int)
 )
     n_2 = freshen(ctx, :n)
+    id_2 = freshen(ctx, :id)
     push_preamble!(
         ctx,
         quote
             $n_2 = $(ctx(n))
+            $id_2 = $(ctx(id))
         end,
     )
-    VirtualCPU(value(n_2, Int), literal(1))
+    VirtualCPU(value(n_2, Int), value(id_2))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
     :($CPU{$(ctx(device.id))}($(ctx(device.n))))

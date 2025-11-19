@@ -553,7 +553,7 @@
             # Computes a horizontal blur a row at a time
             input = Tensor(Dense(Dense(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
-            Cpu = cpu(Threads.nthreads())
+            Cpu = cpu(:test)
             tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
@@ -578,7 +578,7 @@
             # Computes a horizontal blur a row at a time
             input = Tensor(Dense(SparseList(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
-            Cpu = cpu(Threads.nthreads())
+            Cpu = cpu(:test)
             tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
@@ -695,7 +695,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), static_schedule())
+                for j in parallel(_, cpu(:test), static_schedule())
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
@@ -713,7 +713,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), static_schedule(:dynamic))
+                for j in parallel(_, cpu(:test), static_schedule(:dynamic))
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
@@ -732,7 +732,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), greedy_schedule(4))
+                for j in parallel(_, cpu(:test), greedy_schedule(4))
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
@@ -750,7 +750,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), greedy_schedule(4, :dynamic))
+                for j in parallel(_, cpu(:test), greedy_schedule(4, :dynamic))
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
@@ -769,7 +769,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), julia_schedule(4))
+                for j in parallel(_, cpu(:test), julia_schedule(4))
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
@@ -787,7 +787,7 @@
 
             @finch begin
                 y .= 0
-                for j in parallel(_, cpu(Threads.nthreads()), julia_schedule(4, :dynamic))
+                for j in parallel(_, cpu(:test), julia_schedule(4, :dynamic))
                     for i in _
                         y[j] += A[i, j] * x[i]
                     end
