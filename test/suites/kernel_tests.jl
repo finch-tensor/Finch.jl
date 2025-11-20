@@ -6,6 +6,7 @@
 
     seen = false
     for mtx in matrices
+        global seen
         A_ref = SparseMatrixCSC(mmread(joinpath(@__DIR__, "../data", "$mtx.mtx")))
         m, n = size(A_ref)
         B_ref = transpose(A_ref) * A_ref
@@ -31,6 +32,7 @@
 
     seen = false
     for mtx in matrices
+        global seen
         A_ref = SparseMatrixCSC(mmread(joinpath(@__DIR__, "../data", "$mtx.mtx")))
         m, n = size(A_ref)
         if m == n
@@ -86,6 +88,7 @@
 
     seen = false
     for mtx in matrices
+        global seen
         A_ref = SparseMatrixCSC(mmread(joinpath(@__DIR__, "../data", "$mtx.mtx")))
         m, n = size(A_ref)
         if m == n
