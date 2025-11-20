@@ -70,8 +70,6 @@ function add_dummy_idx!(stats::NaiveStats, i::IndexExpr; idx_pos=-1)
     add_dummy_idx!(stats.def, i; idx_pos=idx_pos)
 end
 
-
-
 ################# NaiveStats Propagation ##################################################
 # We do everything in log for numerical stability
 function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{NaiveStats})

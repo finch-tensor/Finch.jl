@@ -642,8 +642,6 @@ function relabel_index!(stats::DCStats, i::IndexExpr, j::IndexExpr)
     end
 end
 
-
-
 ################# DCStats Propagation ##################################################
 
 function unify_dc_ints(all_stats, new_def)

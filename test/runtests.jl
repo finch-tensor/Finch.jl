@@ -156,7 +156,6 @@ if parsed_args["nprocs"] == 0
     end
 
     @testset "Finch" begin
-        
         include("modules/checkoutput_testsetup.jl")
         include("suites/continuous_tests.jl")
         include("suites/continuousexamples_tests.jl")

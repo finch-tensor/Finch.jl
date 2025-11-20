@@ -180,7 +180,6 @@ function transpose_tensor_stats(index_order::Vector{IndexExpr}, stats::NaiveStat
     return stats
 end
 
-
 ################# DCStats Propagation ##################################################
 
 function unify_dc_ints(all_stats, new_def)
