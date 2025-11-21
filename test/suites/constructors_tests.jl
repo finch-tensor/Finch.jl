@@ -325,4 +325,54 @@
         obov[1:3] .= val
         @test obov == [val, val, val, 4] && obov.data == [val - 1, val - 1, val - 1, 3]
     end
+
+    @testset "ShardLevel" begin
+        #Test shard ShardLevel
+        ncpu = cpu(4)
+        A = Tensor(Dense(Shard(ncpu, Element(0.0))), 4)
+        B = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
+        C = Tensor(Dense(Shard(ncpu, Dense(Element(0.0)))), 4, 4)
+
+        @finch begin
+            A .= 0
+            for i in parallel(1:4, ncpu)
+                let j = i
+                    A[i] = j
+                end
+            end
+        end
+
+        @test A[1] == 1
+        @test A[4] == 4
+
+        @finch begin
+            B .= 0
+            for j in parallel(1:4, ncpu)
+                let q = j
+                    for i in 1:4
+                        let r = i
+                            B[i, j] = q + r
+                        end
+                    end
+                end
+            end
+        end
+
+        @test B[4, 4] == 8
+
+        @finch begin
+            C .= 0
+            for j in parallel(1:4, ncpu)
+                let q = j
+                    for i in 1:4
+                        let r = i
+                            C[i, j] = B[i, j] + A[j]
+                        end
+                    end
+                end
+            end
+        end
+
+        @test C[4, 4] == 12
+    end
 end

@@ -57,7 +57,7 @@ end
 
 (ctx::AbstractCompiler)(root) = ctx(root, get_style(ctx, root))
 (ctx::AbstractCompiler)(root, style) = lower(ctx, root, style)
-#(ctx::AbstractCompiler)(root, style) = (println(); println(); display(root); display(style); lower(ctx, root, style))
+# (ctx::AbstractCompiler)(root, style) = (println(); println(); display(root); display(style); lower(ctx, root, style))
 function cache!(ctx::AbstractCompiler, var, val)
     val = finch_leaf(val)
     isconstant(val) && return val
@@ -377,7 +377,7 @@ end
 function lower_parallel_loop(
     ctx, root, ext::VirtualParallelDimension, schedule::AbstractVirtualSchedule
 )
-    root = ensure_concurrent(root, ctx)
+    # root = ensure_concurrent(root, ctx)
     device = ext.device
 
     distribute_host(ctx, root.body, device) do ctx_2, body_2

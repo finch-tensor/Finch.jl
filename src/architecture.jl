@@ -41,12 +41,14 @@ abstract type AbstractVirtualTask end
 Return the number of tasks on the device dev.
 """
 function get_num_tasks end
+
 """
     get_task_num(task::AbstractTask)
 
 Return the task number of `task`.
 """
 function get_task_num end
+
 """
     get_device(task::AbstractTask)
 
@@ -60,6 +62,25 @@ function get_device end
 Return the task which spawned `task`.
 """
 function get_parent_task end
+
+get_num_tasks(ctx::AbstractCompiler) = get_num_tasks(get_task(ctx))
+get_num_tasks(task::AbstractTask) = get_num_tasks(get_device(task))
+get_task_num(ctx::AbstractCompiler) = get_task_num(get_task(ctx))
+get_device(ctx::AbstractCompiler) = get_device(get_task(ctx))
+get_parent_task(ctx::AbstractCompiler) = get_parent_task(get_task(ctx))
+
+function is_on_device(ctx::AbstractCompiler, dev)
+    res = false
+    task = get_task(ctx)
+    while task != nothing
+        if get_device(task) == dev
+            res = true
+            break
+        end
+        task = get_parent_task(task)
+    end
+    return res
+end
 
 """
     aquire_lock!(dev::AbstractDevice, val)
@@ -94,16 +115,36 @@ function make_lock end
 
 A device that represents a serial CPU execution.
 """
-struct Serial <: AbstractTask end
+struct Serial <: AbstractDevice end
 serial() = Serial()
 get_device(::Serial, id=:default) = CPU(id, 1)
 get_parent_task(::Serial) = nothing
 get_task_num(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
 virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
-lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :(Finch.Serial())
+lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :($Serial())
 virtual_call_def(ctx, alg, ::typeof(serial), Any) = VirtualSerial()
 FinchNotation.finch_leaf(device::VirtualSerial) = virtual(device)
+get_num_tasks(::VirtualSerial) = literal(1)
+Base.:(==)(::Serial, ::Serial) = true
+Base.:(==)(::VirtualSerial, ::VirtualSerial) = true
+
+"""
+    SerialTask()
+
+A Task that represents a serial CPU execution.
+"""
+struct SerialTask <: AbstractDevice end
+get_device(::SerialTask) = Serial()
+get_parent_task(::SerialTask) = nothing
+get_task_num(::SerialTask) = 1
+struct VirtualSerialTask <: AbstractVirtualTask end
+virtualize(ctx, ex, ::Type{SerialTask}) = VirtualSerialTask()
+lower(ctx::AbstractCompiler, task::VirtualSerialTask, ::DefaultStyle) = :($SerialTask())
+FinchNotation.finch_leaf(device::VirtualSerialTask) = virtual(device)
+get_device(::VirtualSerialTask) = VirtualSerial()
+get_parent_task(::VirtualSerialTask) = nothing
+get_task_num(::VirtualSerialTask) = literal(1)
 get_device(::VirtualSerial, id=:default) = VirtualCPU(literal(1), value(id))
 get_parent_task(::VirtualSerial) = nothing
 get_task_num(::VirtualSerial) = literal(1)
@@ -180,7 +221,7 @@ function virtualize(ctx, ex, ::Type{CPULocalMemory{Dev}}) where {Dev}
     VirtualCPULocalMemory(virtualize(ctx, :($ex.device), Dev))
 end
 function lower(ctx::AbstractCompiler, mem::VirtualCPULocalMemory, ::DefaultStyle)
-    :(Finch.CPULocalMemory($(ctx(mem.device))))
+    :($CPULocalMemory($(ctx(mem.device))))
 end
 
 struct CPUSharedMemory{Dev<:CPU}
@@ -194,7 +235,7 @@ function virtualize(ctx, ex, ::Type{CPUSharedMemory{Dev}}) where {Dev}
     VirtualCPULocalMemory(virtualize(ctx, :($ex.device), Dev))
 end
 function lower(ctx::AbstractCompiler, mem::VirtualCPUSharedMemory, ::DefaultStyle)
-    :(Finch.CPUSharedMemory($(ctx(mem.device))))
+    :($CPUSharedMemory($(ctx(mem.device))))
 end
 
 local_memory(device::Dev) where {Dev} = CPULocalMemory{Dev}(device)
@@ -232,7 +273,7 @@ function transfer(mem::CPULocalMemory, arr::AbstractArray)
     )
 end
 function transfer(task::CPUThread, arr::CPULocalArray)
-    if get_device(task) === arr.device
+    if get_device(task) == arr.device
         temp = arr.data[task.tid]
         return temp
     else
@@ -432,7 +473,7 @@ function virtualize(ctx, ex, ::Type{CPUThread{Parent}}) where {Parent}
     )
 end
 function lower(ctx::AbstractCompiler, task::VirtualCPUThread, ::DefaultStyle)
-    :(Finch.CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
+    :($CPUThread($(ctx(task.tid)), $(ctx(task.dev)), $(ctx(task.parent))))
 end
 FinchNotation.finch_leaf(device::VirtualCPUThread) = virtual(device)
 get_device(task::VirtualCPUThread) = task.dev
@@ -522,7 +563,7 @@ function virtualize(ctx, ex, ::Type{FinchStaticSchedule{schedule}}) where {sched
 end
 
 function lower(ctx, ex::VirtualFinchStaticSchedule)
-    :(FinchStaticSchedule{$(QuoteNode(ex.schedule))}())
+    :($FinchStaticSchedule{$(QuoteNode(ex.schedule))}())
 end
 
 static_schedule(schedule::Symbol=:dynamic) = FinchStaticSchedule{schedule}()
@@ -556,7 +597,7 @@ function virtualize(ctx, ex, ::Type{FinchGreedySchedule{schedule}}) where {sched
 end
 
 function lower(ctx, ex::VirtualFinchGreedySchedule)
-    :(FinchGreedySchedule{$(QuoteNode(ex.schedule))}($(ctx(ex.chk))))
+    :($FinchGreedySchedule{$(QuoteNode(ex.schedule))}($(ctx(ex.chk))))
 end
 
 greedy_schedule(chk::Int=1, schedule::Symbol=:static) = FinchGreedySchedule{schedule}(chk)
@@ -602,7 +643,7 @@ function virtualize(ctx, ex, ::Type{FinchJuliaSchedule{schedule}}) where {schedu
 end
 
 function lower(ctx, ex::VirtualFinchJuliaSchedule)
-    :(FinchJuliaSchedule{$(QuoteNode(ex.schedule))}($(ctx(ex.chk))))
+    :($FinchJuliaSchedule{$(QuoteNode(ex.schedule))}($(ctx(ex.chk))))
 end
 
 function julia_schedule(chk::Int=1, schedule::Union{Symbol,Nothing}=nothing)
@@ -665,7 +706,6 @@ function virtual_parallel_region(
             end
         end
     end
-
     return quote
         Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
             Finch.@barrier begin

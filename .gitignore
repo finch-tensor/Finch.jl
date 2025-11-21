@@ -6,3 +6,4 @@
 .vscode/c_cpp_properties.json
 Manifest.toml
 */Manifest.toml
+*.mem

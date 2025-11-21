@@ -358,3 +358,82 @@ end
         end
     end
 end
+
+@testitem "representationshard" setup = [CheckOutput, RepresentationSetup] begin
+    ncpu = cpu(1, 4)
+
+    function write_1d(ref, tmp, res)
+        @finch begin
+            tmp .= 0
+            for i in parallel(_, ncpu)
+                tmp[i] = ref[i]
+            end
+        end
+        @finch begin
+            res .= 0
+            for i in _
+                res[i] = tmp[i]
+            end
+        end
+    end
+
+    function write_2d(ref, tmp, res)
+        @finch begin
+            tmp .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tmp[i, j] = ref[i, j]
+                end
+            end
+        end
+
+        @finch begin
+            res .= 0
+            for j in _
+                for i in _
+                    res[i, j] = tmp[i, j]
+                end
+            end
+        end
+    end
+
+    @testset "dense_convert" begin
+        ref = Tensor(Dense(Element(0)), [1, 2, 3, 4])
+        tmp = Tensor(Dense(Shard(ncpu, Element(0))), 4)
+        res = Tensor(Dense(Element(0)), 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_1d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
+
+    @testset "dense_2d_convert" begin
+        ref = Tensor(Dense(Sparse(Element(0))), [1 2 3 4; 5 6 7 8])
+        tmp = Tensor(Dense(Shard(ncpu, Sparse(Element(0)))), 2, 4)
+        res = Tensor(Dense(Sparse(Element(0))), 2, 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_2d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
+end
