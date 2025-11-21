@@ -14,6 +14,10 @@ Finch is a Julia-to-Julia compiler for sparse or structured multidimensional arr
 Finch was built to make sparse and structured array programming easier and more efficient.  Finch.jl leverages compiler technology to automatically generate customized, fused sparse kernels for each specific
 use case. This allows users to write readable, high-level sparse array programs without worrying about the performance of the generated code. Finch can automatically generate efficient implementations even for unique problems that lack existing library solutions.
 
+# Documentation
+
+Check out our [documentation website](https://finch-tensor.github.io/Finch.jl/stable)! Please file an issue if you feel the docs are unclear on anything!
+
 # Installation
 
 At the [Julia](https://julialang.org/downloads/) REPL, install the latest stable version by running:
@@ -134,6 +138,9 @@ Willow Ahrens, Teodoro Fields Collin, Radha Patel, Kyle Deeds, Changwan Hong, Sa
 [Looplets: A Language for Structured Coiteration](https://doi.org/10.1145/3579990.3580020). CGO 2023.
 Willow Ahrens, Daniel Donenfeld, Fredrik Kjolstad, Saman Amarasinghe.
 
+[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
+Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
+
 ## Beyond Finch
 
 The following research efforts use Finch:
@@ -143,9 +150,6 @@ Radha Patel, Willow Ahrens, Saman Amarasinghe.
 
 [The Continuous Tensor Abstraction: Where Indices are Real](https://arxiv.org/abs/2407.01742).
 Jaeyeon Won, Willow Ahrens, Joel S. Emer, Saman Amarasinghe.
-
-[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
-Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
 
 ## Contributing
 

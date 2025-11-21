@@ -23,9 +23,6 @@ julia> reduce(+, A, dims = 2)
  1.1
  7.7
  3.3
-julia> reduce(+, A, dims = (1, 2))
-1×1 Tensor{DenseLevel{Int32, DenseLevel{Int32, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
- 16.5
 julia> reduce(+, A, dims = (:))
 16.5
 

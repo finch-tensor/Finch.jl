@@ -117,7 +117,9 @@ A Task that represents a serial CPU execution.
 """
 struct Serial <: AbstractDevice end
 serial() = Serial()
-get_num_tasks(::Serial) = 1
+get_device(::Serial, id=:default) = CPU(id, 1)
+get_parent_task(::Serial) = nothing
+get_task_num(::Serial) = 1
 struct VirtualSerial <: AbstractVirtualTask end
 virtualize(ctx, ex, ::Type{Serial}) = VirtualSerial()
 lower(ctx::AbstractCompiler, task::VirtualSerial, ::DefaultStyle) = :($Serial())
@@ -143,6 +145,9 @@ FinchNotation.finch_leaf(device::VirtualSerialTask) = virtual(device)
 get_device(::VirtualSerialTask) = VirtualSerial()
 get_parent_task(::VirtualSerialTask) = nothing
 get_task_num(::VirtualSerialTask) = literal(1)
+get_device(::VirtualSerial, id=:default) = VirtualCPU(literal(1), value(id))
+get_parent_task(::VirtualSerial) = nothing
+get_task_num(::VirtualSerial) = literal(1)
 
 struct SerialMemory end
 struct VirtualSerialMemory end
@@ -166,7 +171,7 @@ struct CPU{id} <: AbstractDevice
     n::Int
 end
 cpu(id, n=Threads.nthreads()) = CPU{id}(n)
-get_num_tasks(dev::CPU{tag}) where {tag} = dev.n
+get_num_tasks(dev::CPU{id}) where {id} = dev.n
 @kwdef struct VirtualCPU <: AbstractVirtualDevice
     n
     id
@@ -197,7 +202,7 @@ function virtual_call_def(
     VirtualCPU(value(n_2, Int), value(id_2))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
-    :($CPU{$(QuoteNode(ctx(device.id)))}($(ctx(device.n))))
+    :(Finch.CPU{$(QuoteNode(ctx(device.id)))}($(ctx(device.n))))
 end
 get_num_tasks(device::VirtualCPU) = device.n
 Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1,id2} = id1 == id2
@@ -242,7 +247,7 @@ global_memory(device::VirtualCPU) = VirtualCPUSharedMemory(device)
 
 struct CPUThread{Parent,id} <: AbstractTask
     tid::Int
-    dev::CPU{id}
+    device::CPU{id}
     parent::Parent
 end
 get_device(task::CPUThread) = task.device

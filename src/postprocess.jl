@@ -323,6 +323,7 @@ end
 
 iseffectful(ex) = false
 function iseffectful(ex::Expr)
+    ex.head == :break && return true
     @capture(ex, :call(~f::(!ispure), ~args...)) && return true
     @capture(ex, :(=)(~lhs::issymbol, ~rhs)) && lhs != :_ && return true
     @capture(ex, :for(~lhs, ~rhs)) && return iseffectful(rhs) #TODO this could be handled better if we desugared :for

@@ -232,7 +232,7 @@ fill_value(::Type{SplitMask{Ti}}) where {Ti} = false
 
 A mask to evenly divide `n` indices into P regions. If `M = splitmask(P, n)`,
 then `M[i, j] = fld(n * (j - 1), P) <= i < fld(n * j, P)`.
-```jldoctest
+```jldoctest setup=:(using Finch)
 julia> splitmask(10, 3)
 10×3 Finch.SplitMask{Int64}:
  1  0  0
@@ -350,10 +350,10 @@ end
 """
     chunkmask(n, b)
 
-A mask to evenly divide `n` indices into regions of size `b`. If `m` =
+A mask to evenly divide `n` indices into regions of size `b`. If `m =
 chunkmask(b, n)`, then `m[i, j] = b * (j - 1) < i <= b * j`. Note that this
 specializes for the cleanup case at the end of the range.
-```jldoctest
+```jldoctest setup=:(using Finch)
 julia> chunkmask(10, 3)
 10×4 Finch.ChunkMask{Int64}:
  1  0  0  0

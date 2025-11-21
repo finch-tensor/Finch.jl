@@ -109,11 +109,11 @@ defined in the following grammar:
             mapjoin(IMMEDIATE, EXPR...) |
             aggregate(IMMEDIATE, IMMEDIATE, EXPR, FIELD...)
 ```
-
 Pushes all reorder and relabel statements down to LEAF nodes of each EXPR.
 Output LEAF nodes will match the form `reorder(relabel(LEAF, FIELD...),
 FIELD...)`, omitting reorder or relabel if not present as an ancestor of the
 LEAF in the original EXPR. Tables and immediates will absorb relabels.
+Copies of reorders are left in place, but relabels are removed.
 """
 function push_fields(root)
     root = Rewrite(
@@ -121,10 +121,15 @@ function push_fields(root)
             Fixpoint(
                 Chain([
                     (@rule relabel(mapjoin(~op, ~args...), ~idxs...) => begin
-                        idxs_2 = getfields(mapjoin(op, args...))
+                        reidx = Dict(map(Pair, getfields(mapjoin(op, args...)), idxs)...)
                         mapjoin(
                             op,
-                            map(arg -> relabel(reorder(arg, idxs_2...), idxs...), args)...,
+                            map(
+                                arg -> relabel(
+                                    arg, map(idx -> reidx[idx], getfields(arg))...
+                                ),
+                                args,
+                            )...,
                         )
                     end),
                     (@rule relabel(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
@@ -152,26 +157,36 @@ function push_fields(root)
     )(
         root
     )
+
     root = Rewrite(
         Prewalk(
-            Fixpoint(
-                Chain([
-                    (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
-                        mapjoin(op, map(arg -> reorder(arg, ~idxs...), args)...)),
-                    (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
-                        if !issubsequence(intersect(getfields(arg), idxs_2), idxs_2)
-                            reorder(
-                                aggregate(
-                                    op,
-                                    init,
-                                    reorder(arg, intersect(idxs_2)..., idxs...),
-                                    idxs...,
-                                ), idxs_2...)
-                        end),
-                    (@rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
-                        reorder(~arg, ~idxs_2...)),
-                ]),
-            ),
+            Chain([
+                Fixpoint(
+                    @rule reorder(reorder(~arg, ~idxs...), ~idxs_2...) =>
+                        reorder(~arg, ~idxs_2...)
+                ),
+                (@rule reorder(mapjoin(~op, ~args...), ~idxs...) =>
+                    reorder(
+                        mapjoin(
+                            op,
+                            map(
+                                arg -> reorder(arg, intersect(idxs, getfields(arg))...),
+                                args,
+                            )...,
+                        ),
+                        idxs...,
+                    )),
+                (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
+                    if !issubsequence(intersect(getfields(arg), idxs_2), idxs_2)
+                        reorder(
+                            aggregate(
+                                op,
+                                init,
+                                reorder(arg, withsubsequence(idxs_2, getfields(arg))...),
+                                idxs...,
+                            ), idxs_2...)
+                    end),
+            ]),
         ),
     )(
         root
@@ -301,9 +316,9 @@ function lift_fields(prgm)
                     idxs = getfields(rhs)
                     query(lhs, reorder(rhs, idxs...))
                 end),
-                (@rule query(~lhs, reformat(~arg)) => if arg.kind === mapjoin
+                (@rule query(~lhs, reformat(~tns, ~arg)) => if arg.kind === mapjoin
                     idxs = getfields(arg)
-                    query(lhs, reformat(reorder(arg, idxs...)))
+                    query(lhs, reformat(tns, reorder(arg, idxs...)))
                 end),
             ]),
         ),
@@ -464,25 +479,38 @@ function format_queries(node::LogicNode, defer=false, bindings=Dict())
         node
     end
 end
+
+function dropdims_rep(rep, dims)
+    rep = aggregate_rep(
+        initwrite(fill_value(rep)),
+        fill_value(rep),
+        rep,
+        dims,
+    )
+end
 struct SuitableRep
     bindings::Dict
 end
 function (ctx::SuitableRep)(ex)
-    if ex.kind === alias
-        return ctx.bindings[ex]
+    res = if ex.kind === alias
+        ctx.bindings[ex]
     elseif @capture ex table(~tns::isimmediate, ~idxs...)
-        return data_rep(ex.tns.val)
+        data_rep(ex.tns.val)
     elseif @capture ex table(~tns::isdeferred, ~idxs...)
-        return data_rep(ex.tns.type)
-    elseif ex.kind === mapjoin
-        #This step assumes concordant mapjoin arguments, and also that the
-        #mapjoin arguments have the same number of dimensions. It's necessary to
-        #assume this because it's not possible to recursively reconstruct a
-        #total ordering of the indices as we go.
-        return map_rep(ex.op.val, map(ctx, ex.args)...)
+        data_rep(ex.tns.type)
+    elseif @capture ex reorder(mapjoin(~op, ~args...), ~idxs...)
+        idxs_2 = toposort(vcat(map(collect, map(getfields, args)), [collect(idxs)]))
+        @assert idxs_2 !== nothing
+        reps = map(args) do arg
+            rep = ctx(arg)
+            dims = findall(idx -> !(idx in getfields(arg)), idxs)
+            expanddims_rep(rep, dims)
+        end
+        rep = map_rep(op.val, reps...)
+        dropdims_rep(rep, findall(idx -> !(idx in idxs), idxs_2))
     elseif ex.kind === aggregate
         idxs = getfields(ex.arg)
-        return aggregate_rep(
+        aggregate_rep(
             ex.op.val,
             ex.init.val,
             ctx(ex.arg),
@@ -491,29 +519,33 @@ function (ctx::SuitableRep)(ex)
     elseif ex.kind === reorder
         rep = ctx(ex.arg)
         idxs = getfields(ex.arg)
-        #first reduce dropped dimensions
-        rep = aggregate_rep(
-            initwrite(fill_value(rep)),
-            fill_value(rep),
-            rep,
-            findall(idx -> idx in setdiff(idxs, ex.idxs), idxs),
-        )
+        #first drop dimensions
+        rep = dropdims_rep(rep, findall(idx -> idx in setdiff(idxs, ex.idxs), idxs))
         #then permute remaining dimensions to match
         perm = sortperm(
             intersect(idxs, ex.idxs); by=idx -> findfirst(isequal(idx), ex.idxs)
         )
         rep = permutedims_rep(rep, perm)
         #then add new dimensions
-        return expanddims_rep(rep, findall(idx -> !(idx in idxs), ex.idxs))
+        expanddims_rep(rep, findall(idx -> !(idx in idxs), ex.idxs))
     elseif ex.kind === relabel
-        return ctx(ex.arg)
+        ctx(ex.arg)
     elseif ex.kind === reformat
-        return data_rep(ex.tns.val)
+        data_rep(ex.tns.val)
     elseif ex.kind === immediate
-        return ElementData(ex.val, typeof(ex.val))
+        ElementData(ex.val, typeof(ex.val))
     else
         error("Unrecognized expression: $(ex.kind)")
     end
+    try
+        if ndims(res) != length(getfields(ex))
+            display(ex)
+            println(res)
+            println()
+        end
+    catch
+    end
+    res
 end
 
 function propagate_map_queries(root)
@@ -577,24 +609,44 @@ function propagate_map_queries_backward(root)
     )
     root = push_fields(root)
     root = Rewrite(
-        Prewalk(
-            Chain([
-                (@rule mapjoin(
-                    ~f::isimmediate,
-                    ~a1...,
-                    aggregate(~g::isimmediate, ~init::isimmediate, ~arg, ~idxs...),
-                    ~a2...,
-                ) => begin
-                    if isdistributive(DefaultAlgebra(), literal(g.val), literal(f.val)) &&
-                        isannihilator(
-                            DefaultAlgebra(), literal(f.val), literal(init.val)
-                        ) &&
-                        length(getfields(aggregate(g, init, arg, idxs...))) ==
-                        length(getfields(mapjoin(f, a1..., a2...)))
-                        aggregate(g, init, mapjoin(f, a1..., arg, a2...), idxs...)
-                    end
-                end),
-            ]),
+        Fixpoint(
+            Prewalk(
+                Chain([
+                    (@rule mapjoin(
+                        ~f::isimmediate,
+                        ~a1...,
+                        aggregate(~g::isimmediate, ~init::isimmediate, ~arg, ~idxs...),
+                        ~a2...,
+                    ) => begin
+                        if isdistributive(DefaultAlgebra(), literal(f.val), literal(g.val)) &&
+                            isannihilator(
+                                DefaultAlgebra(), literal(f.val), literal(init.val)
+                            ) &&
+                            length(getfields(aggregate(g, init, arg, idxs...))) ==
+                            length(getfields(mapjoin(f, a1..., a2...)))
+                            aggregate(g, init, mapjoin(f, a1..., arg, a2...), idxs...)
+                        end
+                    end),
+                    (@rule aggregate(~op::isimmediate, ~init::isimmediate,
+                        aggregate(~op, ~init_2, ~arg, ~idxs...),
+                        ~idxs_2...,
+                    ) => begin
+                        if isidentity(
+                            DefaultAlgebra(), literal(op.val), literal(init_2.val)
+                        )
+                            aggregate(op, init, arg, idxs..., idxs_2...)
+                        end
+                    end),
+                    (@rule reorder(aggregate(~op, ~init, ~arg, ~idxs...), ~idxs_2...) =>
+                        aggregate(
+                            op,
+                            init,
+                            reorder(arg, vcat(idxs_2, idxs)...),
+                            idxs...,
+                        )
+                ),
+                ]),
+            ),
         ),
     )(
         root
@@ -620,7 +672,7 @@ function toposort(chains::Vector{Vector{T}}) where {T}
     chains = filter(!isempty, deepcopy(chains))
     parents = Dict{T,Int}(map(chain -> first(chain) => 0, chains))
     for chain in chains, u in chain[2:end]
-        parents[u] += 1
+        parents[u] = get(parents, u, 0) + 1
     end
     roots = filter(u -> parents[u] == 0, keys(parents))
     perm = []
@@ -643,17 +695,17 @@ function toposort(chains::Vector{Vector{T}}) where {T}
     return perm
 end
 
-function heuristic_loop_order(node, reps)
+function heuristic_loop_order(root, reps)
     chains = Vector{LogicNode}[]
-    for node in PostOrderDFS(node)
+    for node in PostOrderDFS(root)
         if @capture node reorder(relabel(~arg, ~idxs...), ~idxs_2...)
-            push!(chains, intersect(idxs, idxs_2))
+            push!(chains, intersect(idxs, idxs_2, getfields(root)))
         end
     end
-    for idx in getfields(node)
+    for idx in getfields(root)
         push!(chains, [idx])
     end
-    res = something(toposort(chains), getfields(node))
+    res = something(toposort(chains), getfields(root))
     if mapreduce(length, max, chains; init=0) < length(unique(reduce(vcat, chains)))
         counts = Dict()
         for chain in chains
@@ -699,8 +751,8 @@ function set_loop_order(node, perms=Dict(), reps=Dict())
     elseif @capture node query(~lhs, reformat(~tns, ~rhs))
         arg = alias(gensym(:A))
         set_loop_order(plan(
-                query(A, rhs),
-                query(lhs, reformat(tns, A)),
+                query(arg, rhs),
+                query(lhs, reformat(tns, arg)),
             ), perms, reps)
     elseif @capture node query(~lhs, table(~tns, ~idxs...))
         reps[lhs] = SuitableRep(reps)(node.rhs)
@@ -757,6 +809,7 @@ function optimize(prgm)
     #These steps fuse copy, permutation, and mapjoin statements
     #into later expressions.
     #Only reformat statements preserve intermediate breaks in computation
+    prgm = propagate_fields(prgm)
     prgm = propagate_copy_queries(prgm)
     prgm = propagate_transpose_queries(prgm)
     prgm = propagate_map_queries(prgm)
@@ -783,6 +836,7 @@ function optimize(prgm)
 
     #Normalize names for caching
     prgm = normalize_names(prgm)
+    prgm
 end
 
 """
