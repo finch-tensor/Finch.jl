@@ -113,7 +113,7 @@ function make_lock end
 """
     Serial()
 
-A Task that represents a serial CPU execution.
+A device that represents a serial CPU execution.
 """
 struct Serial <: AbstractDevice end
 serial() = Serial()
