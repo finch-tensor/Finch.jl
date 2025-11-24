@@ -428,8 +428,6 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
         contain(ctx) do ctx_2
             diff = Dict()
             lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
-            used = distribute_buffer(ctx_2, lvl.used, lvl.device, HostShared())
-            alloc = distribute_buffer(ctx_2, lvl.alloc, lvl.device, HostShared())
 
             ext = VirtualExtent(literal(1), pos)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
@@ -438,14 +436,7 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 ctx_2, parallel_dim, lvl.device, lvl.schedule
             ) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
-                tid = ctx_3(get_task_num(ctx_3))
-
-                alloced_pos = freshen(ctx_3, :alloced_pos)
-                push_preamble!(ctx_3,
-                    quote
-                        $alloced_pos = $(ctx_3(alloc))[$tid]
-                    end)
-
+                
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
                 )
@@ -453,14 +444,8 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     get_task_num(task), multi_channel_dev, task
                 )
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
-                alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
-                freeze_level!(ctx_3, lvl_4, value(alloced_pos))
-                quote
-                    $(ctx_3(used))[$tid] = 0
-                    $(ctx_3(alloc))[$tid] = $alloced_pos
-                end
+                lvl_4 = declare_level!(ctx_3, lvl_3, value(pos), init)
+                freeze_level!(ctx_3, lvl_4, value(pos))
             end
         end,
     )
