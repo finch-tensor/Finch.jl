@@ -230,11 +230,13 @@ end
 
 function set_fill_value!(lvl::ShardLevel, init)
     ShardLevel(
+        lvl.device,
         set_fill_value!(lvl.lvl, init),
         lvl.ptr,
         lvl.task,
         lvl.used,
         lvl.alloc,
+        lvl.schedule
     )
 end
 
