@@ -1,235 +1,87 @@
-###task[pos] gives the processor that owns shard in position pos. AKA which channel in the multimemory channel to access.
+###task[pos] gives the processor that owns Coalesce in position pos. AKA which channel in the multimemory channel to access.
 ###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
 ###ptr[p] = 0 means unallocated.
 
-struct MultiChannelMemory{Device} <: AbstractDevice
-    device::Device
-    n::Int
-end
-
-function Base.:(==)(device::MultiChannelMemory, other::MultiChannelMemory)
-    device.device == other.device
-end
-
-get_num_tasks(device::MultiChannelMemory) = device.n
-get_device(device::MultiChannelMemory) = device.device
-
-struct VirtualMultiChannelMemory <: AbstractVirtualDevice
-    device
-    n
-end
-
-function Base.:(==)(device::VirtualMultiChannelMemory, other::VirtualMultiChannelMemory)
-    device.device == other.device
-end
-
-get_num_tasks(device::VirtualMultiChannelMemory) = device.n
-get_device(device::VirtualMultiChannelMemory) = device.device
-
-function virtualize(ctx, ex, ::Type{MultiChannelMemory{Device}}) where {Device}
-    device = virtualize(ctx, :($ex.device), Device)
-    n = freshen(ctx, :n)
-    push_preamble!(
-        quote
-            $n = $ex.n
-        end,
-    )
-    VirtualMultiChannelMemory(device, n)
-end
-
-function lower(ctx::AbstractCompiler, mem::VirtualMultiChannelMemory, ::DefaultStyle)
-    quote
-        $MultiChannelMemory($(ctx(mem.device)), $(ctx(mem.n)))
-    end
-end
-
-struct MemoryChannel{Device<:MultiChannelMemory,Parent} <: AbstractTask
-    t::Int
-    device::Device
-    Parent::Parent
-end
-
-get_device(device::MemoryChannel) = device.device
-get_parent_task(device::MemoryChannel) = device.parent
-get_task_num(device::MemoryChannel) = device.t
-
-struct VirtualMemoryChannel <: AbstractVirtualTask
-    t
-    device
-    parent
-end
-
-function virtualize(ctx, ex, ::Type{MemoryChannel{Device,Parent}}) where {Device,Parent}
-    device = virtualize(ctx, :($ex.device), Device)
-    parent = virtualize(ctx, :($ex.parent), Parent)
-    t = freshen(ctx, :t)
-    push_preamble!(
-        quote
-            $t = $(ctx(ex.t))
-        end,
-    )
-    VirtualMemoryChannel(device, t)
-end
-
-function lower(ctx::AbstractCompiler, mem::VirtualMemoryChannel, ::DefaultStyle)
-    quote
-        $MemoryChannel($(ctx(mem.t)), $(ctx(mem.device)), $(ctx(mem.parent)))
-    end
-end
-
-struct MultiChannelBuffer{A}
-    device::MultiChannelMemory
-    data::Vector{A}
-end
-
-Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
-Base.ndims(::Type{MultiChannelBuffer{A}}) where {A} = ndims(A)
-
-function transfer(device::MultiChannelMemory, arr::AbstractArray)
-    data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
-    MultiChannelBuffer(device, data)
-end
-
-function transfer(device::MultiChannelMemory, arr::AbstractDict)
-    data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
-    MultiChannelBuffer(device, data)
-end
-
-function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
-    data = arr.data
-    if device.device != arr.device
-        data = map(buf -> transfer(device.device, buf), data)
-    end
-    if arr.device.n > device.n
-        MultiChannelBuffer(device, data)
-    else
-        padding = [
-            transfer(device, Vector{eltype(data[1])}()) for _ in 1:(device.n - arr.device.n)
-        ]
-        if length(padding) > 0
-            MultiChannelBuffer(
-                device, vcat(data, padding)
-            )
-        else
-            MultiChannelBuffer(
-                device, data
-            )
-        end
-    end
-end
-
-function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
-    if task.device == arr.device
-        temp = arr.data[task.t]
-        return temp
-    else
-        return arr
-    end
-end
-function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)
-    return arr
-end
-function transfer(dst::AbstractDevice, arr::MultiChannelBuffer)
-    if dst == arr.device
-        return arr
-    else
-        data = map(buf -> transfer(device.device, buf), arr.data)
-        return MultiChannelBuffer(arr.device, data)
-    end
-end
-
 """
-    ShardLevel{Lvl}()
+    CoalesceLevel{device, Lvl}()
 
-Each subfiber of a Shard level is stored in a thread-specific tensor of type
-`Lvl`, managed by MultiChannelMemory.
+CoalesceLevel uses an internal Coalesceed representation, but unified the result into a single Tensor when
+entering read-only mode.
 
 ```jldoctest
-julia> tensor_tree(Tensor(Dense(Shard(cpu(1,2),Element(0.0))), 4))
+julia> tensor_tree(Tensor(Dense(Coalesce(cpu(1,2),Element(0.0))), 4))
 4-Tensor
 └─ Dense [1:4]
-   ├─ [1]: shard(?) -> ?
-   ├─ [2]: shard(?) -> ?
-   ├─ [3]: shard(?) -> ?
-   └─ [4]: shard(?) -> ?
+   ├─ [1]: Coalesce(?) -> ?
+   ├─ [2]: Coalesce(?) -> ?
+   ├─ [3]: Coalesce(?) -> ?
+   └─ [4]: Coalesce(?) -> ?
 ```
 """
-struct ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule} <: AbstractLevel
+struct CoalesceLevel{Device,Lvl,Schedule} <: AbstractLevel
     device::Device
     lvl::Lvl
-    ptr::Ptr
-    task::Task
-    used::Used
-    alloc::Alloc
     schedule::Schedule
 end
-const Shard = ShardLevel
+const Coalesce = CoalesceLevel
 
-function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
+function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     Tp = postype(lvl)
-    ptr = transfer(shared_memory(device), Tp[])
-    task = transfer(shared_memory(device), Tp[])
-    used = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
-    alloc = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     lvl = transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl)
     schedule = FinchStaticSchedule{:dynamic}()
-    ShardLevel{Device}(
+    CoalesceLevel{Device}(
         device,
         transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl),
-        ptr,
-        task,
-        used,
-        alloc,
         schedule,
     )
 end
 
-function ShardLevel{Device}(
-    device, lvl::Lvl, ptr::Ptr, task::Task, used::Used, alloc::Alloc, schedule::Schedule
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-    ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}(
-        device, lvl, ptr, task, used, alloc, schedule
+function CoalesceLevel{Device}(
+    device, lvl::Lvl, schedule::Schedule
+) where {Device,Lvl,Schedule}
+    CoalesceLevel{Device,Lvl,Schedule}(
+        device, lvl, schedule
     )
 end
 
 function Base.summary(
-    ::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-    "Shard($(Lvl))"
+    ::Coalesce{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule}
+    "Coalesce($(Lvl))"
 end
 
 function similar_level(
-    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}, fill_value, eltype::Type, dims...
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+    lvl::Coalesce{Device,Lvl,Schedule}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Schedule}
     lvl_2 = similar(lvl.lvl, fill_value, eltype, dims...)
-    ShardLevel(
+    CoalesceLevel(
         lvl.device,
         transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl_2),
     )
 end
 
 function postype(
-    ::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+    ::Type{<:Coalesce{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule}
     postype(Lvl)
 end
 
-function transfer(device, lvl::ShardLevel)
+function transfer(device, lvl::CoalesceLevel)
     #lvl_2 = transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl.lvl)
     lvl_2 = transfer(device, lvl.lvl) #TODO unclear
     ptr_2 = transfer(device, lvl.ptr)
     task_2 = transfer(device, lvl.task)
     qos_fill_2 = transfer(device, lvl.used)
     qos_stop_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule)
+    return CoalesceLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2)
 end
 
-function pattern!(lvl::ShardLevel)
-    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc)
+function pattern!(lvl::CoalesceLevel)
+    CoalesceLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc)
 end
 
-function set_fill_value!(lvl::ShardLevel, init)
-    ShardLevel(
+function set_fill_value!(lvl::CoalesceLevel, init)
+    CoalesceLevel(
         set_fill_value!(lvl.lvl, init),
         lvl.ptr,
         lvl.task,
@@ -238,8 +90,8 @@ function set_fill_value!(lvl::ShardLevel, init)
     )
 end
 
-function Base.resize!(lvl::ShardLevel, dims...)
-    ShardLevel(
+function Base.resize!(lvl::CoalesceLevel, dims...)
+    CoalesceLevel(
         lvl.device,
         resize!(lvl.lvl, dims...),
         lvl.ptr,
@@ -251,9 +103,9 @@ function Base.resize!(lvl::ShardLevel, dims...)
 end
 
 function Base.show(
-    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
-    print(io, "Shard(")
+    io::IO, lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule}
+    print(io, "Coalesce(")
     if get(io, :compact, false)
         print(io, "…")
     else
@@ -270,16 +122,16 @@ function Base.show(
     print(io, ")")
 end
 
-function labelled_show(io::IO, fbr::SubFiber{<:ShardLevel})
+function labelled_show(io::IO, fbr::SubFiber{<:CoalesceLevel})
     (lvl, pos) = (fbr.lvl, fbr.pos)
     if lvl.ptr[pos] < 1
-        print(io, "shard(?) -> ?")
+        print(io, "Coalesce(?) -> ?")
     else
-        print(io, "shard($(lvl.task[pos])) -> ")
+        print(io, "Coalesce($(lvl.task[pos])) -> ")
     end
 end
 
-function labelled_children(fbr::SubFiber{<:ShardLevel})
+function labelled_children(fbr::SubFiber{<:CoalesceLevel})
     lvl = fbr.lvl
     pos = fbr.pos
     lvl.ptr[pos] < 1 && return []
@@ -296,22 +148,22 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
+    ::Type{<:CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_ndims(Lvl)
 @inline level_size(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
+    lvl::CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
+    lvl::CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
+    ::Type{CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
+    ::Type{<:CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_fill_value(Lvl)
 
-function (fbr::SubFiber{<:ShardLevel})(idxs...)
+function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     lvl = fbr.lvl
     pos = fbr.pos
     pos > length(lvl.ptr) && return []
@@ -326,7 +178,7 @@ function (fbr::SubFiber{<:ShardLevel})(idxs...)
     SubFiber(lvl_2, lvl.ptr[pos])(idxs...)
 end
 
-function countstored_level(lvl::ShardLevel, pos)
+function countstored_level(lvl::CoalesceLevel, pos)
     sum(1:pos) do qos
         lvl_2 = transfer(
             MemoryChannel(
@@ -340,7 +192,7 @@ function countstored_level(lvl::ShardLevel, pos)
     end
 end
 
-mutable struct VirtualShardLevel <: AbstractVirtualLevel
+mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     tag
     device
     lvl
@@ -361,23 +213,23 @@ mutable struct VirtualShardLevel <: AbstractVirtualLevel
     Schedule
 end
 
-postype(lvl::VirtualShardLevel) = postype(lvl.lvl)
+postype(lvl::VirtualCoalesceLevel) = postype(lvl.lvl)
 
-function is_level_injective(ctx, lvl::VirtualShardLevel)
+function is_level_injective(ctx, lvl::VirtualCoalesceLevel)
     [is_level_injective(ctx, lvl.lvl)..., true]
 end
-function is_level_atomic(ctx, lvl::VirtualShardLevel)
+function is_level_atomic(ctx, lvl::VirtualCoalesceLevel)
     (below, atomic) = is_level_atomic(ctx, lvl.lvl)
     return ([below; [atomic]], atomic)
 end
-function is_level_concurrent(ctx, lvl::VirtualShardLevel)
+function is_level_concurrent(ctx, lvl::VirtualCoalesceLevel)
     (data, _) = is_level_concurrent(ctx, lvl.lvl)
     return (data, true)
 end
 
-function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
+function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
     quote
-        $ShardLevel(
+        $CoalesceLevel(
             $(ctx(lvl.device)),
             $(ctx(lvl.lvl)),
             $(ctx(lvl.ptr)),
@@ -390,7 +242,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualShardLevel, ::DefaultStyle)
 end
 
 function virtualize(
-    ctx, ex, ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}, tag=:lvl
+    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}, tag=:lvl
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
@@ -413,7 +265,7 @@ function virtualize(
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
-    VirtualShardLevel(
+    VirtualCoalesceLevel(
         tag,
         device_2,
         lvl_2,
@@ -435,8 +287,8 @@ function virtualize(
     )
 end
 
-function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
-    diff[lvl.tag] = VirtualShardLevel(
+function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style)
+    diff[lvl.tag] = VirtualCoalesceLevel(
         lvl.tag,
         lvl.device,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
@@ -459,7 +311,7 @@ function distribute_level(ctx, lvl::VirtualShardLevel, arch, diff, style)
 end
 
 function distribute_level(
-    ctx, lvl::VirtualShardLevel, arch, diff, style::Union{DeviceShared}
+    ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Union{DeviceShared}
 )
     Tp = postype(lvl)
     tag = lvl.tag
@@ -489,7 +341,7 @@ function distribute_level(
                 freeze_level!(ctx_2, lvl_2, value(qos_stop))
             end,
         )
-        diff[lvl.tag] = VirtualShardLevel(
+        diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
             lvl_2,
@@ -510,7 +362,7 @@ function distribute_level(
             lvl.Schedule,
         )
     else
-        diff[lvl.tag] = VirtualShardLevel(
+        diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
             distribute_level(ctx, lvl.lvl, arch, diff, style),
@@ -533,11 +385,11 @@ function distribute_level(
     end
 end
 
-function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
+function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
     get(
         diff,
         lvl.tag,
-        VirtualShardLevel(
+        VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
             redistribute(ctx, lvl.lvl, diff),
@@ -560,16 +412,16 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualShardLevel, diff)
     )
 end
 
-Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
+Base.summary(lvl::VirtualCoalesceLevel) = "Coalesce($(lvl.Lvl))"
 
-function virtual_level_resize!(ctx, lvl::VirtualShardLevel, dims...)
+function virtual_level_resize!(ctx, lvl::VirtualCoalesceLevel, dims...)
     (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
-virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lvl)
-virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)
-virtual_level_fill_value(lvl::VirtualShardLevel) = virtual_level_fill_value(lvl.lvl)
+virtual_level_size(ctx, lvl::VirtualCoalesceLevel) = virtual_level_size(ctx, lvl.lvl)
+virtual_level_eltype(lvl::VirtualCoalesceLevel) = virtual_level_eltype(lvl.lvl)
+virtual_level_fill_value(lvl::VirtualCoalesceLevel) = virtual_level_fill_value(lvl.lvl)
 
-function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
+function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
     @assert !is_on_device(ctx, lvl.device)
     push_preamble!(
         ctx,
@@ -615,7 +467,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
     lvl
 end
 
-function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
+function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
     @assert !is_on_device(ctx, lvl.device)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
@@ -632,22 +484,22 @@ function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
     lvl
 end
 
-supports_reassembly(::VirtualShardLevel) = false
+supports_reassembly(::VirtualCoalesceLevel) = false
 
 """
 these two are no-ops, we instead do these on distribute
 """
-function freeze_level!(ctx, lvl::VirtualShardLevel, pos)
+function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     return lvl
 end
 
-function thaw_level!(ctx::AbstractCompiler, lvl::VirtualShardLevel, pos)
+function thaw_level!(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     return lvl
 end
 
-function instantiate(ctx, fbr::VirtualSubFiber{VirtualShardLevel}, mode)
+function instantiate(ctx, fbr::VirtualSubFiber{VirtualCoalesceLevel}, mode)
     (lvl, pos) = (fbr.lvl, fbr.pos)
     Tp = postype(lvl)
     if mode.kind === reader
@@ -701,7 +553,7 @@ write:
 
 The outer level needs to be concurrent, like denselevel.
 """
-function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
+function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode)
     @assert mode.kind === updater
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.tag
@@ -736,7 +588,7 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualShardLevel}, mode)
                 end
             else
                 if $(get_mode_flag(ctx) === :safe)
-                    @assert $(lvl.task)[$(ctx(pos))] == $tid "Task mismatch in ShardLevel"
+                    @assert $(lvl.task)[$(ctx(pos))] == $tid "Task mismatch in CoalesceLevel"
                 end
             end
         end,
