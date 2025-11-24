@@ -148,20 +148,20 @@ function labelled_children(fbr::SubFiber{<:CoalesceLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_ndims(Lvl)
+    ::Type{<:CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_ndims(Lvl)
 @inline level_size(
-    lvl::CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_size(lvl.lvl)
+    lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_axes(lvl.lvl)
+    lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_eltype(Lvl)
+    ::Type{CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_fill_value(Lvl)
+    ::Type{<:CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     lvl = fbr.lvl
@@ -242,8 +242,8 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
 end
 
 function virtualize(
-    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}, tag=:lvl
-) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Schedule}}, tag=:lvl
+) where {Device,Lvl,Schedule}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     task = freshen(ctx, tag, :_task)
