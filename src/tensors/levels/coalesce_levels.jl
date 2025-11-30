@@ -389,6 +389,7 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
         ctx,
         quote
             Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
+            Finch.fill_range!($(lvl.task), -1, $(ctx(pos_start)), $(ctx(pos_stop)))
         end,
     )
     lvl
@@ -425,41 +426,25 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualCoalesceLevel}, mode)
                 $t = $(lvl.task)[$(ctx(pos))]
             end,
         )
-        ##How to generalize this switch? No more pointer array to check if alloced. Do we just assume unalloced?
-        # Switch([
-        #     value(:($t != 0)) => Thunk(;
-        #         body=(ctx_2) -> begin
-        #             task = get_task(ctx_2)
-        #             multi_channel_dev = VirtualMultiChannelMemory(
-        #                 lvl.device, get_num_tasks(lvl.device)
-        #             )
-        #             channel_task = VirtualMemoryChannel(
-        #                 value(t, Tp), multi_channel_dev, task
-        #             )
-        #             lvl_2 = distribute_level(
-        #                 ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
-        #             )
-        #             instantiate(ctx_2, VirtualSubFiber(lvl_2, pos), mode)
-        #         end,
-        #     ),
-        #     literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
-        # ])
-
-        Thunk(;
-            body=(ctx_2) -> begin
-                task = get_task(ctx_2)
-                multi_channel_dev = VirtualMultiChannelMemory(
-                    lvl.device, get_num_tasks(lvl.device)
-                )
-                channel_task = VirtualMemoryChannel(
-                    value(t, Tp), multi_channel_dev, task
-                )
-                lvl_2 = distribute_level(
-                    ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
-                )
-                instantiate(ctx_2, VirtualSubFiber(lvl_2, pos), mode)
-            end,
-        )
+        #How to generalize this switch? No more pointer array to check if alloced. Do we just assume unalloced?
+        Switch([
+            value(:($t > 0)) => Thunk(;
+                body=(ctx_2) -> begin
+                    task = get_task(ctx_2)
+                    multi_channel_dev = VirtualMultiChannelMemory(
+                        lvl.device, get_num_tasks(lvl.device)
+                    )
+                    channel_task = VirtualMemoryChannel(
+                        value(t, Tp), multi_channel_dev, task
+                    )
+                    lvl_2 = distribute_level(
+                        ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
+                    )
+                    instantiate(ctx_2, VirtualSubFiber(lvl_2, pos), mode)
+                end,
+            ),
+            literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
+        ])
     else
         @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(lvl, pos, freshen(ctx, :dirty)), mode)
