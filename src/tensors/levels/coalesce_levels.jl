@@ -5,7 +5,7 @@
 """
     CoalesceLevel{device, Lvl}()
 
-CoalesceLevel uses an internal Coalesceed representation, but unified the result into a single Tensor when
+CoalesceLevel uses an internal Coalesced representation, but unified the result into a single Tensor when
 entering read-only mode.
 
 ```jldoctest
@@ -21,7 +21,7 @@ julia> tensor_tree(Tensor(Dense(Coalesce(cpu(1,2),Element(0.0))), 4))
 struct CoalesceLevel{Device,Lvl,Task,Schedule} <: AbstractLevel
     device::Device
     lvl::Lvl
-    Task::Task
+    task::Task
     schedule::Schedule
 end
 const Coalesce = CoalesceLevel
@@ -101,8 +101,8 @@ function Base.resize!(lvl::CoalesceLevel, dims...)
 end
 
 function Base.show(
-    io::IO, lvl::CoalesceLevel{Device,Lvl,Schedule}
-) where {Device,Lvl,Schedule}
+    io::IO, lvl::CoalesceLevel{Device,Lvl,Task,Schedule}
+) where {Device,Lvl,Task,Schedule}
     print(io, "Coalesce(")
     if get(io, :compact, false)
         print(io, "…")
@@ -221,8 +221,8 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
 end
 
 function virtualize(
-    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Schedule}}, tag=:lvl
-) where {Device,Lvl,Schedule}
+    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Task,Schedule}}, tag=:lvl
+) where {Device,Lvl,Task,Schedule}
     tag = freshen(ctx, tag)
     task = freshen(ctx, tag, :_task)
     schedule = freshen(ctx, tag, :_schedule)
@@ -371,8 +371,8 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     get_task_num(task), multi_channel_dev, task
                 )
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, value(pos), init)
-                freeze_level!(ctx_3, lvl_4, value(pos))
+                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                freeze_level!(ctx_3, lvl_4, pos)
             end
         end,
     )
@@ -419,32 +419,47 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualCoalesceLevel}, mode)
         sym = freshen(ctx, :pointer_to_lvl)
         val = freshen(ctx, lvl.tag, :_val)
         t = freshen(ctx, tag, :_t)
-        qos = freshen(ctx, tag, :_q)
         push_preamble!(
             ctx,
             quote
                 $t = $(lvl.task)[$(ctx(pos))]
-                $qos = $(lvl.ptr)[$(ctx(pos))]
             end,
         )
-        Switch([
-            value(:($qos != 0)) => Thunk(;
-                body=(ctx_2) -> begin
-                    task = get_task(ctx_2)
-                    multi_channel_dev = VirtualMultiChannelMemory(
-                        lvl.device, get_num_tasks(lvl.device)
-                    )
-                    channel_task = VirtualMemoryChannel(
-                        value(t, Tp), multi_channel_dev, task
-                    )
-                    lvl_2 = distribute_level(
-                        ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
-                    )
-                    instantiate(ctx_2, VirtualSubFiber(lvl_2, value(qos, Tp)), mode)
-                end,
-            ),
-            literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
-        ])
+        ##How to generalize this switch? No more pointer array to check if alloced. Do we just assume unalloced?
+        # Switch([
+        #     value(:($t != 0)) => Thunk(;
+        #         body=(ctx_2) -> begin
+        #             task = get_task(ctx_2)
+        #             multi_channel_dev = VirtualMultiChannelMemory(
+        #                 lvl.device, get_num_tasks(lvl.device)
+        #             )
+        #             channel_task = VirtualMemoryChannel(
+        #                 value(t, Tp), multi_channel_dev, task
+        #             )
+        #             lvl_2 = distribute_level(
+        #                 ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
+        #             )
+        #             instantiate(ctx_2, VirtualSubFiber(lvl_2, pos), mode)
+        #         end,
+        #     ),
+        #     literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
+        # ])
+
+        Thunk(;
+            body=(ctx_2) -> begin
+                task = get_task(ctx_2)
+                multi_channel_dev = VirtualMultiChannelMemory(
+                    lvl.device, get_num_tasks(lvl.device)
+                )
+                channel_task = VirtualMemoryChannel(
+                    value(t, Tp), multi_channel_dev, task
+                )
+                lvl_2 = distribute_level(
+                    ctx_2, lvl.lvl, channel_task, Dict(), DeviceGlobal()
+                )
+                instantiate(ctx_2, VirtualSubFiber(lvl_2, pos), mode)
+            end,
+        )
     else
         @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(lvl, pos, freshen(ctx, :dirty)), mode)
