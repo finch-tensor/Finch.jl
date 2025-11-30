@@ -42,7 +42,7 @@ end
 function CoalesceLevel{Device}(
     device, lvl::Lvl, task::Task, schedule::Schedule
 ) where {Device,Lvl,Task,Schedule}
-    CoalesceLevel{Device,Lvl,Schedule}(
+    CoalesceLevel{Device,Lvl,Task,Schedule}(
         device, lvl, task, schedule
     )
 end
