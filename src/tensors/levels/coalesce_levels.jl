@@ -124,8 +124,7 @@ end
 function labelled_children(fbr::SubFiber{<:CoalesceLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    lvl.ptr[pos] < 1 && return []
-    pos > length(lvl.ptr) && return []
+    lvl.task[pos] < 1 && return []
     lvl_2 = transfer(
         MemoryChannel(
             lvl.task[pos],
