@@ -18,10 +18,9 @@ julia> tensor_tree(Tensor(Dense(Coalesce(cpu(1,2),Element(0.0))), 4))
    └─ [4]: Coalesce(?) -> ?
 ```
 """
-struct CoalesceLevel{Device,Lvl,Task,Schedule} <: AbstractLevel
+struct CoalesceLevel{Device,Lvl,Schedule} <: AbstractLevel
     device::Device
     lvl::Lvl
-    task::Task
     schedule::Schedule
 end
 const Coalesce = CoalesceLevel
@@ -29,45 +28,42 @@ const Coalesce = CoalesceLevel
 function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     Tp = postype(lvl)
     lvl = transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl)
-    task = transfer(shared_memory(device), Tp[])
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
         transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl),
-        task,
         schedule,
     )
 end
 
 function CoalesceLevel{Device}(
-    device, lvl::Lvl, task::Task, schedule::Schedule
-) where {Device,Lvl,Task,Schedule}
-    CoalesceLevel{Device,Lvl,Task,Schedule}(
-        device, lvl, task, schedule
+    device, lvl::Lvl, schedule::Schedule
+) where {Device,Lvl,Schedule}
+    CoalesceLevel{Device,Lvl,Schedule}(
+        device, lvl, schedule
     )
 end
 
 function Base.summary(
-    ::Coalesce{Device,Lvl,Task,Schedule}
-) where {Device,Lvl,Task,Schedule}
+    ::Coalesce{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule}
     "Coalesce($(Lvl))"
 end
 
 function similar_level(
-    lvl::Coalesce{Device,Lvl,Task,Schedule}, fill_value, eltype::Type, dims...
-) where {Device,Lvl,Task,Schedule}
+    lvl::Coalesce{Device,Lvl,Schedule}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Schedule}
     lvl_2 = similar(lvl.lvl, fill_value, eltype, dims...)
     CoalesceLevel(
         lvl.device,
         transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl_2),
-        lvl.task,
         lvl.schedule
     )
 end
 
 function postype(
-    ::Type{<:Coalesce{Device,Lvl,Task,Schedule}}
-) where {Device,Lvl,Task,Schedule}
+    ::Type{<:Coalesce{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule}
     postype(Lvl)
 end
 
@@ -86,7 +82,6 @@ function set_fill_value!(lvl::CoalesceLevel, init)
     CoalesceLevel(
         lvl.device,
         set_fill_value!(lvl.lvl, init),
-        lvl.task,
         lvl.schedule,
     )
 end
@@ -95,21 +90,18 @@ function Base.resize!(lvl::CoalesceLevel, dims...)
     CoalesceLevel(
         lvl.device,
         resize!(lvl.lvl, dims...),
-        lvl.task,
         lvl.schedule,
     )
 end
 
 function Base.show(
-    io::IO, lvl::CoalesceLevel{Device,Lvl,Task,Schedule}
-) where {Device,Lvl,Task,Schedule}
+    io::IO, lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule}
     print(io, "Coalesce(")
     if get(io, :compact, false)
         print(io, "…")
     else
         show(io, lvl.lvl)
-        print(io, ", ")
-        show(io, lvl.task)
         print(io, ", ")
         show(io, lvl.schedule)
     end
@@ -124,33 +116,37 @@ end
 function labelled_children(fbr::SubFiber{<:CoalesceLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    lvl.task[pos] < 1 && return []
-    lvl_2 = transfer(
-        MemoryChannel(
-            lvl.task[pos],
-            MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
-            SerialTask(),
-        ),
-        lvl.lvl,
-    )
-    [LabelledTree(SubFiber(lvl_2, lvl.ptr[pos]))]
+    n_threads = get_num_tasks(lvl.device)
+    children = []
+
+    for tid in 1:n_threads
+        lvl_2 = transfer(
+            MemoryChannel(
+                tid,
+                MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
+                SerialTask(),
+            ),
+            lvl.lvl,
+        )
+        push!(children, LabelledTree(SubFiber(lvl_2, pos)))
+    end
 end
 
 @inline level_ndims(
-    ::Type{<:CoalesceLevel{Device,Lvl,Task,Schedule}}
-) where {Device,Lvl,Task,Schedule} = level_ndims(Lvl)
+    ::Type{<:CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_ndims(Lvl)
 @inline level_size(
-    lvl::CoalesceLevel{Device,Lvl,Task,Schedule}
-) where {Device,Lvl,Task,Schedule} = level_size(lvl.lvl)
+    lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::CoalesceLevel{Device,Lvl,Task,Schedule}
-) where {Device,Lvl,Task,Schedule} = level_axes(lvl.lvl)
+    lvl::CoalesceLevel{Device,Lvl,Schedule}
+) where {Device,Lvl,Schedule} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{CoalesceLevel{Device,Lvl,Task,Schedule}}
-) where {Device,Lvl,Task,Schedule} = level_eltype(Lvl)
+    ::Type{CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:CoalesceLevel{Device,Lvl,Task,Schedule}}
-) where {Device,Lvl,Task,Schedule} = level_fill_value(Lvl)
+    ::Type{<:CoalesceLevel{Device,Lvl,Schedule}}
+) where {Device,Lvl,Schedule} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     lvl = fbr.lvl
@@ -168,16 +164,19 @@ function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
 end
 
 function countstored_level(lvl::CoalesceLevel, pos)
-    sum(1:pos) do qos
-        lvl_2 = transfer(
-            MemoryChannel(
-                lvl.task[qos],
-                MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
-                SerialTask(),
-            ),
-            lvl.lvl,
-        )
-        countstored_level(lvl_2, lvl.used[qos])
+    n_tasks = get_num_tasks(lvl.device)
+    sum(1:n_tasks) do tid
+        for qos in 1:pos
+            lvl_2 = transfer(
+                MemoryChannel(
+                    tid,
+                    MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
+                    SerialTask(),
+                ),
+                lvl.lvl,
+            )
+            countstored_level(lvl_2, qos)
+        end
     end
 end
 
@@ -185,13 +184,12 @@ mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     tag
     device
     lvl
-    task
     schedule
     Tv
     Device
     Lvl
-    Task
     Schedule
+    qos_stop
 end
 
 postype(lvl::VirtualCoalesceLevel) = postype(lvl.lvl)
@@ -213,41 +211,38 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
         $CoalesceLevel(
             $(ctx(lvl.device)),
             $(ctx(lvl.lvl)),
-            $(ctx(lvl.task)),
             $(lvl.tag).schedule,
         )
     end
 end
 
 function virtualize(
-    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Task,Schedule}}, tag=:lvl
-) where {Device,Lvl,Task,Schedule}
+    ctx, ex, ::Type{CoalesceLevel{Device,Lvl,Schedule}}, tag=:lvl
+) where {Device,Lvl,Schedule}
     tag = freshen(ctx, tag)
-    task = freshen(ctx, tag, :_task)
     schedule = freshen(ctx, tag, :_schedule)
 
     push_preamble!(
         ctx,
         quote
             $tag = $ex
-            $task = $tag.task
             $schedule = $tag.schedule
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
+    qos_stop = freshen(ctx, tag, :_qos_stop)
     VirtualCoalesceLevel(
         tag,
         device_2,
         lvl_2,
-        task,
         schedule_2,
         typeof(level_fill_value(Lvl)),
         Device,
         Lvl,
-        Task,
         Schedule,
+        qos_stop
     )
 end
 
@@ -256,13 +251,12 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style)
         lvl.tag,
         lvl.device,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
-        distribute_buffer(ctx, lvl.task, arch, style),
         lvl.schedule,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
-        lvl.Task,
         lvl.Schedule,
+        lvl.qos_stop
     )
 end
 
@@ -272,49 +266,47 @@ function distribute_level(
     Tp = postype(lvl)
     tag = lvl.tag
     if true #get_device(arch) == lvl.device
-        qos_stop = freshen(ctx, tag, :_qos_stop)
-        tid = ctx(get_task_num(arch))
-        push_preamble!(
-            ctx,
-            quote
-                $qos_stop = length($(lvl.task)) #all positions in task are always used?
-            end,
-        )
+        # qos_stop = freshen(ctx, tag, :_qos_stop)
+        # tid = ctx(get_task_num(arch))
+        # push_preamble!(
+        #     ctx,
+        #     quote
+        #         $qos_stop = length($(lvl.task)) #all positions in task are always used?
+        #     end,
+        # )
         dev = get_device(arch)
         multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
-        lvl_2 = thaw_level!(ctx, lvl_2, value(qos_stop, Tp))
+        lvl_2 = thaw_level!(ctx, lvl_2, value(lvl.qos_stop, Tp))
         push_epilogue!(
             ctx,
             contain(ctx) do ctx_2
-                freeze_level!(ctx_2, lvl_2, value(qos_stop))
+                freeze_level!(ctx_2, lvl_2, value(lvl.qos_stop))
             end,
         )
         diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
             distribute_level(ctx, lvl.lvl, arch, diff, style),
-            distribute_buffer(ctx, lvl.task, arch, style),
             lvl.schedule,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
-            lvl.Task,
             lvl.Schedule,
+            lvl.qos_stop
         )
     else
         diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
             distribute_level(ctx, lvl.lvl, arch, diff, style),
-            distribute_buffer(ctx, lvl.task, arch, style),
             lvl.schedule,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
-            lvl.Task,
             lvl.Schedule,
+            lvl.qos_stop
         )
     end
 end
@@ -326,14 +318,13 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
         VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
-            distribute_level(ctx, lvl.lvl, arch, diff, style),
-            distribute_buffer(ctx, lvl.task, arch, style),
+            redistribute(ctx, lvl.lvl, diff),
             lvl.schedule,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
-            lvl.Task,
             lvl.Schedule,
+            lvl.qos_stop
         ),
     )
 end
@@ -357,6 +348,11 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
 
             ext = VirtualExtent(literal(1), pos)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
+
+            push_preamble!(ctx_2,
+            quote
+                $(lvl.qos_stop) = $(ctx_2(pos))
+            end)
 
             virtual_parallel_region(
                 ctx_2, parallel_dim, lvl.device, lvl.schedule
@@ -384,13 +380,7 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
     sym = freshen(ctx, :pointer_to_lvl)
-    push_preamble!(
-        ctx,
-        quote
-            Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
-            Finch.fill_range!($(lvl.task), -1, $(ctx(pos_start)), $(ctx(pos_stop)))
-        end,
-    )
+    
     lvl
 end
 
@@ -425,7 +415,7 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualCoalesceLevel}, mode)
                 $t = $(lvl.task)[$(ctx(pos))]
             end,
         )
-        #How to generalize this switch? No more pointer array to check if alloced. Do we just assume unalloced?
+
         Switch([
             value(:($t > 0)) => Thunk(;
                 body=(ctx_2) -> begin
@@ -504,3 +494,5 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
         body=(ctx) -> VirtualHollowSubFiber(lvl.lvl, value(qos), fbr.dirty),
     )
 end
+
+##Does this even work logically lol? My idea was just to init everything once we hit the starting position.
