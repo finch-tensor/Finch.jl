@@ -234,3 +234,13 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualElementLevel}, mode, op, 
         rhs,
     )
 end
+
+function coalesce_level!(lvl::VirtualElementLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
+    val = lvl.val.data
+    
+    if factor > 1
+        coalescent.val = merge_dense_element_level(global_fbr_map, local_fbr_map, task_map, factor, val, P)
+    else
+        coalescent.val = merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P)
+    end
+end

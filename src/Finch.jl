@@ -90,6 +90,7 @@ include("util/limits.jl")
 include("util/staging.jl")
 include("util/style.jl")
 include("util/vectors.jl")
+include("util/merging.jl")
 
 include("environment.jl")
 
