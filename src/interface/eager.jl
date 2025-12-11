@@ -142,6 +142,27 @@ Base.:-(x::AbstractTensor, y::AbstractTensor) = map(-, x, y)
 Base.:/(x::AbstractTensor, y::Number) = map(/, x, y)
 Base.:/(x::Number, y::AbstractTensor) = map(\, y, x)
 
+function Base.:\(A::AbstractTensor, b::AbstractTensor)
+    throw(ErrorException(
+        "Matrix division (\\) requires the SparseArrays package, a Julia stdlib module."
+    ))
+end
+function Base.:\(A::AbstractTensor, b::AbstractVector)
+    throw(ErrorException(
+        "Matrix division (\\) requires the SparseArrays package, a Julia stdlib module."
+    ))
+end
+function Base.:\(A::AbstractVector, b::AbstractTensor)
+    throw(ErrorException(
+        "Matrix division (\\) requires the SparseArrays package, a Julia stdlib module."
+    ))
+end
+# function Base.:\(A::AbstractVector, b::AbstractVector)
+#     throw(ErrorException(
+#         "Matrix division (\\) requires the SparseArrays package, a Julia stdlib module."
+#     ))
+# end
+
 const AbstractTensorOrBroadcast = Union{
     <:AbstractTensor,<:Broadcasted{FinchStyle{N}} where {N}
 }
