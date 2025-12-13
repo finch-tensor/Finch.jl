@@ -173,8 +173,6 @@
     let
         io = IOBuffer()
 
-
-        @repl io testone()
         @repl io A = Tensor(CSCFormat(), [1.0 0.0; 0.0 1.0])
         @repl io b = [1.0, 1.0]
         @repl io A \ b
@@ -185,7 +183,6 @@
         @repl io F = Tensor(CSCFormat(), [1.0 1.0; 1.0 1.0])
         @repl io E \ F
 
-
-        @test check_output("typical/typical_temp.txt", String(take!(io)))
+        @test check_output("typical/typical_sparsearrays_matdiv.txt", String(take!(io)))
     end
 end
