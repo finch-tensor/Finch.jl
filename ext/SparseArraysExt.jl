@@ -680,21 +680,18 @@ Finch.virtual_eltype(ctx, tns::VirtualSparseVector) = tns.Tv
 
 SparseArrays.nnz(fbr::Tensor) = countstored(fbr)
 
-function \(A::AbstractTensor, B::AbstractTensor)
+function Base.:\(A::Tensor, B::Tensor)
     As = SparseArrays.sparse(A)
     Bs = SparseArrays.sparse(B)
     return As \ Bs
 end
-function \(A::AbstractTensor, b::AbstractVector)
+function Base.:\(A::Tensor, b::Vector)
     As = SparseArrays.sparse(A)
     return As \ b
 end
-function \(a::AbstractVector, B::AbstractTensor)
+function Base.:\(a::Vector, B::Tensor)
     Bs = SparseArrays.sparse(B)
     return a \ Bs
 end
-# function \(a::AbstractVector, b::AbstractVector)
-#     return a \ b
-# end
 
 end
