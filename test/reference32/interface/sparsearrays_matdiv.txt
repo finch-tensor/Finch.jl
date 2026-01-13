@@ -1,5 +1,5 @@
 julia> A = Tensor(CSCFormat(), [1.0 0.0; 0.0 1.0])
-2×2 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+2×2 Tensor{DenseLevel{Int32, SparseListLevel{Int32, Vector{Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  1.0  0.0
  0.0  1.0
 julia> b = [1.0, 1.0]
@@ -15,22 +15,22 @@ julia> c = [1.0, 0.0]
  1.0
  0.0
 julia> D = Tensor(CSCFormat(), [1.0 1.0; 0.0 0.0])
-2×2 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+2×2 Tensor{DenseLevel{Int32, SparseListLevel{Int32, Vector{Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  1.0  1.0
  0.0  0.0
 julia> c \ D
 1×2 transpose(::Vector{Float64}) with eltype Float64:
  1.0  1.0
 julia> E = Tensor(CSCFormat(), [1.0 0.0; 0.0 1.0])
-2×2 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+2×2 Tensor{DenseLevel{Int32, SparseListLevel{Int32, Vector{Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  1.0  0.0
  0.0  1.0
 julia> F = Tensor(CSCFormat(), [1.0 1.0; 1.0 1.0])
-2×2 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+2×2 Tensor{DenseLevel{Int32, SparseListLevel{Int32, Vector{Int32}, Vector{Int32}, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  1.0  1.0
  1.0  1.0
 julia> E \ F
-2×2 SparseMatrixCSC{Float64, Int64} with 4 stored entries:
+2×2 SparseMatrixCSC{Float64, Int32} with 4 stored entries:
  1.0  1.0
  1.0  1.0
 
