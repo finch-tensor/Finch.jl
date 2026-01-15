@@ -169,19 +169,21 @@ function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
 end
 
 function countstored_level(lvl::CoalesceLevel, pos)
+    countstored_level(lvl.coalescent, pos)
+end
+
+function coalesce_nnz(lvl::CoalesceLevel, pos)
     n_tasks = get_num_tasks(lvl.device)
     sum(1:n_tasks) do tid
-        for qos in 1:pos
-            lvl_2 = transfer(
-                MemoryChannel(
-                    tid,
-                    MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
-                    SerialTask(),
-                ),
-                lvl.lvl,
-            )
-            countstored_level(lvl_2, qos)
-        end
+        lvl_2 = transfer(
+            MemoryChannel(
+                tid,
+                MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
+                SerialTask(),
+            ),
+            lvl.lvl,
+        )
+        countstored_level(lvl_2, pos)
     end
 end
 
@@ -197,6 +199,7 @@ mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     Coalescent
     Schedule
     qos_stop
+    init
 end
 
 postype(lvl::VirtualCoalesceLevel) = postype(lvl.lvl)
@@ -242,6 +245,7 @@ function virtualize(
     coalescent_2 = virtualize(ctx, :($tag.coalescent), Coalescent, tag)
     schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
     qos_stop = freshen(ctx, tag, :_qos_stop)
+    init = freshen(ctx, tag, :_init)
     VirtualCoalesceLevel(
         tag,
         device_2,
@@ -253,7 +257,8 @@ function virtualize(
         Lvl,
         Coalescent,
         Schedule,
-        qos_stop
+        qos_stop,
+        init
     )
 end
 
@@ -269,7 +274,8 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Lvl,
         lvl.Coalescent,
         lvl.Schedule,
-        lvl.qos_stop
+        lvl.qos_stop,
+        init
     )
 end
 
@@ -285,7 +291,8 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Lvl,
         lvl.Coalescent,
         lvl.Schedule,
-        lvl.qos_stop
+        lvl.qos_stop,
+        init
     )
 end
 
@@ -301,7 +308,8 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Lvl,
         lvl.Coalescent,
         lvl.Schedule,
-        lvl.qos_stop
+        lvl.qos_stop,
+        init
     )
 end
 
@@ -334,6 +342,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
+            init
         )
     else
         diff[lvl.tag] = VirtualCoalesceLevel(
@@ -348,6 +357,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
+            init
         )
     end
 end
@@ -367,7 +377,8 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
             lvl.Lvl,
             lvl.Coalescent,
             lvl.Schedule,
-            lvl.qos_stop
+            lvl.qos_stop,
+            init
         ),
     )
 end
@@ -401,7 +412,7 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 ctx_2, parallel_dim, lvl.device, lvl.schedule
             ) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
-                
+
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
                 )
@@ -449,39 +460,52 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                     get_task_num(task), multi_channel_dev, task
                 )
 
-                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                thaw_level!(ctx_3, lvl_3, pos_start)
-                assemble_level!(ctx_3, lvl_3, pos_start, pos_stop)
-                freeze_level!(ctx_3, lvl_3, pos_stop)
+                contain(ctx_3) do ctx_4
+                    lvl_3 = distribute_level(ctx_4, lvl.lvl, channel_task, diff, DeviceShared())
+                    thaw_level!(ctx_4, lvl_3, pos_start)
+                    assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
+                    freeze_level!(ctx_4, lvl_3, pos_stop)
+                end
             end
         end)
-
-    coalscent_2 = assemble_level!(ctx, lvl.coalescent, pos_start, pos_stop)
-    lvl.coalescent = coalscent_2
+    
+    assemble_level!(ctx, lvl.coalescent, pos_start, pos_stop)
 
     lvl
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
 
-"""
-these two are no-ops, we instead do these on distribute
-"""
-# function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
+# function `freeze`_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 #     @assert !is_on_device(ctx, lvl.device)
 #     return lvl
 # end
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
+    P = ctx(get_num_tasks(lvl.device))
+    lvl_e = ctx(lvl)
+    lvl_ce = ctx(lvl.coalescent)
 
-    P = get_num_tasks(lvl.device)
-    task_map = collect(1:P)
-    global_fbr_map = ones(Int, P)
-    local_fbr_map = ones(Int, P)
-    factor = 1
+    task_map = freshen(ctx, :tm)
+    global_fbr_map = freshen(ctx, :gfm)
+    local_fbr_map = freshen(ctx, :lfm)
+    factor = freshen(ctx, :fac)
 
-    coalesce_level!(lvl, global_fbr_map, local_fbr_map, task_map, factor, P, lvl.coalescent)
+    push_preamble!(
+        ctx,
+        quote
+            $task_map = collect(1:($P))
+            $global_fbr_map = ones(Int, $P)
+            $local_fbr_map = ones(Int, $P)
+            $factor = 1
+
+            coalesce_level!(
+                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce), $(ctx(pos))
+            )
+        end,
+    )
+
     return lvl
 end
 
@@ -527,6 +551,8 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
     )
 end
 
-function coalesce_level!(lvl::VirtualCoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl)
+function coalesce_level!(lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, pos)
+    if coalesce_nnz(lvl, pos) > 0
+        coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl)
+    end
 end

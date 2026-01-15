@@ -88,7 +88,7 @@ function execute_code(
     ex,
     T;
     algebra=DefaultAlgebra(),
-    mode=:safe,
+    mode=:debug,
     ctx=FinchCompiler(; algebra=algebra, mode=mode),
 )
     code = contain(ctx) do ctx_2
@@ -121,7 +121,7 @@ end
     end
 end
 
-function execute(ex; algebra=DefaultAlgebra(), mode=:safe)
+function execute(ex; algebra=DefaultAlgebra(), mode=:debug)
     execute_impl(ex, Val(algebra), Val(mode))
 end
 
@@ -267,7 +267,7 @@ function finch_kernel(
     args,
     prgm;
     algebra=DefaultAlgebra(),
-    mode=:safe,
+    mode=:debug,
     ctx=FinchCompiler(; algebra=algebra, mode=mode),
 )
     maybe_typeof(x) = x isa Type ? x : typeof(x)

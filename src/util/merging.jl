@@ -1,4 +1,6 @@
-@inbounds function s_prefix_sum(arr::Vector{Int})
+using AcceleratedKernels
+
+Base.@propagate_inbounds function s_prefix_sum(arr::Vector{Int})
     out = Vector{Int}(undef, length(arr))
     out[1] = arr[1]
     for i in 2:length(arr)
@@ -7,10 +9,11 @@
     out
 end
 
-@inbounds function binary_search(target::Int, arr)
+Base.@propagate_inbounds function binary_search(target::Int, arr)
     lo = 1
     hi = length(arr)
-
+    println(arr)
+    println(target)
     @assert target > 0
     @assert target < arr[hi]
 
@@ -28,7 +31,7 @@ end
     return -1
 end
 
-@inbounds function binary_search_scalar(target, arr)
+Base.@propagate_inbounds function binary_search_scalar(target, arr)
     lo = 1
     hi = length(arr)
 
@@ -46,7 +49,7 @@ end
     return -1
 end
 
-@inbounds function compute_proc_cutoffs(index, P)
+Base.@propagate_inbounds function compute_proc_cutoffs(index, P)
     cutoffs = Vector{Int}(undef, length(index) + 1)
     cutoffs[1] = 1
     Threads.@threads for i in 2:length(cutoffs)
@@ -55,7 +58,7 @@ end
     s_prefix_sum(cutoffs)
 end
 
-@inbounds function get_permute_idx(proc_id, ptr)
+Base.@propagate_inbounds function get_permute_idx(proc_id, ptr)
     start = 0
 
     for i in 1:proc_id - 1
@@ -65,7 +68,7 @@ end
     return start
 end
 
-@inbounds function p_permute(permutation, arr::Vector{T}) where {T}
+Base.@propagate_inbounds function p_permute(permutation, arr::Vector{T}) where {T}
     shuffled = Vector{T}(undef, length(arr))
 
     @assert length(permutation) == length(arr)
@@ -79,11 +82,11 @@ end
 
 #### Dense Merging Functions
 
-@inbounds function merge_dense(global_fbr_map, local_fbr_map, task_map, factor, shape, P)
+Base.@propagate_inbounds function merge_dense(global_fbr_map, local_fbr_map, task_map, factor, shape, P)
     return global_fbr_map, local_fbr_map, task_map, factor * shape
 end
 
-@inbounds function unroll_dense_coalesce(global_fbr_map, local_fbr_map, task_map, factor, P)
+Base.@propagate_inbounds function unroll_dense_coalesce(global_fbr_map, local_fbr_map, task_map, factor, P)
     unrolled_size = factor * length(global_fbr_map)
 
     global_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
@@ -123,7 +126,7 @@ end
 
 #### SparseList Merging Functions
 
-@inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P)
+Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P)
     ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
     sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
 
@@ -189,7 +192,7 @@ end
     return merged_positions, merged_indices, local_fbr_map2, task_map2
 end
 
-@inbounds function process_next_lvl(merged_positions, merged_indices, task_map, local_fbr_map, P)
+Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indices, task_map, local_fbr_map, P)
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(collect(1:length(merged_positions)); order=ordering)
 
@@ -283,7 +286,7 @@ end
 
 #### ElementLevel Merge Functions
 
-@inbounds function merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P)
+Base.@propagate_inbounds function merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P)
     chk_size = fld(length(global_fbr_map) + P - 1, P)
     val2 = zeros(global_fbr_map[length(global_fbr_map)])
 
@@ -322,7 +325,7 @@ end
     return val2
 end
 
-@inbounds function merge_dense_element_level(global_fbr_map, local_fbr_map, task_map, factor, val, P)
+Base.@propagate_inbounds function merge_dense_element_level(global_fbr_map, local_fbr_map, task_map, factor, val, P)
     val2 = zeros(global_fbr_map[length(global_fbr_map)] * factor)
     chk_size = fld(factor + P - 1, P)
     iter_range = length(global_fbr_map)
