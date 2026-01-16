@@ -164,7 +164,6 @@ function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     #     ),
     #     lvl.lvl,
     # )
-    #Access merged copy.
     SubFiber(lvl.coalescent, pos)(idxs...)
 end
 
@@ -174,7 +173,9 @@ end
 
 function coalesce_nnz(lvl::CoalesceLevel, pos)
     n_tasks = get_num_tasks(lvl.device)
+    println(pos)
     sum(1:n_tasks) do tid
+        total = 0
         lvl_2 = transfer(
             MemoryChannel(
                 tid,
@@ -183,7 +184,10 @@ function coalesce_nnz(lvl::CoalesceLevel, pos)
             ),
             lvl.lvl,
         )
-        countstored_level(lvl_2, pos)
+        for qos in 1:pos
+            total += countstored_level(lvl_2, qos)
+        end
+        total
     end
 end
 
@@ -459,13 +463,14 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                 channel_task = VirtualMemoryChannel(
                     get_task_num(task), multi_channel_dev, task
                 )
-
-                contain(ctx_3) do ctx_4
-                    lvl_3 = distribute_level(ctx_4, lvl.lvl, channel_task, diff, DeviceShared())
-                    thaw_level!(ctx_4, lvl_3, pos_start)
-                    assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
-                    freeze_level!(ctx_4, lvl_3, pos_stop)
-                end
+                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
+                push_preamble!(ctx_3,
+                    contain(ctx_3) do ctx_4
+                        thaw_level!(ctx_4, lvl_3, pos_start)
+                        assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
+                    end,
+                )
+                freeze_level!(ctx_3, lvl_3, pos_stop)
             end
         end)
     
@@ -501,7 +506,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             $factor = 1
 
             coalesce_level!(
-                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce), $(ctx(pos))
+                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce)
             )
         end,
     )
@@ -511,6 +516,38 @@ end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
+
+    push_preamble!(
+        ctx,
+        contain(ctx) do ctx_2
+            diff = Dict()
+            lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
+
+            ext = VirtualExtent(literal(1), pos)
+            parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
+
+            push_preamble!(ctx_2,
+            quote
+                $(lvl.qos_stop) = $(ctx_2(pos))
+            end)
+
+            virtual_parallel_region(
+                ctx_2, parallel_dim, lvl.device, lvl.schedule
+            ) do f, ctx_3, i_lo, i_hi
+                task = get_task(ctx_3)
+
+                multi_channel_dev = VirtualMultiChannelMemory(
+                    lvl.device, get_num_tasks(lvl.device)
+                )
+                channel_task = VirtualMemoryChannel(
+                    get_task_num(task), multi_channel_dev, task
+                )
+                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
+                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                freeze_level!(ctx_3, lvl_4, pos)
+            end
+        end,
+    )
     return lvl
 end
 
@@ -551,8 +588,6 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
     )
 end
 
-function coalesce_level!(lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, pos)
-    if coalesce_nnz(lvl, pos) > 0
-        coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl)
-    end
+function coalesce_level!(lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
+    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
 end

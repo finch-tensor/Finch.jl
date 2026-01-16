@@ -604,6 +604,12 @@ function coalesce_level!(lvl::SparseListLevel, global_fbr_map, local_fbr_map, ta
     ptr = lvl.ptr.data
 
     cutoffs = compute_proc_cutoffs(idx, P)
+
+    #Don't merge zero-ed arrays.
+    if cutoffs[P + 1] == 1
+        return
+    end
+
     pos_map, idx_map, lfm, tm = gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P)
     global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(pos_map, idx_map, tm, lfm, P)
     
