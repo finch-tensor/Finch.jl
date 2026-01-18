@@ -12,7 +12,7 @@ quote
     Finch.fill_range!(res_lvl_ptr, 0, 1 + 1, 1 + 1)
     res_lvl_qos = 0 + 1
     0 < 1 || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
-    for i_4 = 1:tmp_lvl_2.shape
+    for i_4 in 1:tmp_lvl_2.shape
         if res_lvl_qos > res_lvl_qos_stop
             res_lvl_qos_stop = max(res_lvl_qos_stop << 1, 1)
             Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
@@ -27,11 +27,15 @@ quote
     end
     res_lvl_ptr[1 + 1] += (res_lvl_qos - 0) - 1
     resize!(res_lvl_ptr, 1 + 1)
-    for p = 1:1
+    for p in 1:1
         res_lvl_ptr[p + 1] += res_lvl_ptr[p]
     end
     qos_stop = res_lvl_ptr[1 + 1] - 1
     resize!(res_lvl_idx, qos_stop)
     resize!(res_lvl_val, qos_stop)
-    (res = Tensor((SparseListLevel){Int64}(res_lvl_2, tmp_lvl_2.shape, res_lvl_ptr, res_lvl_idx)),)
+    (
+        res=Tensor(
+            (SparseListLevel){Int64}(res_lvl_2, tmp_lvl_2.shape, res_lvl_ptr, res_lvl_idx)
+        ),
+    )
 end

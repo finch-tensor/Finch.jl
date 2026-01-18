@@ -73,7 +73,7 @@ for (scheduler_name, scheduler) in [
             end,
             setup = (
                 Finch.set_scheduler!($scheduler);
-                A = Tensor(
+                A=Tensor(
                     Dense(SparseList(Element($k[] += 1))), fsprand(1, 1, 1)
                 )
             )

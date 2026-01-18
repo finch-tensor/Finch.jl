@@ -118,14 +118,12 @@ end
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseBandLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseBandLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl} =
-    level_eltype(
-        Lvl
-    )
-@inline level_fill_value(::Type{<:SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl} =
-    level_fill_value(
-        Lvl
-    )
+@inline level_eltype(::Type{<:SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl} = level_eltype(
+    Lvl
+)
+@inline level_fill_value(::Type{<:SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl} = level_fill_value(
+    Lvl
+)
 function data_rep_level(::Type{<:SparseBandLevel{Ti,Idx,Ofs,Lvl}}) where {Ti,Idx,Ofs,Lvl}
     SparseData(data_rep_level(Lvl))
 end

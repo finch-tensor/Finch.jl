@@ -374,14 +374,14 @@ function Base.:+(
     map(+, x, y, z...)
 end
 Base.:*(
-    x::LazyTensor,
-    y::Number,
-    z::Number...,
+x::LazyTensor,
+y::Number,
+z::Number...
 ) = map(*, x, y, z...)
 Base.:*(
-    x::Number,
-    y::LazyTensor,
-    z::Number...,
+x::Number,
+y::LazyTensor,
+z::Number...
 ) = map(*, y, x, z...)
 
 function Base.:*(
@@ -397,8 +397,8 @@ function Base.:*(
     tensordot(A, B, (2, 1))
 end
 Base.:*(
-    A::LazyTensor,
-    B::LazyTensor,
+A::LazyTensor,
+B::LazyTensor
 ) = tensordot(A, B, (2, 1))
 
 Base.:-(x::LazyTensor) = map(-, x)
@@ -501,8 +501,9 @@ end
 
 @inline root(x::Power) = x.arg^inv(x.exponent) * x.scale
 
-@inline Base.zero(::Type{Power{T,S,E}}) where {T,S,E} =
-    Power{T,S,E}(zero(T), zero(S), one(E))
+@inline Base.zero(::Type{Power{T,S,E}}) where {T,S,E} = Power{T,S,E}(
+    zero(T), zero(S), one(E)
+)
 @inline Base.zero(x::Power) = Power(zero(x.arg), zero(x.scale), x.exponent)
 @inline Base.isinf(x::Finch.Power) = isinf(x.arg) || isinf(x.scale) || isinf(x.exponent)
 @inline Base.isone(x::Power) = isone(root(x))
@@ -646,8 +647,9 @@ The default scheduler used by `compute` to execute lazy tensor programs.
 Fuses all pointwise expresions into reductions. Only fuses reductions
 into pointwise expressions when they are the only usage of the reduction.
 """
-default_scheduler(; verbose=false) =
+function default_scheduler(; verbose=false)
     LogicExecutor(DefaultLogicOptimizer(LogicCompiler()); verbose=verbose)
+end
 
 """
     fused(f, args...; kwargs...)
@@ -704,8 +706,9 @@ can be passed to control the execution of the program:
     - `verbose=false`: Print the generated code before execution
     - `tag=:global`: A tag to distinguish between different classes of inputs for the same program.
 """
-compute(args...; ctx=get_scheduler(), kwargs...) =
+function compute(args...; ctx=get_scheduler(), kwargs...)
     compute_parse(set_options(ctx; kwargs...), map(lazy, args))
+end
 function compute(arg; ctx=get_scheduler(), kwargs...)
     compute_parse(set_options(ctx; kwargs...), (lazy(arg),))[1]
 end

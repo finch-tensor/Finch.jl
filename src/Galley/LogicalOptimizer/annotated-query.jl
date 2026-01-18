@@ -149,21 +149,21 @@ function AnnotatedQuery(q::PlanNode, ST)
         Postwalk(
             Chain([
                 (@rule Aggregate(~f::isvalue, ~init::isvalue, ~idxs..., ~a) => begin
-                    for idx in idxs
-                        idx_starting_root[idx.name] = a.node_id
-                        idx_top_order[idx.name] = top_counter
-                        top_counter += 1
-                        if isnothing(f.val)
-                            idx_op[idx.name] = initwrite(get_fill_value(a.stats))
-                            idx_init[idx.name] = get_fill_value(a.stats)
-                        else
-                            idx_op[idx.name] = f.val
-                            idx_init[idx.name] = init.val
-                        end
+                for idx in idxs
+                    idx_starting_root[idx.name] = a.node_id
+                    idx_top_order[idx.name] = top_counter
+                    top_counter += 1
+                    if isnothing(f.val)
+                        idx_op[idx.name] = initwrite(get_fill_value(a.stats))
+                        idx_init[idx.name] = get_fill_value(a.stats)
+                    else
+                        idx_op[idx.name] = f.val
+                        idx_init[idx.name] = init.val
                     end
-                    append!(starting_reduce_idxs, [idx.name for idx in idxs])
-                    a
-                end),
+                end
+                append!(starting_reduce_idxs, [idx.name for idx in idxs])
+                a
+            end),
             ]),
         ),
     )(
@@ -528,7 +528,7 @@ function reduce_idx!(reduce_idx, aq; do_condense=false)
     for n in PostOrderDFS(new_point_expr)
         if n.node_id == node_to_replace
             _insert_statistics!(aq.ST, n)
-        elseif istree(n) && any(c.node_id ∈ rel_child_nodes for c in n.children)
+        elseif istree(n) && any(c.node_id in rel_child_nodes for c in n.children)
             _insert_statistics!(aq.ST, n)
             push!(rel_child_nodes, n.node_id)
         end

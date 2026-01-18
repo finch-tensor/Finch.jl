@@ -176,6 +176,8 @@ The galley scheduler uses the sparsity patterns of the inputs to optimize the co
 The first set of inputs given to galley is used to optimize, and the `estimator` is used to
 estimate the sparsity of intermediate computations during optimization.
 """
-galley_scheduler(; threshold=2, verbose=false) = AdaptiveExecutor(
-    GalleyOptimizer(; verbose=verbose); threshold=threshold, verbose=verbose
-)
+function galley_scheduler(; threshold=2, verbose=false)
+    AdaptiveExecutor(
+        GalleyOptimizer(; verbose=verbose); threshold=threshold, verbose=verbose
+    )
+end

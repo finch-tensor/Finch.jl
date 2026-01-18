@@ -39,7 +39,9 @@ quote
                         if tmp_lvl_qos > tmp_lvl_qos_stop
                             tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
                             Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                            Finch.fill_range!(tmp_lvl_val_2, 0.0, tmp_lvl_qos, tmp_lvl_qos_stop)
+                            Finch.fill_range!(
+                                tmp_lvl_val_2, 0.0, tmp_lvl_qos, tmp_lvl_qos_stop
+                            )
                             Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
                             Finch.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
                         end
@@ -62,9 +64,13 @@ quote
                             if tmp_lvl_qos > tmp_lvl_qos_stop
                                 tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
                                 Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                                Finch.fill_range!(tmp_lvl_val_2, 0.0, tmp_lvl_qos, tmp_lvl_qos_stop)
+                                Finch.fill_range!(
+                                    tmp_lvl_val_2, 0.0, tmp_lvl_qos, tmp_lvl_qos_stop
+                                )
                                 Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                                Finch.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
+                                Finch.fill_range!(
+                                    tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop
+                                )
                             end
                         end
                         tmp_lvl_tbl[(1, phase_stop_3)] = tmp_lvl_qos
@@ -86,7 +92,7 @@ quote
     idx_tmp = Vector{Int32}(undef, length(tmp_lvl_tbl))
     val_tmp = Vector{Int32}(undef, length(tmp_lvl_tbl))
     q = 0
-    for entry = pairs(tmp_lvl_tbl)
+    for entry in pairs(tmp_lvl_tbl)
         sugar_2 = entry[1]
         p_2 = sugar_2[1]
         i_9 = sugar_2[2]
@@ -97,12 +103,12 @@ quote
         pdx_tmp[q] = p_2
         tmp_lvl_ptr[p_2 + 1] += 1
     end
-    for p_2 = 2:1 + 1
+    for p_2 in 2:(1 + 1)
         tmp_lvl_ptr[p_2] += tmp_lvl_ptr[p_2 - 1]
     end
     perm = sortperm(idx_tmp)
     ptr_2 = copy(tmp_lvl_ptr)
-    for q = perm
+    for q in perm
         p_2 = pdx_tmp[q]
         r = ptr_2[p_2]
         tmp_lvl_idx[r] = idx_tmp[q]
@@ -111,5 +117,17 @@ quote
     end
     qos_stop = tmp_lvl_ptr[1 + 1] - 1
     resize!(tmp_lvl_val_2, qos_stop)
-    (tmp = Tensor((SparseDictLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx, tmp_lvl_val, tmp_lvl_tbl, tmp_lvl_pool)),)
+    (
+        tmp=Tensor(
+            (SparseDictLevel){Int32}(
+                tmp_lvl_2,
+                ref_lvl.shape,
+                tmp_lvl_ptr,
+                tmp_lvl_idx,
+                tmp_lvl_val,
+                tmp_lvl_tbl,
+                tmp_lvl_pool,
+            ),
+        ),
+    )
 end

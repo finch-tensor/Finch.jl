@@ -46,5 +46,5 @@ quote
     end
     resize!(tmp_lvl_idx, 1)
     resize!(tmp_lvl_val, 1)
-    (tmp = Tensor((SparsePointLevel){Int64}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx)),)
+    (tmp=Tensor((SparsePointLevel){Int64}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx)),)
 end

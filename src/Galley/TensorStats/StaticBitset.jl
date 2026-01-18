@@ -43,7 +43,7 @@ end
  =#
 Base.eltype(::Type{SmallBitSet}) = Int
 
-Base.empty(s::SmallBitSet, ::Type{Int}=Int) = SmallBitSet()
+Base.empty(s::SmallBitSet, (::Type{Int})=Int) = SmallBitSet()
 
 function Base.copy(src::SmallBitSet)
     dest.bits = src.bits
@@ -62,8 +62,9 @@ end
     SmallBitSet(ifelse(b, s.bits | u, s.bits & ~u))
 end
 
-@noinline _throw_bitset_bounds_err() =
-    throw(ArgumentError("elements of SmallBitSet must be between 0 and 128"))
+@noinline _throw_bitset_bounds_err() = throw(
+    ArgumentError("elements of SmallBitSet must be between 0 and 128")
+)
 
 @inline _is_convertible_Int(n) = 0 < n <= 128
 
@@ -115,8 +116,9 @@ function Base.length(s::SmallBitSet)
     count_ones(s.bits)
 end
 
-@noinline _throw_bitset_notempty_error() =
-    throw(ArgumentError("collection must be non-empty"))
+@noinline _throw_bitset_notempty_error() = throw(
+    ArgumentError("collection must be non-empty")
+)
 
 function Base.:(==)(s1::SmallBitSet, s2::SmallBitSet)
     return s1.bits == s2.bits

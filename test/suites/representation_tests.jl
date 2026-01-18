@@ -42,7 +42,7 @@ basic_levels = [
 ]
 
 multi_levels = [
-(key="SparseCOO", Lvl=SparseCOO)
+    (key="SparseCOO", Lvl=SparseCOO)
 ]
 
 levels_1D = []
@@ -179,19 +179,19 @@ end
                     fname = "representation/convert_to_$(lvl.key){Element{$(fill_value(arr))}}.jl"
                     get!(ios, fname) do
                         io = IOBuffer()
-                        show(io, @finch_code (tmp .= 0;
-                        for i in _
-                            tmp[i] = ref[i]
-                        end))
+                        show(io, @finch_code (tmp.=0;
+                            for i in _
+                                tmp[i] = ref[i]
+                            end))
                         io
                     end
                     fname = "representation/convert_from_$(lvl.key){Element{$(fill_value(arr))}}.jl"
                     get!(ios, fname) do
                         io = IOBuffer()
-                        show(io, @finch_code (res .= 0;
-                        for i in _
-                            res[i] = tmp[i]
-                        end))
+                        show(io, @finch_code (res.=0;
+                            for i in _
+                                res[i] = tmp[i]
+                            end))
                         io
                     end
                     roundtrip_key = typeof((res, tmp, ref))
@@ -216,14 +216,14 @@ end
                     @test eltype(res) == eltype(ref)
                     @test res == ref
                     @test isequal(res, ref)
-                    @finch (tmp .= 0;
-                    for i in _
-                        tmp[i] = ref[i]
-                    end)
-                    @finch (res .= 0;
-                    for i in _
-                        res[i] = tmp[i]
-                    end)
+                    @finch (tmp.=0;
+                        for i in _
+                            tmp[i] = ref[i]
+                        end)
+                    @finch (res.=0;
+                        for i in _
+                            res[i] = tmp[i]
+                        end)
                     @test size(res) == size(ref)
                     @test axes(res) == axes(ref)
                     @test ndims(res) == ndims(ref)
@@ -316,14 +316,14 @@ end
                     @test eltype(res) == eltype(ref)
                     @test res == ref
                     @test isequal(res, ref)
-                    @finch (tmp .= 0;
-                    for j in _, i in _
-                        tmp[i, j] = ref[i, j]
-                    end)
-                    @finch (res .= 0;
-                    for j in _, i in _
-                        res[i, j] = tmp[i, j]
-                    end)
+                    @finch (tmp.=0;
+                        for j in _, i in _
+                            tmp[i, j] = ref[i, j]
+                        end)
+                    @finch (res.=0;
+                        for j in _, i in _
+                            res[i, j] = tmp[i, j]
+                        end)
                     @test size(tmp) == size(ref)
                     @test axes(res) == axes(ref)
                     @test ndims(tmp) == ndims(ref)

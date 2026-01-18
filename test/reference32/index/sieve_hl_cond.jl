@@ -38,5 +38,5 @@ begin
         end
     end
     B_data.val = B_val
-    (B = B_data,)
+    (B=B_data,)
 end

@@ -222,7 +222,7 @@ function wrapperize(ctx::AbstractCompiler, root)
     root = unwrap_roots(ctx, root)
     root = Rewrite(
         Prewalk(
-        (@rule loop(~idx, ~ext, ~body) => begin
+            (@rule loop(~idx, ~ext, ~body) => begin
             counts = OrderedDict()
             for node in PostOrderDFS(body)
                 if @capture(node, access(~tn, reader(), ~idxs...))
@@ -250,7 +250,7 @@ function wrapperize(ctx::AbstractCompiler, root)
                 loop(idx, ext, body)
             end
         end)
-    ),
+        ),
     )(
         root
     )

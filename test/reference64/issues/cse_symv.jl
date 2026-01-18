@@ -13,16 +13,24 @@ begin
     x_lvl_stop = x_lvl.shape
     x_lvl_2 = x_lvl.lvl
     x_lvl_2_val = x_lvl_2.val
-    y_lvl_stop == A_lvl_2_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(A_lvl_2_stop))"))
-    x_lvl_stop == A_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(x_lvl_stop) != $(A_lvl_stop))"))
-    y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
-    y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
+    y_lvl_stop == A_lvl_2_stop || throw(
+        DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(A_lvl_2_stop))")
+    )
+    x_lvl_stop == A_lvl_stop || throw(
+        DimensionMismatch("mismatched dimension limits ($(x_lvl_stop) != $(A_lvl_stop))")
+    )
+    y_lvl_stop == x_lvl_stop || throw(
+        DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))")
+    )
+    y_lvl_stop == x_lvl_stop || throw(
+        DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))")
+    )
     @warn "Performance Warning: non-concordant traversal of A[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
-    for i_6 = 1:y_lvl_stop
+    for i_6 in 1:y_lvl_stop
         y_lvl_q = (1 - 1) * y_lvl_stop + i_6
         x_lvl_q = (1 - 1) * x_lvl_stop + i_6
         x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
-        for j_6 = 1:y_lvl_stop
+        for j_6 in 1:y_lvl_stop
             A_lvl_q = (1 - 1) * A_lvl_stop + j_6
             x_lvl_q_2 = (1 - 1) * x_lvl_stop + j_6
             y_lvl_q_2 = (1 - 1) * y_lvl_stop + j_6

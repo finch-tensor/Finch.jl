@@ -15,7 +15,9 @@ begin
     y_lvl_2_val = y_lvl_2.val
     c_data = ((ex.bodies[1]).body.body.bodies[2]).lhs.tns.bind
     c_val = c_data.val
-    y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
+    y_lvl_stop == x_lvl_stop || throw(
+        DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))")
+    )
     x_lvl_q = x_lvl_ptr[1]
     x_lvl_q_stop = x_lvl_ptr[1 + 1]
     if x_lvl_q < x_lvl_q_stop
@@ -48,7 +50,7 @@ begin
                     x_lvl_i = x_lvl_idx[x_lvl_q]
                     if x_lvl_i < phase_stop
                         x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
-                        for i_9 = 1:phase_stop
+                        for i_9 in 1:phase_stop
                             c_val = x_lvl_2_val_2 + c_val
                         end
                         x_lvl_q += 1
@@ -56,7 +58,7 @@ begin
                         phase_stop_4 = min(phase_stop, x_lvl_i)
                         if x_lvl_i == phase_stop_4
                             x_lvl_2_val_2 = x_lvl_2_val[x_lvl_q]
-                            for i_11 = 1:phase_stop
+                            for i_11 in 1:phase_stop
                                 c_val = x_lvl_2_val_2 + c_val
                             end
                             x_lvl_q += 1

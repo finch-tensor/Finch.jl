@@ -1,7 +1,7 @@
 name = "Finch"
 uuid = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
-authors = ["Willow Ahrens"]
 version = "1.2.12"
+authors = ["Willow Ahrens"]
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -11,6 +11,7 @@ DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
@@ -44,6 +45,7 @@ Distributions = "0.25"
 HDF5 = "0.17"
 IterTools = "1.10.0"
 JSON = "1.2"
+JuliaFormatter = "2.2.0"
 NPZ = "0.4"
 PrecompileTools = "1"
 Preferences = "v1.4.3"

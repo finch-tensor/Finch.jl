@@ -31,7 +31,9 @@ quote
             if ref_lvl_i < phase_stop
                 ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
                 tmp_lvl_val[1] = ref_lvl_2_val
-                tmp_lvl_left[1] < tmp_lvl_right[1] && throw(FinchProtocolError("SparseIntervalLevels can only be updated once"))
+                tmp_lvl_left[1] < tmp_lvl_right[1] && throw(
+                    FinchProtocolError("SparseIntervalLevels can only be updated once")
+                )
                 tmp_lvl_left[1] = ref_lvl_i
                 tmp_lvl_right[1] = ref_lvl_i
                 ref_lvl_q += 1
@@ -40,7 +42,9 @@ quote
                 if ref_lvl_i == phase_stop_3
                     ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
                     tmp_lvl_val[1] = ref_lvl_2_val
-                    tmp_lvl_left[1] < tmp_lvl_right[1] && throw(FinchProtocolError("SparseIntervalLevels can only be updated once"))
+                    tmp_lvl_left[1] < tmp_lvl_right[1] && throw(
+                        FinchProtocolError("SparseIntervalLevels can only be updated once")
+                    )
                     tmp_lvl_left[1] = phase_stop_3
                     tmp_lvl_right[1] = phase_stop_3
                     ref_lvl_q += 1
@@ -52,5 +56,11 @@ quote
     resize!(tmp_lvl_left, 1)
     resize!(tmp_lvl_right, 1)
     resize!(tmp_lvl_val, 1)
-    (tmp = Tensor((SparseIntervalLevel){Int64}(tmp_lvl_2, ref_lvl.shape, tmp_lvl.left, tmp_lvl.right)),)
+    (
+        tmp=Tensor(
+            (SparseIntervalLevel){Int64}(
+                tmp_lvl_2, ref_lvl.shape, tmp_lvl.left, tmp_lvl.right
+            ),
+        ),
+    )
 end

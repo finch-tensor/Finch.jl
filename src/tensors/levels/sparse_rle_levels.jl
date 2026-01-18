@@ -187,10 +187,10 @@ end
     level_axes(lvl.lvl)..., Base.OneTo(lvl.shape)
 )
 @inline level_eltype(
-    ::Type{<:SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}
+::Type{<:SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}
 ) where {Ti,Ptr,Left,Right,merge,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}
+::Type{<:SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}
 ) where {Ti,Ptr,Left,Right,merge,Lvl} = level_fill_value(Lvl)
 function data_rep_level(
     ::Type{<:SparseRunListLevel{Ti,Ptr,Left,Right,merge,Lvl}}

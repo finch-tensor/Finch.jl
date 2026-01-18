@@ -14,9 +14,11 @@ Base.IndexStyle(::Type{<:AbstractTensor}) = Base.IndexCartesian()
 Return a trait object representing the result of calling getindex(tns, idxs...)
 on the tensor represented by `tns`. Assumes traits are in collapsed form.
 """
-getindex_rep(tns, idxs...) = collapse_rep(
-    getindex_rep_def(tns, map(idx -> ndims(idx) == 0 ? Drop(idx) : idx, idxs)...)
-)
+function getindex_rep(tns, idxs...)
+    collapse_rep(
+        getindex_rep_def(tns, map(idx -> ndims(idx) == 0 ? Drop(idx) : idx, idxs)...)
+    )
+end
 
 getindex_rep_def(fbr::HollowData, idxs...) = HollowData(getindex_rep_def(fbr.lvl, idxs...))
 

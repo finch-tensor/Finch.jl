@@ -72,10 +72,9 @@ end
 @inline level_size(lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl} = level_size(lvl.lvl)
 @inline level_axes(lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} =
-    level_fill_value(
-        Lvl
-    )
+@inline level_fill_value(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = level_fill_value(
+    Lvl
+)
 data_rep_level(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = data_rep_level(Lvl)
 
 function isstructequal(a::T, b::T) where {T<:Mutex}
@@ -172,7 +171,7 @@ end
 
 Base.summary(lvl::VirtualMutexLevel) = "Mutex($(lvl.Lvl))"
 function virtual_level_resize!(ctx, lvl::VirtualMutexLevel, dims...)
-    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    (lvl.lvl=virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
 virtual_level_size(ctx, lvl::VirtualMutexLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_ndims(ctx, lvl::VirtualMutexLevel) = length(virtual_level_size(ctx, lvl.lvl))

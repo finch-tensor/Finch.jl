@@ -119,14 +119,14 @@
 
     multi_levels = [
         (
-            "SparseCOO",
-            SparseCOO,
-            (;),
-            [
-                [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
-                [0.0 2.0 2.0; 0.0 3.0 3.0],
-            ],
-        ),
+        "SparseCOO",
+        SparseCOO,
+        (;),
+        [
+            [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
+            [0.0 2.0 2.0; 0.0 3.0 3.0],
+        ],
+    ),
     ]
 
     for (key, Lvl, flags, arrs) in multi_levels

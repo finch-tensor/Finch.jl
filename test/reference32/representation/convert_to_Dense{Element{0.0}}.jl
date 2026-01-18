@@ -40,5 +40,5 @@ quote
         end
     end
     resize!(tmp_lvl_val, ref_lvl.shape)
-    (tmp = Tensor((DenseLevel){Int32}(tmp_lvl_2, ref_lvl.shape)),)
+    (tmp=Tensor((DenseLevel){Int32}(tmp_lvl_2, ref_lvl.shape)),)
 end
