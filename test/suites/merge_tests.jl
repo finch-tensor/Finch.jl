@@ -95,7 +95,7 @@
                     b = Tensor(SparseCOO{2}(Element(dts.fill_value)))
 
                     @finch (
-                        b.=0;
+                        b .= 0;
                         for j in _, i in _
                             b[i, j] =
                                 a[$(fmt.proto[1])(i), $(fmt.proto[2])(j)] * diagmask[i, j]
@@ -119,7 +119,7 @@
                     a = dropfills!(fmt.fmt(dts.fill_value), dts.data)
                     b = Tensor(SparseCOO{2}(Element(dts.fill_value)))
                     @finch (
-                        b.=0;
+                        b .= 0;
                         for j in _, i in _
                             b[i, j] =
                                 a[$(fmt.proto[1])(i), $(fmt.proto[2])(j)] * lotrimask[i, j]
@@ -142,7 +142,7 @@
                     a = dropfills!(fmt.fmt(dts.fill_value), dts.data)
                     b = Tensor(SparseCOO{2}(Element(dts.fill_value)))
                     @finch (
-                        b.=0;
+                        b .= 0;
                         for j in _, i in _
                             b[i, j] =
                                 a[$(fmt.proto[1])(i), $(fmt.proto[2])(j)] * uptrimask[i, j]
@@ -189,7 +189,7 @@
                             c = Tensor(SparseCOO{2}(Element(a_dts.fill_value)))
                             d = Tensor(SparseCOO{2}(Element(a_dts.fill_value)))
                             @finch (
-                                c.=0;
+                                c .= 0;
                                 for j in _, i in _
                                     c[i, j] =
                                         a[$(a_fmt.proto[1])(i), $(a_fmt.proto[2])(j)] +
@@ -197,7 +197,7 @@
                                 end
                             )
                             @finch (
-                                d.=0;
+                                d .= 0;
                                 for j in _, i in _
                                     d[i, j] =
                                         a[$(a_fmt.proto[1])(i), $(a_fmt.proto[2])(j)] *

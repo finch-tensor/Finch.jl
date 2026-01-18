@@ -81,9 +81,10 @@ end
 @inline level_size(lvl::SeparateLevel{Lvl,Val}) where {Lvl,Val} = level_size(lvl.lvl)
 @inline level_axes(lvl::SeparateLevel{Lvl,Val}) where {Lvl,Val} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{SeparateLevel{Lvl,Val}}) where {Lvl,Val} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:SeparateLevel{Lvl,Val}}) where {Lvl,Val} = level_fill_value(
-    Lvl
-)
+@inline level_fill_value(::Type{<:SeparateLevel{Lvl,Val}}) where {Lvl,Val} =
+    level_fill_value(
+        Lvl
+    )
 data_rep_level(::Type{<:SeparateLevel{Lvl,Val}}) where {Lvl,Val} = data_rep_level(Lvl)
 
 function (fbr::SubFiber{<:SeparateLevel})(idxs...)
@@ -166,7 +167,7 @@ end
 Base.summary(lvl::VirtualSeparateLevel) = "Separate($(lvl.Lvl))"
 
 function virtual_level_resize!(ctx, lvl::VirtualSeparateLevel, dims...)
-    (lvl.lvl=virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
 virtual_level_size(ctx, lvl::VirtualSeparateLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualSeparateLevel) = virtual_level_eltype(lvl.lvl)

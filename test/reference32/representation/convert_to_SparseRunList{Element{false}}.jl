@@ -15,8 +15,7 @@ quote
     Finch.resize_if_smaller!(tmp_lvl_ptr, 1 + 1)
     Finch.fill_range!(tmp_lvl_ptr, 0, 1 + 1, 1 + 1)
     tmp_lvl_qos = 0 + 1
-    0 < 1 ||
-        throw(FinchProtocolError("SparseRunListLevels cannot be updated multiple times"))
+    0 < 1 || throw(FinchProtocolError("SparseRunListLevels cannot be updated multiple times"))
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -54,9 +53,7 @@ quote
                         Finch.resize_if_smaller!(tmp_lvl_left, tmp_lvl_qos_stop)
                         Finch.resize_if_smaller!(tmp_lvl_right, tmp_lvl_qos_stop)
                         Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                        Finch.fill_range!(
-                            tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop
-                        )
+                        Finch.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop)
                     end
                     tmp_lvl_val_2[tmp_lvl_qos] = ref_lvl_2_val
                     tmp_lvl_left[tmp_lvl_qos] = phase_stop_3
@@ -70,7 +67,7 @@ quote
     end
     tmp_lvl_ptr[1 + 1] += (tmp_lvl_qos - 0) - 1
     resize!(tmp_lvl_ptr, 1 + 1)
-    for p in 1:1
+    for p = 1:1
         tmp_lvl_ptr[p + 1] += tmp_lvl_ptr[p]
     end
     qos_stop = tmp_lvl_ptr[1 + 1] - 1
@@ -79,7 +76,7 @@ quote
     Finch.fill_range!(tmp_lvl_val, false, 1, qos_stop)
     q = 1
     q_2 = 1
-    for p_2 in 1:1
+    for p_2 = 1:1
         q_stop = tmp_lvl_ptr[p_2 + 1]
         while q < q_stop
             q_head = q
@@ -107,17 +104,5 @@ quote
     qos_stop = q_2 - 1
     resize!(tmp_lvl_val, qos_stop)
     resize!(tmp_lvl_val_2, 0)
-    (
-        tmp=Tensor(
-            (SparseRunListLevel){Int32}(
-                tmp_lvl_2,
-                ref_lvl.shape,
-                tmp_lvl_ptr,
-                tmp_lvl_left,
-                tmp_lvl_right,
-                tmp_lvl_3;
-                merge=true,
-            ),
-        ),
-    )
+    (tmp = Tensor((SparseRunListLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_left, tmp_lvl_right, tmp_lvl_3; merge = true)),)
 end

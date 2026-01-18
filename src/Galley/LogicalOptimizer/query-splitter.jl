@@ -130,7 +130,7 @@ function split_query(q::PlanNode, ST, max_kernel_size, alias_stats, verbose)
                         s_reduce_idxs = StableSet{IndexExpr}()
                         for idx in n_reduce_idxs
                             if !any([
-                                idx in get_index_set(n.stats) for n in setdiff(node.args, s)
+                                idx ∈ get_index_set(n.stats) for n in setdiff(node.args, s)
                             ])
                                 push!(s_reduce_idxs, idx)
                             end

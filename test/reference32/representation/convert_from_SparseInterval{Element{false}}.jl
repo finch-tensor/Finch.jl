@@ -19,7 +19,7 @@ quote
     phase_stop_2 = min(tmp_lvl.shape, tmp_lvl_i_stop)
     if phase_stop_2 >= phase_start_2
         tmp_lvl_2_val = tmp_lvl_val[1]
-        for i_6 in phase_start_2:phase_stop_2
+        for i_6 = phase_start_2:phase_stop_2
             if res_lvl_qos > res_lvl_qos_stop
                 res_lvl_qos_stop = max(res_lvl_qos_stop << 1, 1)
                 Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
@@ -33,15 +33,11 @@ quote
     end
     res_lvl_ptr[1 + 1] += (res_lvl_qos - 0) - 1
     resize!(res_lvl_ptr, 1 + 1)
-    for p in 1:1
+    for p = 1:1
         res_lvl_ptr[p + 1] += res_lvl_ptr[p]
     end
     qos_stop = res_lvl_ptr[1 + 1] - 1
     resize!(res_lvl_idx, qos_stop)
     resize!(res_lvl_val, qos_stop)
-    (
-        res=Tensor(
-            (SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape, res_lvl_ptr, res_lvl_idx)
-        ),
-    )
+    (res = Tensor((SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape, res_lvl_ptr, res_lvl_idx)),)
 end

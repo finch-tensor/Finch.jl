@@ -8,11 +8,9 @@ begin
     A_lvl_2_stop = A_lvl_2.shape
     A_lvl_3 = A_lvl_2.lvl
     A_lvl_3_val = A_lvl_3.val
-    A_lvl_stop == A_lvl_2_stop || throw(
-        DimensionMismatch("mismatched dimension limits ($(A_lvl_stop) != $(A_lvl_2_stop))")
-    )
+    A_lvl_stop == A_lvl_2_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_stop) != $(A_lvl_2_stop))"))
     B_val = 0
-    for i_4 in 1:A_lvl_stop
+    for i_4 = 1:A_lvl_stop
         A_lvl_q = (1 - 1) * A_lvl_stop + i_4
         A_lvl_q_2 = (1 - 1) * A_lvl_stop + i_4
         A_lvl_2_q = A_lvl_2_ptr[A_lvl_q]
@@ -50,14 +48,10 @@ begin
                     if phase_stop_3 >= 1
                         k = 1
                         if A_lvl_2_idx[A_lvl_2_q_2] < 1
-                            A_lvl_2_q_2 = Finch.scansearch(
-                                A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1
-                            )
+                            A_lvl_2_q_2 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1)
                         end
                         if A_lvl_2_idx[A_lvl_2_q_3] < 1
-                            A_lvl_2_q_3 = Finch.scansearch(
-                                A_lvl_2_idx, 1, A_lvl_2_q_3, A_lvl_2_q_stop_3 - 1
-                            )
+                            A_lvl_2_q_3 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_3, A_lvl_2_q_stop_3 - 1)
                         end
                         while k <= phase_stop_3
                             A_lvl_2_i_2 = A_lvl_2_idx[A_lvl_2_q_2]
@@ -66,8 +60,7 @@ begin
                             if A_lvl_2_i_2 == phase_stop_4 && A_lvl_2_i_3 == phase_stop_4
                                 A_lvl_3_val_3 = A_lvl_3_val[A_lvl_2_q_2]
                                 A_lvl_3_val_4 = A_lvl_3_val[A_lvl_2_q_3]
-                                B_val =
-                                    A_lvl_3_val_2 * A_lvl_3_val_3 * A_lvl_3_val_4 + B_val
+                                B_val = A_lvl_3_val_2 * A_lvl_3_val_3 * A_lvl_3_val_4 + B_val
                                 A_lvl_2_q_2 += 1
                                 A_lvl_2_q_3 += 1
                             elseif A_lvl_2_i_3 == phase_stop_4
@@ -102,21 +95,16 @@ begin
                         if phase_stop_9 >= 1
                             k = 1
                             if A_lvl_2_idx[A_lvl_2_q_4] < 1
-                                A_lvl_2_q_4 = Finch.scansearch(
-                                    A_lvl_2_idx, 1, A_lvl_2_q_4, A_lvl_2_q_stop_4 - 1
-                                )
+                                A_lvl_2_q_4 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_4, A_lvl_2_q_stop_4 - 1)
                             end
                             if A_lvl_2_idx[A_lvl_2_q_5] < 1
-                                A_lvl_2_q_5 = Finch.scansearch(
-                                    A_lvl_2_idx, 1, A_lvl_2_q_5, A_lvl_2_q_stop_5 - 1
-                                )
+                                A_lvl_2_q_5 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_5, A_lvl_2_q_stop_5 - 1)
                             end
                             while k <= phase_stop_9
                                 A_lvl_2_i_4 = A_lvl_2_idx[A_lvl_2_q_4]
                                 A_lvl_2_i_5 = A_lvl_2_idx[A_lvl_2_q_5]
                                 phase_stop_10 = min(A_lvl_2_i_5, phase_stop_9, A_lvl_2_i_4)
-                                if A_lvl_2_i_4 == phase_stop_10 &&
-                                    A_lvl_2_i_5 == phase_stop_10
+                                if A_lvl_2_i_4 == phase_stop_10 && A_lvl_2_i_5 == phase_stop_10
                                     A_lvl_3_val_7 = A_lvl_3_val[A_lvl_2_q_4]
                                     A_lvl_3_val_8 = A_lvl_3_val[A_lvl_2_q_5]
                                     B_val += A_lvl_3_val_2 * A_lvl_3_val_7 * A_lvl_3_val_8
@@ -138,5 +126,5 @@ begin
         end
     end
     B_data.val = B_val
-    (B=B_data,)
+    (B = B_data,)
 end

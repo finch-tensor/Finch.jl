@@ -20,11 +20,14 @@
     end
 end
 
-Base.copyto!(dst::AbstractTensor, src::AbstractTensor) = copyto_helper!(dst, src)
+Base.copyto!(dst::AbstractTensor, src::AbstractTensor) =
+    copyto_helper!(dst, src)
 
-Base.copyto!(dst::AbstractTensor, src::AbstractArray) = copyto_helper!(dst, src)
+Base.copyto!(dst::AbstractTensor, src::AbstractArray) =
+    copyto_helper!(dst, src)
 
-Base.copyto!(dst::AbstractArray, src::AbstractTensor) = copyto_helper!(dst, src)
+Base.copyto!(dst::AbstractArray, src::AbstractTensor) =
+    copyto_helper!(dst, src)
 
 function copyto_swizzled!(dst, src, perm)
     if issorted(perm)
@@ -107,11 +110,14 @@ end
 
 Copy only the non-fill values from `src` into `dst`.
 """
-dropfills!(dst::AbstractTensor, src::AbstractTensor) = dropfills_helper!(dst, src)
+dropfills!(dst::AbstractTensor, src::AbstractTensor) =
+    dropfills_helper!(dst, src)
 
-dropfills!(dst::AbstractTensor, src::AbstractArray) = dropfills_helper!(dst, src)
+dropfills!(dst::AbstractTensor, src::AbstractArray) =
+    dropfills_helper!(dst, src)
 
-dropfills!(dst::AbstractArray, src::AbstractTensor) = dropfills_helper!(dst, src)
+dropfills!(dst::AbstractArray, src::AbstractTensor) =
+    dropfills_helper!(dst, src)
 
 function dropfills_swizzled!(dst, src, perm)
     if issorted(perm)

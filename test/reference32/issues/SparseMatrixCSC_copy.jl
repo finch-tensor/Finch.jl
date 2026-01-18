@@ -15,10 +15,9 @@ begin
     fill_range!(B_ptr, 0, 1, A_n + 1)
     B_ptr[1] = 1
     B_prev_pos = 0
-    for j_4 in 1:A_n
+    for j_4 = 1:A_n
         B_qos = B_qos_fill + 1
-        B_prev_pos < j_4 ||
-            throw(FinchProtocolError("SparseMatrixCSCs cannot be updated multiple times"))
+        B_prev_pos < j_4 || throw(FinchProtocolError("SparseMatrixCSCs cannot be updated multiple times"))
         A_q = A_ptr[j_4]
         A_q_stop = A_ptr[j_4 + 1]
         if A_q < A_q_stop
@@ -68,11 +67,11 @@ begin
         B_qos_fill = B_qos - 1
     end
     resize!(B_ptr, A_n + 1)
-    for p in 1:A_n
+    for p = 1:A_n
         B_ptr[p + 1] += B_ptr[p]
     end
     qos_stop = B_ptr[A_n + 1] - 1
     resize!(B_idx, qos_stop)
     resize!(B_val, qos_stop)
-    (B=(SparseMatrixCSC)(A_m, A_n, B_ptr, B_idx, B_val),)
+    (B = (SparseMatrixCSC)(A_m, A_n, B_ptr, B_idx, B_val),)
 end

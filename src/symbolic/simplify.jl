@@ -124,7 +124,7 @@ function get_simplify_rules(alg, shash)
         end),
         (@rule block(~a1..., sieve(~c, ~b1), sieve(~c, ~b2), ~a2...) =>
             block(a1..., sieve(~c, block(b1, b2)), a2...)
-        ),
+    ),
         (@rule call(~f, call(~g, ~a, ~b...)) =>
             if isinverse(alg, f, g) && isassociative(alg, g)
                 call(g, call(f, a), map(c -> call(f, call(g, c)), b)...)

@@ -133,12 +133,14 @@ end
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseListLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseListLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl} = level_eltype(
-    Lvl
-)
-@inline level_fill_value(::Type{<:SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl} = level_fill_value(
-    Lvl
-)
+@inline level_eltype(::Type{<:SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl} =
+    level_eltype(
+        Lvl
+    )
+@inline level_fill_value(::Type{<:SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl} =
+    level_fill_value(
+        Lvl
+    )
 function data_rep_level(::Type{<:SparseListLevel{Ti,Ptr,Idx,Lvl}}) where {Ti,Ptr,Idx,Lvl}
     SparseData(data_rep_level(Lvl))
 end

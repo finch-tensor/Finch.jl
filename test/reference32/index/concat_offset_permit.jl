@@ -21,12 +21,10 @@ begin
     Finch.resize_if_smaller!(C_lvl_ptr, 1 + 1)
     Finch.fill_range!(C_lvl_ptr, 0, 1 + 1, 1 + 1)
     C_lvl_qos = 0 + 1
-    0 < 1 || throw(
-        (Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times")
-    )
+    0 < 1 || throw((Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
     phase_stop = min(C_lvl_stop, 0)
     if phase_stop >= 1
-        for i_6 in 1:phase_stop
+        for i_6 = 1:phase_stop
             if C_lvl_qos > C_lvl_qos_stop
                 C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
                 Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
@@ -89,7 +87,7 @@ begin
     phase_start_6 = max(1, 1 + A_lvl_stop)
     phase_stop_7 = min(C_lvl_stop, 10)
     if phase_stop_7 >= phase_start_6
-        for i_14 in phase_start_6:phase_stop_7
+        for i_14 = phase_start_6:phase_stop_7
             if C_lvl_qos > C_lvl_qos_stop
                 C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
                 Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
@@ -215,9 +213,7 @@ begin
         phase_stop_17 = min(A_lvl_i1, phase_stop_13)
         if phase_stop_17 >= phase_start_16
             if A_lvl_idx[A_lvl_q] < phase_start_16
-                A_lvl_q = Finch.scansearch(
-                    A_lvl_idx, phase_start_16, A_lvl_q, A_lvl_q_stop - 1
-                )
+                A_lvl_q = Finch.scansearch(A_lvl_idx, phase_start_16, A_lvl_q, A_lvl_q_stop - 1)
             end
             while true
                 A_lvl_i = A_lvl_idx[A_lvl_q]
@@ -266,9 +262,7 @@ begin
         phase_stop_22 = min(10 + B_lvl_i1, phase_stop_21)
         if phase_stop_22 >= phase_start_19
             if B_lvl_idx[B_lvl_q] < -10 + phase_start_19
-                B_lvl_q = Finch.scansearch(
-                    B_lvl_idx, -10 + phase_start_19, B_lvl_q, B_lvl_q_stop - 1
-                )
+                B_lvl_q = Finch.scansearch(B_lvl_idx, -10 + phase_start_19, B_lvl_q, B_lvl_q_stop - 1)
             end
             while true
                 B_lvl_i = B_lvl_idx[B_lvl_q]
@@ -308,7 +302,7 @@ begin
     phase_start_24 = max(1, 11 + B_lvl_stop)
     phase_stop_26 = min(C_lvl_stop, 0)
     if phase_stop_26 >= phase_start_24
-        for i_39 in phase_start_24:phase_stop_26
+        for i_39 = phase_start_24:phase_stop_26
             if C_lvl_qos > C_lvl_qos_stop
                 C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
                 Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
@@ -333,9 +327,7 @@ begin
         phase_stop_28 = min(A_lvl_i1, phase_stop_27)
         if phase_stop_28 >= phase_start_25
             if A_lvl_idx[A_lvl_q] < phase_start_25
-                A_lvl_q = Finch.scansearch(
-                    A_lvl_idx, phase_start_25, A_lvl_q, A_lvl_q_stop - 1
-                )
+                A_lvl_q = Finch.scansearch(A_lvl_idx, phase_start_25, A_lvl_q, A_lvl_q_stop - 1)
             end
             while true
                 A_lvl_i = A_lvl_idx[A_lvl_q]
@@ -373,7 +365,7 @@ begin
     end
     phase_start_29 = max(1, 1 + A_lvl_stop, 11 + B_lvl_stop)
     if C_lvl_stop >= phase_start_29
-        for i_47 in phase_start_29:C_lvl_stop
+        for i_47 = phase_start_29:C_lvl_stop
             if C_lvl_qos > C_lvl_qos_stop
                 C_lvl_qos_stop = max(C_lvl_qos_stop << 1, 1)
                 Finch.resize_if_smaller!(C_lvl_idx, C_lvl_qos_stop)
@@ -387,20 +379,11 @@ begin
     end
     C_lvl_ptr[1 + 1] += (C_lvl_qos - 0) - 1
     resize!(C_lvl_ptr, 1 + 1)
-    for p in 1:1
+    for p = 1:1
         C_lvl_ptr[p + 1] += C_lvl_ptr[p]
     end
     qos_stop = C_lvl_ptr[1 + 1] - 1
     resize!(C_lvl_idx, qos_stop)
     resize!(C_lvl_2_val, qos_stop)
-    (
-        C=Tensor(
-            (SparseListLevel){Int64}(
-                ElementLevel{0.0,Float64,Int32}(C_lvl_2_val),
-                C_lvl_stop,
-                C_lvl_ptr,
-                C_lvl_idx,
-            ),
-        ),
-    )
+    (C = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int32}(C_lvl_2_val), C_lvl_stop, C_lvl_ptr, C_lvl_idx)),)
 end

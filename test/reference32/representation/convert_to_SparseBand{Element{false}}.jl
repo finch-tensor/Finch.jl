@@ -37,11 +37,7 @@ quote
                 ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
                 if tmp_lvl_i_prev > 0
                     if ref_lvl_i < tmp_lvl_i_prev
-                        throw(
-                            FinchProtocolError(
-                                "SparseBandLevels cannot be updated out of order"
-                            ),
-                        )
+                        throw(FinchProtocolError("SparseBandLevels cannot be updated out of order"))
                     end
                     tmp_lvl_qos = (ref_lvl_i - tmp_lvl_i_prev) + 0 + 1
                 end
@@ -65,11 +61,7 @@ quote
                     ref_lvl_2_val = ref_lvl_val[ref_lvl_q]
                     if tmp_lvl_i_prev > 0
                         if phase_stop_3 < tmp_lvl_i_prev
-                            throw(
-                                FinchProtocolError(
-                                    "SparseBandLevels cannot be updated out of order"
-                                ),
-                            )
+                            throw(FinchProtocolError("SparseBandLevels cannot be updated out of order"))
                         end
                         tmp_lvl_qos = (phase_stop_3 - tmp_lvl_i_prev) + 0 + 1
                     end
@@ -79,9 +71,7 @@ quote
                             tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
                         end
                         Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                        Finch.fill_range!(
-                            tmp_lvl_val, false, tmp_lvl_qos_2, tmp_lvl_qos_stop
-                        )
+                        Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_qos_2, tmp_lvl_qos_stop)
                     end
                     tmp_lvl_val[tmp_lvl_qos] = ref_lvl_2_val
                     if tmp_lvl_i_prev <= 0
@@ -100,14 +90,10 @@ quote
     end
     resize!(tmp_lvl_idx, 1)
     resize!(tmp_lvl_ofs, 1 + 1)
-    for p in 2:(1 + 1)
+    for p = 2:1 + 1
         tmp_lvl_ofs[p] += tmp_lvl_ofs[p - 1]
     end
     qos_stop = tmp_lvl_ofs[1 + 1] - 1
     resize!(tmp_lvl_val, qos_stop)
-    (
-        tmp=Tensor(
-            (SparseBandLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx, tmp_lvl_ofs)
-        ),
-    )
+    (tmp = Tensor((SparseBandLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_idx, tmp_lvl_ofs)),)
 end

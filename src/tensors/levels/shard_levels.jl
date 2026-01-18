@@ -296,19 +296,19 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
 end
 
 @inline level_ndims(
-::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_ndims(Lvl)
 @inline level_size(
-lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_size(lvl.lvl)
 @inline level_axes(
-lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_axes(lvl.lvl)
 @inline level_eltype(
-::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
+    ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardLevel})(idxs...)
@@ -563,7 +563,7 @@ end
 Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
 
 function virtual_level_resize!(ctx, lvl::VirtualShardLevel, dims...)
-    (lvl.lvl=virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
 virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)

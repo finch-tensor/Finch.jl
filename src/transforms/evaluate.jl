@@ -25,7 +25,7 @@ function evaluate_partial(ctx, root)
                         get_binding!(ctx, var, bind)
                         var
                     end
-                    ),
+                ),
                 ]),
             ),
         ),

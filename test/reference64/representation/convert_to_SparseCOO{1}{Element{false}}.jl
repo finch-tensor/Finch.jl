@@ -37,9 +37,7 @@ quote
                     Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_q, tmp_lvl_qos_stop)
                 end
                 tmp_lvl_val[tmp_lvl_q] = ref_lvl_2_val
-                tmp_lvl_prev_coord_2 < (ref_lvl_i,) || throw(
-                    FinchProtocolError("SparseCOOLevels cannot be updated multiple times")
-                )
+                tmp_lvl_prev_coord_2 < (ref_lvl_i,) || throw(FinchProtocolError("SparseCOOLevels cannot be updated multiple times"))
                 tmp_lvl_prev_coord_2 = (ref_lvl_i,)
                 tmp_lvl_tbl1[tmp_lvl_q] = ref_lvl_i
                 tmp_lvl_q += 1
@@ -55,11 +53,7 @@ quote
                         Finch.fill_range!(tmp_lvl_val, false, tmp_lvl_q, tmp_lvl_qos_stop)
                     end
                     tmp_lvl_val[tmp_lvl_q] = ref_lvl_2_val
-                    tmp_lvl_prev_coord_2 < (phase_stop_3,) || throw(
-                        FinchProtocolError(
-                            "SparseCOOLevels cannot be updated multiple times"
-                        ),
-                    )
+                    tmp_lvl_prev_coord_2 < (phase_stop_3,) || throw(FinchProtocolError("SparseCOOLevels cannot be updated multiple times"))
                     tmp_lvl_prev_coord_2 = (phase_stop_3,)
                     tmp_lvl_tbl1[tmp_lvl_q] = phase_stop_3
                     tmp_lvl_q += 1
@@ -71,17 +65,11 @@ quote
     end
     tmp_lvl_ptr[1 + 1] = (tmp_lvl_q - 0) - 1
     resize!(tmp_lvl_ptr, 1 + 1)
-    for p in 2:(1 + 1)
+    for p = 2:1 + 1
         tmp_lvl_ptr[p] += tmp_lvl_ptr[p - 1]
     end
     qos_stop = tmp_lvl_ptr[1 + 1] - 1
     resize!(tmp_lvl_tbl1, qos_stop)
     resize!(tmp_lvl_val, qos_stop)
-    (
-        tmp=Tensor(
-            (SparseCOOLevel){1,Tuple{Int64}}(
-                tmp_lvl_2, (ref_lvl.shape,), tmp_lvl_ptr, (tmp_lvl_tbl1,)
-            ),
-        ),
-    )
+    (tmp = Tensor((SparseCOOLevel){1, Tuple{Int64}}(tmp_lvl_2, (ref_lvl.shape,), tmp_lvl_ptr, (tmp_lvl_tbl1,))),)
 end

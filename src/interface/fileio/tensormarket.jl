@@ -7,13 +7,11 @@ Write a sparse Finch tensor to a TensorMarket file.
 
 See also: [ttwrite](http://willowahrens.io/TensorMarket.jl/stable/#TensorMarket.ttwrite)
 """
-function fttwrite(args...)
-    throw(
-        FinchExtensionError(
-            "TensorMarket.jl must be loaded to use write .ttx files (hint: `using TensorMarket`)"
-        ),
-    )
-end
+fttwrite(args...) = throw(
+    FinchExtensionError(
+        "TensorMarket.jl must be loaded to use write .ttx files (hint: `using TensorMarket`)"
+    ),
+)
 
 """
     fttread(filename, infoonly=false, retcoord=false)
@@ -25,13 +23,11 @@ COO depending on the format of the file.
 
 See also: [ttread](http://willowahrens.io/TensorMarket.jl/stable/#TensorMarket.ttread)
 """
-function fttread(args...)
-    throw(
-        FinchExtensionError(
-            "TensorMarket.jl must be loaded to use read .ttx files (hint: `using TensorMarket`)"
-        ),
-    )
-end
+fttread(args...) = throw(
+    FinchExtensionError(
+        "TensorMarket.jl must be loaded to use read .ttx files (hint: `using TensorMarket`)"
+    ),
+)
 
 """
     ftnswrite(filename, tns)
@@ -46,13 +42,11 @@ Write a sparse Finch tensor to a FROSTT `.tns` file.
 
 See also: [tnswrite](http://willowahrens.io/TensorMarket.jl/stable/#TensorMarket.tnswrite)
 """
-function ftnswrite(args...)
-    throw(
-        FinchExtensionError(
-            "TensorMarket.jl must be loaded to write .tns files (hint: `using TensorMarket`)"
-        ),
-    )
-end
+ftnswrite(args...) = throw(
+    FinchExtensionError(
+        "TensorMarket.jl must be loaded to write .tns files (hint: `using TensorMarket`)"
+    ),
+)
 
 """
     ftnsread(filename)
@@ -67,10 +61,8 @@ Read the contents of the FROSTT `.tns` file 'filename' into a Finch COO Tensor.
 
 See also: [tnsread](http://willowahrens.io/TensorMarket.jl/stable/#TensorMarket.tnsread)
 """
-function ftnsread(args...)
-    throw(
-        FinchExtensionError(
-            "TensorMarket.jl must be loaded to read .tns files (hint: `using TensorMarket`)"
-        ),
-    )
-end
+ftnsread(args...) = throw(
+    FinchExtensionError(
+        "TensorMarket.jl must be loaded to read .tns files (hint: `using TensorMarket`)"
+    ),
+)

@@ -53,5 +53,5 @@ begin
     B_qos_fill = B_qos - 1
     resize!(B_idx, B_qos_fill)
     resize!(B_val, B_qos_fill)
-    (B=(SparseVector)(((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.n, B_idx, B_val),)
+    (B = (SparseVector)(((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.n, B_idx, B_val),)
 end

@@ -338,14 +338,14 @@ function propagate_into_reformats(root)
         Postwalk(
             Chain([
                 (@rule plan(
-                ~a1..., query(~b, ~c), ~a2..., query(~d, reformat(~tns, ~b)), ~a3...
-            ) => begin
-                if !(b in PostOrderDFS(plan(a2..., a3...))) && (
-                    c.kind === mapjoin || c.kind === aggregate || c.kind === reorder
-                )
-                    plan(a1..., query(d, reformat(tns, c)), a2..., a3...)
-                end
-            end),
+                    ~a1..., query(~b, ~c), ~a2..., query(~d, reformat(~tns, ~b)), ~a3...
+                ) => begin
+                    if !(b in PostOrderDFS(plan(a2..., a3...))) && (
+                        c.kind === mapjoin || c.kind === aggregate || c.kind === reorder
+                    )
+                        plan(a1..., query(d, reformat(tns, c)), a2..., a3...)
+                    end
+                end),
             ]),
         ),
     )(
@@ -434,15 +434,15 @@ function concordize(root)
         Postwalk(
             Chain([
                 (@rule query(~a, ~b) => begin
-                if haskey(needed_swizzles, a)
-                    idxs = getfields(b)
-                    swizzle_queries =
-                        map(collect(needed_swizzles[a])) do (perm, c)
-                            query(c, reorder(relabel(a, idxs...), idxs[perm]...))
-                        end
-                    plan(query(a, b), swizzle_queries...)
-                end
-            end),
+                    if haskey(needed_swizzles, a)
+                        idxs = getfields(b)
+                        swizzle_queries =
+                            map(collect(needed_swizzles[a])) do (perm, c)
+                                query(c, reorder(relabel(a, idxs...), idxs[perm]...))
+                            end
+                        plan(query(a, b), swizzle_queries...)
+                    end
+                end),
             ]),
         ),
     )(
@@ -644,7 +644,7 @@ function propagate_map_queries_backward(root)
                             reorder(arg, vcat(idxs_2, idxs)...),
                             idxs...,
                         )
-                    ),
+                ),
                 ]),
             ),
         ),

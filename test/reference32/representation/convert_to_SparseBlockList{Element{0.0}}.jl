@@ -18,8 +18,7 @@ quote
     tmp_lvl_ros = 0
     tmp_lvl_qos = 0 + 1
     tmp_lvl_i_prev = -1
-    0 < 1 ||
-        throw(FinchProtocolError("SparseBlockListLevels cannot be updated multiple times"))
+    0 < 1 || throw(FinchProtocolError("SparseBlockListLevels cannot be updated multiple times"))
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -83,7 +82,7 @@ quote
     end
     tmp_lvl_ptr[1 + 1] = tmp_lvl_ros - 0
     resize!(tmp_lvl_ptr, 1 + 1)
-    for p in 2:(1 + 1)
+    for p = 2:1 + 1
         tmp_lvl_ptr[p] += tmp_lvl_ptr[p - 1]
     end
     ros_stop = tmp_lvl_ptr[1 + 1] - 1
@@ -91,11 +90,5 @@ quote
     resize!(tmp_lvl_ofs, ros_stop + 1)
     qos_stop = tmp_lvl_ofs[ros_stop + 1] - 1
     resize!(tmp_lvl_val, qos_stop)
-    (
-        tmp=Tensor(
-            (SparseBlockListLevel){Int32}(
-                tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx, tmp_lvl_ofs
-            ),
-        ),
-    )
+    (tmp = Tensor((SparseBlockListLevel){Int32}(tmp_lvl_2, ref_lvl.shape, tmp_lvl_ptr, tmp_lvl_idx, tmp_lvl_ofs)),)
 end

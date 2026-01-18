@@ -13,9 +13,7 @@ begin
     y_lvl_stop = y_lvl.shape
     y_lvl_2 = y_lvl.lvl
     y_lvl_2_val = y_lvl_2.val
-    y_lvl_stop == x_lvl_stop || throw(
-        DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))")
-    )
+    y_lvl_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(x_lvl_stop))"))
     y_lvl_q = y_lvl_ptr[1]
     y_lvl_q_stop = y_lvl_ptr[1 + 1]
     if y_lvl_q < y_lvl_q_stop

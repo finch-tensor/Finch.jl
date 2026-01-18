@@ -1039,9 +1039,7 @@ end
                     @repl io F = Tensor(CSCFormat(), [1.0 1.0; 1.0 1.0])
                     @repl io E \ F
 
-                    @test check_output(
-                        "interface/sparsearrays_matdiv.txt", String(take!(io))
-                    )
+                    @test check_output("interface/sparsearrays_matdiv.txt", String(take!(io)))
                 end
             end
         end

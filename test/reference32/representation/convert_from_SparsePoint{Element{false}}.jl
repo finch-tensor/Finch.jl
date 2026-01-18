@@ -30,15 +30,11 @@ quote
     end
     res_lvl_ptr[1 + 1] += (res_lvl_qos - 0) - 1
     resize!(res_lvl_ptr, 1 + 1)
-    for p in 1:1
+    for p = 1:1
         res_lvl_ptr[p + 1] += res_lvl_ptr[p]
     end
     qos_stop = res_lvl_ptr[1 + 1] - 1
     resize!(res_lvl_idx, qos_stop)
     resize!(res_lvl_val, qos_stop)
-    (
-        res=Tensor(
-            (SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape, res_lvl_ptr, res_lvl_idx)
-        ),
-    )
+    (res = Tensor((SparseListLevel){Int32}(res_lvl_2, tmp_lvl.shape, res_lvl_ptr, res_lvl_idx)),)
 end
