@@ -120,20 +120,21 @@ end
 function labelled_children(fbr::SubFiber{<:CoalesceLevel})
     lvl = fbr.lvl
     pos = fbr.pos
-    n_threads = get_num_tasks(lvl.device)
-    children = []
+    # n_threads = get_num_tasks(lvl.device)
+    # children = []
 
-    for tid in 1:n_threads
-        lvl_2 = transfer(
-            MemoryChannel(
-                tid,
-                MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
-                SerialTask(),
-            ),
-            lvl.lvl,
-        )
-        push!(children, LabelledTree(SubFiber(lvl_2, pos)))
-    end
+    # for tid in 1:n_threads
+    #     lvl_2 = transfer(
+    #         MemoryChannel(
+    #             tid,
+    #             MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)),
+    #             SerialTask(),
+    #         ),
+    #         lvl.lvl,
+    #     )
+    #     push!(children, LabelledTree(SubFiber(lvl_2, pos)))
+    # end
+    labelled_children(SubFiber(lvl.coalescent, pos))
 end
 
 @inline level_ndims(
@@ -173,7 +174,6 @@ end
 
 function coalesce_nnz(lvl::CoalesceLevel, pos)
     n_tasks = get_num_tasks(lvl.device)
-    println(pos)
     sum(1:n_tasks) do tid
         total = 0
         lvl_2 = transfer(
@@ -466,16 +466,21 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
                 push_preamble!(ctx_3,
                     contain(ctx_3) do ctx_4
-                        thaw_level!(ctx_4, lvl_3, pos_start)
+                        declare_level!(ctx_4, lvl_3, pos_start, literal(0))
                         assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
                     end,
                 )
                 freeze_level!(ctx_3, lvl_3, pos_stop)
             end
+            
+            push_preamble!(ctx_2,
+                contain(ctx_2) do ctx_3
+                    declare_level!(ctx_3, lvl.coalescent, pos_start, literal(0))
+                    assemble_level!(ctx_3, lvl.coalescent, pos_start, pos_stop)
+                end)
+            freeze_level!(ctx_2, lvl.coalescent, pos_stop)
         end)
     
-    assemble_level!(ctx, lvl.coalescent, pos_start, pos_stop)
-
     lvl
 end
 
