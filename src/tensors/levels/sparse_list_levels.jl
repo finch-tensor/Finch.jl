@@ -602,6 +602,7 @@ function coalesce_level!(lvl::SparseListLevel, global_fbr_map, local_fbr_map, ta
     #lvl.idx and lvl.ptr should be MultiChannelBuffers
     idx = lvl.idx.data
     ptr = lvl.ptr.data
+    max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
     #Don't merge zero-ed arrays.
@@ -610,7 +611,7 @@ function coalesce_level!(lvl::SparseListLevel, global_fbr_map, local_fbr_map, ta
     end
 
     pos_map, idx_map, lfm, tm = gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P)
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(pos_map, idx_map, tm, lfm, P)
+    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(pos_map, idx_map, tm, lfm, P, max_level_dim)
     
     SparseListLevel(coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl),
          lvl.shape, ptr_2, idx_2)

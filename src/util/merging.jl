@@ -174,7 +174,7 @@ Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map,
 
                 tag += 1
                 global_fbr = global_fbr_map[sorter[tag]]
-            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] && local_fbr + 1 < length(ptr[proc_id])
+            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] && local_fbr + 1 < length(ptr[proc_id]) && ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
                 local_fbr += 1
 
                 tag += 1
@@ -190,7 +190,7 @@ Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map,
     return merged_positions, merged_indices, local_fbr_map2, task_map2
 end
 
-Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indices, task_map, local_fbr_map, P)
+Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim)
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(collect(1:length(merged_positions)); order=ordering)
 
@@ -238,7 +238,7 @@ Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indi
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
 
-    lvl_ptr = zeros(Int, merged_positions_s[length(merged_positions_s)] + 1)
+    lvl_ptr = zeros(Int, max_level_dim + 1)
     lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
 
     Threads.@threads for tid in 1:P
@@ -272,11 +272,13 @@ Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indi
             end
             global_fbr_map2[offset] = seen_idx - 1
         end
+    end
 
-        if tid == P
-            lvl_ptr[length(lvl_ptr)] = length(lvl_idx) + 1
-            lvl_ptr[1] = 1
-        end
+    lvl_ptr[1] = 1
+    i = length(lvl_ptr)
+    while lvl_ptr[i] == 0
+        lvl_ptr[i] = length(lvl_idx) + 1
+        i -= 1
     end
 
     return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx
