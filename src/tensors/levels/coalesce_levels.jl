@@ -203,7 +203,7 @@ mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     Coalescent
     Schedule
     qos_stop
-    init
+    coal_ref
 end
 
 postype(lvl::VirtualCoalesceLevel) = postype(lvl.lvl)
@@ -225,7 +225,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
         $CoalesceLevel(
             $(ctx(lvl.device)),
             $(ctx(lvl.lvl)),
-            $(ctx(lvl.coalescent)),
+            $(ctx(lvl.coal_ref)),
             $(lvl.tag).schedule,
         )
     end
@@ -236,12 +236,14 @@ function virtualize(
 ) where {Device,Lvl,Coalescent,Schedule}
     tag = freshen(ctx, tag)
     schedule = freshen(ctx, tag, :_schedule)
+    coal_ref = freshen(ctx, tag, :_coalref)
 
     push_preamble!(
         ctx,
         quote
             $tag = $ex
             $schedule = $tag.schedule
+            $coal_ref = $tag.coalescent
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
@@ -249,7 +251,6 @@ function virtualize(
     coalescent_2 = virtualize(ctx, :($tag.coalescent), Coalescent, tag)
     schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
     qos_stop = freshen(ctx, tag, :_qos_stop)
-    init = freshen(ctx, tag, :_init)
     VirtualCoalesceLevel(
         tag,
         device_2,
@@ -262,7 +263,7 @@ function virtualize(
         Coalescent,
         Schedule,
         qos_stop,
-        init
+        coal_ref
     )
 end
 
@@ -279,7 +280,7 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        init
+        lvl.coal_ref
     )
 end
 
@@ -296,7 +297,7 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        init
+        lvl.coal_ref
     )
 end
 
@@ -313,7 +314,7 @@ function distribute_level(ctx, lvl::VirtualCoalesceLevel, arch, diff, style::Uni
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        init
+        lvl.coal_ref
     )
 end
 
@@ -346,7 +347,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            init
+            lvl.coal_ref
         )
     else
         diff[lvl.tag] = VirtualCoalesceLevel(
@@ -361,7 +362,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            init
+            lvl.coal_ref
         )
     end
 end
@@ -382,7 +383,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            init
+            lvl.coal_ref
         ),
     )
 end
@@ -442,7 +443,6 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
     sym = freshen(ctx, :pointer_to_lvl)
-
     push_preamble!(ctx,
         contain(ctx) do ctx_2
             diff = Dict()
@@ -451,7 +451,7 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
             ext = VirtualExtent(pos_start, pos_stop)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
 
-            virtual_parallel_region(
+            push_preamble!(ctx_2, virtual_parallel_region(
                 ctx_2, parallel_dim, lvl.device, lvl.schedule
             ) do f, ctx_3, i_lo, i_hi
                 task = get_task(ctx_3)
@@ -466,12 +466,12 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
                 push_preamble!(ctx_3,
                     contain(ctx_3) do ctx_4
-                        declare_level!(ctx_4, lvl_3, pos_start, literal(0))
+                        lvl_3 = declare_level!(ctx_4, lvl_3, pos_start, literal(0))
                         assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
                     end,
                 )
-                freeze_level!(ctx_3, lvl_3, pos_stop)
-            end
+                lvl_3 = freeze_level!(ctx_3, lvl_3, pos_stop)
+            end)
             
             push_preamble!(ctx_2,
                 contain(ctx_2) do ctx_3
@@ -480,7 +480,6 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                 end)
             freeze_level!(ctx_2, lvl.coalescent, pos_stop)
         end)
-    
     lvl
 end
 
@@ -496,11 +495,12 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     P = ctx(get_num_tasks(lvl.device))
     lvl_e = ctx(lvl)
     lvl_ce = ctx(lvl.coalescent)
+    factor = ctx(pos)
 
     task_map = freshen(ctx, :tm)
     global_fbr_map = freshen(ctx, :gfm)
     local_fbr_map = freshen(ctx, :lfm)
-    factor = freshen(ctx, :fac)
+    # factor = freshen(ctx, :fac)
 
     push_preamble!(
         ctx,
@@ -508,9 +508,8 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             $task_map = collect(1:($P))
             $global_fbr_map = ones(Int, $P)
             $local_fbr_map = ones(Int, $P)
-            $factor = 1
-
-            coalesce_level!(
+            
+            $(lvl.coal_ref) = coalesce_level!(
                 $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce)
             )
         end,
@@ -548,7 +547,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, pos)
                     get_task_num(task), multi_channel_dev, task
                 )
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                lvl_4 = declare_level!(ctx_3, lvl_3, pos, literal(0))
                 freeze_level!(ctx_3, lvl_4, pos)
             end
         end,

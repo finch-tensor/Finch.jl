@@ -12,8 +12,6 @@ end
 Base.@propagate_inbounds function binary_search(target::Int, arr)
     lo = 1
     hi = length(arr)
-    println(arr)
-    println(target)
     @assert target > 0
     @assert target < arr[hi]
 

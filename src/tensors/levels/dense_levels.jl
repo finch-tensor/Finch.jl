@@ -269,5 +269,6 @@ function coalesce_level!(lvl::DenseLevel, global_fbr_map, local_fbr_map, task_ma
     shape = lvl.shape
     global_fbr_map, local_fbr_map, task_map, factor = merge_dense(global_fbr_map, local_fbr_map, task_map, factor, shape, P)
 
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl)
+    DenseLevel(coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, 
+        factor, P, coalescent.lvl), lvl.shape) 
 end

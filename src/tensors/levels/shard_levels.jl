@@ -118,6 +118,10 @@ function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
     end
 end
 
+function transfer(dev::CPUThread, arr::MultiChannelBuffer)
+    return arr.data[dev.tid]
+end
+
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
     if task.device == arr.device
         temp = arr.data[task.t]
