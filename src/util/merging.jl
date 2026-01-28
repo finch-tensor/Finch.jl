@@ -51,7 +51,7 @@ Base.@propagate_inbounds function compute_proc_cutoffs(index, P)
     cutoffs = Vector{Int}(undef, length(index) + 1)
     cutoffs[1] = 1
     Threads.@threads for i in 2:length(cutoffs)
-        cutoffs[i] = length(index[i-1])
+        cutoffs[i] = length(index[i - 1])
     end
     s_prefix_sum(cutoffs)
 end
@@ -59,7 +59,7 @@ end
 Base.@propagate_inbounds function get_permute_idx(proc_id, ptr)
     start = 0
 
-    for i in 1:proc_id - 1
+    for i in 1:(proc_id - 1)
         start += length(ptr[i]) - 1
     end
 
@@ -80,11 +80,15 @@ end
 
 #### Dense Merging Functions
 
-Base.@propagate_inbounds function merge_dense(global_fbr_map, local_fbr_map, task_map, factor, shape, P)
+Base.@propagate_inbounds function merge_dense(
+    global_fbr_map, local_fbr_map, task_map, factor, shape, P
+)
     return global_fbr_map, local_fbr_map, task_map, factor * shape
 end
 
-Base.@propagate_inbounds function unroll_dense_coalesce(global_fbr_map, local_fbr_map, task_map, factor, P)
+Base.@propagate_inbounds function unroll_dense_coalesce(
+    global_fbr_map, local_fbr_map, task_map, factor, P
+)
     unrolled_size = factor * length(global_fbr_map)
 
     global_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
@@ -95,7 +99,7 @@ Base.@propagate_inbounds function unroll_dense_coalesce(global_fbr_map, local_fb
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
-        for i in 0:chk_size - 1
+        for i in 0:(chk_size - 1)
             offset = init + i
 
             if offset > length(global_fbr_map)
@@ -124,7 +128,9 @@ end
 
 #### SparseList Merging Functions
 
-Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P)
+Base.@propagate_inbounds function gen_pos_idx_map(
+    global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P
+)
     ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
     sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
 
@@ -150,14 +156,14 @@ Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map,
 
         global_fbr = global_fbr_map[sorter[tag]]
         local_fbr_id_child = init - cutoffs[proc_id] + 1
-        
+
         j = 0
-        for i in 0:chk_size - 1
+        for i in 0:(chk_size - 1)
             offset = init + i
             if offset > nnz
                 break
             end
-            
+
             nz_id = j + idx_id
             idx = index[proc_id][nz_id]
             merged_positions[offset] = global_fbr
@@ -174,7 +180,9 @@ Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map,
 
                 tag += 1
                 global_fbr = global_fbr_map[sorter[tag]]
-            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] && local_fbr + 1 < length(ptr[proc_id]) && ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
+            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
+                local_fbr + 1 < length(ptr[proc_id]) &&
+                ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
                 local_fbr += 1
 
                 tag += 1
@@ -190,9 +198,13 @@ Base.@propagate_inbounds function gen_pos_idx_map(global_fbr_map, local_fbr_map,
     return merged_positions, merged_indices, local_fbr_map2, task_map2
 end
 
-Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim)
+Base.@propagate_inbounds function process_next_lvl(
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim
+)
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
-    shuffler = AcceleratedKernels.sortperm(collect(1:length(merged_positions)); order=ordering)
+    shuffler = AcceleratedKernels.sortperm(
+        collect(1:length(merged_positions)); order=ordering
+    )
 
     nnz = length(local_fbr_map)
     global_fbr_map2 = Vector{Int}(undef, nnz)
@@ -210,11 +222,12 @@ Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indi
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         seen = 0
-        prev = init > 1 ? (merged_positions_s[init-1], merged_indices_s[init-1]) : (-1, -1)
-        prev_ptr = init > 1 ? merged_positions_s[init-1] : 1
+        prev =
+            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
+        prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
         seen_ptr = 0
 
-        for i in 0:chk_size-1
+        for i in 0:(chk_size - 1)
             offset = init + i
             if offset > nnz
                 break
@@ -232,8 +245,8 @@ Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indi
                 prev_ptr = p
             end
         end
-        uq_idx[tid+1] = seen
-        uq_ptr[tid+1] = seen_ptr
+        uq_idx[tid + 1] = seen
+        uq_ptr[tid + 1] = seen_ptr
     end
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
@@ -245,9 +258,10 @@ Base.@propagate_inbounds function process_next_lvl(merged_positions, merged_indi
         init = (tid - 1) * chk_size + 1
         seen_ptr = uq_ptr_s[tid] + 2
         seen_idx = uq_idx_s[tid] + 1
-        prev = init > 1 ? (merged_positions_s[init-1], merged_indices_s[init-1]) : (1, -1)
+        prev =
+            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (1, -1)
 
-        for i in 0:chk_size-1
+        for i in 0:(chk_size - 1)
             offset = init + i
             if offset > nnz
                 break
@@ -286,7 +300,9 @@ end
 
 #### ElementLevel Merge Functions
 
-Base.@propagate_inbounds function merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P)
+Base.@propagate_inbounds function merge_element_level(
+    global_fbr_map, local_fbr_map, task_map, val, P
+)
     chk_size = fld(length(global_fbr_map) + P - 1, P)
     val2 = zeros(global_fbr_map[length(global_fbr_map)])
 
@@ -309,7 +325,8 @@ Base.@propagate_inbounds function merge_element_level(global_fbr_map, local_fbr_
             offset_finish = tid * chk_size + 1
             last_idx = global_fbr_map[offset_finish - 1]
 
-            while offset_finish <= length(global_fbr_map) && global_fbr_map[offset_finish] == last_idx
+            while offset_finish <= length(global_fbr_map) &&
+                global_fbr_map[offset_finish] == last_idx
                 offset_finish += 1
             end
             finish = offset_finish
@@ -317,7 +334,7 @@ Base.@propagate_inbounds function merge_element_level(global_fbr_map, local_fbr_
             finish = length(global_fbr_map) + 1
         end
 
-        for i in start:finish - 1
+        for i in start:(finish - 1)
             @fastmath val2[global_fbr_map[i]] += val[task_map[i]][local_fbr_map[i]]
         end
     end
@@ -325,7 +342,9 @@ Base.@propagate_inbounds function merge_element_level(global_fbr_map, local_fbr_
     return val2
 end
 
-Base.@propagate_inbounds function merge_dense_element_level(global_fbr_map, local_fbr_map, task_map, factor, val, P)
+Base.@propagate_inbounds function merge_dense_element_level(
+    global_fbr_map, local_fbr_map, task_map, factor, val, P
+)
     val2 = zeros(global_fbr_map[length(global_fbr_map)] * factor)
     chk_size = fld(factor + P - 1, P)
     iter_range = length(global_fbr_map)
@@ -338,7 +357,7 @@ Base.@propagate_inbounds function merge_dense_element_level(global_fbr_map, loca
         for i in 1:iter_range
             val2_offset = (global_fbr_map[i] - 1) * factor + 1
             val2_local_offset = (local_fbr_map[i] - 1) * factor + 1
-            for dense_fbr in init_dense_fbr:init_dense_fbr + chk_size - 1
+            for dense_fbr in init_dense_fbr:(init_dense_fbr + chk_size - 1)
                 @fastmath val2[val2_offset + dense_fbr] += val[task_map[i]][val2_local_offset + dense_fbr]
             end
         end

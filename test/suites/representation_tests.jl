@@ -498,7 +498,9 @@ end
     end
 
     @testset "dense_2d_convert" begin
-        ref = Tensor(Dense(SparseList(Element(0))), [1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16])
+        ref = Tensor(
+            Dense(SparseList(Element(0))), [1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16]
+        )
         tmp = Tensor(Dense(Coalesce(dev_2d, SparseList(Element(0)))), 4, 4)
         res = Tensor(Dense(SparseList(Element(0))), 4, 4)
 

@@ -240,7 +240,7 @@ function set_fill_value!(lvl::ShardLevel, init)
         lvl.task,
         lvl.used,
         lvl.alloc,
-        lvl.schedule
+        lvl.schedule,
     )
 end
 

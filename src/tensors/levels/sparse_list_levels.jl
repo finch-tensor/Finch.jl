@@ -593,9 +593,13 @@ function unfurl(
     )
 end
 
-function coalesce_level!(lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
+function coalesce_level!(
+    lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+)
     if factor > 1
-        global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(global_fbr_map, local_fbr_map, task_map, factor, P)
+        global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
+            global_fbr_map, local_fbr_map, task_map, factor, P
+        )
         factor = 1
     end
 
@@ -610,10 +614,16 @@ function coalesce_level!(lvl::SparseListLevel, global_fbr_map, local_fbr_map, ta
         return coalescent
     end
 
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map(global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P)
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(pos_map, idx_map, tm, lfm, P, max_level_dim)
-    
-    SparseListLevel(coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl),
-         lvl.shape, ptr_2, idx_2)
-    
+    pos_map, idx_map, lfm, tm = gen_pos_idx_map(
+        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
+    )
+    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(
+        pos_map, idx_map, tm, lfm, P, max_level_dim
+    )
+
+    SparseListLevel(
+        coalesce_level!(
+            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+        ),
+        lvl.shape, ptr_2, idx_2)
 end
