@@ -100,7 +100,7 @@ end
 
 @staged function execute_impl(ex, algebra, mode)
     code = execute_code(:ex, ex; algebra=getvalue(algebra), mode=getvalue(mode))
-    if mode === :safe
+    if mode === :debug
         return quote
             try
                 begin
