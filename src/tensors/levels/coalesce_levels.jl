@@ -478,7 +478,9 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                     )
                     push_preamble!(ctx_3,
                         contain(ctx_3) do ctx_4
-                            lvl_3 = declare_level!(ctx_4, lvl_3, pos_start, literal(0))
+                            lvl_3 = thaw_level!(
+                                ctx_4, lvl_3, call(-, pos_start, literal(1))
+                            )
                             assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
                         end,
                     )
@@ -488,7 +490,7 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 
             push_preamble!(ctx_2,
                 contain(ctx_2) do ctx_3
-                    declare_level!(ctx_3, lvl.coalescent, pos_start, literal(0))
+                    thaw_level!(ctx_3, lvl.coalescent, call(-, pos_start, literal(1)))
                     assemble_level!(ctx_3, lvl.coalescent, pos_start, pos_stop)
                 end)
             freeze_level!(ctx_2, lvl.coalescent, pos_stop)
