@@ -437,3 +437,85 @@ end
         @test isequal(res, ref)
     end
 end
+
+@testitem "representationcoalesce" setup = [CheckOutput, RepresentationSetup] begin
+    dev_1d = cpu(:d, 4)
+    dev_2d = cpu(:t, 2)
+
+    function write_1d(ref, tmp, res)
+        @finch begin
+            tmp .= 0
+            for i in parallel(_, dev_1d)
+                tmp[i] = ref[i]
+            end
+        end
+        @finch begin
+            res .= 0
+            for i in _
+                res[i] = tmp[i]
+            end
+        end
+    end
+
+    function write_2d(ref, tmp, res)
+        @finch begin
+            tmp .= 0
+            for j in parallel(_, dev_2d)
+                for i in _
+                    tmp[i, j] = ref[i, j]
+                end
+            end
+        end
+
+        @finch begin
+            res .= 0
+            for j in _
+                for i in _
+                    res[i, j] = tmp[i, j]
+                end
+            end
+        end
+    end
+
+    @testset "dense_convert" begin
+        ref = Tensor(Dense(Element(0)), [1, 2, 3, 4])
+        tmp = Tensor(Dense(Coalesce(dev_1d, Element(0))), 4)
+        res = Tensor(Dense(Element(0)), 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_1d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
+
+    @testset "dense_2d_convert" begin
+        ref = Tensor(
+            Dense(SparseList(Element(0))), [1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16]
+        )
+        tmp = Tensor(Dense(Coalesce(dev_2d, SparseList(Element(0)))), 4, 4)
+        res = Tensor(Dense(SparseList(Element(0))), 4, 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_2d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
+end

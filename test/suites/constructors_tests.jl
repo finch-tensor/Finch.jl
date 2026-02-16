@@ -328,7 +328,7 @@
 
     @testset "ShardLevel" begin
         #Test shard ShardLevel
-        ncpu = cpu(4)
+        ncpu = cpu(:t, 4)
         A = Tensor(Dense(Shard(ncpu, Element(0.0))), 4)
         B = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
         C = Tensor(Dense(Shard(ncpu, Dense(Element(0.0)))), 4, 4)
@@ -374,5 +374,55 @@
         end
 
         @test C[4, 4] == 12
+    end
+
+    @testset "CoalesceLevel" begin
+        ncpu = cpu(:t, 2)
+        tens = Tensor(Dense(Coalesce(ncpu, SparseList(Element(0.0)))), 2, 2)
+
+        acc = Tensor(Dense(SparseList(Element(0.0))), [1 0; 2 0])
+        @finch begin
+            tens .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tens[i, j] = acc[i, j] + acc[i, j]
+                end
+            end
+        end
+
+        @test tens[1, 1] == 2
+        @test tens[1, 2] == 0
+        @test tens[2, 1] == 4
+        @test tens[2, 2] == 0
+
+        acc = Tensor(Dense(SparseList(Element(0.0))), [0 1; 0 2])
+        @finch begin
+            tens .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tens[i, j] = acc[i, j] + acc[i, j]
+                end
+            end
+        end
+
+        @test tens[1, 1] == 0
+        @test tens[1, 2] == 2
+        @test tens[2, 1] == 0
+        @test tens[2, 2] == 4
+
+        acc = Tensor(Dense(SparseList(Element(0.0))), [1 2; 3 4])
+        @finch begin
+            tens .= 0
+            for j in parallel(_, ncpu)
+                for i in _
+                    tens[i, j] = acc[i, j] + acc[i, j]
+                end
+            end
+        end
+
+        @test tens[1, 1] == 2
+        @test tens[1, 2] == 4
+        @test tens[2, 1] == 6
+        @test tens[2, 2] == 8
     end
 end
