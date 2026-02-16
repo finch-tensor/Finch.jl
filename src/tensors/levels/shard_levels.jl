@@ -118,6 +118,10 @@ function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
     end
 end
 
+function transfer(dev::CPUThread, arr::MultiChannelBuffer)
+    return arr.data[dev.tid]
+end
+
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
     if task.device == arr.device
         temp = arr.data[task.t]
@@ -193,14 +197,14 @@ function ShardLevel{Device}(
 end
 
 function Base.summary(
-    ::Shard{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    ::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     "Shard($(Lvl))"
 end
 
 function similar_level(
-    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc}, fill_value, eltype::Type, dims...
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    lvl::Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}, fill_value, eltype::Type, dims...
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     lvl_2 = similar(lvl.lvl, fill_value, eltype, dims...)
     ShardLevel(
         lvl.device,
@@ -209,8 +213,8 @@ function similar_level(
 end
 
 function postype(
-    ::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    ::Type{<:Shard{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     postype(Lvl)
 end
 
@@ -221,7 +225,7 @@ function transfer(device, lvl::ShardLevel)
     task_2 = transfer(device, lvl.task)
     qos_fill_2 = transfer(device, lvl.used)
     qos_stop_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2)
+    return ShardLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule)
 end
 
 function pattern!(lvl::ShardLevel)
@@ -230,11 +234,13 @@ end
 
 function set_fill_value!(lvl::ShardLevel, init)
     ShardLevel(
+        lvl.device,
         set_fill_value!(lvl.lvl, init),
         lvl.ptr,
         lvl.task,
         lvl.used,
         lvl.alloc,
+        lvl.schedule,
     )
 end
 
@@ -251,8 +257,8 @@ function Base.resize!(lvl::ShardLevel, dims...)
 end
 
 function Base.show(
-    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc}
+    io::IO, lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
     print(io, "Shard(")
     if get(io, :compact, false)
         print(io, "…")
@@ -296,20 +302,20 @@ function labelled_children(fbr::SubFiber{<:ShardLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_ndims(Lvl)
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_ndims(Lvl)
 @inline level_size(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_size(lvl.lvl)
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_axes(lvl.lvl)
+    lvl::ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_axes(lvl.lvl)
 @inline level_eltype(
     ::Type{ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
 ) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc}}
-) where {Device,Lvl,Ptr,Task,Used,Alloc} = level_fill_value(Lvl)
+    ::Type{<:ShardLevel{Device,Lvl,Ptr,Task,Used,Alloc,Schedule}}
+) where {Device,Lvl,Ptr,Task,Used,Alloc,Schedule} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:ShardLevel})(idxs...)
     lvl = fbr.lvl
