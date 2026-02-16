@@ -119,8 +119,11 @@ function get_prove_rules(alg, shash)
                     a3...,
                     a5...,
                 )
-            end), (@rule call(min, ~a1..., call(max), ~a2...) => call(min, a1..., a2...)),
-        (@rule call(max, ~a1..., call(min), ~a2...) => call(min, a1..., a2...)),
+            end),
+        (@rule call(min, ~a1..., call(max), ~a2...) => call(min, a1..., a2...)),
+        (@rule call(min, ~a1..., call(min), ~a2...) => call(min, a1..., a2...)),
+        (@rule call(max, ~a1..., call(min), ~a2...) => call(max, a1..., a2...)),
+        (@rule call(max, ~a1..., call(max), ~a2...) => call(max, a1..., a2...)),
         (@rule call(
             min,
             ~a1...,
