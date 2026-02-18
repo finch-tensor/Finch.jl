@@ -37,7 +37,7 @@ Status `~/.julia/environments/v1.8/Project.toml`
 ## Utilities
 
 Finch include several scripts that can be executed directly, e.g. `runtests.jl`.
-These scripts are all have local [Pkg
+These scripts all have local [Pkg
 environments](https://pkgdocs.julialang.org/v1/getting-started/#Getting-Started-with-Environments).
 The scripts include convenience headers to automatically use their respective
 environments, so you won't need to worry about `--project=.` flags, etc.
