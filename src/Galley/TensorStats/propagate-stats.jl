@@ -121,6 +121,7 @@ function transpose_tensor_def(index_order::Vector{IndexExpr}, def::TensorDef)
     return reindex_def(index_order, def)
 end
 
+#=
 ################# NaiveStats Propagation ##################################################
 # We do everything in log for numerical stability
 function merge_tensor_stats_join(op, new_def::TensorDef, all_stats::Vararg{NaiveStats})
@@ -314,3 +315,5 @@ function transpose_tensor_stats(index_order::Vector{IndexExpr}, stats::DCStats)
     stats.def = transpose_tensor_def(index_order, get_def(stats))
     return stats
 end
+
+=#
