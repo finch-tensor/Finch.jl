@@ -285,6 +285,16 @@ end
         A = swizzle(Tensor(Dense(Sparse(Element(0))), LinearIndices((6, 6))), 2, 1)
         B = permutedims(LinearIndices((6, 6)))
         @test reshape(A, 3, 12) == reshape(B, 3, 12)
+
+        T1 = swizzle(Tensor(Element(0, 0)))
+        @test reshape(T1) == reshape(fill(0), ())
+        @test reshape(T1, 1) == reshape(fill(0), 1)
+        @test reshape(T1, 1, 1) == reshape(fill(0), 1, 1)
+
+        T2 = swizzle(Tensor([0]), 1)
+        @test reshape(T2) == reshape([0], ())
+        @test reshape(T2, 1) == reshape([0], 1)
+        @test reshape(T2, 1, 1) == reshape([0], 1, 1)
     end
 
     let
