@@ -316,6 +316,18 @@ function Statistics.std(
 end
 
 function reshape_plan(tns, dims)
+    if ndims(tns) == 0
+        combine_mask = ()
+        split_mask = ntuple(i -> (i:i...,), length(dims))
+        return combine_mask, split_mask
+    end
+    
+    if length(dims) == 0
+        combine_mask = ndims(tns) == 0 ? () : ((1:ndims(tns)...,),)
+        split_mask = ()
+        return combine_mask, split_mask
+    end
+
     num_colon = count(x -> x === Colon(), dims)
     if num_colon > 1
         throw(ArgumentError("Only one colon is allowed in the reshape dimensions."))
@@ -415,6 +427,14 @@ function splitdims_rep_def(tns::RepeatData, dims, mask)
     res
 end
 
+function splitdims_rep_def(tns::ElementData, dims, mask)
+    res = splitdims_rep(tns, mask...)
+    for dim in dims
+        res = ExtrudeData(res)
+    end
+    res
+end
+
 @staged function reshape_constructor(tns, dims, combine_mask, split_mask)
     combine_mask = combine_mask.parameters[1]
     split_mask = split_mask.parameters[1]
@@ -437,6 +457,16 @@ end
     dst_tmps = [Symbol(:s_, m) for m in 1:M]
     dst_idxs = [Symbol(:j_, m) for m in 1:M]
     dst_dims = [Symbol(:dst_dim_, m) for m in 1:M]
+
+    if N == 0
+        return quote
+            @finch begin
+                dst .= 0
+                dst[$(fill(1, M)...)] = src[]
+            end
+            return dst
+        end
+    end
 
     for (combine_group, split_group) in zip(combine_mask, split_mask)
         src_tmps[combine_group[end]] = src_idxs[combine_group[end]]
@@ -545,9 +575,15 @@ function Base.reshape(tns::AbstractTensor, dims::Tuple{Vararg{Union{Integer,Colo
             )
         end
     end
+
     (combine_mask, split_mask) = reshape_plan(tns, dims)
-    dst = reshape_constructor(tns, dims, Val(combine_mask), Val(split_mask))
-    reshape_kernel(dst, tns, dims, Val(combine_mask), Val(split_mask))
+
+    if length(dims) == 0
+        Tensor(Element(default(tns), tns[fill(1, ndims(tns))...]))
+    else
+        dst = reshape_constructor(tns, dims, Val(combine_mask), Val(split_mask))
+        reshape_kernel(dst, tns, dims, Val(combine_mask), Val(split_mask))
+    end
 end
 function reshape!(dst, src::AbstractTensor, dims::Union{Integer,Colon}...)
     reshape!(dst, src, dims)
