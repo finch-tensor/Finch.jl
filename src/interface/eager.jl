@@ -321,7 +321,7 @@ function reshape_plan(tns, dims)
         split_mask = ntuple(i -> (i:i...,), length(dims))
         return combine_mask, split_mask
     end
-    
+
     if length(dims) == 0
         combine_mask = ndims(tns) == 0 ? () : ((1:ndims(tns)...,),)
         split_mask = ()
@@ -540,8 +540,7 @@ end
     return unblock(striplines(res))
 end
 
-Base.reshape(tns::AbstractTensor, dims::Union{Integer,Colon}...) =
-    reshape(tns, (dims...,))
+Base.reshape(tns::AbstractTensor, dims::Union{Integer,Colon}...) = reshape(tns, (dims...,))
 function Base.reshape(
     tns::SwizzleArray{perm}, dims::Tuple{Vararg{Union{Integer,Colon}}}
 ) where {perm}
