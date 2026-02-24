@@ -2,6 +2,9 @@
 ###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
 ###ptr[p] = 0 means unallocated.
 
+import Base.copy
+import Base.resize!
+
 struct MultiChannelMemory{Device} <: AbstractDevice
     device::Device
     n::Int
@@ -29,7 +32,7 @@ get_device(device::VirtualMultiChannelMemory) = device.device
 function virtualize(ctx, ex, ::Type{MultiChannelMemory{Device}}) where {Device}
     device = virtualize(ctx, :($ex.device), Device)
     n = freshen(ctx, :n)
-    push_preamble!(
+    push_preamble!(ctx, 
         quote
             $n = $ex.n
         end,
@@ -59,16 +62,20 @@ struct VirtualMemoryChannel <: AbstractVirtualTask
     parent
 end
 
+get_device(device::VirtualMemoryChannel) = device.device
+get_parent_task(device::VirtualMemoryChannel) = device.parent
+get_task_num(device::VirtualMemoryChannel) = device.t
+
 function virtualize(ctx, ex, ::Type{MemoryChannel{Device,Parent}}) where {Device,Parent}
     device = virtualize(ctx, :($ex.device), Device)
     parent = virtualize(ctx, :($ex.parent), Parent)
     t = freshen(ctx, :t)
-    push_preamble!(
+    push_preamble!(ctx,
         quote
             $t = $(ctx(ex.t))
         end,
     )
-    VirtualMemoryChannel(device, t)
+    VirtualMemoryChannel(device, t, parent)
 end
 
 function lower(ctx::AbstractCompiler, mem::VirtualMemoryChannel, ::DefaultStyle)
@@ -80,6 +87,12 @@ end
 struct MultiChannelBuffer{A}
     device::MultiChannelMemory
     data::Vector{A}
+end
+
+function resize!(buff::MultiChannelBuffer, n::Integer)
+    for obj in buff.data
+        resize!(obj, n)
+    end
 end
 
 Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
@@ -96,26 +109,8 @@ function transfer(device::MultiChannelMemory, arr::AbstractDict)
 end
 
 function transfer(device::MultiChannelMemory, arr::MultiChannelBuffer)
-    data = arr.data
-    if device.device != arr.device
-        data = map(buf -> transfer(device.device, buf), data)
-    end
-    if arr.device.n > device.n
-        MultiChannelBuffer(device, data)
-    else
-        padding = [
-            transfer(device, Vector{eltype(data[1])}()) for _ in 1:(device.n - arr.device.n)
-        ]
-        if length(padding) > 0
-            MultiChannelBuffer(
-                device, vcat(data, padding)
-            )
-        else
-            MultiChannelBuffer(
-                device, data
-            )
-        end
-    end
+    data = [transfer(device.device, deepcopy(arr)) for _ in 1:(device.n)]
+    MultiChannelBuffer(device, data)
 end
 
 function transfer(dev::CPUThread, arr::MultiChannelBuffer)
@@ -137,7 +132,7 @@ function transfer(dst::AbstractDevice, arr::MultiChannelBuffer)
     if dst == arr.device
         return arr
     else
-        data = map(buf -> transfer(device.device, buf), arr.data)
+        data = map(buf -> transfer(dst, buf), arr.data)
         return MultiChannelBuffer(arr.device, data)
     end
 end
@@ -175,7 +170,6 @@ function ShardLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     task = transfer(shared_memory(device), Tp[])
     used = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
     alloc = transfer(shared_memory(device), zeros(Tp, get_num_tasks(device)))
-    lvl = transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl)
     schedule = FinchStaticSchedule{:dynamic}()
     ShardLevel{Device}(
         device,
@@ -225,7 +219,7 @@ function transfer(device, lvl::ShardLevel)
     task_2 = transfer(device, lvl.task)
     qos_fill_2 = transfer(device, lvl.used)
     qos_stop_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule)
+    return ShardLevel(lvl.device, lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule)
 end
 
 function pattern!(lvl::ShardLevel)
@@ -469,28 +463,35 @@ function distribute_level(
 )
     Tp = postype(lvl)
     tag = lvl.tag
-    if true #get_device(arch) == lvl.device
+    if lvl.device == get_device(arch)
         qos_fill = freshen(ctx, tag, :_qos_fill)
         qos_stop = freshen(ctx, tag, :_qos_stop)
         tid = ctx(get_task_num(arch))
+
+        ptr_2 = distribute_buffer(ctx, lvl.ptr, arch, style)
+        task_2 = distribute_buffer(ctx, lvl.task, arch, style)
+        used_2 = distribute_buffer(ctx, lvl.used, arch, style)
+        alloc_2 = distribute_buffer(ctx, lvl.alloc, arch, style)
+
         push_preamble!(
             ctx,
             quote
-                $qos_fill = $(lvl.used)[$tid]
-                $qos_stop = $(lvl.alloc)[$tid]
+                $qos_fill = $(used_2)[$tid]
+                $qos_stop = $(alloc_2)[$tid]
             end,
         )
-        dev = get_device(arch)
-        multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
+
+        multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
         lvl_2 = thaw_level!(ctx, lvl_2, value(qos_stop, Tp))
+
         push_epilogue!(
             ctx,
             contain(ctx) do ctx_2
                 quote
-                    $(lvl.used)[$tid] = $qos_fill
-                    $(lvl.alloc)[$tid] = $qos_stop
+                    $(used_2)[$tid] = $qos_fill
+                    $(alloc_2)[$tid] = $qos_stop
                 end
                 freeze_level!(ctx_2, lvl_2, value(qos_stop))
             end,
@@ -499,10 +500,10 @@ function distribute_level(
             lvl.tag,
             lvl.device,
             lvl_2,
-            distribute_buffer(ctx, lvl.ptr, arch, style),
-            distribute_buffer(ctx, lvl.task, arch, style),
-            distribute_buffer(ctx, lvl.used, arch, style),
-            distribute_buffer(ctx, lvl.alloc, arch, style),
+            ptr_2,
+            task_2,
+            used_2,
+            alloc_2,
             lvl.schedule,
             qos_fill,
             qos_stop,
@@ -622,7 +623,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
 end
 
 function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
-    @assert !is_on_device(ctx, lvl.device)
+    # @assert !is_on_device(ctx, lvl.device)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     pos = freshen(ctx, :pos)
