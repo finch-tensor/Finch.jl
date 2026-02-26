@@ -481,6 +481,14 @@ function distribute_level(
             end,
         )
 
+        push_epilogue!(
+            ctx,
+            quote
+                $(used_2)[$tid] = $qos_fill
+                $(alloc_2)[$tid] = $qos_stop
+            end
+        )
+
         multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
         lvl_2 = distribute_level(ctx, lvl.lvl, channel_task, diff, style)
