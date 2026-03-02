@@ -31,7 +31,6 @@ function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     coalescent = similar_level(
         lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
     )
-    lvl = transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl)
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
@@ -73,8 +72,7 @@ function postype(
 end
 
 function transfer(device, lvl::CoalesceLevel)
-    #lvl_2 = transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl.lvl)
-    lvl_2 = transfer(device, lvl.lvl) #TODO unclear
+    lvl_2 = transfer(device, lvl.lvl)
     return CoalesceLevel(lvl.device, lvl_2, lvl.coalescent, lvl.schedule)
 end
 
@@ -331,7 +329,7 @@ function distribute_level(
 )
     Tp = postype(lvl)
     tag = lvl.tag
-    if true #get_device(arch) == lvl.device
+    if lvl.device == get_device(arch)
         dev = get_device(arch)
         multi_channel_dev = VirtualMultiChannelMemory(dev, get_num_tasks(dev))
         channel_task = VirtualMemoryChannel(get_task_num(arch), multi_channel_dev, arch)
