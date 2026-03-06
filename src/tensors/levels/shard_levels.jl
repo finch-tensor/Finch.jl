@@ -95,6 +95,12 @@ function resize!(buff::MultiChannelBuffer, n::Integer)
     end
 end
 
+function resize_if_smaller!(buff::MultiChannelBuffer, n::Integer)
+    for obj in buff.data
+        resize_if_smaller!(obj, n)
+    end
+end
+
 Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
 Base.ndims(::Type{MultiChannelBuffer{A}}) where {A} = ndims(A)
 

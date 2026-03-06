@@ -28,8 +28,12 @@ const Coalesce = CoalesceLevel
 
 function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     Tp = postype(lvl)
+    coal_lvl = lvl
+    while typeof(coal_lvl) <: CoalesceLevel
+        coal_lvl = coal_lvl.lvl
+    end
     coalescent = similar_level(
-        lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
+        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
     )
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
@@ -57,10 +61,12 @@ end
 function similar_level(
     lvl::Coalesce{Device,Lvl,Coalescent,Schedule}, fill_value, eltype::Type, dims...
 ) where {Device,Lvl,Coalescent,Schedule}
-    lvl_2 = similar(lvl.lvl, fill_value, eltype, dims...)
+    lvl_2 = similar_level(lvl.lvl, fill_value, eltype, dims...)
+    coal_2 = similar_level(lvl.coalescent, fill_value, eltype, dims...)
     CoalesceLevel(
         lvl.device,
-        transfer(MultiChannelMemory(lvl.device, get_num_tasks(lvl.device)), lvl_2),
+        lvl_2,
+        coal_2,
         lvl.schedule,
     )
 end
@@ -73,7 +79,8 @@ end
 
 function transfer(device, lvl::CoalesceLevel)
     lvl_2 = transfer(device, lvl.lvl)
-    return CoalesceLevel(lvl.device, lvl_2, lvl.coalescent, lvl.schedule)
+    coal_2 = transfer(device, lvl.coalescent)
+    return CoalesceLevel(lvl.device, lvl_2, coal_2, lvl.schedule)
 end
 
 function pattern!(lvl::CoalesceLevel)
@@ -242,8 +249,8 @@ function virtualize(
         ctx,
         quote
             $tag = $ex
-            $schedule = $tag.schedule
             $coal_ref = $tag.coalescent
+            $schedule = $tag.schedule
         end,
     )
     device_2 = virtualize(ctx, :($tag.device), Device, tag)
@@ -498,11 +505,6 @@ end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
 
-# function `freeze`_level!(ctx, lvl::VirtualCoalesceLevel, pos)
-#     @assert !is_on_device(ctx, lvl.device)
-#     return lvl
-# end
-
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     P = ctx(get_num_tasks(lvl.device))
@@ -513,7 +515,6 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     task_map = freshen(ctx, :tm)
     global_fbr_map = freshen(ctx, :gfm)
     local_fbr_map = freshen(ctx, :lfm)
-    # factor = freshen(ctx, :fac)
 
     push_preamble!(
         ctx,
@@ -522,12 +523,11 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             $global_fbr_map = ones(Int, $P)
             $local_fbr_map = ones(Int, $P)
 
-            $(lvl.coal_ref) = coalesce_level!(
+            $(lvl.coal_ref) = Finch.coalesce_level!(
                 $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce)
             )
         end,
     )
-
     return lvl
 end
 
@@ -608,5 +608,10 @@ end
 function coalesce_level!(
     lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
+
+    if factor < 1
+        return
+    end
+
     coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
 end
