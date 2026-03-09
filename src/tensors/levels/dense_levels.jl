@@ -273,6 +273,10 @@ function coalesce_level!(
         global_fbr_map, local_fbr_map, task_map, factor, shape, P
     )
 
+    if factor < 1
+        return coalescent
+    end
+
     DenseLevel(
         coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,
             factor, P, coalescent.lvl), lvl.shape)
