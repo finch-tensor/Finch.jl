@@ -605,9 +605,8 @@ end
 function coalesce_level!(
     lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
-
     if factor < 1
-        return
+        return coalescent
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)

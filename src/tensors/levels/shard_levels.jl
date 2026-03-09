@@ -32,7 +32,7 @@ get_device(device::VirtualMultiChannelMemory) = device.device
 function virtualize(ctx, ex, ::Type{MultiChannelMemory{Device}}) where {Device}
     device = virtualize(ctx, :($ex.device), Device)
     n = freshen(ctx, :n)
-    push_preamble!(ctx, 
+    push_preamble!(ctx,
         quote
             $n = $ex.n
         end,
@@ -225,7 +225,9 @@ function transfer(device, lvl::ShardLevel)
     task_2 = transfer(device, lvl.task)
     qos_fill_2 = transfer(device, lvl.used)
     qos_stop_2 = transfer(device, lvl.alloc)
-    return ShardLevel(lvl.device, lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule)
+    return ShardLevel(
+        lvl.device, lvl_2, ptr_2, task_2, qos_fill_2, qos_stop_2, lvl.schedule
+    )
 end
 
 function pattern!(lvl::ShardLevel)
@@ -492,7 +494,7 @@ function distribute_level(
             quote
                 $(used_2)[$tid] = $qos_fill
                 $(alloc_2)[$tid] = $qos_stop
-            end
+            end,
         )
 
         multi_channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
