@@ -508,7 +508,7 @@ supports_reassembly(::VirtualCoalesceLevel) = false
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     P = ctx(get_num_tasks(lvl.device))
-    lvl_e = ctx(lvl)
+    lvl_e = ctx(lvl.lvl)
     lvl_ce = ctx(lvl.coalescent)
     factor = ctx(pos)
 
@@ -577,7 +577,6 @@ function instantiate(ctx, fbr::VirtualSubFiber{VirtualCoalesceLevel}, mode)
             end,
         )
     else
-        @assert is_on_device(ctx, lvl.device)
         instantiate(ctx, VirtualHollowSubFiber(lvl, pos, freshen(ctx, :dirty)), mode)
     end
 end
@@ -597,8 +596,6 @@ The outer level needs to be concurrent, like denselevel.
 function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode)
     @assert mode.kind === updater
     (lvl, pos) = (fbr.lvl, fbr.pos)
-
-    @assert is_on_device(ctx, lvl.device)
 
     return Thunk(;
         body=(ctx) -> VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty)
