@@ -614,115 +614,15 @@ function coalesce_level!(
     pos_map, idx_map, lfm, tm = gen_pos_idx_map(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
     )
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2 = process_next_lvl_hash(
+    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2 = process_next_lvl(
         pos_map, idx_map, tm, lfm, P, max_level_dim
     )
+
+    tbl_2 = Dict((pos_map[x], idx_map[x]) => global_fbr_map[x] for x in eachindex(pos_map))
 
     SparseDictLevel(
         coalesce_level!(
             lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
         ),
         lvl.shape, ptr_2, idx_2, global_fbr_map, tbl_2, Vector{Int}(undef, 0))
-end
-
-Base.@propagate_inbounds function process_next_lvl_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim
-)
-    ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
-    shuffler = AcceleratedKernels.sortperm(
-        collect(1:length(merged_positions)); order=ordering
-    )
-
-    nnz = length(local_fbr_map)
-    global_fbr_map2 = Vector{Int}(undef, nnz)
-
-    merged_positions_s = p_permute(shuffler, merged_positions)
-    merged_indices_s = p_permute(shuffler, merged_indices)
-    task_map = p_permute(shuffler, task_map)
-    local_fbr_map = p_permute(shuffler, local_fbr_map)
-
-    uq_ptr = zeros(Int, P + 1)
-    uq_idx = zeros(Int, P + 1)
-
-    chk_size = fld(nnz + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
-        prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
-        seen_ptr = 0
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                prev = tup
-                seen += 1
-            end
-
-            p = merged_positions_s[offset]
-            if prev_ptr != p
-                seen_ptr += (p - prev_ptr)
-                prev_ptr = p
-            end
-        end
-        uq_idx[tid + 1] = seen
-        uq_ptr[tid + 1] = seen_ptr
-    end
-    uq_ptr_s = s_prefix_sum(uq_ptr)
-    uq_idx_s = s_prefix_sum(uq_idx)
-
-    lvl_ptr = zeros(Int, max_level_dim + 1)
-    lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
-    lvl_tbl = Dict{Tuple{Int,Int},Int}()
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen_ptr = uq_ptr_s[tid] + 2
-        seen_idx = uq_idx_s[tid] + 1
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (1, -1)
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            while seen_ptr < merged_positions_s[offset]
-                lvl_ptr[seen_ptr] = seen_idx
-                seen_ptr += 1
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                lvl_idx[seen_idx] = tup[2]
-
-                p = merged_positions_s[offset]
-                if prev[1] != p
-                    lvl_ptr[seen_ptr] = seen_idx
-                    seen_ptr += 1
-                end
-                prev = tup
-                seen_idx += 1
-            end
-            global_fbr_map2[offset] = seen_idx - 1
-            lvl_tbl[tup] = seen_idx - 1
-        end
-    end
-
-    lvl_ptr[1] = 1
-    i = length(lvl_ptr)
-    while lvl_ptr[i] == 0
-        lvl_ptr[i] = length(lvl_idx) + 1
-        i -= 1
-    end
-
-    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, lvl_tbl
 end
