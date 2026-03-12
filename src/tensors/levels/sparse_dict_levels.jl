@@ -685,6 +685,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     lvl_ptr = zeros(Int, max_level_dim + 1)
     lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
     tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
+    tbl_2 = Dict{Tuple{Int, Int}, Int}(undef, nnz)
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -721,7 +722,9 @@ Base.@propagate_inbounds function process_next_lvl_hash(
         end
     end
 
-    tbl_2 = reduce(merge!, tbls)
+    for tbl in tbls
+        merge!(tbl_2, tbl)
+    end
     lvl_ptr[1] = 1
     i = length(lvl_ptr)
     while lvl_ptr[i] == 0
