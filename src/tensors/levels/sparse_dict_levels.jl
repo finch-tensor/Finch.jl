@@ -35,7 +35,6 @@ julia> tensor_tree(Tensor(SparseDict(SparseDict(Element(0.0))), [10 0 20; 30 0 0
 ```
 """
 
-using ConcurrentCollections
 struct SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
@@ -685,7 +684,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     lvl_ptr = zeros(Int, max_level_dim + 1)
     lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
-    tbl_2 = ConcurrentDict{Tuple{Int, Int}, Int}()
+    tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -718,10 +717,11 @@ Base.@propagate_inbounds function process_next_lvl_hash(
                 seen_idx += 1
             end
             global_fbr_map2[offset] = seen_idx - 1
-            tbl_2[tup] = seen_idx - 1
+            tbls[tid][tup] = seen_idx - 1
         end
     end
 
+    tbl_2 = reduce(merge!, tbls)
     lvl_ptr[1] = 1
     i = length(lvl_ptr)
     while lvl_ptr[i] == 0
