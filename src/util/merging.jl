@@ -313,7 +313,7 @@ Base.@propagate_inbounds function merge_element_level(
             offset_start = (tid - 1) * chk_size + 1
             last_idx = global_fbr_map[offset_start - 1]
 
-            while offset_start > 1 && global_fbr_map[offset_start] == last_idx
+            while offset_start > 1 && offset_start <= length(global_fbr_map) && global_fbr_map[offset_start] == last_idx
                 offset_start += 1
             end
             start = offset_start
