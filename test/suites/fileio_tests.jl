@@ -5,6 +5,8 @@
     using JSON
     using SparseArrays
     using Finch: Structure
+    const FINCH_REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
+    const FINCH_BIN_DIR = joinpath(FINCH_REPO_ROOT, "bin")
     @testset "h5 binsparse" begin
         let f = mktempdir()
             A = [0.0 1.0 2.0 2.0;
@@ -94,6 +96,18 @@
                 A = fread(fname)
                 A_expected = sparse(Bool[0 1 0; 1 0 1; 0 1 0])
                 @test SparseMatrixCSC(A) == A_expected
+            end
+
+            @testset "binsparse hdf5 group" begin
+                fname = joinpath(f, "grouped.bsp.h5")
+                A = Tensor(sparse([0.0 2.0 0.0; 2.0 0.0 1.0; 0.0 1.0 0.0]))
+                h5open(fname, "w") do io
+                    matrices = create_group(io, "matrices")
+                    Finch.bspwrite(create_group(matrices, "primary"), A)
+                end
+                @test SparseMatrixCSC(h5open(fname, "r") do io
+                    Finch.bspread(io["matrices"]["primary"])
+                end) == SparseMatrixCSC(A)
             end
         end
     end
@@ -198,6 +212,30 @@
             fwrite(joinpath(f, "test.ttx"), Tensor(A_ref))
             str = String(read(joinpath(f, "test.ttx")))
             @test check_output("fileio/Trec4.ttx", str)
+        end
+    end
+
+    @testset "fileio cli" begin
+        let f = mktempdir()
+            mtx2bsp = joinpath(FINCH_BIN_DIR, "mtx2bsp")
+            bsp2mtx = joinpath(FINCH_BIN_DIR, "bsp2mtx")
+            check_equivalence = joinpath(FINCH_BIN_DIR, "check_equivalence")
+
+            source = joinpath(f, "sym.mtx")
+            open(source, "w") do io
+                write(io, "%%MatrixMarket matrix coordinate pattern symmetric\n")
+                write(io, "3 3 2\n")
+                write(io, "2 1\n")
+                write(io, "3 2\n")
+            end
+
+            grouped_bsp = joinpath(f, "sym.bsp.h5:matrices/primary")
+            regenerated = joinpath(f, "sym_out.mtx")
+
+            run(`$mtx2bsp $source $grouped_bsp`)
+            run(`$bsp2mtx $grouped_bsp $regenerated`)
+            run(`$check_equivalence $source $grouped_bsp`)
+            run(`$check_equivalence $grouped_bsp $regenerated`)
         end
     end
 
