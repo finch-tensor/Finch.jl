@@ -59,7 +59,17 @@ function bspwrite_vector end
 function bspread_data(f, desc, key)
     t = desc["data_types"][key]
     if (m = match(r"^iso\[([^\[]*)\]$", t)) !== nothing
-        throw(ArgumentError("iso values not currently supported"))
+        inner_type = m.captures[1]
+        original = desc["data_types"][key]
+        desc["data_types"][key] = inner_type
+        data = bspread_data(f, desc, key)
+        desc["data_types"][key] = original
+
+        n = key == "values" ? Int(desc["number_of_stored_values"]) : length(data)
+        if n == 0
+            return similar(data, 0)
+        end
+        return fill(data[1], n)
     elseif (m = match(r"^complex\[([^\[]*)\]$", t)) !== nothing
         desc["data_types"][key] = m.captures[1]
         data = bspread_data(f, desc, key)
@@ -329,6 +339,11 @@ function bspread_header end
 function bspread(f)
     desc = bspread_header(f)["binsparse"]
     @assert desc["version"] == "$BINSPARSE_VERSION"
+
+    if get(desc, "format", nothing) == "COO" && length(desc["shape"]) == 2
+        return bspread_coo_matrix(f, desc)
+    end
+
     fmt = OrderedDict{Any,Any}(
         get(() -> bspread_tensor_lookup[desc["format"]], desc, "custom")
     )
@@ -343,10 +358,77 @@ function bspread(f)
     if !issorted(reverse(fmt["transpose"]))
         fbr = swizzle(fbr, reverse(fmt["transpose"] .+ 1)...)
     end
-    if haskey(desc, "structure")
-        throw(ArgumentError("binsparse structure field currently unsupported"))
+    structure = get(desc, "structure", "general")
+    bspread_apply_structure(fbr, structure)
+end
+
+function bspread_coo_matrix(f, desc)
+    row = Int.(bspread_data(f, desc, "indices_0")) .+ 1
+    col = Int.(bspread_data(f, desc, "indices_1")) .+ 1
+    val = convert(Vector, bspread_data(f, desc, "values"))
+    shape = Tuple(Int.(desc["shape"]))
+
+    if haskey(f, "fill_value")
+        Vf = bspread_data(f, desc, "fill_value")[1]
+    else
+        Vf = zero(eltype(val))
     end
-    fbr
+
+    fbr = Tensor(sparse(row, col, val, shape...))
+    structure = get(desc, "structure", "general")
+    fbr = bspread_apply_structure(fbr, structure)
+    return fbr
+end
+
+function bspread_apply_structure(fbr, structure::AbstractString)
+    structure == "general" && return fbr
+
+    ndims(fbr) == 2 || throw(
+        ArgumentError("binsparse structure field currently only supported for matrices"),
+    )
+
+    I, J, V = ffindnz(fbr)
+    fill = fill_value(fbr)
+
+    if startswith(structure, "symmetric")
+        keep = I .!= J
+        return bspread_matrix_from_coords(
+            [I; J[keep]],
+            [J; I[keep]],
+            [V; V[keep]],
+            size(fbr),
+            fill,
+        )
+    elseif startswith(structure, "skew_symmetric")
+        keep = I .!= J
+        return bspread_matrix_from_coords(
+            [I; J[keep]],
+            [J; I[keep]],
+            [V; -V[keep]],
+            size(fbr),
+            fill,
+        )
+    elseif startswith(structure, "hermitian")
+        keep = I .!= J
+        return bspread_matrix_from_coords(
+            [I; J[keep]],
+            [J; I[keep]],
+            [V; conj.(V[keep])],
+            size(fbr),
+            fill,
+        )
+    else
+        throw(ArgumentError("unsupported binsparse structure field: $structure"))
+    end
+end
+
+function bspread_matrix_from_coords(I, J, V, shape, fill)
+    fill == zero(eltype(V)) || throw(
+        ArgumentError(
+            "binsparse structured matrices with nonzero fill_value are not currently supported"
+        ),
+    )
+    return Tensor(sparse(I, J, V, shape...))
 end
 
 bspread_level(f, desc, fmt) = bspread_level(f, desc, fmt, Val(Symbol(fmt["level_desc"])))
@@ -404,7 +486,7 @@ function bspwrite_level(f, desc, fmt, lvl::SparseCOOLevel{R}) where {R}
         bspwrite_data(f, desc, "pointers_to_$(N - n)", indices_one_to_zero(lvl.ptr))
     end
     for r in 1:R
-        bspwrite_data(f, desc, "indices_$(N - n + R - r)", indices_one_to_zero(lvl.tbl[r]))
+        bspwrite_data(f, desc, "indices_$(N - n + r - 1)", indices_one_to_zero(lvl.tbl[r]))
     end
     fmt["level"] = OrderedDict()
     bspwrite_level(f, desc, fmt["level"], lvl.lvl)
@@ -415,7 +497,7 @@ function bspread_level(f, desc, fmt, ::Val{:sparse})
     n = level_ndims(typeof(lvl)) + R
     N = length(desc["shape"])
     tbl = (map(1:R) do r
-        indices_zero_to_one(bspread_data(f, desc, "indices_$(N - n + R - r)"))
+        indices_zero_to_one(bspread_data(f, desc, "indices_$(N - n + r - 1)"))
     end...,)
     if N - n > 0
         ptr = bspread_data(f, desc, "pointers_to_$(N - n)")
