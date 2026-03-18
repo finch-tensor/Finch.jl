@@ -497,7 +497,7 @@ function unfurl(
         body=(ctx, i) -> Thunk(;
             preamble=quote
                 $h = hash(($(ctx(pos)), $(ctx(i)))) % length($(lvl.tbl))
-                $my_q = get($(lvl.tbl)[$h], ($(ctx(pos)), $(ctx(i))), 0)
+                $my_q = get($(lvl.tbl).data[$h], ($(ctx(pos)), $(ctx(i))), 0)
             end,
             body=(ctx) -> Switch(
                 [
