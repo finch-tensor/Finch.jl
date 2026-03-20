@@ -13,8 +13,10 @@ The following file extensions are supported:
 function fwrite(filename::AbstractString, tns)
     if endswith(filename, ".tns")
         ftnswrite(filename, tns)
-    elseif endswith(filename, ".ttx") || endswith(filename, ".mtx")
+    elseif endswith(filename, ".ttx")
         fttwrite(filename, tns)
+    elseif endswith(filename, ".mtx")
+        fmmwrite(filename, tns)
     elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") ||
         endswith(filename, ".bspnpy")
         bspwrite(filename, tns)
@@ -38,14 +40,32 @@ The following file extensions are supported:
 function fread(filename::AbstractString)
     if endswith(filename, ".tns")
         ftnsread(filename)
-    elseif endswith(filename, ".ttx") || endswith(filename, ".mtx")
+    elseif endswith(filename, ".ttx")
         fttread(filename)
+    elseif endswith(filename, ".mtx")
+        fmmread(filename)
     elseif endswith(filename, ".bsp.h5") || endswith(filename, ".bsp.hdf5") ||
         endswith(filename, ".bspnpy")
         bspread(filename)
     else
         error("Unknown file extension for file $filename")
     end
+end
+
+function fmmwrite(args...)
+    throw(
+        FinchExtensionError(
+            "MatrixMarket.jl must be loaded to use write .mtx files",
+        ),
+    )
+end
+
+function fmmread(args...)
+    throw(
+        FinchExtensionError(
+            "MatrixMarket.jl must be loaded to use read .mtx files",
+        ),
+    )
 end
 
 include("binsparse.jl")
