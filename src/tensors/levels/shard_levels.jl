@@ -4,6 +4,7 @@
 
 import Base.copy
 import Base.resize!
+import Base.length
 
 struct MultiChannelMemory{Device} <: AbstractDevice
     device::Device
@@ -99,6 +100,11 @@ function resize_if_smaller!(buff::MultiChannelBuffer, n::Integer)
     for obj in buff.data
         resize_if_smaller!(obj, n)
     end
+end
+
+#Make less horrifically hacky if necessary
+function length(::MultiChannelBuffer{Vector{Tuple{Int, Int}}})
+    return 0
 end
 
 Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
@@ -627,6 +633,7 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
                 alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
                 lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
+
                 freeze_level!(ctx_3, lvl_4, value(alloced_pos))
                 quote
                     $(ctx_3(used))[$tid] = 0
@@ -652,6 +659,44 @@ function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
             Finch.fill_range!($(lvl.ptr), 0, $(ctx(pos_start)), $(ctx(pos_stop)))
         end,
     )
+
+    push_preamble!(ctx,
+        contain(ctx) do ctx_2
+            diff = Dict()
+            lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
+
+            ext = VirtualExtent(pos_start, pos_stop)
+            parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
+
+            push_preamble!(
+                ctx_2,
+                virtual_parallel_region(
+                    ctx_2, parallel_dim, lvl.device, lvl.schedule
+                ) do f, ctx_3, i_lo, i_hi
+                    task = get_task(ctx_3)
+
+                    multi_channel_dev = VirtualMultiChannelMemory(
+                        lvl.device, get_num_tasks(lvl.device)
+                    )
+
+                    channel_task = VirtualMemoryChannel(
+                        get_task_num(task), multi_channel_dev, task
+                    )
+                    lvl_3 = distribute_level(
+                        ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
+                    )
+                    push_preamble!(ctx_3,
+                        contain(ctx_3) do ctx_4
+                            lvl_3 = thaw_level!(
+                                ctx_4, lvl_3, call(-, pos_start, literal(1))
+                            )
+                            assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
+                        end,
+                    )
+                    lvl_3 = freeze_level!(ctx_3, lvl_3, pos_stop)
+                end,
+            )
+        end)
     lvl
 end
 
