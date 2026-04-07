@@ -617,11 +617,11 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 task = get_task(ctx_3)
                 tid = ctx_3(get_task_num(ctx_3))
 
-                alloced_pos = freshen(ctx_3, :alloced_pos)
-                push_preamble!(ctx_3,
-                    quote
-                        $alloced_pos = $(ctx_3(alloc))[$tid]
-                    end)
+                # alloced_pos = freshen(ctx_3, :alloced_pos)
+                # push_preamble!(ctx_3,
+                #     quote
+                #         $alloced_pos = $(ctx_3(alloc))[$tid]
+                #     end)
 
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
@@ -632,12 +632,15 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
                 used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
                 alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
+                # lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
+                lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
 
-                freeze_level!(ctx_3, lvl_4, value(alloced_pos))
+                # freeze_level!(ctx_3, lvl_4, value(alloced_pos))
+                freeze_level!(ctx_3, lvl_4, literal(0))
                 quote
                     $(ctx_3(used))[$tid] = 0
-                    $(ctx_3(alloc))[$tid] = $alloced_pos
+                    # $(ctx_3(alloc))[$tid] = $alloced_pos
+                    $(ctx_3(alloc))[$tid] = 0
                 end
             end
         end,
