@@ -220,6 +220,7 @@
             mtx2bsp = joinpath(FINCH_BIN_DIR, "mtx2bsp")
             bsp2mtx = joinpath(FINCH_BIN_DIR, "bsp2mtx")
             check_equivalence = joinpath(FINCH_BIN_DIR, "check_equivalence")
+            check_canonical_equivalence = joinpath(FINCH_BIN_DIR, "check_canonical_equivalence")
 
             source = joinpath(f, "sym.mtx")
             open(source, "w") do io
@@ -236,6 +237,17 @@
             run(`$bsp2mtx $grouped_bsp $regenerated`)
             run(`$check_equivalence $source $grouped_bsp`)
             run(`$check_equivalence $grouped_bsp $regenerated`)
+
+            canonical = joinpath(f, "sym.canonical.h5")
+            A_expected = Bool[0 1 0; 1 0 1; 0 1 0]
+            h5open(canonical, "w") do io
+                io["matrix"] = permutedims(UInt8.(A_expected))
+                io["pattern"] = permutedims(UInt8.(A_expected))
+                attributes(io)["source_field"] = "pattern"
+                attributes(io)["structure"] = "symmetric_lower"
+                attributes(io)["is_iso"] = 1
+            end
+            run(`$check_canonical_equivalence $canonical $grouped_bsp`)
         end
     end
 

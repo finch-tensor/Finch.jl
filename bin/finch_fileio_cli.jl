@@ -10,6 +10,7 @@ function usage(io::IO = stderr)
     println(io, "  finch_fileio_cli.jl mtx2bsp INPUT.mtx OUTPUT.bsp.h5[:DATASET]")
     println(io, "  finch_fileio_cli.jl bsp2mtx INPUT.bsp.h5[:DATASET] OUTPUT.mtx")
     println(io, "  finch_fileio_cli.jl check_equivalence FILE1 FILE2")
+    println(io, "  finch_fileio_cli.jl check_canonical_equivalence INPUT.canonical.h5 FILE")
     return 1
 end
 
@@ -84,6 +85,27 @@ function tensors_equivalent(left, right)
     return left == right
 end
 
+function read_canonical(path::AbstractString)
+    h5open(path, "r") do io
+        matrix = permutedims(read(io["matrix"]))
+        pattern = permutedims(read(io["pattern"]))
+        return matrix, UInt8.(pattern)
+    end
+end
+
+function tensor_matches_canonical(tensor, canonical_matrix, canonical_pattern)
+    dense = Array(tensor)
+    size(dense) == size(canonical_matrix) || return false, "shape mismatch"
+    if dense != canonical_matrix
+        return false, "dense values differ"
+    end
+    dense_pattern = UInt8.(dense .!= zero(eltype(dense)))
+    if dense_pattern != canonical_pattern
+        return false, "dense pattern differs"
+    end
+    return true, "OK"
+end
+
 function main(args)
     length(args) == 3 || return usage()
     command, arg1, arg2 = args
@@ -102,6 +124,16 @@ function main(args)
             return 0
         end
         println(stderr, "files are not equivalent")
+        return 1
+    elseif command == "check_canonical_equivalence"
+        canonical_matrix, canonical_pattern = read_canonical(arg1)
+        tensor = read_tensor(arg2)
+        equivalent, message = tensor_matches_canonical(tensor, canonical_matrix, canonical_pattern)
+        if equivalent
+            println("OK")
+            return 0
+        end
+        println(stderr, message)
         return 1
     else
         return usage()
