@@ -601,6 +601,7 @@ function coalesce_level!(
     idx = lvl.idx.data
     ptr = lvl.ptr.data
     dev = lvl.tbl.device
+    tbl = lvl.tbl.data
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
@@ -609,8 +610,8 @@ function coalesce_level!(
         return coalescent
     end
 
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
+    pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
+        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
     global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2 = process_next_lvl_parallel_hash(
         pos_map, idx_map, tm, lfm, P, max_level_dim
@@ -625,6 +626,72 @@ function coalesce_level!(
         lvl.shape, ptr_2, idx_2, global_fbr_map, my_tbl, Vector{Int}(undef, 0))
 end
 
+Base.@propagate_inbounds function gen_pos_idx_map_hash(
+    global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P, tbl
+)
+    ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
+    sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
+
+    nnz = cutoffs[length(cutoffs)] - 1
+    merged_positions = Vector{Int}(undef, nnz)
+    merged_indices = Vector{Int}(undef, nnz)
+
+    task_map2 = Vector{Int}(undef, nnz)
+    local_fbr_map2 = Vector{Int}(undef, nnz)
+
+    chk_size = fld(nnz + P - 1, P)
+    Threads.@threads for tid in 1:P
+        init = (tid - 1) * chk_size + 1
+        proc_id = binary_search(init, cutoffs)
+        idx_id = init - cutoffs[proc_id] + 1
+
+        local_fbr = binary_search(idx_id, ptr[proc_id])
+
+        tag = get_permute_idx(proc_id, ptr) + local_fbr
+
+        @assert local_fbr > 0
+        @assert tag > 0
+
+        global_fbr = global_fbr_map[sorter[tag]]
+
+        j = 0
+        for i in 0:(chk_size - 1)
+            offset = init + i
+            if offset > nnz
+                break
+            end
+
+            nz_id = j + idx_id
+            idx = index[proc_id][nz_id]
+            merged_positions[offset] = global_fbr
+            merged_indices[offset] = idx
+            task_map2[offset] = proc_id
+            local_fbr_map2[offset] = tbl[proc_id][(local_fbr, idx)]
+
+            if nz_id >= length(index[proc_id]) && proc_id < P
+                proc_id += 1
+                idx_id = 1
+                j = 0
+                
+                local_fbr = binary_search(idx_id, ptr[proc_id])
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
+
+                global_fbr = global_fbr_map[sorter[tag]]
+            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
+                local_fbr + 1 < length(ptr[proc_id]) &&
+                ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
+                local_fbr += 1
+
+                tag += 1
+                global_fbr = global_fbr_map[sorter[tag]]
+                j += 1
+            else
+                j += 1
+            end
+        end
+    end
+    return merged_positions, merged_indices, local_fbr_map2, task_map2
+end
 
 Base.@propagate_inbounds function process_next_lvl_parallel_hash(
     merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim

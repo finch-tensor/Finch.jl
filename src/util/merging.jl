@@ -176,13 +176,15 @@ Base.@propagate_inbounds function gen_pos_idx_map(
                 idx_id = 1
                 j = 0
                 local_fbr_id_child = 1
-                local_fbr = 1
+                
+                local_fbr = binary_search(idx_id, ptr[proc_id])
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
 
-                tag += 1
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
                 local_fbr + 1 < length(ptr[proc_id]) &&
                 ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
+                
                 local_fbr += 1
 
                 tag += 1
@@ -222,8 +224,7 @@ Base.@propagate_inbounds function process_next_lvl(
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
+        prev = init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
         prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
         seen_ptr = 0
 

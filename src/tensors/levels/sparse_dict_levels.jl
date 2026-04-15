@@ -604,6 +604,7 @@ function coalesce_level!(
     #lvl.idx and lvl.ptr should be MultiChannelBuffers
     idx = lvl.idx.data
     ptr = lvl.ptr.data
+    tbl = lvl.tbl.data
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
@@ -612,14 +613,12 @@ function coalesce_level!(
         return coalescent
     end
 
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
+    pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
+        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
     global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2 = process_next_lvl_hash(
         pos_map, idx_map, tm, lfm, P, max_level_dim
     )
-
-    # tbl_2 = Dict((pos_map[x], idx_map[x]) => global_fbr_map[x] for x in eachindex(pos_map))
 
     SparseDictLevel(
         coalesce_level!(
