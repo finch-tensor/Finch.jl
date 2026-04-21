@@ -182,12 +182,11 @@ Base.@propagate_inbounds function gen_pos_idx_map(
 
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) &&
-                ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
+                local_fbr + 1 < length(ptr[proc_id])
                 
-                local_fbr += 1
+                local_fbr = binary_search(nz_id + 1, ptr[proc_id])
 
-                tag += 1
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
                 global_fbr = global_fbr_map[sorter[tag]]
                 local_fbr_id_child += 1
                 j += 1

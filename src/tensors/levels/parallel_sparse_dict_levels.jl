@@ -602,6 +602,8 @@ function coalesce_level!(
     ptr = lvl.ptr.data
     dev = lvl.tbl.device
     tbl = lvl.tbl.data
+    val = lvl.val.data
+
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
@@ -613,7 +615,7 @@ function coalesce_level!(
     pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2 = process_next_lvl_parallel_hash(
+    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2, val_2 = process_next_lvl_parallel_hash(
         pos_map, idx_map, tm, lfm, P, max_level_dim
     )
 
@@ -623,7 +625,7 @@ function coalesce_level!(
         coalesce_level!(
             lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
         ),
-        lvl.shape, ptr_2, idx_2, global_fbr_map, my_tbl, Vector{Int}(undef, 0))
+        lvl.shape, ptr_2, idx_2, val_2, my_tbl, Vector{Int}(undef, 0))
 end
 
 Base.@propagate_inbounds function gen_pos_idx_map_hash(
@@ -678,11 +680,11 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
 
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) &&
-                ptr[proc_id][local_fbr + 1] != ptr[proc_id][local_fbr]
-                local_fbr += 1
+                local_fbr + 1 < length(ptr[proc_id])
+                
+                local_fbr = binary_search(nz_id + 1, ptr[proc_id])
 
-                tag += 1
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
                 global_fbr = global_fbr_map[sorter[tag]]
                 j += 1
             else
@@ -745,6 +747,7 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
     end
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
+    lvl_val = zeros(Int, uq_idx_s[length(uq_idx_s)])
 
     lvl_ptr = zeros(Int, max_level_dim + 1)
     lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
@@ -771,6 +774,7 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
             tup = (merged_positions_s[offset], merged_indices_s[offset])
             if tup != prev
                 lvl_idx[seen_idx] = tup[2]
+                lvl_val[seen_idx] = seen_idx
 
                 p = merged_positions_s[offset]
                 if prev[1] != p
@@ -799,5 +803,5 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
         i -= 1
     end
 
-    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2
+    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2, lvl_val
 end

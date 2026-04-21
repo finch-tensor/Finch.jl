@@ -605,6 +605,7 @@ function coalesce_level!(
     idx = lvl.idx.data
     ptr = lvl.ptr.data
     tbl = lvl.tbl.data
+    val = lvl.val.data
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
@@ -616,7 +617,7 @@ function coalesce_level!(
     pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2 = process_next_lvl_hash(
+    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2, val_2 = process_next_lvl_hash(
         pos_map, idx_map, tm, lfm, P, max_level_dim
     )
 
@@ -624,7 +625,7 @@ function coalesce_level!(
         coalesce_level!(
             lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
         ),
-        lvl.shape, ptr_2, idx_2, global_fbr_map, tbl_2, Vector{Int}(undef, 0))
+        lvl.shape, ptr_2, idx_2, val_2, tbl_2, Vector{Int}(undef, 0))
 end
 
 
@@ -683,6 +684,8 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     lvl_ptr = zeros(Int, max_level_dim + 1)
     lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
+    lvl_val = zeros(Int, uq_idx_s[length(uq_idx_s)])
+    
     tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
     tbl_2 = Dict{Tuple{Int, Int}, Int}()
     sizehint!(tbl_2, nnz)
@@ -708,7 +711,8 @@ Base.@propagate_inbounds function process_next_lvl_hash(
             tup = (merged_positions_s[offset], merged_indices_s[offset])
             if tup != prev
                 lvl_idx[seen_idx] = tup[2]
-
+                lvl_val[seen_idx] = seen_idx
+                
                 p = merged_positions_s[offset]
                 if prev[1] != p
                     lvl_ptr[seen_ptr] = seen_idx
@@ -725,6 +729,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     for tbl in tbls
         merge!(tbl_2, tbl)
     end
+
     lvl_ptr[1] = 1
     i = length(lvl_ptr)
     while lvl_ptr[i] == 0
@@ -732,5 +737,5 @@ Base.@propagate_inbounds function process_next_lvl_hash(
         i -= 1
     end
 
-    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2
+    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2, lvl_val
 end

@@ -2,6 +2,9 @@
 ###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
 ###ptr[p] = 0 means unallocated.
 
+
+##### NOTE: In order to get coalesce levels to work, I need to recursively construct a new coalescent FROM THE ORIGINAL COALESCENT
+
 """
     CoalesceLevel{device, Lvl}()
 
@@ -367,7 +370,7 @@ function distribute_level(
             lvl.tag,
             lvl.device,
             distribute_level(ctx, lvl.lvl, arch, diff, style),
-            lvl.coalescent,
+            distribute_level(ctx, lvl.coalescent, arch, diff, style),
             lvl.schedule,
             lvl.Tv,
             lvl.Device,
@@ -441,12 +444,11 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
                 freeze_level!(ctx_3, lvl_4, pos)
             end
+            coalescent_2 = declare_level!(ctx_2, lvl.coalescent, pos, init)
+            freeze_level!(ctx_2, coalescent_2, pos)
+            lvl.coalescent = coalescent_2
         end,
     )
-    coalescent_2 = declare_level!(ctx, lvl.coalescent, pos, init)
-    freeze_level!(ctx, coalescent_2, pos)
-    lvl.coalescent = coalescent_2
-
     lvl
 end
 
