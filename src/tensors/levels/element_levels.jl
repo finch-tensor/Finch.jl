@@ -243,15 +243,95 @@ function coalesce_level!(
     factor,
     P,
     coalescent,
+    mux
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
-    if factor > 1
-        new_val = merge_dense_element_level(
-            global_fbr_map, local_fbr_map, task_map, factor, val, P
-        )
-        return ElementLevel{Vf,Tv,Tp}(new_val)
-    else
-        new_val = merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P)
-        return ElementLevel{Vf,Tv,Tp}(new_val)
+    val2 = coalescent.val
+    if val2 isa MultiChannelBuffer
+        val2 = val2.data[mux]
     end
+
+    if length(val) < 1
+        return
+    end
+    
+    if factor > 1
+        merge_dense_element_level(
+            global_fbr_map, local_fbr_map, task_map, factor, val, P, val2
+        )
+    else
+        merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P, val2)
+    end
+end
+
+
+Base.@propagate_inbounds function merge_element_level(
+    global_fbr_map, local_fbr_map, task_map, val, P, val_merged
+)
+    chk_size = fld(length(global_fbr_map) + P - 1, P)
+    resize_if_smaller!(val_merged, global_fbr_map[length(global_fbr_map)])
+
+    Threads.@threads for tid in 1:P
+        start, finish = 0, 0
+
+        if tid > 1
+            offset_start = (tid - 1) * chk_size + 1
+            last_idx = global_fbr_map[offset_start - 1]
+
+            while offset_start > 1 && offset_start <= length(global_fbr_map) && global_fbr_map[offset_start] == last_idx
+                offset_start += 1
+            end
+            start = offset_start
+        else
+            start = 1
+        end
+
+        if tid < P
+            offset_finish = tid * chk_size + 1
+            last_idx = global_fbr_map[offset_finish - 1]
+
+            while offset_finish <= length(global_fbr_map) &&
+                global_fbr_map[offset_finish] == last_idx
+                offset_finish += 1
+            end
+            finish = offset_finish
+        else
+            finish = length(global_fbr_map) + 1
+        end
+
+        for i in start:(finish - 1)
+            val_merged[global_fbr_map[i]] = 0
+        end
+
+        for i in start:(finish - 1)
+            @fastmath val_merged[global_fbr_map[i]] += val[task_map[i]][local_fbr_map[i]]
+        end
+    end
+end
+
+Base.@propagate_inbounds function merge_dense_element_level(
+    global_fbr_map, local_fbr_map, task_map, factor, val, P, val2
+)
+    # val2 = zeros(global_fbr_map[length(global_fbr_map)] * factor)
+    resize_if_smaller!(val2, global_fbr_map[length(global_fbr_map)] * factor)
+    fill!(val2, 0)
+
+    chk_size = fld(factor + P - 1, P)
+    iter_range = length(global_fbr_map)
+
+    Threads.@threads for tid in 1:P
+        init_dense_fbr = (tid - 1) * chk_size
+        if init_dense_fbr >= factor
+            break
+        end
+        for i in 1:iter_range
+            val2_offset = (global_fbr_map[i] - 1) * factor + 1
+            val2_local_offset = (local_fbr_map[i] - 1) * factor + 1
+
+            for dense_fbr in init_dense_fbr:(init_dense_fbr + chk_size - 1)
+                @fastmath val2[val2_offset + dense_fbr] += val[task_map[i]][val2_local_offset + dense_fbr]
+            end
+        end
+    end
+    # return val2
 end

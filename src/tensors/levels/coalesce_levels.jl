@@ -235,7 +235,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
         $CoalesceLevel(
             $(ctx(lvl.device)),
             $(ctx(lvl.lvl)),
-            $(ctx(lvl.coal_ref)),
+            $(ctx(lvl.coalescent)),
             $(lvl.tag).schedule,
         )
     end
@@ -366,6 +366,8 @@ function distribute_level(
             lvl.coal_ref,
         )
     else
+        dev = get_device(get_device(arch)) ##get the CPU associated with the memory channel
+        distribute_level(ctx, lvl.coalescent, dev, diff, HostShared())
         diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
@@ -429,21 +431,24 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     $(lvl.qos_stop) = $(ctx_2(pos))
                 end)
 
-            virtual_parallel_region(
-                ctx_2, parallel_dim, lvl.device, lvl.schedule
-            ) do f, ctx_3, i_lo, i_hi
-                task = get_task(ctx_3)
+            push_preamble!(ctx_2,
+                virtual_parallel_region(
+                    ctx_2, parallel_dim, lvl.device, lvl.schedule
+                ) do f, ctx_3, i_lo, i_hi
+                    task = get_task(ctx_3)
 
-                multi_channel_dev = VirtualMultiChannelMemory(
-                    lvl.device, get_num_tasks(lvl.device)
-                )
-                channel_task = VirtualMemoryChannel(
-                    get_task_num(task), multi_channel_dev, task
-                )
-                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
-                freeze_level!(ctx_3, lvl_4, pos)
-            end
+                    multi_channel_dev = VirtualMultiChannelMemory(
+                        lvl.device, get_num_tasks(lvl.device)
+                    )
+                    channel_task = VirtualMemoryChannel(
+                        get_task_num(task), multi_channel_dev, task
+                    )
+                    lvl_3 = distribute_level(
+                        ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
+                    )
+                    lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                    freeze_level!(ctx_3, lvl_4, pos)
+                end)
             coalescent_2 = declare_level!(ctx_2, lvl.coalescent, pos, init)
             freeze_level!(ctx_2, coalescent_2, pos)
             lvl.coalescent = coalescent_2
@@ -465,6 +470,11 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 
             ext = VirtualExtent(pos_start, pos_stop)
             parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
+
+            push_preamble!(ctx_2,
+                quote
+                    $(lvl.qos_stop) = $(ctx_2(pos_stop))
+                end)
 
             push_preamble!(
                 ctx_2,
@@ -511,12 +521,12 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     P = ctx(get_num_tasks(lvl.device))
     lvl_e = ctx(lvl.lvl)
-    lvl_ce = ctx(lvl.coalescent)
     factor = ctx(pos)
 
     task_map = freshen(ctx, :tm)
     global_fbr_map = freshen(ctx, :gfm)
     local_fbr_map = freshen(ctx, :lfm)
+    multiplexer = freshen(ctx, :mux)
 
     push_preamble!(
         ctx,
@@ -524,9 +534,11 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             $task_map = collect(1:($P))
             $global_fbr_map = ones(Int, $P)
             $local_fbr_map = ones(Int, $P)
+            $multiplexer = $(ctx(get_task_num(ctx)))
 
-            $(lvl.coal_ref) = Finch.coalesce_level!(
-                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_ce)
+            # $(lvl.coal_ref) = 
+            Finch.coalesce_level!(
+                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl.tag).coalescent, $multiplexer
             )
         end,
     )
@@ -536,37 +548,42 @@ end
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
 
-    push_preamble!(
-        ctx,
-        contain(ctx) do ctx_2
-            diff = Dict()
-            lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
+    push_preamble!(ctx,
+        quote
+            $(lvl.qos_stop) = $(ctx(pos))
+        end)
 
-            ext = VirtualExtent(literal(1), pos)
-            parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
+    # push_preamble!(
+    #     ctx,
+    #     contain(ctx) do ctx_2
+    #         diff = Dict()
+    #         lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
 
-            push_preamble!(ctx_2,
-                quote
-                    $(lvl.qos_stop) = $(ctx_2(pos))
-                end)
+    #         ext = VirtualExtent(literal(1), pos)
+    #         parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
 
-            virtual_parallel_region(
-                ctx_2, parallel_dim, lvl.device, lvl.schedule
-            ) do f, ctx_3, i_lo, i_hi
-                task = get_task(ctx_3)
+    #         push_preamble!(ctx_2,
+    #             quote
+    #                 $(lvl.qos_stop) = $(ctx_2(pos))
+    #             end)
 
-                multi_channel_dev = VirtualMultiChannelMemory(
-                    lvl.device, get_num_tasks(lvl.device)
-                )
-                channel_task = VirtualMemoryChannel(
-                    get_task_num(task), multi_channel_dev, task
-                )
-                lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, pos, literal(0))
-                freeze_level!(ctx_3, lvl_4, pos)
-            end
-        end,
-    )
+    #         virtual_parallel_region(
+    #             ctx_2, parallel_dim, lvl.device, lvl.schedule
+    #         ) do f, ctx_3, i_lo, i_hi
+    #             task = get_task(ctx_3)
+
+    #             multi_channel_dev = VirtualMultiChannelMemory(
+    #                 lvl.device, get_num_tasks(lvl.device)
+    #             )
+    #             channel_task = VirtualMemoryChannel(
+    #                 get_task_num(task), multi_channel_dev, task
+    #             )
+    #             lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
+    #             lvl_4 = declare_level!(ctx_3, lvl_3, pos, literal(0))
+    #             freeze_level!(ctx_3, lvl_4, pos)
+    #         end
+    #     end,
+    # )
     return lvl
 end
 
@@ -605,11 +622,11 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
 end
 
 function coalesce_level!(
-    lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
 )
     if factor < 1
-        return coalescent
+        return
     end
 
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
+    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux)
 end

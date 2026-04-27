@@ -497,7 +497,7 @@ function unfurl(
         body=(ctx, i) -> Thunk(;
             preamble=quote
                 $h = hash(($(ctx(pos)), $(ctx(i)))) % length($(lvl.tbl))
-                $my_q = get($(lvl.tbl).data[$h], ($(ctx(pos)), $(ctx(i))), 0)
+                $my_q = get($(lvl.tbl)[$h], ($(ctx(pos)), $(ctx(i))), 0)
             end,
             body=(ctx) -> Switch(
                 [
@@ -588,7 +588,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::ParallelSparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::ParallelSparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -600,9 +600,7 @@ function coalesce_level!(
     #lvl.idx and lvl.ptr should be MultiChannelBuffers
     idx = lvl.idx.data
     ptr = lvl.ptr.data
-    dev = lvl.tbl.device
     tbl = lvl.tbl.data
-    val = lvl.val.data
 
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
@@ -615,17 +613,13 @@ function coalesce_level!(
     pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2, val_2 = process_next_lvl_parallel_hash(
-        pos_map, idx_map, tm, lfm, P, max_level_dim
+    global_fbr_map, local_fbr_map, task_map = process_next_lvl_parallel_hash(
+        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx, coalescent.val, coalescent.tbl
     )
 
-    my_tbl = MultiChannelBuffer(dev, tbl_2)
-
-    ParallelSparseDictLevel(
-        coalesce_level!(
-            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-        ),
-        lvl.shape, ptr_2, idx_2, val_2, my_tbl, Vector{Int}(undef, 0))
+    coalesce_level!(
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl, mux
+    )
 end
 
 Base.@propagate_inbounds function gen_pos_idx_map_hash(
@@ -670,7 +664,7 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
             task_map2[offset] = proc_id
             local_fbr_map2[offset] = tbl[proc_id][(local_fbr, idx)]
 
-            if nz_id >= length(index[proc_id]) && proc_id < P
+            if nz_id >= length(index[proc_id]) && proc_id < P && length(index[proc_id + 1]) > 0
                 proc_id += 1
                 idx_id = 1
                 j = 0
@@ -680,7 +674,7 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
 
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id])
+                local_fbr + 1 < length(ptr[proc_id]) && ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
                 
                 local_fbr = binary_search(nz_id + 1, ptr[proc_id])
 
@@ -696,7 +690,7 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
 end
 
 Base.@propagate_inbounds function process_next_lvl_parallel_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr, lvl_idx, lvl_val, lvl_tbl
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -747,10 +741,16 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
     end
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
-    lvl_val = zeros(Int, uq_idx_s[length(uq_idx_s)])
 
-    lvl_ptr = zeros(Int, max_level_dim + 1)
-    lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
+    for tid in 1:P
+        lvl_tbl[tid] = Dict{Tuple{Int, Int}, Int}()
+    end
+
+    resize_if_smaller!(lvl_ptr, max_level_dim + 1)
+    fill!(lvl_ptr, 0)
+    resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
+    resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
+
     tbls = [[Dict{Tuple{Int, Int}, Int}() for _ in 1:P] for _ in 1:P]
 
     Threads.@threads for tid in 1:P
@@ -790,10 +790,8 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
         end
     end
 
-    tbl_2 = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
-
     Threads.@threads for tid in 1:P
-        merge!(tbl_2[tid], reduce(merge!, tbls[tid]))
+        merge!(lvl_tbl[tid], reduce(merge!, tbls[tid]))
     end
 
     lvl_ptr[1] = 1
@@ -803,5 +801,5 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
         i -= 1
     end
 
-    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2, lvl_val
+    return global_fbr_map2, local_fbr_map, task_map
 end

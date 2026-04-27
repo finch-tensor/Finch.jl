@@ -592,7 +592,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -605,7 +605,7 @@ function coalesce_level!(
     idx = lvl.idx.data
     ptr = lvl.ptr.data
     tbl = lvl.tbl.data
-    val = lvl.val.data
+    # val = lvl.val.data
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
 
@@ -617,20 +617,18 @@ function coalesce_level!(
     pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
-    global_fbr_map, local_fbr_map, task_map, ptr_2, idx_2, tbl_2, val_2 = process_next_lvl_hash(
-        pos_map, idx_map, tm, lfm, P, max_level_dim
+    global_fbr_map, local_fbr_map, task_map = process_next_lvl_hash(
+        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx, coalescent.val, coalescent.tbl
     )
 
-    SparseDictLevel(
-        coalesce_level!(
-            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-        ),
-        lvl.shape, ptr_2, idx_2, val_2, tbl_2, Vector{Int}(undef, 0))
+    coalesce_level!(
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl, mux
+    )
 end
 
 
 Base.@propagate_inbounds function process_next_lvl_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr, lvl_idx, lvl_val, lvl_tbl
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -653,8 +651,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
+        prev = init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
         prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
         seen_ptr = 0
 
@@ -682,13 +679,12 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
 
-    lvl_ptr = zeros(Int, max_level_dim + 1)
-    lvl_idx = zeros(Int, uq_idx_s[length(uq_idx_s)])
-    lvl_val = zeros(Int, uq_idx_s[length(uq_idx_s)])
-    
+    resize_if_smaller!(lvl_ptr, max_level_dim + 1)
+    fill!(lvl_ptr, 0)
+    resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
+    resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
     tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
-    tbl_2 = Dict{Tuple{Int, Int}, Int}()
-    sizehint!(tbl_2, nnz)
+    sizehint!(lvl_tbl, nnz)
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -727,7 +723,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     end
 
     for tbl in tbls
-        merge!(tbl_2, tbl)
+        merge!(lvl_tbl, tbl)
     end
 
     lvl_ptr[1] = 1
@@ -737,5 +733,5 @@ Base.@propagate_inbounds function process_next_lvl_hash(
         i -= 1
     end
 
-    return global_fbr_map2, local_fbr_map, task_map, lvl_ptr, lvl_idx, tbl_2, lvl_val
+    return global_fbr_map2, local_fbr_map, task_map
 end
