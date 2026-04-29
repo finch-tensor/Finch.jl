@@ -592,7 +592,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
+    lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -622,7 +622,7 @@ function coalesce_level!(
     )
 
     coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl, mux
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
     )
 end
 

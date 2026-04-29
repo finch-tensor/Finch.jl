@@ -521,12 +521,12 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     P = ctx(get_num_tasks(lvl.device))
     lvl_e = ctx(lvl.lvl)
+    lvl_c = ctx(lvl.coalescent)
     factor = ctx(pos)
 
     task_map = freshen(ctx, :tm)
     global_fbr_map = freshen(ctx, :gfm)
     local_fbr_map = freshen(ctx, :lfm)
-    multiplexer = freshen(ctx, :mux)
 
     push_preamble!(
         ctx,
@@ -534,11 +534,9 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             $task_map = collect(1:($P))
             $global_fbr_map = ones(Int, $P)
             $local_fbr_map = ones(Int, $P)
-            $multiplexer = $(ctx(get_task_num(ctx)))
 
-            # $(lvl.coal_ref) = 
             Finch.coalesce_level!(
-                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl.tag).coalescent, $multiplexer
+                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_c)
             )
         end,
     )
@@ -622,11 +620,11 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
 end
 
 function coalesce_level!(
-    lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
+    lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
     if factor < 1
         return
     end
 
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux)
+    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
 end

@@ -594,7 +594,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent, mux
+    lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -617,11 +617,6 @@ function coalesce_level!(
     ptr_2 = coalescent.ptr
     idx_2 = coalescent.idx
 
-    if ptr_2 isa MultiChannelBuffer
-        ptr_2 = ptr_2.data[mux]
-        idx_2 = idx_2.data[mux]
-    end
-
 
     pos_map, idx_map, lfm, tm = gen_pos_idx_map(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
@@ -637,7 +632,7 @@ function coalesce_level!(
     #     lvl.shape, ptr_2, idx_2)
 
     coalesce_level!(
-            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl, mux
+            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
         )
 end
 

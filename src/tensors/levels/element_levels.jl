@@ -242,14 +242,10 @@ function coalesce_level!(
     task_map,
     factor,
     P,
-    coalescent,
-    mux
+    coalescent
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
     val2 = coalescent.val
-    if val2 isa MultiChannelBuffer
-        val2 = val2.data[mux]
-    end
 
     if length(val) < 1
         return
