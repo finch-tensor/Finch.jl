@@ -137,9 +137,17 @@ function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
         return arr
     end
 end
+
 function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)
     return arr
 end
+
+function transfer(mem::CPULocalMemory, buff::MultiChannelBuffer)
+    CPULocalArray{typeof(buff), typeof(mem.device)}(
+        mem.device, [deepcopy(buff) for _ in 1:(mem.device.n)]
+    )
+end
+
 function transfer(dst::AbstractDevice, arr::MultiChannelBuffer)
     if dst == arr.device
         return arr

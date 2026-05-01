@@ -50,7 +50,7 @@ end
 Base.@propagate_inbounds function compute_proc_cutoffs(index, P)
     cutoffs = Vector{Int}(undef, length(index) + 1)
     cutoffs[1] = 1
-    Threads.@threads for i in 2:length(cutoffs)
+    for i in 2:length(cutoffs)
         cutoffs[i] = length(index[i - 1])
     end
     s_prefix_sum(cutoffs)

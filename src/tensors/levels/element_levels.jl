@@ -253,7 +253,7 @@ function coalesce_level!(
     
     if factor > 1
         merge_dense_element_level(
-            global_fbr_map, local_fbr_map, task_map, factor, val, P, val2
+            factor, val, P, val2
         )
     else
         merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P, val2)
@@ -305,29 +305,18 @@ Base.@propagate_inbounds function merge_element_level(
     end
 end
 
-Base.@propagate_inbounds function merge_dense_element_level(
-    global_fbr_map, local_fbr_map, task_map, factor, val, P, val2
-)
-    # val2 = zeros(global_fbr_map[length(global_fbr_map)] * factor)
-    resize_if_smaller!(val2, global_fbr_map[length(global_fbr_map)] * factor)
-    fill!(val2, 0)
-
+Base.@propagate_inbounds function merge_dense_element_level(factor, val, P, val2)
     chk_size = fld(factor + P - 1, P)
-    iter_range = length(global_fbr_map)
 
     Threads.@threads for tid in 1:P
-        init_dense_fbr = (tid - 1) * chk_size
-        if init_dense_fbr >= factor
+        init = (tid - 1) * chk_size + 1
+        if init >= factor
             break
         end
-        for i in 1:iter_range
-            val2_offset = (global_fbr_map[i] - 1) * factor + 1
-            val2_local_offset = (local_fbr_map[i] - 1) * factor + 1
-
-            for dense_fbr in init_dense_fbr:(init_dense_fbr + chk_size - 1)
-                @fastmath val2[val2_offset + dense_fbr] += val[task_map[i]][val2_local_offset + dense_fbr]
+        for proc_id in 1:P
+            for i in init:(min(init+chk_size-1, length(val2)))
+                val2[i] += val[proc_id][i]
             end
         end
     end
-    # return val2
 end

@@ -625,12 +625,6 @@ function coalesce_level!(
         pos_map, idx_map, tm, lfm, P, max_level_dim, ptr_2, idx_2
     )
 
-    # SparseListLevel(
-    #     coalesce_level!(
-    #         lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-    #     ),
-    #     lvl.shape, ptr_2, idx_2)
-
     coalesce_level!(
             lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
         )

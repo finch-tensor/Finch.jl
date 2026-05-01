@@ -254,8 +254,10 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl, arch, style),
         distribute_buffer(ctx, lvl.srt, arch, style),
         lvl.shape,
-        distribute_buffer(ctx, lvl.qos_fill, arch, style),
-        distribute_buffer(ctx, lvl.qos_stop, arch, style),
+        # distribute_buffer(ctx, lvl.qos_fill, arch, style),
+        lvl.qos_fill,
+        lvl.qos_stop,
+        # distribute_buffer(ctx, lvl.qos_stop, arch, style),
     )
 end
 
@@ -619,4 +621,79 @@ function unfurl(
             ),
         ),
     )
+end
+
+function coalesce_level!(
+    lvl::SparseByteMapLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+)
+
+    #lvl.idx and lvl.ptr should be MultiChannelBuffers
+    shape = lvl.shape
+    srt = lvl.srt.data
+    max_level_dim = global_fbr_map[length(global_fbr_map)]
+    @assert max_level_dim == 1
+    cutoffs = compute_proc_cutoffs(srt, P)
+
+    #Don't merge zero-ed arrays.
+    if cutoffs[P + 1] <= 1
+        return
+    end
+
+    global_fbr_map, local_fbr_map, task_map, factor = merge_dense(
+        global_fbr_map, local_fbr_map, task_map, factor, shape, P
+    )
+
+    merge_bytemap(srt, coalescent.srt, coalescent.tbl, coalescent.ptr, cutoffs, P, max_level_dim)
+
+    coalesce_level!(
+            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+        )
+end
+
+Base.@propagate_inbounds function merge_bytemap(
+    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, max_level_dim
+)
+    nnz = cutoffs[P + 1] - 1
+    ##Currently, we only support vector bytemaps.
+    lvl_ptr[1] = 1
+    lvl_ptr[2] = nnz + 1
+    coldim = fld(length(lvl_tbl), max_level_dim)
+
+    resize!(lvl_srt, nnz)
+
+    chk_size = fld(nnz + P - 1, P)
+    Threads.@threads for tid in 1:P
+        init = (tid - 1) * chk_size + 1
+        
+        if init > nnz
+            continue
+        end
+
+        proc_id = binary_search(init, cutoffs)
+        idx_id = init - cutoffs[proc_id] + 1
+
+        j = 0
+        for i in 0:(chk_size - 1)
+            offset = init + i
+            if offset > nnz
+                break
+            end
+
+            nz_id = j + idx_id
+            idx = last(srt[proc_id][nz_id])
+            pos = first(srt[proc_id][nz_id])
+            global_nz_id = init + i
+            lvl_srt[global_nz_id] = (pos, idx)
+            lvl_tbl[(pos - 1) * coldim + idx] = true
+
+            if nz_id >= length(srt[proc_id]) && proc_id < P && length(srt[proc_id+1]) > 0
+                proc_id += 1
+                idx_id = 1
+                j = 0
+            else
+                j += 1
+            end
+        end
+    end
+    nothing
 end

@@ -409,7 +409,9 @@ end
 Base.summary(lvl::VirtualCoalesceLevel) = "Coalesce($(lvl.Lvl))"
 
 function virtual_level_resize!(ctx, lvl::VirtualCoalesceLevel, dims...)
-    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...)
+    lvl.coalescent = virtual_level_resize!(ctx, lvl.coalescent, dims...)
+    return lvl
 end
 virtual_level_size(ctx, lvl::VirtualCoalesceLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualCoalesceLevel) = virtual_level_eltype(lvl.lvl)
@@ -431,7 +433,6 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     $(lvl.qos_stop) = $(ctx_2(pos))
                 end)
 
-            push_preamble!(ctx_2,
                 virtual_parallel_region(
                     ctx_2, parallel_dim, lvl.device, lvl.schedule
                 ) do f, ctx_3, i_lo, i_hi
@@ -446,14 +447,14 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     lvl_3 = distribute_level(
                         ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
                     )
-                    lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
-                    freeze_level!(ctx_3, lvl_4, pos)
-                end)
-            coalescent_2 = declare_level!(ctx_2, lvl.coalescent, pos, init)
-            freeze_level!(ctx_2, coalescent_2, pos)
-            lvl.coalescent = coalescent_2
+                    lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
+                    freeze_level!(ctx_3, lvl_4, literal(0))
+                    nothing
+            end
         end,
     )
+    coalescent_2 = declare_level!(ctx, lvl.coalescent, literal(0), init)
+    freeze_level!(ctx, coalescent_2, literal(0))
     lvl
 end
 
@@ -501,7 +502,8 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
                             assemble_level!(ctx_4, lvl_3, pos_start, pos_stop)
                         end,
                     )
-                    lvl_3 = freeze_level!(ctx_3, lvl_3, pos_stop)
+                    lvl_4 = freeze_level!(ctx_3, lvl_3, pos_stop)
+                    nothing
                 end,
             )
 
@@ -551,37 +553,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, pos)
             $(lvl.qos_stop) = $(ctx(pos))
         end)
 
-    # push_preamble!(
-    #     ctx,
-    #     contain(ctx) do ctx_2
-    #         diff = Dict()
-    #         lvl_2 = distribute_level(ctx_2, lvl.lvl, lvl.device, diff, HostShared())
-
-    #         ext = VirtualExtent(literal(1), pos)
-    #         parallel_dim = VirtualParallelDimension(ext, lvl.device, lvl.schedule)
-
-    #         push_preamble!(ctx_2,
-    #             quote
-    #                 $(lvl.qos_stop) = $(ctx_2(pos))
-    #             end)
-
-    #         virtual_parallel_region(
-    #             ctx_2, parallel_dim, lvl.device, lvl.schedule
-    #         ) do f, ctx_3, i_lo, i_hi
-    #             task = get_task(ctx_3)
-
-    #             multi_channel_dev = VirtualMultiChannelMemory(
-    #                 lvl.device, get_num_tasks(lvl.device)
-    #             )
-    #             channel_task = VirtualMemoryChannel(
-    #                 get_task_num(task), multi_channel_dev, task
-    #             )
-    #             lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
-    #             lvl_4 = declare_level!(ctx_3, lvl_3, pos, literal(0))
-    #             freeze_level!(ctx_3, lvl_4, pos)
-    #         end
-    #     end,
-    # )
     return lvl
 end
 
