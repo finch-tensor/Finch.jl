@@ -680,10 +680,7 @@ Base.@propagate_inbounds function merge_bytemap(
             end
 
             nz_id = j + idx_id
-            if nz_id > length(srt[proc_id][nz_id])
-                break
-            end
-            
+
             idx = last(srt[proc_id][nz_id])
             pos = first(srt[proc_id][nz_id])
             lvl_srt[offset] = (pos, idx)
