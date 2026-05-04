@@ -314,7 +314,7 @@ Base.@propagate_inbounds function merge_dense_element_level(factor, val, P, val2
             break
         end
         for proc_id in 1:P
-            for i in init:(min(init+chk_size-1, length(val2)))
+            for i in init:(min(init+chk_size-1, factor))
                 val2[i] += val[proc_id][i]
             end
         end
