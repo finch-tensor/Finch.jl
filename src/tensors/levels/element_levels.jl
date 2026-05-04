@@ -310,8 +310,8 @@ Base.@propagate_inbounds function merge_dense_element_level(factor, val, P, val2
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
-        if init >= factor
-            break
+        if init > length(val2)
+            continue
         end
         for proc_id in 1:P
             for i in init:(min(init+chk_size-1, factor))
