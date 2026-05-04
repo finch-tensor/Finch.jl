@@ -654,14 +654,52 @@ Base.@propagate_inbounds function merge_bytemap(
     srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, max_level_dim
 )
     nnz = cutoffs[P + 1] - 1
+    chk_size = fld(nnz + P - 1, P)
+
     ##Currently, we only support vector bytemaps.
     lvl_ptr[1] = 1
-    lvl_ptr[2] = nnz + 1
     coldim = fld(length(lvl_tbl), max_level_dim)
 
-    resize!(lvl_srt, nnz)
+    Threads.@threads for tid in 1:P
+        init = (tid - 1) * chk_size + 1
+        if init > nnz
+            continue
+        end
 
-    chk_size = fld(nnz + P - 1, P)
+        proc_id = binary_search(init, cutoffs)
+        idx_id = init - cutoffs[proc_id] + 1
+
+        # if idx_id > length(srt[proc_id])
+        #     continue
+        # end
+
+        j = 0
+        for i in 0:(chk_size - 1)
+            offset = init + i
+            if offset > nnz
+                break
+            end
+
+            nz_id = j + idx_id
+            idx = last(srt[proc_id][nz_id])
+            pos = first(srt[proc_id][nz_id])
+            lvl_tbl[(pos - 1) * coldim + idx] = true
+
+            if nz_id >= length(srt[proc_id]) && proc_id < P && length(srt[proc_id+1]) > 0
+                proc_id += 1
+                idx_id = 1
+                j = 0
+            else
+                j += 1
+            end
+        end
+    end
+
+    uq_nnz = AcceleratedKernels.cumsum(lvl_tbl)
+
+    resize!(lvl_srt, uq_nnz[length(uq_nnz)])
+    lvl_ptr[2] = uq_nnz[length(uq_nnz)] + 1
+
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         
@@ -683,8 +721,9 @@ Base.@propagate_inbounds function merge_bytemap(
 
             idx = last(srt[proc_id][nz_id])
             pos = first(srt[proc_id][nz_id])
-            lvl_srt[offset] = (pos, idx)
-            lvl_tbl[(pos - 1) * coldim + idx] = true
+            mapping = uq_nnz[(pos - 1) * coldim + idx]
+
+            lvl_srt[mapping] = (pos, idx)
 
             if nz_id >= length(srt[proc_id]) && proc_id < P && length(srt[proc_id+1]) > 0
                 proc_id += 1
