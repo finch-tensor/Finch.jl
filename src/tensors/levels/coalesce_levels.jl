@@ -354,7 +354,7 @@ function distribute_level(
         diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,
             lvl.device,
-            distribute_level(ctx, lvl.lvl, arch, diff, style),
+            lvl_2,
             lvl.coalescent,
             lvl.schedule,
             lvl.Tv,
@@ -366,7 +366,7 @@ function distribute_level(
             lvl.coal_ref,
         )
     else
-        dev = get_device(get_device(arch)) ##get the CPU associated with the memory channel
+        dev = get_device(get_device(arch))
         distribute_level(ctx, lvl.coalescent, dev, diff, HostShared())
         diff[lvl.tag] = VirtualCoalesceLevel(
             lvl.tag,

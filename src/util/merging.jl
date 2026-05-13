@@ -13,7 +13,10 @@ Base.@propagate_inbounds function binary_search(target::Int, arr)
     lo = 1
     hi = length(arr)
     @assert target > 0
-    @assert target < arr[hi]
+    if target >= arr[hi]
+        return -1
+    end
+    # @assert target < arr[hi]
 
     while lo <= hi
         mid = div(lo + hi, 2)

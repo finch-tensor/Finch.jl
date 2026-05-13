@@ -650,6 +650,11 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
+        
+        if init > length(merged_positions_s)
+            continue
+        end
+
         seen = 0
         prev = init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
         prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
@@ -688,6 +693,9 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
+        if init > length(merged_positions_s)
+            continue
+        end
         seen_ptr = uq_ptr_s[tid] + 2
         seen_idx = uq_idx_s[tid] + 1
         prev =

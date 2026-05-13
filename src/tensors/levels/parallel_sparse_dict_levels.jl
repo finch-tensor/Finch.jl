@@ -639,6 +639,11 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         proc_id = binary_search(init, cutoffs)
+        
+        if proc_id < 1
+            continue
+        end
+
         idx_id = init - cutoffs[proc_id] + 1
 
         local_fbr = binary_search(idx_id, ptr[proc_id])

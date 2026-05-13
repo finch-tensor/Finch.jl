@@ -272,6 +272,9 @@ Base.@propagate_inbounds function merge_element_level(
 
         if tid > 1
             offset_start = (tid - 1) * chk_size + 1
+             if offset_start > length(global_fbr_map)
+                continue
+            end
             last_idx = global_fbr_map[offset_start - 1]
 
             while offset_start > 1 && offset_start <= length(global_fbr_map) && global_fbr_map[offset_start] == last_idx
@@ -284,6 +287,9 @@ Base.@propagate_inbounds function merge_element_level(
 
         if tid < P
             offset_finish = tid * chk_size + 1
+            if offset_finish > length(global_fbr_map)
+                continue
+            end
             last_idx = global_fbr_map[offset_finish - 1]
 
             while offset_finish <= length(global_fbr_map) &&
