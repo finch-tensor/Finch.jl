@@ -669,8 +669,16 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
             task_map2[offset] = proc_id
             local_fbr_map2[offset] = tbl[proc_id][(local_fbr, idx)]
 
-            if nz_id >= length(index[proc_id]) && proc_id < P && length(index[proc_id + 1]) > 0
+            if nz_id >= length(index[proc_id]) && proc_id < P
                 proc_id += 1
+                while proc_id < P && length(index[proc_id]) < 1
+                    proc_id += 1
+                end
+                
+                if length(index[proc_id]) < 1
+                    break
+                end
+
                 idx_id = 1
                 j = 0
                 
