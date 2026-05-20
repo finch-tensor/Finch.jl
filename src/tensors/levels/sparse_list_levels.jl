@@ -713,8 +713,17 @@ Base.@propagate_inbounds function gen_pos_idx_map(
             task_map2[offset] = proc_id
             local_fbr_map2[offset] = local_fbr_id_child
 
-            if nz_id >= length(index[proc_id]) && proc_id < P && length(index[proc_id + 1]) > 0
+            if nz_id >= length(index[proc_id]) && proc_id < P
                 proc_id += 1
+                
+                while proc_id < P && length(index[proc_id]) < 1
+                    proc_id += 1
+                end
+                
+                if length(index[proc_id]) < 1
+                    break
+                end
+
                 idx_id = 1
                 j = 0
                 local_fbr_id_child = 1

@@ -250,8 +250,9 @@ function coalesce_level!(
     if length(val) < 1
         return
     end
-    
-    if factor > 1
+    if global_fbr_map[end] == 1 && local_fbr_map[end] == 1
+        merge_element_scalar(val, P, val2)
+e   elseif factor > 1
         merge_dense_element_level(
             factor, val, P, val2
         )
@@ -260,6 +261,12 @@ function coalesce_level!(
     end
 end
 
+Base.@propagate_inbounds function merge_element_scalar(val, P, lvl_val)
+    lvl_val[1] = 0
+    for t in 1:P
+        lvl_val[1] += val[t][1]
+    end
+end
 
 Base.@propagate_inbounds function merge_element_level(
     global_fbr_map, local_fbr_map, task_map, val, P, val_merged
