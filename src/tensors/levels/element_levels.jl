@@ -264,7 +264,7 @@ end
 Base.@propagate_inbounds function merge_element_scalar(val, P, lvl_val)
     lvl_val[1] = 0
     for t in 1:P
-        lvl_val[1] += val[t][1]
+        @fastmath lvl_val[1] += val[t][1]
     end
 end
 
