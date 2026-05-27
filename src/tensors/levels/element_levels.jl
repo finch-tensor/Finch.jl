@@ -250,7 +250,7 @@ function coalesce_level!(
     if length(val) < 1
         return
     end
-    if global_fbr_map[end] == 1 && local_fbr_map[end] == 1
+    if length(val2) == 1 && global_fbr_map[end] == 1 && local_fbr_map[end] == 1
         merge_element_scalar(val, P, val2)
     elseif factor > 1
         merge_dense_element_level(
