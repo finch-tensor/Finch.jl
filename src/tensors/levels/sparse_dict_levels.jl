@@ -688,8 +688,8 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     fill!(lvl_ptr, 0)
     Finch.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
     Finch.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
-    # tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
-    # sizehint!(lvl_tbl, nnz)
+    tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
+    sizehint!(lvl_tbl, nnz)
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -726,13 +726,13 @@ Base.@propagate_inbounds function process_next_lvl_hash(
                 seen_idx += 1
             end
             global_fbr_map2[offset] = seen_idx - 1
-            # tbls[tid][tup] = seen_idx - 1
+            tbls[tid][tup] = seen_idx - 1
         end
     end
 
-    # for tbl in tbls
-    #     merge!(lvl_tbl, tbl)
-    # end
+    for tbl in tbls
+        merge!(lvl_tbl, tbl)
+    end
 
     lvl_ptr[1] = 1
     i = length(lvl_ptr)
