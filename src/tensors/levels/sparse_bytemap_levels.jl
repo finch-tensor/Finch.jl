@@ -725,8 +725,17 @@ Base.@propagate_inbounds function merge_bytemap(
 
             lvl_srt[mapping] = (pos, idx)
 
-            if nz_id >= length(srt[proc_id]) && proc_id < P && length(srt[proc_id+1]) > 0
+            if nz_id >= length(srt[proc_id]) && proc_id < P
                 proc_id += 1
+
+                while proc_id < P && length(srt[proc_id]) < 1
+                    proc_id += 1
+                end
+                
+                if length(srt[proc_id]) < 1
+                    break
+                end
+
                 idx_id = 1
                 j = 0
             else
