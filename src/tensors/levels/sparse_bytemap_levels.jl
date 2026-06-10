@@ -685,8 +685,12 @@ Base.@propagate_inbounds function merge_bytemap(
             pos = first(srt[proc_id][nz_id])
             lvl_tbl[(pos - 1) * coldim + idx] = true
 
-            if nz_id >= length(srt[proc_id]) && proc_id < P && length(srt[proc_id+1]) > 0
+            if nz_id >= length(srt[proc_id]) && proc_id < P
                 proc_id += 1
+
+                while proc_id < P && length(srt[proc_id]) < 1
+                    proc_id += 1
+                end
                 idx_id = 1
                 j = 0
             else
