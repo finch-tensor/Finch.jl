@@ -16,12 +16,12 @@ function main(A_orig)
 
     B = reverse(A, dims=2)
 
-    _A = Tensor(Dense(RunList(Element(0.0))), A)
-    _B = Tensor(Dense(RunList(Element(0.0))), B)
+    _A = Tensor(Dense(SparseRunList(Element(0.0))), A)
+    _B = Tensor(Dense(SparseRunList(Element(0.0))), B)
 
     dev = cpu(:t, 2)
-    _C = Tensor(Dense(Shard(dev, RunList(Element(0.0)))))
-    _C_s = Tensor(Dense(RunList(Element(0.0))))
+    _C = Tensor(Dense(Shard(dev, SparseRunList(Element(0.0)))))
+    _C_s = Tensor(Dense(SparseRunList(Element(0.0))))
 
     @finch mode = :fast begin
         _C .= 0.0
