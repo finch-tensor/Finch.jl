@@ -618,7 +618,8 @@ function coalesce_level!(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
     global_fbr_map, local_fbr_map, task_map = process_next_lvl_hash(
-        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx, coalescent.val, coalescent.tbl
+        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx,
+        coalescent.val, coalescent.tbl,
     )
 
     coalesce_level!(
@@ -626,9 +627,9 @@ function coalesce_level!(
     )
 end
 
-
 Base.@propagate_inbounds function process_next_lvl_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr, lvl_idx, lvl_val, lvl_tbl
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
+    lvl_idx, lvl_val, lvl_tbl,
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -650,13 +651,14 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
-        
+
         if init > length(merged_positions_s)
             continue
         end
 
         seen = 0
-        prev = init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
+        prev =
+            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
         prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
         seen_ptr = 0
 
@@ -688,7 +690,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     fill!(lvl_ptr, 0)
     Finch.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
     Finch.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
-    tbls = [Dict{Tuple{Int, Int}, Int}() for _ in 1:P]
+    tbls = [Dict{Tuple{Int,Int},Int}() for _ in 1:P]
     sizehint!(lvl_tbl, nnz)
 
     Threads.@threads for tid in 1:P
@@ -716,7 +718,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
             if tup != prev
                 lvl_idx[seen_idx] = tup[2]
                 lvl_val[seen_idx] = seen_idx
-                
+
                 p = merged_positions_s[offset]
                 if prev[1] != p
                     lvl_ptr[seen_ptr] = seen_idx

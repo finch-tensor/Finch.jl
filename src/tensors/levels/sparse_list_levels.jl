@@ -611,12 +611,11 @@ function coalesce_level!(
 
     #Don't merge zero-ed arrays.
     if cutoffs[P + 1] <= 1
-        return
+        return nothing
     end
 
     ptr_2 = coalescent.ptr
     idx_2 = coalescent.idx
-
 
     pos_map, idx_map, lfm, tm = gen_pos_idx_map(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
@@ -626,8 +625,8 @@ function coalesce_level!(
     )
 
     coalesce_level!(
-            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-        )
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+    )
 end
 
 Base.@propagate_inbounds function unroll_dense_coalesce(
@@ -715,11 +714,11 @@ Base.@propagate_inbounds function gen_pos_idx_map(
 
             if nz_id >= length(index[proc_id]) && proc_id < P
                 proc_id += 1
-                
+
                 while proc_id < P && length(index[proc_id]) < 1
                     proc_id += 1
                 end
-                
+
                 if length(index[proc_id]) < 1
                     break
                 end
@@ -727,14 +726,14 @@ Base.@propagate_inbounds function gen_pos_idx_map(
                 idx_id = 1
                 j = 0
                 local_fbr_id_child = 1
-                
+
                 local_fbr = binary_search(idx_id, ptr[proc_id])
                 tag = get_permute_idx(proc_id, ptr) + local_fbr
 
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) && ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
-                
+                local_fbr + 1 < length(ptr[proc_id]) &&
+                ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
                 local_fbr = binary_search(nz_id + 1, ptr[proc_id])
 
                 tag = get_permute_idx(proc_id, ptr) + local_fbr
@@ -751,7 +750,8 @@ Base.@propagate_inbounds function gen_pos_idx_map(
 end
 
 Base.@propagate_inbounds function process_next_lvl(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr, lvl_idx
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
+    lvl_idx,
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -774,7 +774,8 @@ Base.@propagate_inbounds function process_next_lvl(
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         seen = 0
-        prev = init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
+        prev =
+            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
         prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
         seen_ptr = 0
 

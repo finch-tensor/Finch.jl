@@ -14,7 +14,7 @@ function main(A_orig)
         end
     end
 
-    B = reverse(A, dims=2)
+    B = reverse(A; dims=2)
 
     _A = Tensor(Dense(SparseRunList(Element(0.0))), A)
     _B = Tensor(Dense(SparseRunList(Element(0.0))), B)
@@ -25,24 +25,26 @@ function main(A_orig)
 
     @finch mode = :fast begin
         _C .= 0.0
-        for j = parallel(_, dev), i = _
+        for j in parallel(_, dev), i in _
             _C[i, j] = _A[i, j] + _B[i, j]
         end
     end
 
     @finch mode = :fast begin
         _C_s .= 0.0
-        for j = _, i = _
+        for j in _, i in _
             _C_s[i, j] = _A[i, j] + _B[i, j]
         end
     end
 
     cnt = 0
-    for i = 1:m
-        for j = 1:n
+    for i in 1:m
+        for j in 1:n
             if _C[i, j] != _C_s[i, j] && cnt < 50
                 cnt += 1
-                print("Mismatch at ($i, $j):\n\t_A = $(_A[i, j])\t_B = $(_B[i, j])\n\t_C = \t$(_C[i, j])\n\t_C_s = \t$(_C_s[i, j])\n")
+                print(
+                    "Mismatch at ($i, $j):\n\t_A = $(_A[i, j])\t_B = $(_B[i, j])\n\t_C = \t$(_C[i, j])\n\t_C_s = \t$(_C_s[i, j])\n"
+                )
             end
         end
     end

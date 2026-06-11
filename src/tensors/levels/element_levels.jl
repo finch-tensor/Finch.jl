@@ -242,13 +242,13 @@ function coalesce_level!(
     task_map,
     factor,
     P,
-    coalescent
+    coalescent,
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
     val2 = coalescent.val
 
     if length(val) < 1
-        return
+        return nothing
     end
     if length(val2) == 1 && global_fbr_map[end] == 1 && local_fbr_map[end] == 1
         merge_element_scalar(val, P, val2)
@@ -279,12 +279,13 @@ Base.@propagate_inbounds function merge_element_level(
 
         if tid > 1
             offset_start = (tid - 1) * chk_size + 1
-             if offset_start > length(global_fbr_map)
+            if offset_start > length(global_fbr_map)
                 continue
             end
             last_idx = global_fbr_map[offset_start - 1]
 
-            while offset_start > 1 && offset_start <= length(global_fbr_map) && global_fbr_map[offset_start] == last_idx
+            while offset_start > 1 && offset_start <= length(global_fbr_map) &&
+                      global_fbr_map[offset_start] == last_idx
                 offset_start += 1
             end
             start = offset_start
