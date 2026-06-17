@@ -274,7 +274,7 @@ function coalesce_level!(
     )
 
     if factor < 1
-        return
+        return nothing
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,

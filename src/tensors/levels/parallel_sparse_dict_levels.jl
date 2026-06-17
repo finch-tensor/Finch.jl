@@ -65,7 +65,9 @@ end
 function ParallelSparseDictLevel{Ti}(
     lvl::Lvl, shape, ptr::Ptr, idx::Idx, val::Val, tbl::Tbl, pool::Pool
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}
-    ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}(lvl, shape, ptr, idx, val, tbl, pool)
+    ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}(
+        lvl, shape, ptr, idx, val, tbl, pool
+    )
 end
 
 Base.summary(lvl::ParallelSparseDictLevel) = "SparseDict($(summary(lvl.lvl)))"
@@ -181,7 +183,8 @@ end
     ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::ParallelSparseDictLevel) = (level_size(lvl.lvl)..., lvl.shape)
-@inline level_axes(lvl::ParallelSparseDictLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
+@inline level_axes(lvl::ParallelSparseDictLevel) =
+    (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(
     ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} = level_eltype(Lvl)
@@ -255,7 +258,9 @@ function virtualize(
     qos_stop = freshen(ctx, tag, :_qos_stop)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualParallelSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop)
+    VirtualParallelSparseDictLevel(
+        tag, lvl_2, Ti, ptr, idx, val, tbl, pool, shape, qos_stop
+    )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualParallelSparseDictLevel, ::DefaultStyle)
     quote
@@ -321,11 +326,15 @@ function virtual_level_resize!(ctx, lvl::VirtualParallelSparseDictLevel, dims...
 end
 
 virtual_level_eltype(lvl::VirtualParallelSparseDictLevel) = virtual_level_eltype(lvl.lvl)
-virtual_level_fill_value(lvl::VirtualParallelSparseDictLevel) = virtual_level_fill_value(lvl.lvl)
+function virtual_level_fill_value(lvl::VirtualParallelSparseDictLevel)
+    virtual_level_fill_value(lvl.lvl)
+end
 
 postype(lvl::VirtualParallelSparseDictLevel) = postype(lvl.lvl)
 
-function declare_level!(ctx::AbstractCompiler, lvl::VirtualParallelSparseDictLevel, pos, init)
+function declare_level!(
+    ctx::AbstractCompiler, lvl::VirtualParallelSparseDictLevel, pos, init
+)
     #TODO check that init == fill_value
     Ti = lvl.Ti
     Tp = postype(lvl)
@@ -588,7 +597,8 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::ParallelSparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::ParallelSparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P,
+    coalescent,
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -614,7 +624,8 @@ function coalesce_level!(
         global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
     )
     global_fbr_map, local_fbr_map, task_map = process_next_lvl_parallel_hash(
-        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx, coalescent.val, coalescent.tbl
+        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx,
+        coalescent.val, coalescent.tbl,
     )
 
     coalesce_level!(
@@ -639,7 +650,7 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
         proc_id = binary_search(init, cutoffs)
-        
+
         if proc_id < 1
             continue
         end
@@ -674,21 +685,21 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
                 while proc_id < P && length(index[proc_id]) < 1
                     proc_id += 1
                 end
-                
+
                 if length(index[proc_id]) < 1
                     break
                 end
 
                 idx_id = 1
                 j = 0
-                
+
                 local_fbr = binary_search(idx_id, ptr[proc_id])
                 tag = get_permute_idx(proc_id, ptr) + local_fbr
 
                 global_fbr = global_fbr_map[sorter[tag]]
             elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) && ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
-                
+                local_fbr + 1 < length(ptr[proc_id]) &&
+                ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
                 local_fbr = binary_search(nz_id + 1, ptr[proc_id])
 
                 tag = get_permute_idx(proc_id, ptr) + local_fbr
@@ -703,7 +714,8 @@ Base.@propagate_inbounds function gen_pos_idx_map_hash(
 end
 
 Base.@propagate_inbounds function process_next_lvl_parallel_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr, lvl_idx, lvl_val, lvl_tbl
+    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
+    lvl_idx, lvl_val, lvl_tbl,
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -756,7 +768,7 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
     uq_idx_s = s_prefix_sum(uq_idx)
 
     for tid in 1:P
-        lvl_tbl[tid] = Dict{Tuple{Int, Int}, Int}()
+        lvl_tbl[tid] = Dict{Tuple{Int,Int},Int}()
     end
 
     resize_if_smaller!(lvl_ptr, max_level_dim + 1)
@@ -764,7 +776,7 @@ Base.@propagate_inbounds function process_next_lvl_parallel_hash(
     resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
     resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
 
-    tbls = [[Dict{Tuple{Int, Int}, Int}() for _ in 1:P] for _ in 1:P]
+    tbls = [[Dict{Tuple{Int,Int},Int}() for _ in 1:P] for _ in 1:P]
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1

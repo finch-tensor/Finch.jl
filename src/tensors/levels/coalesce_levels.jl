@@ -2,7 +2,6 @@
 ###the subfiber p is contained at position ptr[p] on the sublevel in CHANNEL task[p].
 ###ptr[p] = 0 means unallocated.
 
-
 ##### NOTE: In order to get coalesce levels to work, I need to recursively construct a new coalescent FROM THE ORIGINAL COALESCENT
 
 """
@@ -433,23 +432,23 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                     $(lvl.qos_stop) = $(ctx_2(pos))
                 end)
 
-                virtual_parallel_region(
-                    ctx_2, parallel_dim, lvl.device, lvl.schedule
-                ) do f, ctx_3, i_lo, i_hi
-                    task = get_task(ctx_3)
+            virtual_parallel_region(
+                ctx_2, parallel_dim, lvl.device, lvl.schedule
+            ) do f, ctx_3, i_lo, i_hi
+                task = get_task(ctx_3)
 
-                    multi_channel_dev = VirtualMultiChannelMemory(
-                        lvl.device, get_num_tasks(lvl.device)
-                    )
-                    channel_task = VirtualMemoryChannel(
-                        get_task_num(task), multi_channel_dev, task
-                    )
-                    lvl_3 = distribute_level(
-                        ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
-                    )
-                    lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
-                    freeze_level!(ctx_3, lvl_4, literal(0))
-                    nothing
+                multi_channel_dev = VirtualMultiChannelMemory(
+                    lvl.device, get_num_tasks(lvl.device)
+                )
+                channel_task = VirtualMemoryChannel(
+                    get_task_num(task), multi_channel_dev, task
+                )
+                lvl_3 = distribute_level(
+                    ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
+                )
+                lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
+                freeze_level!(ctx_3, lvl_4, literal(0))
+                nothing
             end
         end,
     )
@@ -594,7 +593,7 @@ function coalesce_level!(
     lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
     if factor < 1
-        return
+        return nothing
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)

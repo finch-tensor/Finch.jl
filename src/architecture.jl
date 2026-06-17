@@ -267,7 +267,7 @@ Base.eltype(::Type{CPULocalArray{A}}) where {A} = eltype(A)
 Base.ndims(::Type{CPULocalArray{A}}) where {A} = ndims(A)
 
 transfer(device::Union{CPUThread,CPUSharedMemory}, arr::AbstractArray) = arr
-function transfer(mem::CPULocalMemory, arr::Union{AbstractArray, AbstractDict})
+function transfer(mem::CPULocalMemory, arr::Union{AbstractArray,AbstractDict})
     CPULocalArray{typeof(arr),typeof(mem.device)}(
         mem.device, [copy(arr) for _ in 1:(mem.device.n)]
     )

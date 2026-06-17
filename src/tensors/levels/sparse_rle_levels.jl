@@ -583,7 +583,9 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, pos_
             end
         end,
     )
-    (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
+    if !lvl.merge
+        (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
+    end
     lvl.buf = thaw_level!(ctx, lvl.buf, value(qos_stop))
     return lvl
 end

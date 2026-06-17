@@ -103,7 +103,7 @@ function resize_if_smaller!(buff::MultiChannelBuffer, n::Integer)
 end
 
 #Make less horrifically hacky if necessary
-function length(::MultiChannelBuffer{Vector{Tuple{Int, Int}}})
+function length(::MultiChannelBuffer{Vector{Tuple{Int,Int}}})
     return 0
 end
 
@@ -143,7 +143,7 @@ function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)
 end
 
 function transfer(mem::CPULocalMemory, buff::MultiChannelBuffer)
-    CPULocalArray{typeof(buff), typeof(mem.device)}(
+    CPULocalArray{typeof(buff),typeof(mem.device)}(
         mem.device, [deepcopy(buff) for _ in 1:(mem.device.n)]
     )
 end

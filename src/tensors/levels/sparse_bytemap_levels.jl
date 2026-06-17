@@ -636,18 +636,20 @@ function coalesce_level!(
 
     #Don't merge zero-ed arrays.
     if cutoffs[P + 1] <= 1
-        return
+        return nothing
     end
 
     global_fbr_map, local_fbr_map, task_map, factor = merge_dense(
         global_fbr_map, local_fbr_map, task_map, factor, shape, P
     )
 
-    merge_bytemap(srt, coalescent.srt, coalescent.tbl, coalescent.ptr, cutoffs, P, max_level_dim)
+    merge_bytemap(
+        srt, coalescent.srt, coalescent.tbl, coalescent.ptr, cutoffs, P, max_level_dim
+    )
 
     coalesce_level!(
-            lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-        )
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+    )
 end
 
 Base.@propagate_inbounds function merge_bytemap(
@@ -706,7 +708,7 @@ Base.@propagate_inbounds function merge_bytemap(
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
-        
+
         if init > nnz
             continue
         end
@@ -735,7 +737,7 @@ Base.@propagate_inbounds function merge_bytemap(
                 while proc_id < P && length(srt[proc_id]) < 1
                     proc_id += 1
                 end
-                
+
                 if length(srt[proc_id]) < 1
                     break
                 end
