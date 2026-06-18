@@ -4,6 +4,7 @@
 
 import Base.copy
 import Base.resize!
+import Base.length
 
 struct MultiChannelMemory{Device} <: AbstractDevice
     device::Device
@@ -101,6 +102,11 @@ function resize_if_smaller!(buff::MultiChannelBuffer, n::Integer)
     end
 end
 
+#Make less horrifically hacky if necessary
+function length(::MultiChannelBuffer{Vector{Tuple{Int,Int}}})
+    return 0
+end
+
 Base.eltype(::Type{MultiChannelBuffer{A}}) where {A} = eltype(A)
 Base.ndims(::Type{MultiChannelBuffer{A}}) where {A} = ndims(A)
 
@@ -131,9 +137,17 @@ function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
         return arr
     end
 end
+
 function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)
     return arr
 end
+
+function transfer(mem::CPULocalMemory, buff::MultiChannelBuffer)
+    CPULocalArray{typeof(buff),typeof(mem.device)}(
+        mem.device, [deepcopy(buff) for _ in 1:(mem.device.n)]
+    )
+end
+
 function transfer(dst::AbstractDevice, arr::MultiChannelBuffer)
     if dst == arr.device
         return arr
@@ -611,11 +625,11 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 task = get_task(ctx_3)
                 tid = ctx_3(get_task_num(ctx_3))
 
-                alloced_pos = freshen(ctx_3, :alloced_pos)
-                push_preamble!(ctx_3,
-                    quote
-                        $alloced_pos = $(ctx_3(alloc))[$tid]
-                    end)
+                # alloced_pos = freshen(ctx_3, :alloced_pos)
+                # push_preamble!(ctx_3,
+                #     quote
+                #         $alloced_pos = $(ctx_3(alloc))[$tid]
+                #     end)
 
                 multi_channel_dev = VirtualMultiChannelMemory(
                     lvl.device, get_num_tasks(lvl.device)
@@ -626,11 +640,15 @@ function declare_level!(ctx, lvl::VirtualShardLevel, pos, init)
                 lvl_3 = distribute_level(ctx_3, lvl.lvl, channel_task, diff, DeviceShared())
                 used = distribute_buffer(ctx_3, lvl.used, task, DeviceShared())
                 alloc = distribute_buffer(ctx_3, lvl.alloc, task, DeviceShared())
-                lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
-                freeze_level!(ctx_3, lvl_4, value(alloced_pos))
+                # lvl_4 = declare_level!(ctx_3, lvl_3, value(alloced_pos), init)
+                lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
+
+                # freeze_level!(ctx_3, lvl_4, value(alloced_pos))
+                freeze_level!(ctx_3, lvl_4, literal(0))
                 quote
                     $(ctx_3(used))[$tid] = 0
-                    $(ctx_3(alloc))[$tid] = $alloced_pos
+                    # $(ctx_3(alloc))[$tid] = $alloced_pos
+                    $(ctx_3(alloc))[$tid] = 0
                 end
             end
         end,
