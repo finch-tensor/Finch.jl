@@ -34,7 +34,6 @@ julia> tensor_tree(Tensor(SparseDict(SparseDict(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-
 struct SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
