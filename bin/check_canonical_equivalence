@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+
+exec julia --project="$repo_root/test" "$script_dir/finch_fileio_cli.jl" check_canonical_equivalence "$@"

@@ -2,7 +2,11 @@
     using MatrixMarket
     using Pkg
     using HDF5
+    using JSON
+    using SparseArrays
     using Finch: Structure
+    const FINCH_REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
+    const FINCH_BIN_DIR = joinpath(FINCH_REPO_ROOT, "bin")
     @testset "h5 binsparse" begin
         let f = mktempdir()
             A = [0.0 1.0 2.0 2.0;
@@ -62,6 +66,48 @@
                 fname = joinpath(f, "foo.bsp.h5")
                 bspwrite(fname, B)
                 @test Structure(B) == Structure(bspread(fname))
+            end
+
+            @testset "binsparse iso symmetric_lower" begin
+                fname = joinpath(f, "symmetric_iso.bsp.h5")
+                header = JSON.json(
+                    Dict(
+                        "binsparse" => Dict(
+                            "version" => "0.1",
+                            "format" => "COO",
+                            "shape" => [3, 3],
+                            "number_of_stored_values" => 2,
+                            "structure" => "symmetric_lower",
+                            "data_types" => Dict(
+                                "values" => "iso[bint8]",
+                                "indices_0" => "uint8",
+                                "indices_1" => "uint8",
+                            ),
+                        ),
+                    ),
+                )
+                h5open(fname, "w") do io
+                    attributes(io)["binsparse"] = header
+                    io["values"] = Bool[true]
+                    io["indices_0"] = UInt8[1, 2]
+                    io["indices_1"] = UInt8[0, 1]
+                end
+
+                A = fread(fname)
+                A_expected = sparse(Bool[0 1 0; 1 0 1; 0 1 0])
+                @test SparseMatrixCSC(A) == A_expected
+            end
+
+            @testset "binsparse hdf5 group" begin
+                fname = joinpath(f, "grouped.bsp.h5")
+                A = Tensor(sparse([0.0 2.0 0.0; 2.0 0.0 1.0; 0.0 1.0 0.0]))
+                h5open(fname, "w") do io
+                    matrices = create_group(io, "matrices")
+                    Finch.bspwrite(create_group(matrices, "primary"), A)
+                end
+                @test SparseMatrixCSC(h5open(fname, "r") do io
+                    Finch.bspread(io["matrices"]["primary"])
+                end) == SparseMatrixCSC(A)
             end
         end
     end
@@ -166,6 +212,62 @@
             fwrite(joinpath(f, "test.ttx"), Tensor(A_ref))
             str = String(read(joinpath(f, "test.ttx")))
             @test check_output("fileio/Trec4.ttx", str)
+        end
+    end
+
+    @testset "fileio cli" begin
+        let f = mktempdir()
+            mtx2bsp = joinpath(FINCH_BIN_DIR, "mtx2bsp")
+            bsp2mtx = joinpath(FINCH_BIN_DIR, "bsp2mtx")
+            check_equivalence = joinpath(FINCH_BIN_DIR, "check_equivalence")
+            check_canonical_equivalence = joinpath(FINCH_BIN_DIR, "check_canonical_equivalence")
+
+            source = joinpath(f, "sym.mtx")
+            open(source, "w") do io
+                write(io, "%%MatrixMarket matrix coordinate pattern symmetric\n")
+                write(io, "3 3 2\n")
+                write(io, "2 1\n")
+                write(io, "3 2\n")
+            end
+
+            grouped_bsp = joinpath(f, "sym.bsp.h5:matrices/primary")
+            regenerated = joinpath(f, "sym_out.mtx")
+
+            run(`$mtx2bsp $source $grouped_bsp`)
+            run(`$bsp2mtx $grouped_bsp $regenerated`)
+            run(`$check_equivalence $source $grouped_bsp`)
+            run(`$check_equivalence $grouped_bsp $regenerated`)
+
+            canonical = joinpath(f, "sym.canonical.h5")
+            A_expected = Bool[0 1 0; 1 0 1; 0 1 0]
+            h5open(canonical, "w") do io
+                io["matrix"] = permutedims(UInt8.(A_expected))
+                io["pattern"] = permutedims(UInt8.(A_expected))
+                attributes(io)["source_field"] = "pattern"
+                attributes(io)["structure"] = "symmetric_lower"
+                attributes(io)["is_iso"] = 1
+            end
+            run(`$check_canonical_equivalence $canonical $grouped_bsp`)
+        end
+    end
+
+    @testset "matrix market symmetric" begin
+        let f = mktempdir()
+            fname = joinpath(f, "sym.mtx")
+            open(fname, "w") do io
+                write(io, "%%MatrixMarket matrix coordinate pattern symmetric\n")
+                write(io, "3 3 2\n")
+                write(io, "2 1\n")
+                write(io, "3 2\n")
+            end
+
+            A = fread(fname)
+            A_expected = sparse(Bool[0 1 0; 1 0 1; 0 1 0])
+            @test SparseMatrixCSC(A) == A_expected
+
+            out = joinpath(f, "sym_out.mtx")
+            fwrite(out, Tensor(A_expected))
+            @test occursin("symmetric", lowercase(first(split(read(out, String), '\n'))))
         end
     end
 
