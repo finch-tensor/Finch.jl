@@ -274,10 +274,15 @@ function coalesce_level!(
     )
 
     if factor < 1
-        return coalescent
+        return nothing
     end
 
-    DenseLevel(
-        coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,
-            factor, P, coalescent.lvl), lvl.shape)
+    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,
+        factor, P, coalescent.lvl)
+end
+
+Base.@propagate_inbounds function merge_dense(
+    global_fbr_map, local_fbr_map, task_map, factor, shape, P
+)
+    return global_fbr_map, local_fbr_map, task_map, factor * shape
 end
