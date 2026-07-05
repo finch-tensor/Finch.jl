@@ -42,12 +42,38 @@ function SparseByteMapLevel(lvl, shape, args...)
 end
 SparseByteMapLevel{Ti}(lvl) where {Ti} = SparseByteMapLevel{Ti}(lvl, zero(Ti))
 function SparseByteMapLevel{Ti}(lvl, shape) where {Ti}
-    SparseByteMapLevel{Ti}(lvl, shape, postype(lvl)[1], Bool[], Tuple{postype(lvl),Ti}[])
+    SparseByteMapLevel{Ti}(lvl, shape, postype(lvl)[1], Bool[], postype(lvl)[])
 end
 function SparseByteMapLevel{Ti}(
     lvl::Lvl, shape, ptr::Ptr, tbl::Tbl, srt::Srt
 ) where {Ti,Lvl,Ptr,Tbl,Srt}
     SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}(lvl, shape, ptr, tbl, srt)
+end
+
+@inline function bytemap_srt_stride(Tp::Type, shape)
+    stride = one(Tp)
+    shape = Tp(shape)
+    while stride < shape
+        stride <<= 1
+    end
+    return stride
+end
+
+@inline bytemap_srt_shift(Tp::Type, shape) = trailing_zeros(bytemap_srt_stride(Tp, shape))
+
+@inline function bytemap_srt_encode(pos::Tp, idx, shape) where {Tp}
+    shift = bytemap_srt_shift(Tp, shape)
+    return ((pos - one(Tp)) << shift) + Tp(idx)
+end
+
+@inline function bytemap_srt_pos(q::Tp, shape) where {Tp}
+    shift = bytemap_srt_shift(Tp, shape)
+    return ((q - one(Tp)) >> shift) + one(Tp)
+end
+
+@inline function bytemap_srt_idx(q::Tp, shape) where {Tp}
+    mask = bytemap_srt_stride(Tp, shape) - one(Tp)
+    return ((q - one(Tp)) & mask) + one(Tp)
 end
 
 Base.summary(lvl::SparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"
@@ -133,7 +159,8 @@ function labelled_children(fbr::SubFiber{<:SparseByteMapLevel})
     map(lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)) do qos
         LabelledTree(
             cartesian_label(
-                [range_label() for _ in 1:(ndims(fbr) - 1)]..., lvl.srt[qos][2]
+                [range_label() for _ in 1:(ndims(fbr) - 1)]...,
+                bytemap_srt_idx(lvl.srt[qos], lvl.shape)
             ),
             SubFiber(lvl.lvl, qos),
         )
@@ -308,10 +335,10 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
         ctx,
         quote
             for $r in 1:($(lvl.qos_fill))
-                $p = first($(lvl.srt)[$r])
+                $p = Finch.bytemap_srt_pos($(lvl.srt)[$r], $(ctx(lvl.shape)))
                 $(lvl.ptr)[$p] = $(Tp(0))
                 $(lvl.ptr)[$p + 1] = $(Tp(0))
-                $i = last($(lvl.srt)[$r])
+                $i = Finch.bytemap_srt_idx($(lvl.srt)[$r], $(ctx(lvl.shape)))
                 $q = ($p - $(Tp(1))) * $(ctx(lvl.shape)) + $i
                 $(lvl.tbl)[$q] = false
                 if $(supports_reassembly(lvl.lvl))
@@ -392,7 +419,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
             sort!($(lvl.srt))
             $p_prev = $(Tp(0))
             for $r in 1:($(lvl.qos_fill))
-                $p = first($(lvl.srt)[$r])
+                $p = Finch.bytemap_srt_pos($(lvl.srt)[$r], $(ctx(lvl.shape)))
                 if $p != $p_prev
                     $(lvl.ptr)[$p_prev + 1] = $r
                     $(lvl.ptr)[$p] = $r
@@ -431,8 +458,10 @@ function unfurl(
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = last($(lvl.srt)[$my_r])
-                    $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
+                    $my_i = Finch.bytemap_srt_idx($(lvl.srt)[$my_r], $(ctx(lvl.shape)))
+                    $my_i_stop = Finch.bytemap_srt_idx(
+                        $(lvl.srt)[$my_r_stop - 1], $(ctx(lvl.shape))
+                    )
                 else
                     $my_i = $(Ti(1))
                     $my_i_stop = $(Ti(0))
@@ -444,11 +473,17 @@ function unfurl(
                     body=(ctx, ext) -> Stepper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
+                                Finch.bytemap_srt_idx(
+                                    $(lvl.srt)[$my_r], $(ctx(lvl.shape))
+                                ) < $(ctx(getstart(ext)))
                                 $my_r += $(Tp(1))
                             end
                         end,
-                        preamble=:($my_i = last($(lvl.srt)[$my_r])),
+                        preamble=:(
+                            $my_i = Finch.bytemap_srt_idx(
+                                $(lvl.srt)[$my_r], $(ctx(lvl.shape))
+                            )
+                        ),
                         stop=(ctx, ext) -> value(my_i),
                         chunk=Spike(;
                             body=FillLeaf(virtual_level_fill_value(lvl)),
@@ -496,8 +531,10 @@ function unfurl(
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = last($(lvl.srt)[$my_r])
-                    $my_i_stop = last($(lvl.srt)[$my_r_stop - 1])
+                    $my_i = Finch.bytemap_srt_idx($(lvl.srt)[$my_r], $(ctx(lvl.shape)))
+                    $my_i_stop = Finch.bytemap_srt_idx(
+                        $(lvl.srt)[$my_r_stop - 1], $(ctx(lvl.shape))
+                    )
                 else
                     $my_i = $(Tp(1))
                     $my_i_stop = $(Tp(0))
@@ -509,11 +546,17 @@ function unfurl(
                     body=(ctx, ext) -> Jumper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                last($(lvl.srt)[$my_r]) < $(ctx(getstart(ext)))
+                                Finch.bytemap_srt_idx(
+                                    $(lvl.srt)[$my_r], $(ctx(lvl.shape))
+                                ) < $(ctx(getstart(ext)))
                                 $my_r += $(Tp(1))
                             end
                         end,
-                        preamble=:($my_i = last($(lvl.srt)[$my_r])),
+                        preamble=:(
+                            $my_i = Finch.bytemap_srt_idx(
+                                $(lvl.srt)[$my_r], $(ctx(lvl.shape))
+                            )
+                        ),
                         stop=(ctx, ext) -> value(my_i),
                         chunk=Spike(;
                             body=FillLeaf(virtual_level_fill_value(lvl)),
@@ -614,7 +657,9 @@ function unfurl(
                                 $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
                                 Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
                             end
-                            $(lvl.srt)[$(lvl.qos_fill)] = ($(ctx(pos)), $(ctx(idx)))
+                            $(lvl.srt)[$(lvl.qos_fill)] = Finch.bytemap_srt_encode(
+                                $(Tp)($(ctx(pos))), $(ctx(idx)), $(ctx(lvl.shape))
+                            )
                         end
                     end
                 end,
@@ -683,8 +728,9 @@ Base.@propagate_inbounds function merge_bytemap(
             end
 
             nz_id = j + idx_id
-            idx = last(srt[proc_id][nz_id])
-            pos = first(srt[proc_id][nz_id])
+            srt_entry = srt[proc_id][nz_id]
+            idx = bytemap_srt_idx(srt_entry, coldim)
+            pos = bytemap_srt_pos(srt_entry, coldim)
             lvl_tbl[(pos - 1) * coldim + idx] = true
 
             if nz_id >= length(srt[proc_id]) && proc_id < P
@@ -725,11 +771,12 @@ Base.@propagate_inbounds function merge_bytemap(
 
             nz_id = j + idx_id
 
-            idx = last(srt[proc_id][nz_id])
-            pos = first(srt[proc_id][nz_id])
+            srt_entry = srt[proc_id][nz_id]
+            idx = bytemap_srt_idx(srt_entry, coldim)
+            pos = bytemap_srt_pos(srt_entry, coldim)
             mapping = uq_nnz[(pos - 1) * coldim + idx]
 
-            lvl_srt[mapping] = (pos, idx)
+            lvl_srt[mapping] = bytemap_srt_encode(pos, idx, coldim)
 
             if nz_id >= length(srt[proc_id]) && proc_id < P
                 proc_id += 1
