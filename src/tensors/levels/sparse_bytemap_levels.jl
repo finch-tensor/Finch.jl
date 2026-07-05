@@ -51,15 +51,14 @@ function SparseByteMapLevel{Ti}(
 end
 
 @inline function bytemap_srt_stride(Tp::Type, shape)
-    stride = one(Tp)
-    shape = Tp(shape)
-    while stride < shape
-        stride <<= 1
-    end
-    return stride
+    return one(Tp) << bytemap_srt_shift(Tp, shape)
 end
 
-@inline bytemap_srt_shift(Tp::Type, shape) = trailing_zeros(bytemap_srt_stride(Tp, shape))
+@inline function bytemap_srt_shift(Tp::Type, shape)
+    shape = Tp(shape)
+    shape <= one(Tp) && return 0
+    return 8 * sizeof(Tp) - leading_zeros(shape - one(Tp))
+end
 
 @inline function bytemap_srt_encode(pos::Tp, idx, shape) where {Tp}
     shift = bytemap_srt_shift(Tp, shape)
