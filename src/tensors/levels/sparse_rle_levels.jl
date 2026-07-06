@@ -552,8 +552,59 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                 resize!($(lvl.right), $qos_stop)
             end,
         )
-        (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
+        lvl.buf = freeze_level!(ctx, lvl.buf, value(qos_stop))
+        lvl.lvl = declare_level!(
+            ctx, lvl.lvl, literal(1), literal(virtual_level_fill_value(lvl.buf))
+        )
+        q = freshen(ctx, :q)
+        push_preamble!(
+            ctx,
+            quote
+                $(contain(
+                    ctx_2 ->
+                        assemble_level!(ctx_2, lvl.lvl, value(1, Tp), value(qos_stop, Tp)),
+                    ctx,
+                ))
+                for $q in 1:$qos_stop
+                    $(
+                        contain(ctx) do ctx_2
+                            src = variable(freshen(ctx, :src))
+                            set_binding!(
+                                ctx_2,
+                                src,
+                                virtual(VirtualSubFiber(lvl.buf, value(q, Tp))),
+                            )
+                            dst = variable(freshen(ctx, :dst))
+                            set_binding!(
+                                ctx_2,
+                                dst,
+                                virtual(VirtualSubFiber(lvl.lvl, value(q, Tp))),
+                            )
+                            exts = virtual_level_size(ctx_2, lvl.buf)
+                            inds = [
+                                index(freshen(ctx_2, :i, n)) for n in 1:length(exts)
+                            ]
+                            op = initwrite(virtual_level_fill_value(lvl.lvl))
+                            prgm = assign(
+                                access(dst, updater(op), inds...),
+                                op,
+                                access(src, reader(), inds...),
+                            )
+                            for (ind, ext) in zip(inds, exts)
+                                prgm = loop(ind, ext, prgm)
+                            end
+                            prgm = instantiate!(ctx_2, prgm)
+                            ctx_2(prgm)
+                        end
+                    )
+                end
+            end,
+        )
         lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
+        lvl.buf = declare_level!(
+            ctx, lvl.buf, literal(1), literal(virtual_level_fill_value(lvl.buf))
+        )
+        lvl.buf = freeze_level!(ctx, lvl.buf, literal(0))
         return lvl
     end
 end
@@ -583,9 +634,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, pos_
             end
         end,
     )
-    if !lvl.merge
-        (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
-    end
     lvl.buf = thaw_level!(ctx, lvl.buf, value(qos_stop))
     return lvl
 end

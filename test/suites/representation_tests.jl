@@ -436,6 +436,27 @@ end
         @test res == ref
         @test isequal(res, ref)
     end
+
+    @testset "sparserunlist_2d_convert merge=$merge" for merge in (true, false)
+        Lvl = (base) -> SparseRunList(base; merge=merge)
+        ref = Tensor(Dense(Lvl(Element(0))), [1 2 3 4; 5 6 7 8])
+        tmp = Tensor(Dense(Shard(ncpu, Lvl(Element(0)))), 2, 4)
+        res = Tensor(Dense(Lvl(Element(0))), 2, 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_2d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
 end
 
 @testitem "representationcoalesce" setup = [CheckOutput, RepresentationSetup] begin
