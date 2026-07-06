@@ -34,7 +34,6 @@ struct SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl} <: AbstractLevel
     ptr::Ptr
     tbl::Tbl
     srt::Srt
-    srt_shift::Int
 end
 const SparseByteMap = SparseByteMapLevel
 SparseByteMapLevel(lvl::Lvl) where {Lvl} = SparseByteMapLevel{Int}(lvl)
@@ -48,16 +47,7 @@ end
 function SparseByteMapLevel{Ti}(
     lvl::Lvl, shape, ptr::Ptr, tbl::Tbl, srt::Srt
 ) where {Ti,Lvl,Ptr,Tbl,Srt}
-    Tp = postype(lvl)
-    srt_shape = Tp(shape)
-    srt_shift =
-        srt_shape <= one(Tp) ? 0 : 8 * sizeof(Tp) - leading_zeros(srt_shape - one(Tp))
-    SparseByteMapLevel{Ti}(lvl, shape, ptr, tbl, srt, srt_shift)
-end
-function SparseByteMapLevel{Ti}(
-    lvl::Lvl, shape, ptr::Ptr, tbl::Tbl, srt::Srt, srt_shift
-) where {Ti,Lvl,Ptr,Tbl,Srt}
-    SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}(lvl, shape, ptr, tbl, srt, srt_shift)
+    SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}(lvl, shape, ptr, tbl, srt)
 end
 
 Base.summary(lvl::SparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"
@@ -76,18 +66,16 @@ function transfer(device, lvl::SparseByteMapLevel{Ti}) where {Ti}
     ptr_2 = transfer(device, lvl.ptr)
     tbl_2 = transfer(device, lvl.tbl)
     srt_2 = transfer(device, lvl.srt)
-    return SparseByteMapLevel{Ti}(lvl_2, lvl.shape, ptr_2, tbl_2, srt_2, lvl.srt_shift)
+    return SparseByteMapLevel{Ti}(lvl_2, lvl.shape, ptr_2, tbl_2, srt_2)
 end
 
 function pattern!(lvl::SparseByteMapLevel{Ti}) where {Ti}
-    SparseByteMapLevel{Ti}(
-        pattern!(lvl.lvl), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt, lvl.srt_shift
-    )
+    SparseByteMapLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt)
 end
 
 function set_fill_value!(lvl::SparseByteMapLevel{Ti}, init) where {Ti}
     SparseByteMapLevel{Ti}(
-        set_fill_value!(lvl.lvl, init), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt, lvl.srt_shift
+        set_fill_value!(lvl.lvl, init), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt
     )
 end
 
@@ -143,15 +131,15 @@ function labelled_children(fbr::SubFiber{<:SparseByteMapLevel})
     pos = fbr.pos
     pos + 1 > length(lvl.ptr) && return []
     Tp = postype(lvl)
-    srt_mask = (one(Tp) << lvl.srt_shift) - one(Tp)
+    q_offset = (Tp(pos) - one(Tp)) * Tp(lvl.shape)
     map(lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)) do qos
         srt_entry = lvl.srt[qos]
         LabelledTree(
             cartesian_label(
                 [range_label() for _ in 1:(ndims(fbr) - 1)]...,
-                ((srt_entry - one(Tp)) & srt_mask) + one(Tp)
+                srt_entry - q_offset
             ),
-            SubFiber(lvl.lvl, qos),
+            SubFiber(lvl.lvl, srt_entry),
         )
     end
 end
@@ -180,7 +168,6 @@ function isstructequal(a::T, b::T) where {T<:SparseByteMap}
         a.ptr == b.ptr &&
         a.tbl == b.tbl &&
         a.srt == b.srt &&
-        a.srt_shift == b.srt_shift &&
         isstructequal(a.lvl, b.lvl)
 end
 
@@ -205,7 +192,6 @@ mutable struct VirtualSparseByteMapLevel <: AbstractVirtualLevel
     ptr
     tbl
     srt
-    srt_shift
     shape
     qos_fill
     qos_stop
@@ -233,7 +219,6 @@ function virtualize(
     ptr = freshen(ctx, tag, :_ptr)
     tbl = freshen(ctx, tag, :_tbl)
     srt = freshen(ctx, tag, :_srt)
-    srt_shift = freshen(ctx, tag, :_srt_shift)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -242,7 +227,6 @@ function virtualize(
             $ptr = $tag.ptr
             $tbl = $tag.tbl
             $srt = $tag.srt
-            $srt_shift = $tag.srt_shift
             $qos_stop = $qos_fill = length($tag.srt)
             $stop = $tag.shape
         end,
@@ -250,7 +234,7 @@ function virtualize(
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseByteMapLevel(
-        tag, lvl_2, Ti, ptr, tbl, srt, value(srt_shift, Int), shape, qos_fill, qos_stop
+        tag, lvl_2, Ti, ptr, tbl, srt, shape, qos_fill, qos_stop
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultStyle)
@@ -261,7 +245,6 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, ::DefaultS
             $(lvl.ptr),
             $(lvl.tbl),
             $(lvl.srt),
-            $(ctx(lvl.srt_shift)),
         )
     end
 end
@@ -276,7 +259,6 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
         distribute_buffer(ctx, lvl.srt, arch, style),
-        lvl.srt_shift,
         lvl.shape,
         distribute_buffer(ctx, lvl.qos_fill, arch, style),
         # lvl.qos_fill,
@@ -296,7 +278,6 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, dif
             lvl.ptr,
             lvl.tbl,
             lvl.srt,
-            lvl.srt_shift,
             lvl.shape,
             lvl.qos_fill,
             lvl.qos_stop,
@@ -313,19 +294,6 @@ end
 
 function virtual_level_resize!(ctx, lvl::VirtualSparseByteMapLevel, dims...)
     lvl.shape = getstop(dims[end])
-    Tp = postype(lvl)
-    srt_shape = freshen(ctx, lvl.tag, :_srt_shape)
-    srt_shift = freshen(ctx, lvl.tag, :_srt_shift)
-    push_preamble!(
-        ctx,
-        quote
-            $srt_shape = $(Tp)($(ctx(lvl.shape)))
-            $srt_shift =
-                $srt_shape <= $(Tp(1)) ? 0 :
-                8 * sizeof($(Tp)) - leading_zeros($srt_shape - $(Tp(1)))
-        end,
-    )
-    lvl.srt_shift = value(srt_shift, Int)
     lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims[1:(end - 1)]...)
     lvl
 end
@@ -341,20 +309,16 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
     r = freshen(ctx, lvl.tag, :_r)
     p = freshen(ctx, lvl.tag, :_p)
     q = freshen(ctx, lvl.tag, :_q)
-    i = freshen(ctx, lvl.tag, :_i)
-    srt_shift = freshen(ctx, lvl.tag, :_srt_shift)
-    srt_mask = freshen(ctx, lvl.tag, :_srt_mask)
+    srt_shape = freshen(ctx, lvl.tag, :_srt_shape)
     push_preamble!(
         ctx,
         quote
-            $srt_shift = $(ctx(lvl.srt_shift))
-            $srt_mask = ($(Tp(1)) << $srt_shift) - $(Tp(1))
+            $srt_shape = $(Tp)($(ctx(lvl.shape)))
             for $r in 1:($(lvl.qos_fill))
-                $p = (($(lvl.srt)[$r] - $(Tp(1))) >> $srt_shift) + $(Tp(1))
+                $q = $(lvl.srt)[$r]
+                $p = fld($q - $(Tp(1)), $srt_shape) + $(Tp(1))
                 $(lvl.ptr)[$p] = $(Tp(0))
                 $(lvl.ptr)[$p + 1] = $(Tp(0))
-                $i = (($(lvl.srt)[$r] - $(Tp(1))) & $srt_mask) + $(Tp(1))
-                $q = ($p - $(Tp(1))) * $(ctx(lvl.shape)) + $i
                 $(lvl.tbl)[$q] = false
                 if $(supports_reassembly(lvl.lvl))
                     $(contain(
@@ -422,7 +386,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     r = freshen(ctx, lvl.tag, :_r)
     p = freshen(ctx, lvl.tag, :_p)
     p_prev = freshen(ctx, lvl.tag, :_p_prev)
-    srt_shift = freshen(ctx, lvl.tag, :_srt_shift)
+    srt_shape = freshen(ctx, lvl.tag, :_srt_shape)
     pos_stop = cache!(ctx, :pos_stop, pos_stop)
     Ti = lvl.Ti
     Tp = postype(lvl)
@@ -433,10 +397,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
             resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
-            $srt_shift = $(ctx(lvl.srt_shift))
+            $srt_shape = $(Tp)($(ctx(lvl.shape)))
             $p_prev = $(Tp(0))
             for $r in 1:($(lvl.qos_fill))
-                $p = (($(lvl.srt)[$r] - $(Tp(1))) >> $srt_shift) + $(Tp(1))
+                $p = fld($(lvl.srt)[$r] - $(Tp(1)), $srt_shape) + $(Tp(1))
                 if $p != $p_prev
                     $(lvl.ptr)[$p_prev + 1] = $r
                     $(lvl.ptr)[$p] = $r
@@ -464,28 +428,24 @@ function unfurl(
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
     my_q = freshen(ctx, tag, :_q)
+    my_q_offset = freshen(ctx, tag, :_q_offset)
     my_r = freshen(ctx, tag, :_r)
     my_r_stop = freshen(ctx, tag, :_r_stop)
     my_i_stop = freshen(ctx, tag, :_i_stop)
-    srt_shift = freshen(ctx, tag, :_srt_shift)
-    srt_mask = freshen(ctx, tag, :_srt_mask)
 
     Unfurled(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $srt_shift = $(ctx(lvl.srt_shift))
-                $srt_mask = ($(Tp(1)) << $srt_shift) - $(Tp(1))
+                $my_q_offset = ($(ctx(pos)) - $(Tp(1))) * $(Tp)($(ctx(lvl.shape)))
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) + $(Tp(1))
-                    $my_i_stop =
-                        (($(lvl.srt)[$my_r_stop - 1] - $(Tp(1))) & $srt_mask) +
-                        $(Tp(1))
+                    $my_i = $(lvl.srt)[$my_r] - $my_q_offset
+                    $my_i_stop = $(lvl.srt)[$my_r_stop - 1] - $my_q_offset
                 else
-                    $my_i = $(Ti(1))
-                    $my_i_stop = $(Ti(0))
+                    $my_i = $(Tp(1))
+                    $my_i_stop = $(Tp(0))
                 end
             end,
             body=(ctx) -> Sequence([
@@ -494,24 +454,19 @@ function unfurl(
                     body=(ctx, ext) -> Stepper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) +
-                                $(Tp(1)) < $(ctx(getstart(ext)))
+                                $(lvl.srt)[$my_r] <
+                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,
                         preamble=:(
-                            $my_i =
-                                (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) +
-                                $(Tp(1))
+                            $my_i = $(lvl.srt)[$my_r] - $my_q_offset
                         ),
                         stop=(ctx, ext) -> value(my_i),
                         chunk=Spike(;
                             body=FillLeaf(virtual_level_fill_value(lvl)),
                             tail=Thunk(;
-                                preamble=:(
-                                    $my_q =
-                                        ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i
-                                ),
+                                preamble=:($my_q = $my_q_offset + $my_i),
                                 body=(ctx) -> instantiate(
                                     ctx,
                                     VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)),
@@ -539,26 +494,22 @@ function unfurl(
     Tp = postype(lvl)
     my_i = freshen(ctx, tag, :_i)
     my_q = freshen(ctx, tag, :_q)
+    my_q_offset = freshen(ctx, tag, :_q_offset)
     my_r = freshen(ctx, tag, :_r)
     my_r_stop = freshen(ctx, tag, :_r_stop)
     my_i_stop = freshen(ctx, tag, :_i_stop)
     my_j = freshen(ctx, tag, :_j)
-    srt_shift = freshen(ctx, tag, :_srt_shift)
-    srt_mask = freshen(ctx, tag, :_srt_mask)
 
     Unfurled(;
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $srt_shift = $(ctx(lvl.srt_shift))
-                $srt_mask = ($(Tp(1)) << $srt_shift) - $(Tp(1))
+                $my_q_offset = ($(ctx(pos)) - $(Tp(1))) * $(Tp)($(ctx(lvl.shape)))
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
-                    $my_i = (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) + $(Tp(1))
-                    $my_i_stop =
-                        (($(lvl.srt)[$my_r_stop - 1] - $(Tp(1))) & $srt_mask) +
-                        $(Tp(1))
+                    $my_i = $(lvl.srt)[$my_r] - $my_q_offset
+                    $my_i_stop = $(lvl.srt)[$my_r_stop - 1] - $my_q_offset
                 else
                     $my_i = $(Tp(1))
                     $my_i_stop = $(Tp(0))
@@ -570,24 +521,19 @@ function unfurl(
                     body=(ctx, ext) -> Jumper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) +
-                                $(Tp(1)) < $(ctx(getstart(ext)))
+                                $(lvl.srt)[$my_r] <
+                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,
                         preamble=:(
-                            $my_i =
-                                (($(lvl.srt)[$my_r] - $(Tp(1))) & $srt_mask) +
-                                $(Tp(1))
+                            $my_i = $(lvl.srt)[$my_r] - $my_q_offset
                         ),
                         stop=(ctx, ext) -> value(my_i),
                         chunk=Spike(;
                             body=FillLeaf(virtual_level_fill_value(lvl)),
                             tail=Thunk(;
-                                preamble=:(
-                                    $my_q =
-                                        ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $my_i
-                                ),
+                                preamble=:($my_q = $my_q_offset + $my_i),
                                 body=(ctx) -> instantiate(
                                     ctx,
                                     VirtualSubFiber(lvl.lvl, value(my_q, lvl.Ti)),
@@ -655,7 +601,6 @@ function unfurl(
     tag = lvl.tag
     Tp = postype(lvl)
     my_q = freshen(ctx, tag, :_q)
-    srt_shift = freshen(ctx, tag, :_srt_shift)
     dirty = freshen(ctx, :dirty)
 
     Unfurled(;
@@ -664,7 +609,6 @@ function unfurl(
             body=(ctx, idx) -> Thunk(;
                 preamble=quote
                     $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
-                    $srt_shift = $(ctx(lvl.srt_shift))
                     $dirty = false
                 end,
                 body=(ctx) -> instantiate(
@@ -682,9 +626,7 @@ function unfurl(
                                 $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
                                 Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
                             end
-                            $(lvl.srt)[$(lvl.qos_fill)] =
-                                (($(Tp)($(ctx(pos))) - $(Tp(1))) << $srt_shift) +
-                                $(Tp)($(ctx(idx)))
+                            $(lvl.srt)[$(lvl.qos_fill)] = $my_q
                         end
                     end
                 end,
@@ -721,7 +663,6 @@ function coalesce_level!(
         cutoffs,
         P,
         max_level_dim,
-        coalescent.srt_shift,
     )
 
     coalesce_level!(
@@ -730,16 +671,13 @@ function coalesce_level!(
 end
 
 Base.@propagate_inbounds function merge_bytemap(
-    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, max_level_dim, srt_shift
+    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, max_level_dim
 )
     nnz = cutoffs[P + 1] - 1
     chk_size = fld(nnz + P - 1, P)
 
     ##Currently, we only support vector bytemaps.
     lvl_ptr[1] = 1
-    coldim = fld(length(lvl_tbl), max_level_dim)
-    Tp = eltype(lvl_srt)
-    srt_mask = (one(Tp) << srt_shift) - one(Tp)
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -763,9 +701,7 @@ Base.@propagate_inbounds function merge_bytemap(
 
             nz_id = j + idx_id
             srt_entry = srt[proc_id][nz_id]
-            idx = ((srt_entry - one(Tp)) & srt_mask) + one(Tp)
-            pos = ((srt_entry - one(Tp)) >> srt_shift) + one(Tp)
-            lvl_tbl[(pos - 1) * coldim + idx] = true
+            lvl_tbl[srt_entry] = true
 
             if nz_id >= length(srt[proc_id]) && proc_id < P
                 proc_id += 1
@@ -806,11 +742,9 @@ Base.@propagate_inbounds function merge_bytemap(
             nz_id = j + idx_id
 
             srt_entry = srt[proc_id][nz_id]
-            idx = ((srt_entry - one(Tp)) & srt_mask) + one(Tp)
-            pos = ((srt_entry - one(Tp)) >> srt_shift) + one(Tp)
-            mapping = uq_nnz[(pos - 1) * coldim + idx]
+            mapping = uq_nnz[srt_entry]
 
-            lvl_srt[mapping] = ((pos - one(Tp)) << srt_shift) + idx
+            lvl_srt[mapping] = srt_entry
 
             if nz_id >= length(srt[proc_id]) && proc_id < P
                 proc_id += 1

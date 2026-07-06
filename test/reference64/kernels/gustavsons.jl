@@ -21,12 +21,6 @@ begin
     A_lvl_3 = A_lvl_2.lvl
     A_lvl_3_val = A_lvl_3.val
     A_lvl_2_stop == A_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_2_stop) != $(A_lvl_stop))"))
-    w_lvl_srt_shape = (Int64)(A_lvl_2_stop)
-    w_lvl_srt_shift_2 = if w_lvl_srt_shape <= 1
-            0
-        else
-            8 * sizeof(Int64) - leading_zeros(w_lvl_srt_shape - 1)
-        end
     B_lvl_2_qos_fill = 0
     B_lvl_2_qos_stop = 0
     B_lvl_2_prev_pos = 0
@@ -35,13 +29,12 @@ begin
     for j_4 = 1:A_lvl_stop
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
         B_lvl_q = (1 - 1) * A_lvl_stop + j_4
-        w_lvl_srt_mask = 1 << w_lvl_srt_shift_2 - 1
+        w_lvl_srt_shape = (Int64)(A_lvl_2_stop)
         for w_lvl_r = 1:w_lvl_qos_fill
-            w_lvl_p = (w_lvl_srt[w_lvl_r] - 1) >> w_lvl_srt_shift_2 + 1
+            w_lvl_q = w_lvl_srt[w_lvl_r]
+            w_lvl_p = fld(w_lvl_q - 1, w_lvl_srt_shape) + 1
             w_lvl_ptr[w_lvl_p] = 0
             w_lvl_ptr[w_lvl_p + 1] = 0
-            w_lvl_i = (w_lvl_srt[w_lvl_r] - 1) & w_lvl_srt_mask + 1
-            w_lvl_q = (w_lvl_p - 1) * A_lvl_2_stop + w_lvl_i
             w_lvl_tbl[w_lvl_q] = false
             Finch.resize_if_smaller!(w_lvl_2_val, w_lvl_q)
             Finch.fill_range!(w_lvl_2_val, 0.0, w_lvl_q, w_lvl_q)
@@ -98,7 +91,7 @@ begin
                                         w_lvl_qos_stop = max(w_lvl_qos_stop << 1, 1)
                                         Finch.resize_if_smaller!(w_lvl_srt, w_lvl_qos_stop)
                                     end
-                                    w_lvl_srt[w_lvl_qos_fill] = ((Int64)(1) - 1) << w_lvl_srt_shift_2 + (Int64)(A_lvl_2_i_2)
+                                    w_lvl_srt[w_lvl_qos_fill] = w_lvl_q_2
                                 end
                                 A_lvl_2_q_2 += 1
                             else
@@ -114,7 +107,7 @@ begin
                                             w_lvl_qos_stop = max(w_lvl_qos_stop << 1, 1)
                                             Finch.resize_if_smaller!(w_lvl_srt, w_lvl_qos_stop)
                                         end
-                                        w_lvl_srt[w_lvl_qos_fill] = ((Int64)(1) - 1) << w_lvl_srt_shift_2 + (Int64)(phase_stop_5)
+                                        w_lvl_srt[w_lvl_qos_fill] = w_lvl_q_2
                                     end
                                     A_lvl_2_q_2 += 1
                                 end
@@ -153,7 +146,7 @@ begin
                                             w_lvl_qos_stop = max(w_lvl_qos_stop << 1, 1)
                                             Finch.resize_if_smaller!(w_lvl_srt, w_lvl_qos_stop)
                                         end
-                                        w_lvl_srt[w_lvl_qos_fill] = ((Int64)(1) - 1) << w_lvl_srt_shift_2 + (Int64)(A_lvl_2_i_3)
+                                        w_lvl_srt[w_lvl_qos_fill] = w_lvl_q_3
                                     end
                                     A_lvl_2_q_3 += 1
                                 else
@@ -169,7 +162,7 @@ begin
                                                 w_lvl_qos_stop = max(w_lvl_qos_stop << 1, 1)
                                                 Finch.resize_if_smaller!(w_lvl_srt, w_lvl_qos_stop)
                                             end
-                                            w_lvl_srt[w_lvl_qos_fill] = ((Int64)(1) - 1) << w_lvl_srt_shift_2 + (Int64)(phase_stop_10)
+                                            w_lvl_srt[w_lvl_qos_fill] = w_lvl_q_3
                                         end
                                         A_lvl_2_q_3 += 1
                                     end
@@ -187,9 +180,10 @@ begin
         resize!(w_lvl_tbl, 1A_lvl_2_stop)
         resize!(w_lvl_srt, w_lvl_qos_fill)
         sort!(w_lvl_srt)
+        w_lvl_srt_shape_2 = (Int64)(A_lvl_2_stop)
         w_lvl_p_prev = 0
         for w_lvl_r_2 = 1:w_lvl_qos_fill
-            w_lvl_p_2 = (w_lvl_srt[w_lvl_r_2] - 1) >> w_lvl_srt_shift_2 + 1
+            w_lvl_p_2 = fld(w_lvl_srt[w_lvl_r_2] - 1, w_lvl_srt_shape_2) + 1
             if w_lvl_p_2 != w_lvl_p_prev
                 w_lvl_ptr[w_lvl_p_prev + 1] = w_lvl_r_2
                 w_lvl_ptr[w_lvl_p_2] = w_lvl_r_2
@@ -201,23 +195,23 @@ begin
         resize!(w_lvl_2_val, A_lvl_2_stop)
         B_lvl_2_qos = B_lvl_2_qos_fill + 1
         B_lvl_2_prev_pos < B_lvl_q || throw((Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
-        w_lvl_srt_mask_2 = 1 << w_lvl_srt_shift_2 - 1
+        w_lvl_q_offset = (1 - 1) * (Int64)(A_lvl_2_stop)
         w_lvl_r_3 = w_lvl_ptr[1]
         w_lvl_r_stop = w_lvl_ptr[1 + 1]
         if w_lvl_r_3 != 0 && w_lvl_r_3 < w_lvl_r_stop
-            w_lvl_i_stop = (w_lvl_srt[w_lvl_r_stop - 1] - 1) & w_lvl_srt_mask_2 + 1
+            w_lvl_i_stop = w_lvl_srt[w_lvl_r_stop - 1] - w_lvl_q_offset
         else
             w_lvl_i_stop = 0
         end
         phase_stop_13 = min(A_lvl_2_stop, w_lvl_i_stop)
         if phase_stop_13 >= 1
-            while w_lvl_r_3 + 1 < w_lvl_r_stop && (w_lvl_srt[w_lvl_r_3] - 1) & w_lvl_srt_mask_2 + 1 < 1
+            while w_lvl_r_3 + 1 < w_lvl_r_stop && w_lvl_srt[w_lvl_r_3] < w_lvl_q_offset + (Int64)(1)
                 w_lvl_r_3 += 1
             end
             while true
-                w_lvl_i_2 = (w_lvl_srt[w_lvl_r_3] - 1) & w_lvl_srt_mask_2 + 1
-                if w_lvl_i_2 < phase_stop_13
-                    w_lvl_q_4 = (1 - 1) * A_lvl_2_stop + w_lvl_i_2
+                w_lvl_i = w_lvl_srt[w_lvl_r_3] - w_lvl_q_offset
+                if w_lvl_i < phase_stop_13
+                    w_lvl_q_4 = w_lvl_q_offset + w_lvl_i
                     w_lvl_2_val_2 = w_lvl_2_val[w_lvl_q_4]
                     if B_lvl_2_qos > B_lvl_2_qos_stop
                         B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
@@ -226,14 +220,14 @@ begin
                         Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_stop)
                     end
                     B_lvl_3_val[B_lvl_2_qos] = w_lvl_2_val_2
-                    B_lvl_2_idx[B_lvl_2_qos] = w_lvl_i_2
+                    B_lvl_2_idx[B_lvl_2_qos] = w_lvl_i
                     B_lvl_2_qos += 1
                     B_lvl_2_prev_pos = B_lvl_q
                     w_lvl_r_3 += 1
                 else
-                    phase_stop_15 = min(phase_stop_13, w_lvl_i_2)
-                    if w_lvl_i_2 == phase_stop_15
-                        w_lvl_q_4 = (1 - 1) * A_lvl_2_stop + w_lvl_i_2
+                    phase_stop_15 = min(phase_stop_13, w_lvl_i)
+                    if w_lvl_i == phase_stop_15
+                        w_lvl_q_4 = w_lvl_q_offset + w_lvl_i
                         w_lvl_2_val_3 = w_lvl_2_val[w_lvl_q_4]
                         if B_lvl_2_qos > B_lvl_2_qos_stop
                             B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
