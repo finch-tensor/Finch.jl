@@ -303,6 +303,19 @@ virtual_level_fill_value(lvl::VirtualSparseByteMapLevel) = virtual_level_fill_va
 
 postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 
+function sparse_bytemap_parent_position(ctx, lvl::VirtualSparseByteMapLevel, q, pos_stop, srt_shape)
+    Tp = postype(lvl)
+    if prove(ctx, call(==, pos_stop, 1))
+        return nothing, :($(Tp(1)))
+    elseif prove(ctx, call(==, lvl.shape, 1))
+        return nothing, q
+    else
+        return :($srt_shape = $(Tp)($(ctx(lvl.shape)))), :(
+            fld($q - $(Tp(1)), $srt_shape) + $(Tp(1))
+        )
+    end
+end
+
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos, init)
     Ti = lvl.Ti
     Tp = postype(lvl)
@@ -310,13 +323,15 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
     p = freshen(ctx, lvl.tag, :_p)
     q = freshen(ctx, lvl.tag, :_q)
     srt_shape = freshen(ctx, lvl.tag, :_srt_shape)
+    (srt_shape_init, parent_position) =
+        sparse_bytemap_parent_position(ctx, lvl, q, pos, srt_shape)
     push_preamble!(
         ctx,
         quote
-            $srt_shape = $(Tp)($(ctx(lvl.shape)))
+            $srt_shape_init
             for $r in 1:($(lvl.qos_fill))
                 $q = $(lvl.srt)[$r]
-                $p = fld($q - $(Tp(1)), $srt_shape) + $(Tp(1))
+                $p = $parent_position
                 $(lvl.ptr)[$p] = $(Tp(0))
                 $(lvl.ptr)[$p + 1] = $(Tp(0))
                 $(lvl.tbl)[$q] = false
@@ -390,6 +405,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     pos_stop = cache!(ctx, :pos_stop, pos_stop)
     Ti = lvl.Ti
     Tp = postype(lvl)
+    srt_entry = :($(lvl.srt)[$r])
+    (srt_shape_init, parent_position) =
+        sparse_bytemap_parent_position(ctx, lvl, srt_entry, pos_stop, srt_shape)
     push_preamble!(
         ctx,
         quote
@@ -397,10 +415,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
             resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
-            $srt_shape = $(Tp)($(ctx(lvl.shape)))
+            $srt_shape_init
             $p_prev = $(Tp(0))
             for $r in 1:($(lvl.qos_fill))
-                $p = fld($(lvl.srt)[$r] - $(Tp(1)), $srt_shape) + $(Tp(1))
+                $p = $parent_position
                 if $p != $p_prev
                     $(lvl.ptr)[$p_prev + 1] = $r
                     $(lvl.ptr)[$p] = $r
