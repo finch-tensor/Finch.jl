@@ -60,7 +60,7 @@ function sparse_dict_table_count(tbl_val)
     return n
 end
 
-function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
+@inline function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
     old_pos = copy(tbl_pos)
     old_idx = copy(tbl_idx)
     old_val = copy(tbl_val)
@@ -77,7 +77,7 @@ function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
     return tbl_pos, tbl_idx, tbl_val
 end
 
-function sparse_dict_table_insert_slot_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
+@inline function sparse_dict_table_insert_slot_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
     n = length(tbl_val)
     h = sparse_dict_hash_slot(p, i, n)
     @inbounds for _ in 1:n
@@ -96,24 +96,36 @@ function sparse_dict_table_insert_slot_noresize!(tbl_pos, tbl_idx, tbl_val, p, i
     error("SparseDict linear-probing table is full")
 end
 
-function sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
+@inline function sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
     sparse_dict_table_insert_slot_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
     return v
 end
 
-function sparse_dict_table_lookup(tbl_pos, tbl_idx, tbl_val, p, i)
-    isempty(tbl_val) && return zero(eltype(tbl_val))
+@inline function sparse_dict_table_lookup_slot(tbl_pos, tbl_idx, tbl_val, p, i)
+    isempty(tbl_val) && return 0
     n = length(tbl_val)
     h = sparse_dict_hash_slot(p, i, n)
     @inbounds for _ in 1:n
         val = tbl_val[h]
-        val == 0 && return zero(eltype(tbl_val))
-        if tbl_pos[h] == p && tbl_idx[h] == i
-            return val
+        if val == 0 || (tbl_pos[h] == p && tbl_idx[h] == i)
+            return h
         end
         h = h == n ? 1 : h + 1
     end
-    return zero(eltype(tbl_val))
+    error("SparseDict linear-probing table is full")
+end
+
+@inline function sparse_dict_table_lookup(tbl_pos, tbl_idx, tbl_val, p, i)
+    h = sparse_dict_table_lookup_slot(tbl_pos, tbl_idx, tbl_val, p, i)
+    h == 0 && return zero(eltype(tbl_val))
+    return tbl_val[h]
+end
+
+@inline function sparse_dict_table_insert_at_slot!(tbl_pos, tbl_idx, tbl_val, h, p, i, v)
+    tbl_pos[h] = p
+    tbl_idx[h] = i
+    tbl_val[h] = v
+    return v
 end
 
 function sparse_dict_table_rebuild!(tbl_pos, tbl_idx, tbl_val, ptr, idx, val, pos_stop)
@@ -484,27 +496,6 @@ end
 function assemble_level!(ctx, lvl::VirtualSparseDictLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
-    Tp = postype(lvl)
-    old = freshen(ctx, lvl.tag, :old)
-    tbl_cap = freshen(ctx, lvl.tag, :tbl_cap)
-
-    quote
-        $old = length($(lvl.perm)) + 1
-        Finch.resize_if_smaller!($(lvl.perm), $pos_stop)
-        if $old <= $pos_stop
-            Finch.fill_range!($(lvl.perm), 0, $old, $pos_stop)
-        end
-        $tbl_cap = Finch.sparse_dict_table_capacity($pos_stop)
-        if length($(lvl.tbl_val)) < $tbl_cap
-            Finch.sparse_dict_table_resize!(
-                $(lvl.tbl_pos), $(lvl.tbl_idx), $(lvl.tbl_val), $tbl_cap
-            )
-        end
-        $(contain(
-            ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(old, Tp), value(pos_stop, Tp)),
-            ctx,
-        ))
-    end
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
@@ -727,9 +718,12 @@ function unfurl(
     dirty = freshen(ctx, tag, :_dirty)
     p = freshen(ctx, tag, :_p)
     q_stop = freshen(ctx, tag, :_q_stop)
+    old = freshen(ctx, tag, :_old)
+    tbl_cap = freshen(ctx, tag, :_tbl_cap)
     tbl_pos = freshen(ctx, tag, :_tbl_pos)
     tbl_idx = freshen(ctx, tag, :_tbl_idx)
     tbl_val = freshen(ctx, tag, :_tbl_val)
+    tbl_slot = freshen(ctx, tag, :_tbl_slot)
 
     Thunk(;
         body=(ctx) -> Lookup(;
@@ -738,9 +732,30 @@ function unfurl(
                     $tbl_pos = $(lvl.tbl_pos)
                     $tbl_idx = $(lvl.tbl_idx)
                     $tbl_val = $(lvl.tbl_val)
-                    $qos = Finch.sparse_dict_table_lookup(
+                    if $qos_stop == length($(lvl.perm))
+                        $old = length($(lvl.perm)) + 1
+                        $p = $old
+                        $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
+                        Finch.resize_if_smaller!($(lvl.perm), $q_stop)
+                        Finch.fill_range!($(lvl.perm), 0, $old, $q_stop)
+                        $tbl_cap = Finch.sparse_dict_table_capacity($q_stop)
+                        Finch.sparse_dict_table_resize!(
+                            $tbl_pos, $tbl_idx, $tbl_val, $tbl_cap
+                        )
+                        $(contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2,
+                                lvl.lvl,
+                                value(p, Tp),
+                                value(q_stop, Tp),
+                            ),
+                            ctx,
+                        ))
+                    end
+                    $tbl_slot = Finch.sparse_dict_table_lookup_slot(
                         $tbl_pos, $tbl_idx, $tbl_val, $(ctx(pos)), $(ctx(idx))
                     )
+                    $qos = $tbl_val[$tbl_slot]
                     if $qos == 0
                         #If the qos is not in the table, we need to add it.
                         #We need to commit it to the table in the event that
@@ -753,21 +768,14 @@ function unfurl(
                             $qos = $qos_stop + 1
                             $qos_stop = $qos
                         end
-                        if $qos > length($(lvl.perm))
-                            $p = length($(lvl.perm)) + 1
-                            $q_stop = max(length($(lvl.perm)) << 1, $qos)
-                            $(contain(
-                                ctx_2 -> assemble_level!(
-                                    ctx_2,
-                                    lvl,
-                                    value(p, Tp),
-                                    value(q_stop, Tp),
-                                ),
-                                ctx,
-                            ))
-                        end
-                        Finch.sparse_dict_table_insert_noresize!(
-                            $tbl_pos, $tbl_idx, $tbl_val, $(ctx(pos)), $(ctx(idx)), $qos
+                        Finch.sparse_dict_table_insert_at_slot!(
+                            $tbl_pos,
+                            $tbl_idx,
+                            $tbl_val,
+                            $tbl_slot,
+                            $(ctx(pos)),
+                            $(ctx(idx)),
+                            $qos,
                         )
                     end
                     $dirty = false
