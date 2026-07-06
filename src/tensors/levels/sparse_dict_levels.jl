@@ -1,5 +1,5 @@
 """
-    SparseDictLevel{[Ti=Int], [Tp=Int], [Ptr, Idx, Val, Tbl]}(lvl, [dim])
+    SparseDictLevel{[Ti=Int], [Tp=Int], [Ptr, Idx, Val, TblPos, TblIdx, TblVal]}(lvl, [dim])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -34,16 +34,94 @@ julia> tensor_tree(Tensor(SparseDict(SparseDict(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl} <: AbstractLevel
+struct SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     ptr::Ptr
     idx::Idx
     val::Val
-    tbl::Tbl
+    tbl_pos::TblPos
+    tbl_idx::TblIdx
+    tbl_val::TblVal
 end
 
 const SparseDict = SparseDictLevel
+
+@inline sparse_dict_table_capacity(n) = max(4, n <= 1 ? 4 : nextpow(2, 2n))
+
+@inline function sparse_dict_hash_slot(p, i, n)
+    return Int(mod(hash((p, i)), UInt(n))) + 1
+end
+
+function sparse_dict_table_count(tbl_val)
+    n = 0
+    @inbounds for v in tbl_val
+        n += v > 0
+    end
+    return n
+end
+
+function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
+    old_pos = copy(tbl_pos)
+    old_idx = copy(tbl_idx)
+    old_val = copy(tbl_val)
+    resize!(tbl_pos, cap)
+    resize!(tbl_idx, cap)
+    resize!(tbl_val, cap)
+    fill!(tbl_val, zero(eltype(tbl_val)))
+    @inbounds for h in eachindex(old_val)
+        v = old_val[h]
+        if v != 0
+            sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, old_pos[h], old_idx[h], v)
+        end
+    end
+    return tbl_pos, tbl_idx, tbl_val
+end
+
+function sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, p, i, v)
+    n = length(tbl_val)
+    h = sparse_dict_hash_slot(p, i, n)
+    @inbounds for _ in 1:n
+        val = tbl_val[h]
+        if val == 0
+            tbl_pos[h] = p
+            tbl_idx[h] = i
+            tbl_val[h] = v
+            return v
+        elseif tbl_pos[h] == p && tbl_idx[h] == i
+            tbl_val[h] = v
+            return v
+        end
+        h = h == n ? 1 : h + 1
+    end
+    error("SparseDict linear-probing table is full")
+end
+
+function sparse_dict_table_lookup(tbl_pos, tbl_idx, tbl_val, p, i)
+    isempty(tbl_val) && return zero(eltype(tbl_val))
+    n = length(tbl_val)
+    h = sparse_dict_hash_slot(p, i, n)
+    @inbounds for _ in 1:n
+        val = tbl_val[h]
+        val == 0 && return zero(eltype(tbl_val))
+        if tbl_pos[h] == p && tbl_idx[h] == i
+            return val
+        end
+        h = h == n ? 1 : h + 1
+    end
+    return zero(eltype(tbl_val))
+end
+
+function sparse_dict_table_rebuild!(tbl_pos, tbl_idx, tbl_val, ptr, idx, val, pos_stop)
+    nnz = isempty(ptr) ? 0 : ptr[pos_stop + 1] - 1
+    sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, sparse_dict_table_capacity(nnz))
+    @inbounds for p in 1:pos_stop
+        for q in ptr[p]:(ptr[p + 1] - 1)
+            sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, p, idx[q], val[q])
+        end
+    end
+    return tbl_pos, tbl_idx, tbl_val
+end
 
 SparseDictLevel(lvl) = SparseDictLevel{Int}(lvl)
 SparseDictLevel(lvl, shape::Ti) where {Ti} = SparseDictLevel{Ti}(lvl, shape)
@@ -55,14 +133,25 @@ function SparseDictLevel{Ti}(lvl, shape) where {Ti}
         postype(lvl)[1],
         Ti[],
         postype(lvl)[],
-        Dict{Tuple{postype(lvl),Ti},postype(lvl)}(),
+        postype(lvl)[],
+        Ti[],
+        postype(lvl)[],
     )
 end
 
 function SparseDictLevel{Ti}(
-    lvl::Lvl, shape, ptr::Ptr, idx::Idx, val::Val, tbl::Tbl
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl}
-    SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}(lvl, shape, ptr, idx, val, tbl)
+    lvl::Lvl,
+    shape,
+    ptr::Ptr,
+    idx::Idx,
+    val::Val,
+    tbl_pos::TblPos,
+    tbl_idx::TblIdx,
+    tbl_val::TblVal,
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
+    SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}(
+        lvl, shape, ptr, idx, val, tbl_pos, tbl_idx, tbl_val
+    )
 end
 
 Base.summary(lvl::SparseDictLevel) = "SparseDict($(summary(lvl.lvl)))"
@@ -71,8 +160,8 @@ function similar_level(lvl::SparseDictLevel, fill_value, eltype::Type, dim, tail
 end
 
 function postype(
-    ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl}
+    ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
     return postype(Lvl)
 end
 
@@ -83,19 +172,25 @@ function Base.resize!(lvl::SparseDictLevel{Ti}, dims...) where {Ti}
         lvl.ptr,
         lvl.idx,
         lvl.val,
-        lvl.tbl,
+        lvl.tbl_pos,
+        lvl.tbl_idx,
+        lvl.tbl_val,
     )
 end
 
 function transfer(
-    Tm, lvl::SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl}
+    Tm, lvl::SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
     idx_2 = transfer(Tm, lvl.idx)
     val_2 = transfer(Tm, lvl.val)
-    tbl_2 = transfer(Tm, lvl.tbl)
-    return SparseDictLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_2)
+    tbl_pos_2 = transfer(Tm, lvl.tbl_pos)
+    tbl_idx_2 = transfer(Tm, lvl.tbl_idx)
+    tbl_val_2 = transfer(Tm, lvl.tbl_val)
+    return SparseDictLevel{Ti}(
+        lvl_2, lvl.shape, ptr_2, idx_2, val_2, tbl_pos_2, tbl_idx_2, tbl_val_2
+    )
 end
 
 function countstored_level(lvl::SparseDictLevel, pos)
@@ -105,7 +200,14 @@ end
 
 function pattern!(lvl::SparseDictLevel{Ti}) where {Ti}
     SparseDictLevel{Ti}(
-        pattern!(lvl.lvl), lvl.shape, lvl.ptr, lvl.idx, lvl.val, lvl.tbl
+        pattern!(lvl.lvl),
+        lvl.shape,
+        lvl.ptr,
+        lvl.idx,
+        lvl.val,
+        lvl.tbl_pos,
+        lvl.tbl_idx,
+        lvl.tbl_val,
     )
 end
 
@@ -116,7 +218,9 @@ function set_fill_value!(lvl::SparseDictLevel{Ti}, init) where {Ti}
         lvl.ptr,
         lvl.idx,
         lvl.val,
-        lvl.tbl,
+        lvl.tbl_pos,
+        lvl.tbl_idx,
+        lvl.tbl_val,
     )
 end
 
@@ -139,7 +243,11 @@ function Base.show(io::IO, lvl::SparseDictLevel{Ti}) where {Ti}
         print(io, ", ")
         show(io, lvl.val)
         print(io, ", ")
-        show(io, lvl.tbl)
+        show(io, lvl.tbl_pos)
+        print(io, ", ")
+        show(io, lvl.tbl_idx)
+        print(io, ", ")
+        show(io, lvl.tbl_val)
     end
     print(io, ")")
 end
@@ -170,25 +278,27 @@ function labelled_children(fbr::SubFiber{<:SparseDictLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl} = 1 + level_ndims(Lvl)
+    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseDictLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseDictLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(
-    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl} = level_eltype(Lvl)
+    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl} = level_fill_value(Lvl)
+    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl} = level_fill_value(Lvl)
 function data_rep_level(
-    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl}
+    ::Type{<:SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}}
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
     SparseData(data_rep_level(Lvl))
 end
 
 function isstructequal(a::T, b::T) where {T<:SparseDict}
     a.shape == b.shape &&
-        a.tbl == b.tbl &&
+        a.tbl_pos == b.tbl_pos &&
+        a.tbl_idx == b.tbl_idx &&
+        a.tbl_val == b.tbl_val &&
         isstructequal(a.lvl, b.lvl)
 end
 
@@ -210,7 +320,9 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     ptr
     idx
     val
-    tbl
+    tbl_pos
+    tbl_idx
+    tbl_val
     shape
     qos_stop
     qos_free
@@ -229,13 +341,18 @@ function is_level_concurrent(ctx, lvl::VirtualSparseDictLevel)
 end
 
 function virtualize(
-    ctx, ex, ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Lvl}}, tag=:lvl
-) where {Ti,Ptr,Idx,Val,Tbl,Lvl}
+    ctx,
+    ex,
+    ::Type{SparseDictLevel{Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}},
+    tag=:lvl,
+) where {Ti,Ptr,Idx,Val,TblPos,TblIdx,TblVal,Lvl}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     idx = freshen(ctx, tag, :_idx)
     val = freshen(ctx, tag, :_val)
-    tbl = freshen(ctx, tag, :_tbl)
+    tbl_pos = freshen(ctx, tag, :_tbl_pos)
+    tbl_idx = freshen(ctx, tag, :_tbl_idx)
+    tbl_val = freshen(ctx, tag, :_tbl_val)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -244,7 +361,9 @@ function virtualize(
             $ptr = $tag.ptr
             $idx = $tag.idx
             $val = $tag.val
-            $tbl = $tag.tbl
+            $tbl_pos = $tag.tbl_pos
+            $tbl_idx = $tag.tbl_idx
+            $tbl_val = $tag.tbl_val
             $stop = $tag.shape
         end,
     )
@@ -252,7 +371,10 @@ function virtualize(
     qos_free = freshen(ctx, tag, :_qos_free)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, shape, qos_stop, qos_free)
+    VirtualSparseDictLevel(
+        tag, lvl_2, Ti, ptr, idx, val, tbl_pos, tbl_idx, tbl_val, shape, qos_stop,
+        qos_free,
+    )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -262,7 +384,9 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyl
             $(lvl.ptr),
             $(lvl.idx),
             $(lvl.val),
-            $(lvl.tbl),
+            $(lvl.tbl_pos),
+            $(lvl.tbl_idx),
+            $(lvl.tbl_val),
         )
     end
 end
@@ -277,7 +401,9 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
         distribute_buffer(ctx, lvl.val, arch, style),
-        distribute_buffer(ctx, lvl.tbl, arch, style),
+        distribute_buffer(ctx, lvl.tbl_pos, arch, style),
+        distribute_buffer(ctx, lvl.tbl_idx, arch, style),
+        distribute_buffer(ctx, lvl.tbl_val, arch, style),
         lvl.shape,
         lvl.qos_stop,
         lvl.qos_free,
@@ -295,7 +421,9 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
             lvl.ptr,
             lvl.idx,
             lvl.val,
-            lvl.tbl,
+            lvl.tbl_pos,
+            lvl.tbl_idx,
+            lvl.tbl_val,
             lvl.shape,
             lvl.qos_stop,
             lvl.qos_free,
@@ -329,7 +457,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos,
     push_preamble!(
         ctx,
         quote
-            empty!($(lvl.tbl))
+            empty!($(lvl.tbl_pos))
+            empty!($(lvl.tbl_idx))
+            empty!($(lvl.tbl_val))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
             $(lvl.qos_free) = 0
@@ -343,6 +473,27 @@ end
 function assemble_level!(ctx, lvl::VirtualSparseDictLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
+    Tp = postype(lvl)
+    old = freshen(ctx, lvl.tag, :old)
+    tbl_cap = freshen(ctx, lvl.tag, :tbl_cap)
+
+    quote
+        $old = length($(lvl.val)) + 1
+        Finch.resize_if_smaller!($(lvl.val), $pos_stop)
+        if $old <= $pos_stop
+            Finch.fill_range!($(lvl.val), 0, $old, $pos_stop)
+        end
+        $tbl_cap = Finch.sparse_dict_table_capacity($pos_stop)
+        if length($(lvl.tbl_val)) < $tbl_cap
+            Finch.sparse_dict_table_resize!(
+                $(lvl.tbl_pos), $(lvl.tbl_idx), $(lvl.tbl_val), $tbl_cap
+            )
+        end
+        $(contain(
+            ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(old, Tp), value(pos_stop, Tp)),
+            ctx,
+        ))
+    end
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
@@ -363,34 +514,41 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
     entry = freshen(ctx, :entry)
     ptr_2 = freshen(ctx, :ptr_2)
     qos_max = freshen(ctx, :qos_max)
+    tbl_len = freshen(ctx, :tbl_len)
+    h = freshen(ctx, :h)
     push_preamble!(
         ctx,
         quote
+            $tbl_len = Finch.sparse_dict_table_count($(lvl.tbl_val))
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
-            $pdx_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
-            resize!($(lvl.idx), length($(lvl.tbl)))
-            $idx_tmp = Vector{$Ti}(undef, length($(lvl.tbl)))
-            $val_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
+            $pdx_tmp = Vector{$Tp}(undef, $tbl_len)
+            resize!($(lvl.idx), $tbl_len)
+            $idx_tmp = Vector{$Ti}(undef, $tbl_len)
+            $val_tmp = Vector{$Tp}(undef, $tbl_len)
             $q = 0
             $qos_max = $(Tp(0))
-            for $entry in pairs($(lvl.tbl))
-                (($p, $i), $v) = $entry
-                $q += 1
-                $idx_tmp[$q] = $i
-                $val_tmp[$q] = $v
-                $qos_max = max($qos_max, $v)
-                $pdx_tmp[$q] = $p
-                $(lvl.ptr)[$p + 1] += 1
+            for $h in eachindex($(lvl.tbl_val))
+                $v = $(lvl.tbl_val)[$h]
+                if $v > 0
+                    $p = $(lvl.tbl_pos)[$h]
+                    $i = $(lvl.tbl_idx)[$h]
+                    $q += 1
+                    $idx_tmp[$q] = $i
+                    $val_tmp[$q] = $v
+                    $qos_max = max($qos_max, $v)
+                    $pdx_tmp[$q] = $p
+                    $(lvl.ptr)[$p + 1] += 1
+                end
             end
             # In read mode, val[1:length(tbl)] stores child positions; the tail
-            # encodes free qoses. Nonpositive tail slots encode themselves.
+            # encodes free qoses from older tables.
             $p = $qos_max
             $q = $(lvl.qos_free)
             while $q != 0
                 $v = -$(lvl.val)[$q]
-                if $q <= length($(lvl.tbl))
+                if $q <= $tbl_len
                     while $(lvl.val)[$p] <= 0
                         $p -= 1
                     end
@@ -422,13 +580,15 @@ end
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
     p = freshen(ctx, :p)
     v = freshen(ctx, :v)
+    tbl_len = freshen(ctx, :tbl_len)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     push_preamble!(
         ctx,
         quote
             $(lvl.qos_stop) = length($(lvl.val))
             $(lvl.qos_free) = 0
-            for $p in (length($(lvl.tbl)) + 1):$(lvl.qos_stop)
+            $tbl_len = Finch.sparse_dict_table_count($(lvl.tbl_val))
+            for $p in ($tbl_len + 1):$(lvl.qos_stop)
                 $v = $(lvl.val)[$p]
                 if $v <= 0
                     $v = $p
@@ -436,8 +596,10 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_sto
                 $(lvl.val)[$v] = -$(lvl.qos_free)
                 $(lvl.qos_free) = $v
             end
-            for $v in values($(lvl.tbl))
-                $(lvl.val)[$v] = $v
+            for $v in $(lvl.tbl_val)
+                if $v > 0
+                    $(lvl.val)[$v] = $v
+                end
             end
         end,
     )
@@ -523,7 +685,13 @@ function unfurl(
     Lookup(;
         body=(ctx, i) -> Thunk(;
             preamble=quote
-                $my_q = get($(lvl.tbl), ($(ctx(pos)), $(ctx(i))), 0)
+                $my_q = Finch.sparse_dict_table_lookup(
+                    $(lvl.tbl_pos),
+                    $(lvl.tbl_idx),
+                    $(lvl.tbl_val),
+                    $(ctx(pos)),
+                    $(ctx(i)),
+                )
             end,
             body=(ctx) -> Switch(
                 [
@@ -564,12 +732,20 @@ function unfurl(
     dirty = freshen(ctx, tag, :_dirty)
     p = freshen(ctx, tag, :_p)
     q_stop = freshen(ctx, tag, :_q_stop)
+    tbl_pos = freshen(ctx, tag, :_tbl_pos)
+    tbl_idx = freshen(ctx, tag, :_tbl_idx)
+    tbl_val = freshen(ctx, tag, :_tbl_val)
 
     Thunk(;
         body=(ctx) -> Lookup(;
             body=(ctx, idx) -> Thunk(;
                 preamble=quote
-                    $qos = get($(lvl.tbl), ($(ctx(pos)), $(ctx(idx))), 0)
+                    $tbl_pos = $(lvl.tbl_pos)
+                    $tbl_idx = $(lvl.tbl_idx)
+                    $tbl_val = $(lvl.tbl_val)
+                    $qos = Finch.sparse_dict_table_lookup(
+                        $tbl_pos, $tbl_idx, $tbl_val, $(ctx(pos)), $(ctx(idx))
+                    )
                     if $qos == 0
                         #If the qos is not in the table, we need to add it.
                         #We need to commit it to the table in the event that
@@ -588,16 +764,16 @@ function unfurl(
                             $(contain(
                                 ctx_2 -> assemble_level!(
                                     ctx_2,
-                                    lvl.lvl,
+                                    lvl,
                                     value(p, Tp),
                                     value(q_stop, Tp),
                                 ),
                                 ctx,
                             ))
-                            Finch.resize_if_smaller!($(lvl.val), $q_stop)
-                            Finch.fill_range!($(lvl.val), 0, $p, $q_stop)
                         end
-                        $(lvl.tbl)[($(ctx(pos)), $(ctx(idx)))] = $qos
+                        Finch.sparse_dict_table_insert_noresize!(
+                            $tbl_pos, $tbl_idx, $tbl_val, $(ctx(pos)), $(ctx(idx)), $qos
+                        )
                     end
                     $dirty = false
                 end,
@@ -613,9 +789,7 @@ function unfurl(
                         end
                         $(fbr.dirty) = true
                     elseif $(lvl.val)[$qos] == 0 #here, val is being used as a dirty bit
-                        delete!($(lvl.tbl), ($(ctx(pos)), $(ctx(idx))))
-                        $(lvl.val)[$qos] = -$qos_free
-                        $qos_free = $qos
+                        $(lvl.val)[$qos] = $qos
                     end
                 end,
             ),
@@ -636,7 +810,6 @@ function coalesce_level!(
     #lvl.idx and lvl.ptr should be MultiChannelBuffers
     idx = lvl.idx.data
     ptr = lvl.ptr.data
-    tbl = lvl.tbl.data
     # val = lvl.val.data
     max_level_dim = global_fbr_map[length(global_fbr_map)]
     cutoffs = compute_proc_cutoffs(idx, P)
@@ -647,11 +820,20 @@ function coalesce_level!(
     end
 
     pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
+        global_fbr_map,
+        local_fbr_map,
+        task_map,
+        ptr,
+        idx,
+        cutoffs,
+        P,
+        lvl.tbl_pos.data,
+        lvl.tbl_idx.data,
+        lvl.tbl_val.data,
     )
     global_fbr_map, local_fbr_map, task_map = process_next_lvl_hash(
         pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx,
-        coalescent.val, coalescent.tbl,
+        coalescent.val, coalescent.tbl_pos, coalescent.tbl_idx, coalescent.tbl_val,
     )
 
     coalesce_level!(
@@ -659,9 +841,100 @@ function coalesce_level!(
     )
 end
 
+Base.@propagate_inbounds function gen_pos_idx_map_hash(
+    global_fbr_map,
+    local_fbr_map,
+    task_map,
+    ptr,
+    index,
+    cutoffs,
+    P,
+    tbl_pos,
+    tbl_idx,
+    tbl_val,
+)
+    ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
+    sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
+
+    nnz = cutoffs[length(cutoffs)] - 1
+    merged_positions = Vector{Int}(undef, nnz)
+    merged_indices = Vector{Int}(undef, nnz)
+
+    task_map2 = Vector{Int}(undef, nnz)
+    local_fbr_map2 = Vector{Int}(undef, nnz)
+
+    chk_size = fld(nnz + P - 1, P)
+    Threads.@threads for tid in 1:P
+        init = (tid - 1) * chk_size + 1
+        proc_id = binary_search(init, cutoffs)
+
+        if proc_id < 1
+            continue
+        end
+
+        idx_id = init - cutoffs[proc_id] + 1
+
+        local_fbr = binary_search(idx_id, ptr[proc_id])
+
+        tag = get_permute_idx(proc_id, ptr) + local_fbr
+
+        @assert local_fbr > 0
+        @assert tag > 0
+
+        global_fbr = global_fbr_map[sorter[tag]]
+
+        j = 0
+        for i in 0:(chk_size - 1)
+            offset = init + i
+            if offset > nnz
+                break
+            end
+
+            nz_id = j + idx_id
+            idx = index[proc_id][nz_id]
+            merged_positions[offset] = global_fbr
+            merged_indices[offset] = idx
+            task_map2[offset] = proc_id
+            local_fbr_map2[offset] = sparse_dict_table_lookup(
+                tbl_pos[proc_id], tbl_idx[proc_id], tbl_val[proc_id], local_fbr, idx
+            )
+
+            if nz_id >= length(index[proc_id]) && proc_id < P
+                proc_id += 1
+                while proc_id < P && length(index[proc_id]) < 1
+                    proc_id += 1
+                end
+
+                if length(index[proc_id]) < 1
+                    break
+                end
+
+                idx_id = 1
+                j = 0
+
+                local_fbr = binary_search(idx_id, ptr[proc_id])
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
+
+                global_fbr = global_fbr_map[sorter[tag]]
+            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
+                local_fbr + 1 < length(ptr[proc_id]) &&
+                ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
+                local_fbr = binary_search(nz_id + 1, ptr[proc_id])
+
+                tag = get_permute_idx(proc_id, ptr) + local_fbr
+                global_fbr = global_fbr_map[sorter[tag]]
+                j += 1
+            else
+                j += 1
+            end
+        end
+    end
+    return merged_positions, merged_indices, local_fbr_map2, task_map2
+end
+
 Base.@propagate_inbounds function process_next_lvl_hash(
     merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
-    lvl_idx, lvl_val, lvl_tbl,
+    lvl_idx, lvl_val, lvl_tbl_pos, lvl_tbl_idx, lvl_tbl_val,
 )
     ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
     shuffler = AcceleratedKernels.sortperm(
@@ -722,8 +995,6 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     fill!(lvl_ptr, 0)
     Finch.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
     Finch.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
-    tbls = [Dict{Tuple{Int,Int},Int}() for _ in 1:P]
-    sizehint!(lvl_tbl, nnz)
 
     Threads.@threads for tid in 1:P
         init = (tid - 1) * chk_size + 1
@@ -760,12 +1031,7 @@ Base.@propagate_inbounds function process_next_lvl_hash(
                 seen_idx += 1
             end
             global_fbr_map2[offset] = seen_idx - 1
-            tbls[tid][tup] = seen_idx - 1
         end
-    end
-
-    for tbl in tbls
-        merge!(lvl_tbl, tbl)
     end
 
     lvl_ptr[1] = 1
@@ -774,6 +1040,5 @@ Base.@propagate_inbounds function process_next_lvl_hash(
         lvl_ptr[i] = length(lvl_idx) + 1
         i -= 1
     end
-
     return global_fbr_map2, local_fbr_map, task_map
 end
