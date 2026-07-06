@@ -213,6 +213,7 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     tbl
     shape
     qos_stop
+    qos_free
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseDictLevel)
@@ -248,9 +249,10 @@ function virtualize(
         end,
     )
     qos_stop = freshen(ctx, tag, :_qos_stop)
+    qos_free = freshen(ctx, tag, :_qos_free)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
-    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, shape, qos_stop)
+    VirtualSparseDictLevel(tag, lvl_2, Ti, ptr, idx, val, tbl, shape, qos_stop, qos_free)
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
     quote
@@ -278,6 +280,7 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl, arch, style),
         lvl.shape,
         lvl.qos_stop,
+        lvl.qos_free,
     )
 end
 
@@ -295,6 +298,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
             lvl.tbl,
             lvl.shape,
             lvl.qos_stop,
+            lvl.qos_free,
         ),
     )
 end
@@ -328,6 +332,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos,
             empty!($(lvl.tbl))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
+            $(lvl.qos_free) = 0
+            resize!($(lvl.val), 0)
         end,
     )
     lvl.lvl = declare_level!(ctx, lvl.lvl, value(qos, Tp), init)
@@ -365,7 +371,6 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
             $pdx_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
             resize!($(lvl.idx), length($(lvl.tbl)))
-            resize!($(lvl.val), length($(lvl.tbl)))
             $idx_tmp = Vector{$Ti}(undef, length($(lvl.tbl)))
             $val_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
             $q = 0
@@ -379,6 +384,22 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
                 $pdx_tmp[$q] = $p
                 $(lvl.ptr)[$p + 1] += 1
             end
+            # In read mode, val[1:length(tbl)] stores child positions; the tail
+            # encodes free qoses. Nonpositive tail slots encode themselves.
+            $p = $qos_max
+            $q = $(lvl.qos_free)
+            while $q != 0
+                $v = -$(lvl.val)[$q]
+                if $q <= length($(lvl.tbl))
+                    while $(lvl.val)[$p] <= 0
+                        $p -= 1
+                    end
+                    $(lvl.val)[$p] = $q
+                    $p -= 1
+                end
+                $q = $v
+            end
+            resize!($(lvl.val), $qos_max)
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
@@ -400,11 +421,24 @@ end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
     p = freshen(ctx, :p)
+    v = freshen(ctx, :v)
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_stop) = $(lvl.ptr)[$(ctx(pos_stop)) + 1] - 1
+            $(lvl.qos_stop) = length($(lvl.val))
+            $(lvl.qos_free) = 0
+            for $p in (length($(lvl.tbl)) + 1):$(lvl.qos_stop)
+                $v = $(lvl.val)[$p]
+                if $v <= 0
+                    $v = $p
+                end
+                $(lvl.val)[$v] = -$(lvl.qos_free)
+                $(lvl.qos_free) = $v
+            end
+            for $v in values($(lvl.tbl))
+                $(lvl.val)[$v] = $v
+            end
         end,
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
@@ -526,9 +560,10 @@ function unfurl(
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
     qos_stop = lvl.qos_stop
+    qos_free = lvl.qos_free
     dirty = freshen(ctx, tag, :_dirty)
     p = freshen(ctx, tag, :_p)
-    v = freshen(ctx, tag, :_v)
+    q_stop = freshen(ctx, tag, :_q_stop)
 
     Thunk(;
         body=(ctx) -> Lookup(;
@@ -539,32 +574,28 @@ function unfurl(
                         #If the qos is not in the table, we need to add it.
                         #We need to commit it to the table in the event that
                         #another accessor tries to write it in the same loop.
-                        $qos = length($(lvl.tbl)) + 1
-                        if $qos <= length($(lvl.val))
-                            $v = $(lvl.val)[$qos]
-                            while $v != 0
-                                $qos = $v < 0 ? -$v : $qos + 1
-                                if $qos > length($(lvl.val))
-                                    $v = 0
-                                else
-                                    $v = $(lvl.val)[$qos]
-                                end
-                            end
+                        if $qos_free != 0
+                            $qos = $qos_free
+                            $qos_free = -$(lvl.val)[$qos]
+                            $(lvl.val)[$qos] = 0
+                        else
+                            $qos = $qos_stop + 1
+                            $qos_stop = $qos
                         end
-                        if $qos > $qos_stop
-                            $p = $qos_stop + 1
-                            $qos_stop = max($qos_stop << 1, $qos)
+                        if $qos > length($(lvl.val))
+                            $p = length($(lvl.val)) + 1
+                            $q_stop = max(length($(lvl.val)) << 1, $qos)
                             $(contain(
                                 ctx_2 -> assemble_level!(
                                     ctx_2,
                                     lvl.lvl,
                                     value(p, Tp),
-                                    value(qos_stop, Tp),
+                                    value(q_stop, Tp),
                                 ),
                                 ctx,
                             ))
-                            Finch.resize_if_smaller!($(lvl.val), $qos_stop)
-                            Finch.fill_range!($(lvl.val), 0, $p, $qos_stop)
+                            Finch.resize_if_smaller!($(lvl.val), $q_stop)
+                            Finch.fill_range!($(lvl.val), 0, $p, $q_stop)
                         end
                         $(lvl.tbl)[($(ctx(pos)), $(ctx(idx)))] = $qos
                     end
@@ -583,6 +614,8 @@ function unfurl(
                         $(fbr.dirty) = true
                     elseif $(lvl.val)[$qos] == 0 #here, val is being used as a dirty bit
                         delete!($(lvl.tbl), ($(ctx(pos)), $(ctx(idx))))
+                        $(lvl.val)[$qos] = -$qos_free
+                        $qos_free = $qos
                     end
                 end,
             ),
