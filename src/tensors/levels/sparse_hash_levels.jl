@@ -607,7 +607,6 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     h = freshen(ctx, :h)
     r = freshen(ctx, :r)
     idx_tmp = freshen(ctx, :idx_tmp)
-    pdx_tmp = freshen(ctx, :pdx_tmp)
     val_tmp = freshen(ctx, :val_tmp)
     shuffler = freshen(ctx, :shuffler)
     push_preamble!(
@@ -646,18 +645,17 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
             $idx_tmp = Vector{$Ti}(undef, $tbl_count)
-            $pdx_tmp = Vector{$Tp}(undef, $tbl_count)
             $val_tmp = copy($(lvl.perm))
             @inbounds for $q in eachindex($val_tmp)
                 $v = $val_tmp[$q]
                 $idx_tmp[$q] = $(lvl.tbl_idx)[$v]
-                $pdx_tmp[$q] = $(lvl.tbl_pos)[$v]
             end
             $shuffler = sortperm($idx_tmp)
             @inbounds for $q in $shuffler
-                $p = $pdx_tmp[$q]
+                $v = $val_tmp[$q]
+                $p = $(lvl.tbl_pos)[$v]
                 $r = $(lvl.ptr)[$p]
-                $(lvl.perm)[$r] = $val_tmp[$q]
+                $(lvl.perm)[$r] = $v
                 # Advancing ptr[p] turns bucket p's start into bucket p's stop.
                 $(lvl.ptr)[$p] += 1
             end
