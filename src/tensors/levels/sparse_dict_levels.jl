@@ -52,14 +52,6 @@ const SparseDict = SparseDictLevel
     return Int(mod(hash((p, i)), UInt(n))) + 1
 end
 
-function sparse_dict_table_count(tbl_val)
-    n = 0
-    @inbounds for v in tbl_val
-        n += v > 0
-    end
-    return n
-end
-
 @inline function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
     old_pos = copy(tbl_pos)
     old_idx = copy(tbl_idx)
@@ -126,6 +118,11 @@ end
     tbl_idx[h] = i
     tbl_val[h] = v
     return v
+end
+
+function sparse_dict_table_sort_perm!(perm, tbl_pos, tbl_idx)
+    sort!(perm; by=h -> (tbl_pos[h], tbl_idx[h]))
+    return perm
 end
 
 function sparse_dict_table_rebuild!(tbl_pos, tbl_idx, tbl_val, ptr, idx, val, pos_stop)
@@ -354,6 +351,7 @@ mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
     shape
     qos_stop
     qos_free
+    tbl_count
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseDictLevel)
@@ -395,11 +393,12 @@ function virtualize(
     )
     qos_stop = freshen(ctx, tag, :_qos_stop)
     qos_free = freshen(ctx, tag, :_qos_free)
+    tbl_count = freshen(ctx, tag, :_tbl_count)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseDictLevel(
         tag, lvl_2, Ti, ptr, tbl_pos, tbl_idx, tbl_val, perm, shape, qos_stop,
-        qos_free,
+        qos_free, tbl_count,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, ::DefaultStyle)
@@ -431,6 +430,7 @@ function distribute_level(
         lvl.shape,
         lvl.qos_stop,
         lvl.qos_free,
+        lvl.tbl_count,
     )
 end
 
@@ -450,6 +450,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, diff)
             lvl.shape,
             lvl.qos_stop,
             lvl.qos_free,
+            lvl.tbl_count,
         ),
     )
 end
@@ -486,6 +487,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos,
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
             $(lvl.qos_free) = 0
+            $(lvl.tbl_count) = 0
             resize!($(lvl.perm), 0)
         end,
     )
@@ -508,12 +510,11 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
     q = freshen(ctx, :q)
     v = freshen(ctx, :v)
     qos_max = freshen(ctx, :qos_max)
-    tbl_len = freshen(ctx, :tbl_len)
+    tbl_count = lvl.tbl_count
     h = freshen(ctx, :h)
     push_preamble!(
         ctx,
         quote
-            $tbl_len = Finch.sparse_dict_table_count($(lvl.tbl_val))
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
@@ -534,7 +535,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
             $q = $(lvl.qos_free)
             while $q != 0
                 $v = -$(lvl.perm)[$q]
-                if $q <= $tbl_len
+                if $q <= $tbl_count
                     while $(lvl.perm)[$p] <= 0
                         $p -= 1
                     end
@@ -543,7 +544,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
                 end
                 $q = $v
             end
-            resize!($(lvl.perm), $tbl_len)
+            resize!($(lvl.perm), $tbl_count)
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
                 if $(lvl.tbl_val)[$h] > 0
@@ -554,7 +555,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            sort!($(lvl.perm); by=$h -> ($(lvl.tbl_pos)[$h], $(lvl.tbl_idx)[$h]))
+            Finch.sparse_dict_table_sort_perm!($(lvl.perm), $(lvl.tbl_pos), $(lvl.tbl_idx))
             $qos_stop = $qos_max
         end,
     )
@@ -565,15 +566,15 @@ end
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
     p = freshen(ctx, :p)
     v = freshen(ctx, :v)
-    tbl_len = freshen(ctx, :tbl_len)
+    tbl_count = lvl.tbl_count
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     push_preamble!(
         ctx,
         quote
             $(lvl.qos_stop) = length($(lvl.perm))
             $(lvl.qos_free) = 0
-            $tbl_len = Finch.sparse_dict_table_count($(lvl.tbl_val))
-            for $p in ($tbl_len + 1):$(lvl.qos_stop)
+            $tbl_count = length($(lvl.perm))
+            for $p in ($tbl_count + 1):$(lvl.qos_stop)
                 $v = $(lvl.perm)[$p]
                 if $v <= 0
                     $v = $p
@@ -777,6 +778,7 @@ function unfurl(
                             $(ctx(idx)),
                             $qos,
                         )
+                        $(lvl.tbl_count) += 1
                     end
                     $dirty = false
                 end,
