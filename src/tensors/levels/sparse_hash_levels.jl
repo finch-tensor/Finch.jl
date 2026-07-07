@@ -183,20 +183,25 @@ end
     return v
 end
 
-@inline function sparse_hash_table_insert_resize!(
-    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v, tbl_count
+@inline function sparse_hash_table_lookup_insert_resize_slot!(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, tbl_count
 )
-    if ((tbl_count + 1) << 1) > length(tbl_val)
-        cap = max(length(tbl_val) << 1, sparse_hash_table_capacity(tbl_count + 1))
-        sparse_hash_table_resize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, cap)
-    end
     h = sparse_hash_table_lookup_insert_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
-    if h == 0
+    if h == 0 || (tbl_val[h] == 0 && ((tbl_count + 1) << 1) > length(tbl_val))
         cap = max(length(tbl_val) << 1, sparse_hash_table_capacity(tbl_count + 1))
         sparse_hash_table_resize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, cap)
         h = sparse_hash_table_lookup_insert_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
     end
     h == 0 && error("SparseHash linear-probing table is full")
+    return h
+end
+
+@inline function sparse_hash_table_insert_resize!(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v, tbl_count
+)
+    h = sparse_hash_table_lookup_insert_resize_slot!(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, tbl_count
+    )
     sparse_hash_table_insert_at_slot!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v)
     return v
 end
@@ -771,7 +776,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
             $(lvl.stk_stop) = 0
             Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
             Finch.fill_range!($(lvl.perm), 0, 1, $(lvl.qos_stop))
-            # Rebuild update-mode perm: live q maps to itself, and unused q
+            # Restore update-mode perm: live q maps to itself, and unused q
             # values become negative free-list links below.
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
@@ -957,37 +962,20 @@ function unfurl(
                             ctx,
                         ))
                     end
+                    $stk_slot = 0
                     $(
                         if lvl.single_writer
                             quote
-                                $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                                $tbl_slot =
+                                    Finch.sparse_hash_table_lookup_insert_resize_slot!(
                                     $tbl_pos,
                                     $tbl_idx,
                                     $tbl_ctrl,
                                     $tbl_val,
                                     $(ctx(pos)),
                                     $(ctx(idx)),
+                                    $(lvl.tbl_count),
                                 )
-                                if $tbl_slot == 0
-                                    $tbl_cap = max(
-                                        length($tbl_val) << 1,
-                                        Finch.sparse_hash_table_capacity(
-                                            $(lvl.tbl_count) + 1
-                                        ),
-                                    )
-                                    Finch.sparse_hash_table_resize!(
-                                        $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val,
-                                        $tbl_cap,
-                                    )
-                                    $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
-                                        $tbl_pos,
-                                        $tbl_idx,
-                                        $tbl_ctrl,
-                                        $tbl_val,
-                                        $(ctx(pos)),
-                                        $(ctx(idx)),
-                                    )
-                                end
                             end
                         else
                             quote
@@ -1005,15 +993,13 @@ function unfurl(
                     $qos = $(Tp(0))
                     if $tbl_slot != 0
                         $qos = $tbl_val[$tbl_slot]
-                        $stk_slot = 0
-                    else
-                        $(
-                            if lvl.single_writer
-                                quote
-                                    $stk_slot = 0
-                                end
-                            else
-                                quote
+                    end
+                    $(
+                        if lvl.single_writer
+                            nothing
+                        else
+                            quote
+                                if $qos == 0
                                     $stk_slot = Finch.sparse_hash_stack_lookup(
                                         $(lvl.stk_pos),
                                         $(lvl.stk_idx),
@@ -1028,32 +1014,9 @@ function unfurl(
                                     end
                                 end
                             end
-                        )
-                    end
-                    if $qos == 0 && $stk_slot == 0
-                        $(
-                            if lvl.single_writer
-                                nothing
-                            else
-                                quote
-                                    if (
-                                        ($(lvl.tbl_count) + $(lvl.stk_stop) + 1) <<
-                                        1
-                                    ) > length($tbl_val)
-                                        $tbl_cap = max(
-                                            length($tbl_val) << 1,
-                                            Finch.sparse_hash_table_capacity(
-                                                $(lvl.tbl_count) + $(lvl.stk_stop) + 1
-                                            ),
-                                        )
-                                        Finch.sparse_hash_table_resize!(
-                                            $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val,
-                                            $tbl_cap,
-                                        )
-                                    end
-                                end
-                            end
-                        )
+                        end
+                    )
+                    if $qos == 0
                         # If the qos is not in the table or pending stack, allocate it.
                         if $qos_free != 0
                             $qos = $qos_free
