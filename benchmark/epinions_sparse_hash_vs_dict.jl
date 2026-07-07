@@ -8,8 +8,6 @@ using SparseArrays
 using Statistics
 
 const MATRIX_NAME = "SNAP/soc-Epinions1"
-const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 3
-const SECONDS = length(ARGS) >= 2 ? parse(Float64, ARGS[2]) : 120.0
 
 function human_bytes(n)
     units = ("B", "KiB", "MiB", "GiB")
@@ -119,7 +117,7 @@ function run_case(::Type{Format}, A) where {Format}
     warm = spgemm_outer_with(Format, A, A)
     @printf("warmup result: %s, stored=%d\n", summary(warm), countstored(warm))
     GC.gc()
-    bench = @benchmarkable spgemm_outer_with($Format, $A, $A) evals = 1 samples = SAMPLES seconds = SECONDS
+    bench = @benchmarkable spgemm_outer_with($Format, $A, $A) evals = 1
     trial = run(bench)
     best = minimum(trial)
     med_time = median(trial.times)
@@ -135,7 +133,7 @@ end
 
 function main()
     println("SparseHash vs SparseDict on $(MATRIX_NAME)")
-    println("samples=$(SAMPLES), seconds=$(SECONDS)")
+    println("BenchmarkTools default samples and seconds, evals=1")
     matrix = SparseMatrixCSC(matrixdepot(MATRIX_NAME))
     @printf(
         "matrix: %d x %d, nnz=%d, density=%.6g\n",
