@@ -1010,78 +1010,70 @@ function unfurl(
                     VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty),
                     mode,
                 ),
-                epilogue=quote
-                    if $dirty
-                        if $(lvl.perm)[$qos] <= 0
-                            $(
-                                if lvl.single_writer
-                                    quote
-                                        Finch.sparse_hash_table_insert_at_slot!(
-                                            $tbl_pos,
-                                            $tbl_idx,
-                                            $tbl_ctrl,
-                                            $tbl_val,
-                                            $tbl_slot,
-                                            $(ctx(pos)),
-                                            $(ctx(idx)),
-                                            $qos,
-                                        )
-                                        $(lvl.tbl_count) += 1
-                                    end
-                                else
-                                    nothing
-                                end
-                            )
-                            $(lvl.perm)[$qos] = $qos
+                epilogue=if lvl.single_writer
+                    quote
+                        if $dirty
+                            if $(lvl.perm)[$qos] <= 0
+                                Finch.sparse_hash_table_insert_at_slot!(
+                                    $tbl_pos,
+                                    $tbl_idx,
+                                    $tbl_ctrl,
+                                    $tbl_val,
+                                    $tbl_slot,
+                                    $(ctx(pos)),
+                                    $(ctx(idx)),
+                                    $qos,
+                                )
+                                $(lvl.tbl_count) += 1
+                                $(lvl.perm)[$qos] = $qos
+                            end
+                            $(fbr.dirty) = true
+                        elseif $(lvl.perm)[$qos] == 0
+                            $(lvl.perm)[$qos] = -$qos_free
+                            $qos_free = $qos
                         end
-                        $(fbr.dirty) = true
                     end
-                    $(
-                        if lvl.single_writer
-                            quote
-                                if !$dirty && $(lvl.perm)[$qos] == 0
+                else
+                    quote
+                        if $dirty
+                            if $(lvl.perm)[$qos] <= 0
+                                $(lvl.perm)[$qos] = $qos
+                            end
+                            $(fbr.dirty) = true
+                        end
+                        if $stk_slot != 0
+                            $(lvl.stk_cnt)[$stk_slot] -= 1
+                            if $(lvl.stk_cnt)[$stk_slot] == 0
+                                if $(lvl.perm)[$qos] > 0
+                                    $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                                        $tbl_pos,
+                                        $tbl_idx,
+                                        $tbl_ctrl,
+                                        $tbl_val,
+                                        $(lvl.stk_pos)[$stk_slot],
+                                        $(lvl.stk_idx)[$stk_slot],
+                                    )
+                                    Finch.sparse_hash_table_insert_at_slot!(
+                                        $tbl_pos,
+                                        $tbl_idx,
+                                        $tbl_ctrl,
+                                        $tbl_val,
+                                        $tbl_slot,
+                                        $(lvl.stk_pos)[$stk_slot],
+                                        $(lvl.stk_idx)[$stk_slot],
+                                        $qos,
+                                    )
+                                    $(lvl.tbl_count) += 1
+                                else
                                     $(lvl.perm)[$qos] = -$qos_free
                                     $qos_free = $qos
                                 end
-                            end
-                        else
-                            quote
-                                if $stk_slot != 0
-                                    $(lvl.stk_cnt)[$stk_slot] -= 1
-                                    if $(lvl.stk_cnt)[$stk_slot] == 0
-                                        if $(lvl.perm)[$qos] > 0
-                                            $tbl_slot =
-                                                Finch.sparse_hash_table_lookup_insert_slot(
-                                                $tbl_pos,
-                                                $tbl_idx,
-                                                $tbl_ctrl,
-                                                $tbl_val,
-                                                $(lvl.stk_pos)[$stk_slot],
-                                                $(lvl.stk_idx)[$stk_slot],
-                                            )
-                                            Finch.sparse_hash_table_insert_at_slot!(
-                                                $tbl_pos,
-                                                $tbl_idx,
-                                                $tbl_ctrl,
-                                                $tbl_val,
-                                                $tbl_slot,
-                                                $(lvl.stk_pos)[$stk_slot],
-                                                $(lvl.stk_idx)[$stk_slot],
-                                                $qos,
-                                            )
-                                            $(lvl.tbl_count) += 1
-                                        else
-                                            $(lvl.perm)[$qos] = -$qos_free
-                                            $qos_free = $qos
-                                        end
-                                        $(lvl.stk_stop) = Finch.sparse_hash_stack_trim(
-                                            $(lvl.stk_cnt), $(lvl.stk_stop)
-                                        )
-                                    end
-                                end
+                                $(lvl.stk_stop) = Finch.sparse_hash_stack_trim(
+                                    $(lvl.stk_cnt), $(lvl.stk_stop)
+                                )
                             end
                         end
-                    )
+                    end
                 end,
             ),
         ),
