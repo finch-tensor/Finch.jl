@@ -414,7 +414,7 @@ end
     # Putting some things in `setup` can reduce the size of the
     # precompile file and potentially make loading faster.
     @compile_workload begin
-        Base.invokelatest(workload)
+        #Base.invokelatest(workload)
     end
 end
 
