@@ -33,6 +33,7 @@ export SparseInterval, SparseIntervalLevel
 export Sparse, SparseLevel
 export SparseList, SparseListLevel
 export SparseDict, SparseDictLevel
+export SparseHash, SparseHashLevel
 export ParallelSparseDict, ParallelSparseDictLevel
 export SparsePoint, SparsePointLevel
 export SparseBand, SparseBandLevel
@@ -139,6 +140,7 @@ include("tensors/levels/sparse_point_levels.jl")
 include("tensors/levels/sparse_coo_levels.jl")
 include("tensors/levels/sparse_band_levels.jl")
 include("tensors/levels/sparse_dict_levels.jl")
+include("tensors/levels/sparse_hash_levels.jl")
 include("tensors/levels/parallel_sparse_dict_levels.jl")
 include("tensors/levels/sparse_bytemap_levels.jl")
 include("tensors/levels/sparse_vbl_levels.jl")
