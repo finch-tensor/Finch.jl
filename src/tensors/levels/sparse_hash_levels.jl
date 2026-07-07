@@ -26,6 +26,9 @@ Implementation invariants:
   is a `q`. Each parent range is sorted by `tbl_idx[q]`.
 * In thawed/update mode, `perm[q] > 0` means `q` is live/dirty and
   `perm[q] == 0` means `q` was touched but has not retained data.
+* `pool` is a stack of vacant `q` values for multi-writer update mode. It is
+  rebuilt by thaw, cleared by freeze/declaration, and unused by single-writer
+  update mode.
 * `tbl_count` counts full hash slots.
 * `SingleWriter == true` promises that a newly created `(p, i)` has at most one
   writer before it is published to the table. In that case update mode caches
@@ -76,6 +79,7 @@ struct SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Per
     tbl_idx::TblIdx
     tbl_ctrl::TblCtrl
     tbl_val::TblVal
+    # Update-mode scratch stack of vacant q values for multi-writer assembly.
     pool::Pool
     perm::Perm
 end
@@ -117,6 +121,12 @@ end
     n = length(tbl_val)
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
+    return sparse_hash_table_lookup_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n)
+end
+
+@inline function sparse_hash_table_lookup_slot(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n
+)
     h = sparse_hash_hash_slot(hsh, n)
     @inbounds for _ in 1:n
         c = tbl_ctrl[h]
@@ -140,6 +150,24 @@ end
     n = length(tbl_val)
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
+    return sparse_hash_table_lookup_insert_slot(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n
+    )
+end
+
+@inline function sparse_hash_table_lookup_insert_slot(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl
+)
+    isempty(tbl_val) && return 0
+    n = length(tbl_val)
+    return sparse_hash_table_lookup_insert_slot(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n
+    )
+end
+
+@inline function sparse_hash_table_lookup_insert_slot(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n
+)
     h = sparse_hash_hash_slot(hsh, n)
     @inbounds for _ in 1:n
         c = tbl_ctrl[h]
@@ -159,25 +187,46 @@ end
 @inline function sparse_hash_table_insert_noresize!(
     tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v
 )
-    h = sparse_hash_table_lookup_insert_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
-    sparse_hash_table_insert_at_slot!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v)
+    hsh = sparse_hash_hash(p, i)
+    ctrl = sparse_hash_hash_ctrl(hsh)
+    h = sparse_hash_table_lookup_insert_slot(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl
+    )
+    sparse_hash_table_insert_at_slot!(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v, ctrl
+    )
     return v
 end
 
 @inline function sparse_hash_table_lookup(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
-    h = sparse_hash_table_lookup_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
+    hsh = sparse_hash_hash(p, i)
+    ctrl = sparse_hash_hash_ctrl(hsh)
+    n = length(tbl_val)
+    n == 0 && return zero(eltype(tbl_val))
+    h = sparse_hash_table_lookup_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, hsh, ctrl, n)
     h == 0 && return zero(eltype(tbl_val))
-    return tbl_val[h]
+    @inbounds return tbl_val[h]
 end
 
 @inline function sparse_hash_table_insert_at_slot!(
     tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v
 )
     hsh = sparse_hash_hash(p, i)
-    tbl_pos[v] = p
-    tbl_idx[v] = i
-    tbl_ctrl[h] = sparse_hash_hash_ctrl(hsh)
-    tbl_val[h] = v
+    ctrl = sparse_hash_hash_ctrl(hsh)
+    return sparse_hash_table_insert_at_slot!(
+        tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v, ctrl
+    )
+end
+
+@inline function sparse_hash_table_insert_at_slot!(
+    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v, ctrl::UInt8
+)
+    @inbounds begin
+        tbl_pos[v] = p
+        tbl_idx[v] = i
+        tbl_ctrl[h] = ctrl
+        tbl_val[h] = v
+    end
     return v
 end
 
@@ -944,8 +993,16 @@ function unfurl(
     tbl_idx = freshen(ctx, tag, :_tbl_idx)
     tbl_ctrl = freshen(ctx, tag, :_tbl_ctrl)
     tbl_val = freshen(ctx, tag, :_tbl_val)
+    tbl_p = freshen(ctx, tag, :_tbl_p)
+    tbl_i = freshen(ctx, tag, :_tbl_i)
+    tbl_hash = freshen(ctx, tag, :_tbl_hash)
+    tbl_ctrl_byte = freshen(ctx, tag, :_tbl_ctrl_byte)
     tbl_slot = freshen(ctx, tag, :_tbl_slot)
     stk_slot = freshen(ctx, tag, :_stk_slot)
+    stk_p = freshen(ctx, tag, :_stk_p)
+    stk_i = freshen(ctx, tag, :_stk_i)
+    stk_hash = freshen(ctx, tag, :_stk_hash)
+    stk_ctrl = freshen(ctx, tag, :_stk_ctrl)
 
     Thunk(;
         body=(ctx) -> Lookup(;
@@ -955,6 +1012,8 @@ function unfurl(
                     $tbl_idx = $(lvl.tbl_idx)
                     $tbl_ctrl = $(lvl.tbl_ctrl)
                     $tbl_val = $(lvl.tbl_val)
+                    $tbl_p = $(ctx(pos))
+                    $tbl_i = $(ctx(idx))
                     if $(
                         if lvl.single_writer
                             :($qos_stop == length($(lvl.perm)))
@@ -983,14 +1042,18 @@ function unfurl(
                             ctx,
                         ))
                     end
+                    $tbl_hash = Finch.sparse_hash_hash($tbl_p, $tbl_i)
+                    $tbl_ctrl_byte = Finch.sparse_hash_hash_ctrl($tbl_hash)
                     $stk_slot = 0
                     $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
                         $tbl_pos,
                         $tbl_idx,
                         $tbl_ctrl,
                         $tbl_val,
-                        $(ctx(pos)),
-                        $(ctx(idx)),
+                        $tbl_p,
+                        $tbl_i,
+                        $tbl_hash,
+                        $tbl_ctrl_byte,
                     )
                     $qos = $(Tp(0))
                     if $tbl_slot != 0
@@ -1007,8 +1070,8 @@ function unfurl(
                                         $(lvl.stk_idx),
                                         $(lvl.stk_cnt),
                                         $(lvl.stk_stop),
-                                        $(ctx(pos)),
-                                        $(ctx(idx)),
+                                        $tbl_p,
+                                        $tbl_i,
                                     )
                                     if $stk_slot != 0
                                         $qos = $(lvl.stk_val)[$stk_slot]
@@ -1042,8 +1105,8 @@ function unfurl(
                                             $(lvl.stk_val),
                                             $(lvl.stk_cnt),
                                             $(lvl.stk_stop),
-                                            $(ctx(pos)),
-                                            $(ctx(idx)),
+                                            $tbl_p,
+                                            $tbl_i,
                                             $qos,
                                         )
                                 end
@@ -1067,9 +1130,10 @@ function unfurl(
                                     $tbl_ctrl,
                                     $tbl_val,
                                     $tbl_slot,
-                                    $(ctx(pos)),
-                                    $(ctx(idx)),
+                                    $tbl_p,
+                                    $tbl_i,
                                     $qos,
+                                    $tbl_ctrl_byte,
                                 )
                                 $(lvl.tbl_count) += 1
                                 $(lvl.perm)[$qos] = $qos
@@ -1089,13 +1153,19 @@ function unfurl(
                             $(lvl.stk_cnt)[$stk_slot] -= 1
                             if $(lvl.stk_cnt)[$stk_slot] == 0
                                 if $(lvl.perm)[$qos] > 0
+                                    $stk_p = $(lvl.stk_pos)[$stk_slot]
+                                    $stk_i = $(lvl.stk_idx)[$stk_slot]
+                                    $stk_hash = Finch.sparse_hash_hash($stk_p, $stk_i)
+                                    $stk_ctrl = Finch.sparse_hash_hash_ctrl($stk_hash)
                                     $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
                                         $tbl_pos,
                                         $tbl_idx,
                                         $tbl_ctrl,
                                         $tbl_val,
-                                        $(lvl.stk_pos)[$stk_slot],
-                                        $(lvl.stk_idx)[$stk_slot],
+                                        $stk_p,
+                                        $stk_i,
+                                        $stk_hash,
+                                        $stk_ctrl,
                                     )
                                     Finch.sparse_hash_table_insert_at_slot!(
                                         $tbl_pos,
@@ -1103,9 +1173,10 @@ function unfurl(
                                         $tbl_ctrl,
                                         $tbl_val,
                                         $tbl_slot,
-                                        $(lvl.stk_pos)[$stk_slot],
-                                        $(lvl.stk_idx)[$stk_slot],
+                                        $stk_p,
+                                        $stk_i,
                                         $qos,
+                                        $stk_ctrl,
                                     )
                                     $(lvl.tbl_count) += 1
                                 else
