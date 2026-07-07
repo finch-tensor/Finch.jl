@@ -38,6 +38,8 @@ struct SparseDictLevel{Ti,Ptr,TblPos,TblIdx,TblVal,Perm,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     ptr::Ptr
+    # tbl_val is the open-addressed table: slot => q, with 0 marking empty.
+    # tbl_pos and tbl_idx are packed entry arrays indexed by q.
     tbl_pos::TblPos
     tbl_idx::TblIdx
     tbl_val::TblVal
@@ -53,17 +55,15 @@ const SparseDict = SparseDictLevel
 end
 
 @inline function sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, cap)
-    old_pos = copy(tbl_pos)
-    old_idx = copy(tbl_idx)
     old_val = copy(tbl_val)
-    resize!(tbl_pos, cap)
-    resize!(tbl_idx, cap)
     resize!(tbl_val, cap)
     fill!(tbl_val, zero(eltype(tbl_val)))
     @inbounds for h in eachindex(old_val)
         v = old_val[h]
         if v != 0
-            sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, old_pos[h], old_idx[h], v)
+            sparse_dict_table_insert_noresize!(
+                tbl_pos, tbl_idx, tbl_val, tbl_pos[v], tbl_idx[v], v
+            )
         end
     end
     return tbl_pos, tbl_idx, tbl_val
@@ -75,11 +75,13 @@ end
     @inbounds for _ in 1:n
         val = tbl_val[h]
         if val == 0
-            tbl_pos[h] = p
-            tbl_idx[h] = i
+            tbl_pos[v] = p
+            tbl_idx[v] = i
             tbl_val[h] = v
             return h
-        elseif tbl_pos[h] == p && tbl_idx[h] == i
+        elseif tbl_pos[val] == p && tbl_idx[val] == i
+            tbl_pos[v] = p
+            tbl_idx[v] = i
             tbl_val[h] = v
             return h
         end
@@ -99,7 +101,7 @@ end
     h = sparse_dict_hash_slot(p, i, n)
     @inbounds for _ in 1:n
         val = tbl_val[h]
-        if val == 0 || (tbl_pos[h] == p && tbl_idx[h] == i)
+        if val == 0 || (tbl_pos[val] == p && tbl_idx[val] == i)
             return h
         end
         h = h == n ? 1 : h + 1
@@ -114,23 +116,32 @@ end
 end
 
 @inline function sparse_dict_table_insert_at_slot!(tbl_pos, tbl_idx, tbl_val, h, p, i, v)
-    tbl_pos[h] = p
-    tbl_idx[h] = i
+    tbl_pos[v] = p
+    tbl_idx[v] = i
     tbl_val[h] = v
     return v
 end
 
 function sparse_dict_table_sort_perm!(perm, tbl_pos, tbl_idx)
-    sort!(perm; by=h -> (tbl_pos[h], tbl_idx[h]))
+    sort!(perm; by=q -> (tbl_pos[q], tbl_idx[q]))
     return perm
 end
 
 function sparse_dict_table_rebuild!(tbl_pos, tbl_idx, tbl_val, ptr, idx, val, pos_stop)
     nnz = isempty(ptr) ? 0 : ptr[pos_stop + 1] - 1
-    sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, sparse_dict_table_capacity(nnz))
+    qos_stop = zero(eltype(tbl_val))
+    @inbounds for q in 1:nnz
+        qos_stop = max(qos_stop, val[q])
+    end
+    resize!(tbl_pos, qos_stop)
+    resize!(tbl_idx, qos_stop)
+    resize!(tbl_val, sparse_dict_table_capacity(nnz))
+    fill!(tbl_val, zero(eltype(tbl_val)))
     @inbounds for p in 1:pos_stop
         for q in ptr[p]:(ptr[p + 1] - 1)
-            sparse_dict_table_insert_noresize!(tbl_pos, tbl_idx, tbl_val, p, idx[q], val[q])
+            sparse_dict_table_insert_noresize!(
+                tbl_pos, tbl_idx, tbl_val, p, idx[q], val[q]
+            )
         end
     end
     return tbl_pos, tbl_idx, tbl_val
@@ -140,13 +151,21 @@ function sparse_dict_table_rebuild_perm!(
     perm, tbl_pos, tbl_idx, tbl_val, ptr, idx, val, pos_stop
 )
     nnz = isempty(ptr) ? 0 : ptr[pos_stop + 1] - 1
-    sparse_dict_table_resize!(tbl_pos, tbl_idx, tbl_val, sparse_dict_table_capacity(nnz))
+    qos_stop = zero(eltype(tbl_val))
+    @inbounds for q in 1:nnz
+        qos_stop = max(qos_stop, val[q])
+    end
+    resize!(tbl_pos, qos_stop)
+    resize!(tbl_idx, qos_stop)
+    resize!(tbl_val, sparse_dict_table_capacity(nnz))
+    fill!(tbl_val, zero(eltype(tbl_val)))
     resize!(perm, nnz)
     @inbounds for p in 1:pos_stop
         for q in ptr[p]:(ptr[p + 1] - 1)
-            perm[q] = sparse_dict_table_insert_slot_noresize!(
+            sparse_dict_table_insert_slot_noresize!(
                 tbl_pos, tbl_idx, tbl_val, p, idx[q], val[q]
             )
+            perm[q] = val[q]
         end
     end
     return perm, tbl_pos, tbl_idx, tbl_val
@@ -291,12 +310,13 @@ function labelled_children(fbr::SubFiber{<:SparseDictLevel})
     pos = fbr.pos
     pos + 1 > length(lvl.ptr) && return []
     map(lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)) do qos
+        q = lvl.perm[qos]
         LabelledTree(
             cartesian_label(
                 [range_label() for _ in 1:(ndims(fbr) - 1)]...,
-                lvl.tbl_idx[lvl.perm[qos]],
+                lvl.tbl_idx[q],
             ),
-            SubFiber(lvl.lvl, lvl.tbl_val[lvl.perm[qos]]),
+            SubFiber(lvl.lvl, q),
         )
     end
 end
@@ -336,7 +356,7 @@ function (fbr::SubFiber{<:SparseDictLevel{Ti}})(idxs...) where {Ti}
     r = searchsorted(crds, idxs[end])
     q = lvl.ptr[p] + first(r) - 1
     length(r) == 0 ? fill_value(fbr) :
-    SubFiber(lvl.lvl, lvl.tbl_val[lvl.perm[q]])(idxs[1:(end - 1)]...)
+    SubFiber(lvl.lvl, lvl.perm[q])(idxs[1:(end - 1)]...)
 end
 
 mutable struct VirtualSparseDictLevel <: AbstractVirtualLevel
@@ -523,35 +543,24 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
                 if $v > 0
-                    $p = $(lvl.tbl_pos)[$h]
+                    $p = $(lvl.tbl_pos)[$v]
                     $q += 1
                     $qos_max = max($qos_max, $v)
                     $(lvl.ptr)[$p + 1] += 1
                 end
             end
-            # In read mode, val[1:length(tbl)] stores child positions; the tail
-            # encodes free qoses from older tables.
-            $p = $qos_max
-            $q = $(lvl.qos_free)
-            while $q != 0
-                $v = -$(lvl.perm)[$q]
-                if $q <= $tbl_count
-                    while $(lvl.perm)[$p] <= 0
-                        $p -= 1
-                    end
-                    $(lvl.perm)[$p] = $q
-                    $p -= 1
-                end
-                $q = $v
-            end
+            $tbl_count = $q
             resize!($(lvl.perm), $tbl_count)
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
-                if $(lvl.tbl_val)[$h] > 0
+                $v = $(lvl.tbl_val)[$h]
+                if $v > 0
                     $q += 1
-                    $(lvl.perm)[$q] = $h
+                    $(lvl.perm)[$q] = $v
                 end
             end
+            resize!($(lvl.tbl_pos), $qos_max)
+            resize!($(lvl.tbl_idx), $qos_max)
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
@@ -565,26 +574,34 @@ end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_stop)
     p = freshen(ctx, :p)
+    q = freshen(ctx, :q)
     v = freshen(ctx, :v)
     tbl_count = lvl.tbl_count
     pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     push_preamble!(
         ctx,
         quote
-            $(lvl.qos_stop) = length($(lvl.perm))
+            $(lvl.qos_stop) = 0
             $(lvl.qos_free) = 0
-            $tbl_count = length($(lvl.perm))
-            for $p in ($tbl_count + 1):$(lvl.qos_stop)
-                $v = $(lvl.perm)[$p]
-                if $v <= 0
-                    $v = $p
+            $q = 0
+            for $v in $(lvl.tbl_val)
+                if $v > 0
+                    $q += 1
+                    $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
                 end
-                $(lvl.perm)[$v] = -$(lvl.qos_free)
-                $(lvl.qos_free) = $v
             end
+            $tbl_count = $q
+            Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
+            Finch.fill_range!($(lvl.perm), 0, 1, $(lvl.qos_stop))
             for $v in $(lvl.tbl_val)
                 if $v > 0
                     $(lvl.perm)[$v] = $v
+                end
+            end
+            for $p in $(lvl.qos_stop):-1:1
+                if $(lvl.perm)[$p] == 0
+                    $(lvl.perm)[$p] = -$(lvl.qos_free)
+                    $(lvl.qos_free) = $p
                 end
             end
         end,
@@ -640,7 +657,7 @@ function unfurl(
                     end,
                     preamble=quote
                         $my_i = $(lvl.tbl_idx)[$(lvl.perm)[$my_q]]
-                        $my_v = $(lvl.tbl_val)[$(lvl.perm)[$my_q]]
+                        $my_v = $(lvl.perm)[$my_q]
                     end,
                     stop=(ctx, ext) -> value(my_i),
                     chunk=Spike(;
@@ -733,11 +750,13 @@ function unfurl(
                     $tbl_pos = $(lvl.tbl_pos)
                     $tbl_idx = $(lvl.tbl_idx)
                     $tbl_val = $(lvl.tbl_val)
-                    if $qos_stop == length($(lvl.perm))
+                    if $qos_free == 0 && $qos_stop == length($(lvl.perm))
                         $old = length($(lvl.perm)) + 1
                         $p = $old
                         $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
                         Finch.resize_if_smaller!($(lvl.perm), $q_stop)
+                        Finch.resize_if_smaller!($(lvl.tbl_pos), $q_stop)
+                        Finch.resize_if_smaller!($(lvl.tbl_idx), $q_stop)
                         Finch.fill_range!($(lvl.perm), 0, $old, $q_stop)
                         $tbl_cap = Finch.sparse_dict_table_capacity($q_stop)
                         Finch.sparse_dict_table_resize!(
