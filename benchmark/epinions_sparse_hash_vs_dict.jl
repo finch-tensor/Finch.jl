@@ -42,10 +42,8 @@ end
 function level_parts(::Type{SparseHashLevel}, lvl)
     return (
         "ptr" => lvl.ptr,
-        "tbl_pos" => lvl.tbl_pos,
-        "tbl_idx" => lvl.tbl_idx,
         "tbl_ctrl" => lvl.tbl_ctrl,
-        "tbl_val" => lvl.tbl_val,
+        "tbl" => lvl.tbl,
         "pool" => lvl.pool,
         "perm" => lvl.perm,
     )
