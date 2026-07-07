@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblPos, TblIdx, TblCtrl, TblVal, Perm]}(lvl, [dim])
+    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblPos, TblIdx, TblCtrl, TblVal, Pool, Perm]}(lvl, [dim])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -25,10 +25,7 @@ Implementation invariants:
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a `q`. Each parent range is sorted by `tbl_idx[q]`.
 * In thawed/update mode, `perm[q] > 0` means `q` is live/dirty and
-  `perm[q] == 0` means `q` was touched but has not retained data. Multi-writer
-  update mode additionally uses `perm[q] < 0` to link `q` into the free list
-  headed by `qos_free`; that encoding assumes `perm` uses a signed position
-  type.
+  `perm[q] == 0` means `q` was touched but has not retained data.
 * `tbl_count` counts full hash slots.
 * `SingleWriter == true` promises that a newly created `(p, i)` has at most one
   writer before it is published to the table. In that case update mode caches
@@ -38,7 +35,7 @@ Implementation invariants:
   missing key. Generated update code keeps a small linear pending stack of
   `(p, i, q, live-count)` records. Pending entries are not published to the
   hash table; the last live writer either publishes a retained `q` or returns
-  it to the multi-writer free list.
+  it to `pool`.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -64,7 +61,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} <:
+struct SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl} <:
        AbstractLevel
     lvl::Lvl
     shape::Ti
@@ -79,6 +76,7 @@ struct SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl
     tbl_idx::TblIdx
     tbl_ctrl::TblCtrl
     tbl_val::TblVal
+    pool::Pool
     perm::Perm
 end
 
@@ -246,6 +244,7 @@ function SparseHashLevel{Ti,SingleWriter}(lvl, shape) where {Ti,SingleWriter}
         UInt8[],
         postype(lvl)[],
         postype(lvl)[],
+        postype(lvl)[],
     )
 end
 
@@ -257,10 +256,11 @@ function SparseHashLevel{Ti,SingleWriter}(
     tbl_idx::TblIdx,
     tbl_ctrl::TblCtrl,
     tbl_val::TblVal,
+    pool::Pool,
     perm::Perm,
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
-    SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}(
-        lvl, shape, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, perm
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
+    SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}(
+        lvl, shape, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, pool, perm
     )
 end
 
@@ -274,8 +274,8 @@ function similar_level(
 end
 
 function postype(
-    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
     return postype(Lvl)
 end
 
@@ -290,23 +290,35 @@ function Base.resize!(
         lvl.tbl_idx,
         lvl.tbl_ctrl,
         lvl.tbl_val,
+        lvl.pool,
         lvl.perm,
     )
 end
 
 function transfer(
     Tm,
-    lvl::SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl},
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    lvl::SparseHashLevel{
+        Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl
+    },
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
     tbl_pos_2 = transfer(Tm, lvl.tbl_pos)
     tbl_idx_2 = transfer(Tm, lvl.tbl_idx)
     tbl_ctrl_2 = transfer(Tm, lvl.tbl_ctrl)
     tbl_val_2 = transfer(Tm, lvl.tbl_val)
+    pool_2 = transfer(Tm, lvl.pool)
     perm_2 = transfer(Tm, lvl.perm)
     return SparseHashLevel{Ti,SingleWriter}(
-        lvl_2, lvl.shape, ptr_2, tbl_pos_2, tbl_idx_2, tbl_ctrl_2, tbl_val_2, perm_2
+        lvl_2,
+        lvl.shape,
+        ptr_2,
+        tbl_pos_2,
+        tbl_idx_2,
+        tbl_ctrl_2,
+        tbl_val_2,
+        pool_2,
+        perm_2,
     )
 end
 
@@ -324,6 +336,7 @@ function pattern!(lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
         lvl.tbl_idx,
         lvl.tbl_ctrl,
         lvl.tbl_val,
+        lvl.pool,
         lvl.perm,
     )
 end
@@ -339,6 +352,7 @@ function set_fill_value!(
         lvl.tbl_idx,
         lvl.tbl_ctrl,
         lvl.tbl_val,
+        lvl.pool,
         lvl.perm,
     )
 end
@@ -367,6 +381,8 @@ function Base.show(io::IO, lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,Sing
         show(io, lvl.tbl_ctrl)
         print(io, ", ")
         show(io, lvl.tbl_val)
+        print(io, ", ")
+        show(io, lvl.pool)
         print(io, ", ")
         show(io, lvl.perm)
     end
@@ -403,21 +419,30 @@ function labelled_children(fbr::SubFiber{<:SparseHashLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} =
+    ::Type{
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
+    }
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl} =
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseHashLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseHashLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(
-    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} = level_eltype(Lvl)
+    ::Type{
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
+    }
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl} =
+    level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} =
+    ::Type{
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
+    }
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl} =
     level_fill_value(Lvl)
 function data_rep_level(
-    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    ::Type{
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
+    }
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
     SparseData(data_rep_level(Lvl))
 end
 
@@ -427,6 +452,7 @@ function isstructequal(a::T, b::T) where {T<:SparseHash}
         a.tbl_idx == b.tbl_idx &&
         a.tbl_ctrl == b.tbl_ctrl &&
         a.tbl_val == b.tbl_val &&
+        a.pool == b.pool &&
         a.perm == b.perm &&
         isstructequal(a.lvl, b.lvl)
 end
@@ -453,10 +479,10 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     tbl_idx
     tbl_ctrl
     tbl_val
+    pool
     perm
     shape
     qos_stop
-    qos_free
     tbl_count
     stk_pos
     stk_idx
@@ -480,15 +506,18 @@ end
 function virtualize(
     ctx,
     ex,
-    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}},
+    ::Type{SparseHashLevel{
+        Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl
+    }},
     tag=:lvl,
-) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Pool,Perm,Lvl}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     tbl_pos = freshen(ctx, tag, :_tbl_pos)
     tbl_idx = freshen(ctx, tag, :_tbl_idx)
     tbl_ctrl = freshen(ctx, tag, :_tbl_ctrl)
     tbl_val = freshen(ctx, tag, :_tbl_val)
+    pool = freshen(ctx, tag, :_pool)
     perm = freshen(ctx, tag, :_perm)
     stk_pos = freshen(ctx, tag, :_stk_pos)
     stk_idx = freshen(ctx, tag, :_stk_idx)
@@ -504,6 +533,7 @@ function virtualize(
             $tbl_idx = $tag.tbl_idx
             $tbl_ctrl = $tag.tbl_ctrl
             $tbl_val = $tag.tbl_val
+            $pool = $tag.pool
             $perm = $tag.perm
             $(
                 if SingleWriter
@@ -521,15 +551,14 @@ function virtualize(
         end,
     )
     qos_stop = freshen(ctx, tag, :_qos_stop)
-    qos_free = freshen(ctx, tag, :_qos_free)
     tbl_count = freshen(ctx, tag, :_tbl_count)
     stk_stop = freshen(ctx, tag, :_stk_stop)
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseHashLevel(
-        tag, lvl_2, Ti, SingleWriter, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, perm,
-        shape, qos_stop, qos_free, tbl_count, stk_pos, stk_idx, stk_val, stk_cnt,
-        stk_stop,
+        tag, lvl_2, Ti, SingleWriter, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val,
+        pool, perm, shape, qos_stop, tbl_count, stk_pos, stk_idx, stk_val,
+        stk_cnt, stk_stop,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
@@ -542,6 +571,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyl
             $(lvl.tbl_idx),
             $(lvl.tbl_ctrl),
             $(lvl.tbl_val),
+            $(lvl.pool),
             $(lvl.perm),
         )
     end
@@ -560,10 +590,10 @@ function distribute_level(
         distribute_buffer(ctx, lvl.tbl_idx, arch, style),
         distribute_buffer(ctx, lvl.tbl_ctrl, arch, style),
         distribute_buffer(ctx, lvl.tbl_val, arch, style),
+        distribute_buffer(ctx, lvl.pool, arch, style),
         distribute_buffer(ctx, lvl.perm, arch, style),
         lvl.shape,
         lvl.qos_stop,
-        lvl.qos_free,
         lvl.tbl_count,
         lvl.stk_pos,
         lvl.stk_idx,
@@ -587,10 +617,10 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, diff)
             lvl.tbl_idx,
             lvl.tbl_ctrl,
             lvl.tbl_val,
+            lvl.pool,
             lvl.perm,
             lvl.shape,
             lvl.qos_stop,
-            lvl.qos_free,
             lvl.tbl_count,
             lvl.stk_pos,
             lvl.stk_idx,
@@ -630,17 +660,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
             empty!($(lvl.tbl_idx))
             empty!($(lvl.tbl_ctrl))
             empty!($(lvl.tbl_val))
+            empty!($(lvl.pool))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
-            $(
-                if lvl.single_writer
-                    nothing
-                else
-                    quote
-                        $(lvl.qos_free) = 0
-                    end
-                end
-            )
             $(lvl.tbl_count) = 0
             $(lvl.stk_stop) = 0
             resize!($(lvl.perm), 0)
@@ -731,6 +753,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             $(lvl.ptr)[1] = 1
             $(lvl.stk_stop) == 0 ||
                 error("SparseHash pending writer stack is not empty during freeze")
+            empty!($(lvl.pool))
             $qos_stop = $qos_max
         end,
     )
@@ -748,15 +771,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         ctx,
         quote
             $(lvl.qos_stop) = 0
-            $(
-                if lvl.single_writer
-                    nothing
-                else
-                    quote
-                        $(lvl.qos_free) = 0
-                    end
-                end
-            )
+            empty!($(lvl.pool))
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
@@ -781,11 +796,11 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
                     nothing
                 else
                     quote
-                        # Link unused q values into the multi-writer free list.
+                        # Rebuild the multi-writer pool from q values not present
+                        # in the table. Update-mode perm stays simple: q or 0.
                         for $p in ($(lvl.qos_stop)):-1:1
                             if $(lvl.perm)[$p] == 0
-                                $(lvl.perm)[$p] = -$(lvl.qos_free)
-                                $(lvl.qos_free) = $p
+                                push!($(lvl.pool), $p)
                             end
                         end
                     end
@@ -920,7 +935,6 @@ function unfurl(
     Tp = postype(lvl)
     qos = freshen(ctx, tag, :_qos)
     qos_stop = lvl.qos_stop
-    qos_free = lvl.qos_free
     dirty = freshen(ctx, tag, :_dirty)
     p = freshen(ctx, tag, :_p)
     q_stop = freshen(ctx, tag, :_q_stop)
@@ -945,7 +959,7 @@ function unfurl(
                         if lvl.single_writer
                             :($qos_stop == length($(lvl.perm)))
                         else
-                            :($qos_free == 0 && $qos_stop == length($(lvl.perm)))
+                            :(isempty($(lvl.pool)) && $qos_stop == length($(lvl.perm)))
                         end
                     )
                         $old = length($(lvl.perm)) + 1
@@ -1014,9 +1028,8 @@ function unfurl(
                                 end
                             else
                                 quote
-                                    if $qos_free != 0
-                                        $qos = $qos_free
-                                        $qos_free = -$(lvl.perm)[$qos]
+                                    if !isempty($(lvl.pool))
+                                        $qos = pop!($(lvl.pool))
                                         $(lvl.perm)[$qos] = 0
                                     else
                                         $qos = $qos_stop + 1
@@ -1067,7 +1080,7 @@ function unfurl(
                 else
                     quote
                         if $dirty
-                            if $(lvl.perm)[$qos] <= 0
+                            if $(lvl.perm)[$qos] == 0
                                 $(lvl.perm)[$qos] = $qos
                             end
                             $(fbr.dirty) = true
@@ -1096,8 +1109,8 @@ function unfurl(
                                     )
                                     $(lvl.tbl_count) += 1
                                 else
-                                    $(lvl.perm)[$qos] = -$qos_free
-                                    $qos_free = $qos
+                                    $(lvl.perm)[$qos] = 0
+                                    push!($(lvl.pool), $qos)
                                 end
                                 $(lvl.stk_stop) = Finch.sparse_hash_stack_trim(
                                     $(lvl.stk_cnt), $(lvl.stk_stop)
