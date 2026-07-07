@@ -3,12 +3,34 @@
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
-slices are stored as subfibers in `lvl`.  A datastructure specified by Tbl is used to record which
+slices are stored as subfibers in `lvl`. A data structure specified by Tbl is used to record which
 slices are stored. Optionally, `dim` is the size of the last dimension.
 
 `Ti` is the type of the last fiber index, and `Tp` is the type used for
 positions in the level. The types `Ptr` and `Idx` are the types of the
-arrays used to store positions and indicies.
+arrays used to store positions and indices.
+
+Implementation invariants:
+
+* `tbl_ctrl` and `tbl_val` form a linear-probing hash table. A full slot has
+  the high bit set in `tbl_ctrl[h]`, stores seven high hash bits in the low
+  bits, and has a positive `q = tbl_val[h]`. `0x00` is a clean empty slot and
+  terminates a probe; `0x40` is a deleted tombstone and does not terminate a
+  probe.
+* Full slots point into the packed entry arrays: `tbl_pos[q]` is the parent
+  position and `tbl_idx[q]` is the coordinate. `q == 0` is reserved as the
+  missing sentinel.
+* The hash bucket uses low hash bits because the table capacity is a power of
+  two. The control byte fingerprint uses high hash bits so bucket selection and
+  fingerprint screening are independent.
+* In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
+  is a `q`. Each parent range is sorted by `tbl_idx[q]`.
+* In thawed/update mode, `perm[q] > 0` means `q` is live/dirty, `perm[q] == 0`
+  means `q` was touched but has not retained data, and `perm[q] < 0` links `q`
+  into the free list headed by `qos_free`. This encoding assumes `perm` uses a
+  signed position type.
+* `tbl_count` counts full hash slots, while `tbl_dirty` counts tombstones.
+  Rehashing preserves `q` values and clears tombstones.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -37,6 +59,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 struct SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
+    # In frozen/read mode, ptr is a CSR-style parent pointer into perm.
     ptr::Ptr
     # tbl_val is the open-addressed table: slot => q, with 0 marking empty.
     # tbl_ctrl stores a SwissHash-style control byte per slot:
@@ -88,6 +111,8 @@ end
     sparse_hash_table_resize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, length(tbl_val))
 end
 
+# A clean empty slot ends a probe chain. Tombstones keep the chain alive, but
+# lookup_insert_slot may reuse the first one it sees if the key is not present.
 @inline function sparse_hash_table_lookup_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
     isempty(tbl_val) && return 0
     n = length(tbl_val)
@@ -570,7 +595,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
     #TODO check that init == fill_value
     Ti = lvl.Ti
     Tp = postype(lvl)
-    qos = freshen(ctx, tag, :qos)
+    qos = freshen(ctx, lvl.tag, :qos)
     push_preamble!(
         ctx,
         quote
@@ -652,6 +677,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $v = $val_tmp[$q]
                 $idx_tmp[$q] = $(lvl.tbl_idx)[$v]
             end
+            # Sort all live q values by coordinate, then scatter by parent.
+            # Filtering this globally sorted stream into parent ranges leaves
+            # each parent range sorted by tbl_idx[q].
             $shuffler = sortperm($idx_tmp)
             @inbounds for $q in $shuffler
                 $v = $val_tmp[$q]
@@ -710,6 +738,8 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
             $(lvl.tbl_dirty) = $dirty_count
             Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
             Finch.fill_range!($(lvl.perm), 0, 1, $(lvl.qos_stop))
+            # Rebuild update-mode perm: live q maps to itself, and unused q
+            # values become negative free-list links below.
             for $h in eachindex($(lvl.tbl_val))
                 if Finch.sparse_hash_ctrl_is_full($(lvl.tbl_ctrl)[$h])
                     $v = $(lvl.tbl_val)[$h]
