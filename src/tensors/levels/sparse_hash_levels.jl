@@ -173,8 +173,23 @@ end
     return v_deleted
 end
 
-function sparse_hash_table_sort_perm!(perm, tbl_pos, tbl_idx)
-    sort!(perm; by=q -> (tbl_pos[q], tbl_idx[q]))
+function sparse_hash_table_sort_perm!(perm, ptr, tbl_pos, tbl_idx)
+    idx_tmp = Vector{eltype(tbl_idx)}(undef, length(perm))
+    pdx_tmp = Vector{eltype(tbl_pos)}(undef, length(perm))
+    val_tmp = copy(perm)
+    @inbounds for q in eachindex(val_tmp)
+        v = val_tmp[q]
+        idx_tmp[q] = tbl_idx[v]
+        pdx_tmp[q] = tbl_pos[v]
+    end
+    shuffler = sortperm(idx_tmp)
+    ptr_2 = copy(ptr)
+    @inbounds for q in shuffler
+        p = pdx_tmp[q]
+        r = ptr_2[p]
+        perm[r] = val_tmp[q]
+        ptr_2[p] += 1
+    end
     return perm
 end
 
@@ -642,7 +657,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            Finch.sparse_hash_table_sort_perm!($(lvl.perm), $(lvl.tbl_pos), $(lvl.tbl_idx))
+            Finch.sparse_hash_table_sort_perm!(
+                $(lvl.perm), $(lvl.ptr), $(lvl.tbl_pos), $(lvl.tbl_idx)
+            )
             if $(lvl.tbl_dirty) != 0
                 Finch.sparse_hash_table_rehash!(
                     $(lvl.tbl_pos), $(lvl.tbl_idx), $(lvl.tbl_ctrl), $(lvl.tbl_val)
