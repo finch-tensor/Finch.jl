@@ -610,10 +610,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     pdx_tmp = freshen(ctx, :pdx_tmp)
     val_tmp = freshen(ctx, :val_tmp)
     shuffler = freshen(ctx, :shuffler)
-    ptr_2 = freshen(ctx, :ptr_2)
     push_preamble!(
         ctx,
         quote
+            # Count bucket sizes in ptr[p + 1]; ptr[1] is the fixed first start.
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
@@ -640,6 +640,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             end
             resize!($(lvl.tbl_pos), $qos_max)
             resize!($(lvl.tbl_idx), $qos_max)
+            # After the prefix sum, ptr[p] is the final start for bucket p,
+            # and ptr[p + 1] is the final stop for bucket p.
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
@@ -652,13 +654,19 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $pdx_tmp[$q] = $(lvl.tbl_pos)[$v]
             end
             $shuffler = sortperm($idx_tmp)
-            $ptr_2 = copy($(lvl.ptr))
             @inbounds for $q in $shuffler
                 $p = $pdx_tmp[$q]
-                $r = $ptr_2[$p]
+                $r = $(lvl.ptr)[$p]
                 $(lvl.perm)[$r] = $val_tmp[$q]
-                $ptr_2[$p] += 1
+                # Advancing ptr[p] turns bucket p's start into bucket p's stop.
+                $(lvl.ptr)[$p] += 1
             end
+            # Shift the restored stops right: ptr[p + 1] becomes bucket p's stop,
+            # and ptr[1] is reset to the first start.
+            for $p in ($(ctx(pos_stop)) + 1):-1:2
+                $(lvl.ptr)[$p] = $(lvl.ptr)[$p - 1]
+            end
+            $(lvl.ptr)[1] = 1
             if $(lvl.tbl_dirty) != 0
                 Finch.sparse_hash_table_rehash!(
                     $(lvl.tbl_pos), $(lvl.tbl_idx), $(lvl.tbl_ctrl), $(lvl.tbl_val)
