@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int], [Tp=Int], [Ptr, TblPos, TblIdx, TblCtrl, TblVal, Perm]}(lvl, [dim])
+    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblPos, TblIdx, TblCtrl, TblVal, Perm]}(lvl, [dim])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -31,6 +31,10 @@ Implementation invariants:
   signed position type.
 * `tbl_count` counts full hash slots, while `tbl_dirty` counts tombstones.
   Rehashing preserves `q` values and clears tombstones.
+* `SingleWriter == true` promises that a newly created `(p, i)` has at most one
+  writer before it is published to the table. In that case update mode caches
+  the insertion slot but delays publishing the missing key until the child
+  reports that it retained data.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -56,7 +60,8 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} <: AbstractLevel
+struct SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} <:
+       AbstractLevel
     lvl::Lvl
     shape::Ti
     # In frozen/read mode, ptr is a CSR-style parent pointer into perm.
@@ -252,9 +257,13 @@ end
 
 SparseHashLevel(lvl) = SparseHashLevel{Int}(lvl)
 SparseHashLevel(lvl, shape::Ti) where {Ti} = SparseHashLevel{Ti}(lvl, shape)
-SparseHashLevel{Ti}(lvl) where {Ti} = SparseHashLevel{Ti}(lvl, zero(Ti))
-function SparseHashLevel{Ti}(lvl, shape) where {Ti}
-    SparseHashLevel{Ti}(
+SparseHashLevel{Ti}(lvl) where {Ti} = SparseHashLevel{Ti,true}(lvl)
+SparseHashLevel{Ti}(lvl, shape) where {Ti} = SparseHashLevel{Ti,true}(lvl, shape)
+function SparseHashLevel{Ti,SingleWriter}(lvl) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(lvl, zero(Ti))
+end
+function SparseHashLevel{Ti,SingleWriter}(lvl, shape) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(
         lvl,
         shape,
         postype(lvl)[1],
@@ -266,7 +275,7 @@ function SparseHashLevel{Ti}(lvl, shape) where {Ti}
     )
 end
 
-function SparseHashLevel{Ti}(
+function SparseHashLevel{Ti,SingleWriter}(
     lvl::Lvl,
     shape,
     ptr::Ptr,
@@ -275,25 +284,31 @@ function SparseHashLevel{Ti}(
     tbl_ctrl::TblCtrl,
     tbl_val::TblVal,
     perm::Perm,
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
-    SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}(
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}(
         lvl, shape, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, perm
     )
 end
 
 Base.summary(lvl::SparseHashLevel) = "SparseHash($(summary(lvl.lvl)))"
-function similar_level(lvl::SparseHashLevel, fill_value, eltype::Type, dim, tail...)
-    SparseHash(similar_level(lvl.lvl, fill_value, eltype, tail...), dim)
+function similar_level(
+    lvl::SparseHashLevel{Ti,SingleWriter}, fill_value, eltype::Type, dim, tail...
+) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(
+        similar_level(lvl.lvl, fill_value, eltype, tail...), dim
+    )
 end
 
 function postype(
-    ::Type{SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
     return postype(Lvl)
 end
 
-function Base.resize!(lvl::SparseHashLevel{Ti}, dims...) where {Ti}
-    SparseHashLevel{Ti}(
+function Base.resize!(
+    lvl::SparseHashLevel{Ti,SingleWriter}, dims...
+) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(
         resize!(lvl.lvl, dims[1:(end - 1)]...),
         dims[end],
         lvl.ptr,
@@ -306,8 +321,9 @@ function Base.resize!(lvl::SparseHashLevel{Ti}, dims...) where {Ti}
 end
 
 function transfer(
-    Tm, lvl::SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    Tm,
+    lvl::SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl},
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
     tbl_pos_2 = transfer(Tm, lvl.tbl_pos)
@@ -315,7 +331,7 @@ function transfer(
     tbl_ctrl_2 = transfer(Tm, lvl.tbl_ctrl)
     tbl_val_2 = transfer(Tm, lvl.tbl_val)
     perm_2 = transfer(Tm, lvl.perm)
-    return SparseHashLevel{Ti}(
+    return SparseHashLevel{Ti,SingleWriter}(
         lvl_2, lvl.shape, ptr_2, tbl_pos_2, tbl_idx_2, tbl_ctrl_2, tbl_val_2, perm_2
     )
 end
@@ -325,8 +341,8 @@ function countstored_level(lvl::SparseHashLevel, pos)
     countstored_level(lvl.lvl, lvl.ptr[pos + 1] - 1)
 end
 
-function pattern!(lvl::SparseHashLevel{Ti}) where {Ti}
-    SparseHashLevel{Ti}(
+function pattern!(lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(
         pattern!(lvl.lvl),
         lvl.shape,
         lvl.ptr,
@@ -338,8 +354,10 @@ function pattern!(lvl::SparseHashLevel{Ti}) where {Ti}
     )
 end
 
-function set_fill_value!(lvl::SparseHashLevel{Ti}, init) where {Ti}
-    SparseHashLevel{Ti}(
+function set_fill_value!(
+    lvl::SparseHashLevel{Ti,SingleWriter}, init
+) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(
         set_fill_value!(lvl.lvl, init),
         lvl.shape,
         lvl.ptr,
@@ -351,11 +369,13 @@ function set_fill_value!(lvl::SparseHashLevel{Ti}, init) where {Ti}
     )
 end
 
-function Base.show(io::IO, lvl::SparseHashLevel{Ti}) where {Ti}
+function Base.show(io::IO, lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
     if get(io, :compact, false)
         print(io, "SparseHash(")
-    else
+    elseif SingleWriter
         print(io, "SparseHash{$Ti}(")
+    else
+        print(io, "SparseHash{$Ti, false}(")
     end
     show(io, lvl.lvl)
     print(io, ", ")
@@ -409,19 +429,21 @@ function labelled_children(fbr::SubFiber{<:SparseHashLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} = 1 + level_ndims(Lvl)
+    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} =
+    1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseHashLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseHashLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(
-    ::Type{<:SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} = level_eltype(Lvl)
+    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} = level_fill_value(Lvl)
+    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl} =
+    level_fill_value(Lvl)
 function data_rep_level(
-    ::Type{<:SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+    ::Type{<:SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
     SparseData(data_rep_level(Lvl))
 end
 
@@ -451,6 +473,7 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     tag
     lvl
     Ti
+    single_writer
     ptr
     tbl_pos
     tbl_idx
@@ -479,9 +502,9 @@ end
 function virtualize(
     ctx,
     ex,
-    ::Type{SparseHashLevel{Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}},
+    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}},
     tag=:lvl,
-) where {Ti,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
+) where {Ti,SingleWriter,Ptr,TblPos,TblIdx,TblCtrl,TblVal,Perm,Lvl}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     tbl_pos = freshen(ctx, tag, :_tbl_pos)
@@ -510,13 +533,13 @@ function virtualize(
     shape = value(stop, Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseHashLevel(
-        tag, lvl_2, Ti, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, perm, shape, qos_stop,
-        qos_free, tbl_count, tbl_dirty,
+        tag, lvl_2, Ti, SingleWriter, ptr, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, perm,
+        shape, qos_stop, qos_free, tbl_count, tbl_dirty,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
     quote
-        $SparseHashLevel{$(lvl.Ti)}(
+        $SparseHashLevel{$(lvl.Ti),$(lvl.single_writer)}(
             $(ctx(lvl.lvl)),
             $(ctx(lvl.shape)),
             $(lvl.ptr),
@@ -536,6 +559,7 @@ function distribute_level(
         lvl.tag,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
+        lvl.single_writer,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl_pos, arch, style),
         distribute_buffer(ctx, lvl.tbl_idx, arch, style),
@@ -558,6 +582,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, diff)
             lvl.tag,
             redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
+            lvl.single_writer,
             lvl.ptr,
             lvl.tbl_pos,
             lvl.tbl_idx,
@@ -746,7 +771,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
                     $(lvl.perm)[$v] = $v
                 end
             end
-            for $p in $(lvl.qos_stop):-1:1
+            for $p in ($(lvl.qos_stop)):-1:1
                 if $(lvl.perm)[$p] == 0
                     $(lvl.perm)[$p] = -$(lvl.qos_free)
                     $(lvl.qos_free) = $p
@@ -925,32 +950,86 @@ function unfurl(
                             ctx,
                         ))
                     end
-                    if $(lvl.tbl_dirty) != 0 &&
-                            (($(lvl.tbl_count) + $(lvl.tbl_dirty)) << 1) > length($tbl_val)
-                        Finch.sparse_hash_table_rehash!(
-                            $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val
-                        )
-                        $(lvl.tbl_dirty) = 0
-                    end
-                    $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
-                        $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val, $(ctx(pos)), $(ctx(idx))
+                    $(
+                        if lvl.single_writer
+                            nothing
+                        else
+                            quote
+                                if $(lvl.tbl_dirty) != 0 &&
+                                    (($(lvl.tbl_count) + $(lvl.tbl_dirty)) << 1) >
+                                   length($tbl_val)
+                                    Finch.sparse_hash_table_rehash!(
+                                        $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val
+                                    )
+                                    $(lvl.tbl_dirty) = 0
+                                end
+                            end
+                        end
+                    )
+                    $(
+                        if lvl.single_writer
+                            quote
+                                $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                                    $tbl_pos,
+                                    $tbl_idx,
+                                    $tbl_ctrl,
+                                    $tbl_val,
+                                    $(ctx(pos)),
+                                    $(ctx(idx)),
+                                )
+                            end
+                        else
+                            quote
+                                $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                                    $tbl_pos,
+                                    $tbl_idx,
+                                    $tbl_ctrl,
+                                    $tbl_val,
+                                    $(ctx(pos)),
+                                    $(ctx(idx)),
+                                )
+                                if $tbl_slot == 0
+                                    $tbl_cap = max(
+                                        length($tbl_val) << 1,
+                                        Finch.sparse_hash_table_capacity(
+                                            $(lvl.tbl_count) + $(lvl.tbl_dirty) + 1
+                                        ),
+                                    )
+                                    Finch.sparse_hash_table_resize!(
+                                        $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val,
+                                        $tbl_cap,
+                                    )
+                                    $(lvl.tbl_dirty) = 0
+                                    $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                                        $tbl_pos,
+                                        $tbl_idx,
+                                        $tbl_ctrl,
+                                        $tbl_val,
+                                        $(ctx(pos)),
+                                        $(ctx(idx)),
+                                    )
+                                end
+                            end
+                        end
                     )
                     if $tbl_slot == 0
-                        $tbl_cap = max(length($tbl_val) << 1, Finch.sparse_hash_table_capacity($(lvl.tbl_count) + $(lvl.tbl_dirty) + 1))
-                        Finch.sparse_hash_table_resize!(
-                            $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val, $tbl_cap
-                        )
-                        $(lvl.tbl_dirty) = 0
-                        $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
-                            $tbl_pos, $tbl_idx, $tbl_ctrl, $tbl_val, $(ctx(pos)), $(ctx(idx))
-                        )
+                        $qos = $(Tp(0))
+                    else
+                        $qos = $tbl_val[$tbl_slot]
                     end
-                    $qos = $tbl_val[$tbl_slot]
                     if $qos == 0
-                        $tbl_deleted = $tbl_ctrl[$tbl_slot] == Finch.SPARSE_HASH_CTRL_DELETED
+                        $(
+                            if lvl.single_writer
+                                nothing
+                            else
+                                quote
+                                    $tbl_deleted =
+                                        $tbl_ctrl[$tbl_slot] ==
+                                        Finch.SPARSE_HASH_CTRL_DELETED
+                                end
+                            end
+                        )
                         #If the qos is not in the table, we need to add it.
-                        #We need to commit it to the table in the event that
-                        #another accessor tries to write it in the same loop.
                         if $qos_free != 0
                             $qos = $qos_free
                             $qos_free = -$(lvl.perm)[$qos]
@@ -959,20 +1038,30 @@ function unfurl(
                             $qos = $qos_stop + 1
                             $qos_stop = $qos
                         end
-                        Finch.sparse_hash_table_insert_at_slot!(
-                            $tbl_pos,
-                            $tbl_idx,
-                            $tbl_ctrl,
-                            $tbl_val,
-                            $tbl_slot,
-                            $(ctx(pos)),
-                            $(ctx(idx)),
-                            $qos,
+                        $(
+                            if lvl.single_writer
+                                nothing
+                            else
+                                quote
+                                    # Multi-writer mode publishes immediately so another
+                                    # accessor in the same loop can find the same q.
+                                    Finch.sparse_hash_table_insert_at_slot!(
+                                        $tbl_pos,
+                                        $tbl_idx,
+                                        $tbl_ctrl,
+                                        $tbl_val,
+                                        $tbl_slot,
+                                        $(ctx(pos)),
+                                        $(ctx(idx)),
+                                        $qos,
+                                    )
+                                    $(lvl.tbl_count) += 1
+                                    if $tbl_deleted
+                                        $(lvl.tbl_dirty) -= 1
+                                    end
+                                end
+                            end
                         )
-                        $(lvl.tbl_count) += 1
-                        if $tbl_deleted
-                            $(lvl.tbl_dirty) -= 1
-                        end
                     end
                     $dirty = false
                 end,
@@ -984,15 +1073,45 @@ function unfurl(
                 epilogue=quote
                     if $dirty
                         if $(lvl.perm)[$qos] <= 0
+                            $(
+                                if lvl.single_writer
+                                    quote
+                                        $tbl_slot != 0 || error(
+                                            "SparseHash linear-probing table is full"
+                                        )
+                                        Finch.sparse_hash_table_insert_at_slot!(
+                                            $tbl_pos,
+                                            $tbl_idx,
+                                            $tbl_ctrl,
+                                            $tbl_val,
+                                            $tbl_slot,
+                                            $(ctx(pos)),
+                                            $(ctx(idx)),
+                                            $qos,
+                                        )
+                                        $(lvl.tbl_count) += 1
+                                    end
+                                else
+                                    nothing
+                                end
+                            )
                             $(lvl.perm)[$qos] = $qos
                         end
                         $(fbr.dirty) = true
                     elseif $(lvl.perm)[$qos] == 0 #here, perm is being used as a dirty bit
-                        Finch.sparse_hash_table_delete_at_slot!(
-                            $tbl_ctrl, $tbl_val, $tbl_slot
+                        $(
+                            if lvl.single_writer
+                                nothing
+                            else
+                                quote
+                                    Finch.sparse_hash_table_delete_at_slot!(
+                                        $tbl_ctrl, $tbl_val, $tbl_slot
+                                    )
+                                    $(lvl.tbl_count) -= 1
+                                    $(lvl.tbl_dirty) += 1
+                                end
+                            end
                         )
-                        $(lvl.tbl_count) -= 1
-                        $(lvl.tbl_dirty) += 1
                         $(lvl.perm)[$qos] = -$qos_free
                         $qos_free = $qos
                     end
