@@ -122,6 +122,23 @@ end
     return v
 end
 
+@inline function sparse_dict_table_delete_at_slot!(tbl_pos, tbl_idx, tbl_val, h)
+    n = length(tbl_val)
+    v_deleted = tbl_val[h]
+    tbl_val[h] = zero(eltype(tbl_val))
+    h = h == n ? 1 : h + 1
+    @inbounds for _ in 1:n
+        v = tbl_val[h]
+        v == 0 && return v_deleted
+        tbl_val[h] = zero(eltype(tbl_val))
+        sparse_dict_table_insert_noresize!(
+            tbl_pos, tbl_idx, tbl_val, tbl_pos[v], tbl_idx[v], v
+        )
+        h = h == n ? 1 : h + 1
+    end
+    error("SparseDict linear-probing table is full")
+end
+
 function sparse_dict_table_sort_perm!(perm, tbl_pos, tbl_idx)
     sort!(perm; by=q -> (tbl_pos[q], tbl_idx[q]))
     return perm
@@ -813,7 +830,12 @@ function unfurl(
                         end
                         $(fbr.dirty) = true
                     elseif $(lvl.perm)[$qos] == 0 #here, perm is being used as a dirty bit
-                        $(lvl.perm)[$qos] = $qos
+                        Finch.sparse_dict_table_delete_at_slot!(
+                            $tbl_pos, $tbl_idx, $tbl_val, $tbl_slot
+                        )
+                        $(lvl.tbl_count) -= 1
+                        $(lvl.perm)[$qos] = -$qos_free
+                        $qos_free = $qos
                     end
                 end,
             ),

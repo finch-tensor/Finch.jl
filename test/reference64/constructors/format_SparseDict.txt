@@ -1,6 +1,6 @@
 Tensor(SparseDict(Element(0))) constructors:
-initialized tensor: Tensor(SparseDict{Int64}(Element{0.0, Float64, Int64}([0.0, 2.0, 2.0, 0.0, 3.0, 3.0]), 6, [1, 7], [1, 1, 1, 1, 1, 1], [1, 2, 3, 4, 5, 6], [0, 0, 2, 0, 1, 0, 0, 3, 6, 0, 0, 4, 0, 0, 5, 0], [1, 2, 3, 4, 5, 6]))
-initialized tensor: Tensor(SparseDict{Int16}(Element{0.0, Float64, Int64}([0.0, 2.0, 2.0, 0.0, 3.0, 3.0]), 6, [1, 7], [1, 1, 1, 1, 1, 1], Int16[1, 2, 3, 4, 5, 6], [0, 0, 2, 0, 1, 0, 0, 3, 6, 0, 0, 4, 0, 0, 5, 0], [1, 2, 3, 4, 5, 6]))
+initialized tensor: Tensor(SparseDict{Int64}(Element{0.0, Float64, Int64}([2.0, 2.0, 3.0, 3.0]), 6, [1, 5], [1, 1, 1, 1], [2, 3, 5, 6], [4, 0, 1, 0, 0, 0, 3, 2], [1, 2, 3, 4]))
+initialized tensor: Tensor(SparseDict{Int16}(Element{0.0, Float64, Int64}([2.0, 2.0, 3.0, 3.0]), 6, [1, 5], [1, 1, 1, 1], Int16[2, 3, 5, 6], [4, 0, 1, 0, 0, 0, 3, 2], [1, 2, 3, 4]))
 sized tensor: Tensor(SparseDict{Int64}(Element{0.0, Float64, Int64}(Float64[]), 7, [1], Int64[], Int64[], Int64[], Int64[]))
 sized tensor: Tensor(SparseDict{Int16}(Element{0.0, Float64, Int64}(Float64[]), 7, [1], Int64[], Int16[], Int64[], Int64[]))
 empty tensor: Tensor(SparseDict{Int64}(Element{0.0, Float64, Int64}(Float64[]), 0, [1], Int64[], Int64[], Int64[], Int64[]))
