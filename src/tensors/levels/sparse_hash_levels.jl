@@ -173,26 +173,6 @@ end
     return v_deleted
 end
 
-function sparse_hash_table_sort_perm!(perm, ptr, tbl_pos, tbl_idx)
-    idx_tmp = Vector{eltype(tbl_idx)}(undef, length(perm))
-    pdx_tmp = Vector{eltype(tbl_pos)}(undef, length(perm))
-    val_tmp = copy(perm)
-    @inbounds for q in eachindex(val_tmp)
-        v = val_tmp[q]
-        idx_tmp[q] = tbl_idx[v]
-        pdx_tmp[q] = tbl_pos[v]
-    end
-    shuffler = sortperm(idx_tmp)
-    ptr_2 = copy(ptr)
-    @inbounds for q in shuffler
-        p = pdx_tmp[q]
-        r = ptr_2[p]
-        perm[r] = val_tmp[q]
-        ptr_2[p] += 1
-    end
-    return perm
-end
-
 function sparse_hash_table_rebuild!(
     tbl_pos, tbl_idx, tbl_ctrl, tbl_val, ptr, idx, val, pos_stop
 )
@@ -625,6 +605,12 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     qos_max = freshen(ctx, :qos_max)
     tbl_count = lvl.tbl_count
     h = freshen(ctx, :h)
+    r = freshen(ctx, :r)
+    idx_tmp = freshen(ctx, :idx_tmp)
+    pdx_tmp = freshen(ctx, :pdx_tmp)
+    val_tmp = freshen(ctx, :val_tmp)
+    shuffler = freshen(ctx, :shuffler)
+    ptr_2 = freshen(ctx, :ptr_2)
     push_preamble!(
         ctx,
         quote
@@ -657,9 +643,22 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            Finch.sparse_hash_table_sort_perm!(
-                $(lvl.perm), $(lvl.ptr), $(lvl.tbl_pos), $(lvl.tbl_idx)
-            )
+            $idx_tmp = Vector{$Ti}(undef, $tbl_count)
+            $pdx_tmp = Vector{$Tp}(undef, $tbl_count)
+            $val_tmp = copy($(lvl.perm))
+            @inbounds for $q in eachindex($val_tmp)
+                $v = $val_tmp[$q]
+                $idx_tmp[$q] = $(lvl.tbl_idx)[$v]
+                $pdx_tmp[$q] = $(lvl.tbl_pos)[$v]
+            end
+            $shuffler = sortperm($idx_tmp)
+            $ptr_2 = copy($(lvl.ptr))
+            @inbounds for $q in $shuffler
+                $p = $pdx_tmp[$q]
+                $r = $ptr_2[$p]
+                $(lvl.perm)[$r] = $val_tmp[$q]
+                $ptr_2[$p] += 1
+            end
             if $(lvl.tbl_dirty) != 0
                 Finch.sparse_hash_table_rehash!(
                     $(lvl.tbl_pos), $(lvl.tbl_idx), $(lvl.tbl_ctrl), $(lvl.tbl_val)
