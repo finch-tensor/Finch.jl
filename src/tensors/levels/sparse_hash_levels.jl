@@ -55,13 +55,15 @@ const SPARSE_HASH_CTRL_EMPTY = UInt8(0x00)
 const SPARSE_HASH_CTRL_DELETED = UInt8(0x40)
 const SPARSE_HASH_CTRL_FULL = UInt8(0x80)
 const SPARSE_HASH_CTRL_HASH_MASK = UInt8(0x7f)
+const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 
 @inline sparse_hash_table_capacity(n) = max(4, n <= 1 ? 4 : nextpow(2, 2n))
 
 @inline sparse_hash_hash(p, i) = hash((p, i))
 @inline sparse_hash_hash_slot(h::UInt, n) = Int(h & UInt(n - 1)) + 1
 @inline sparse_hash_hash_ctrl(h::UInt) =
-    SPARSE_HASH_CTRL_FULL | UInt8(h & UInt(SPARSE_HASH_CTRL_HASH_MASK))
+    SPARSE_HASH_CTRL_FULL |
+    UInt8((h >> SPARSE_HASH_CTRL_SHIFT) & UInt(SPARSE_HASH_CTRL_HASH_MASK))
 @inline sparse_hash_ctrl_is_full(ctrl) = (ctrl & SPARSE_HASH_CTRL_FULL) != 0
 
 @inline function sparse_hash_table_resize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, cap)
