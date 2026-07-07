@@ -24,10 +24,11 @@ Implementation invariants:
   fingerprint screening are independent.
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a `q`. Each parent range is sorted by `tbl_idx[q]`.
-* In thawed/update mode, `perm[q] > 0` means `q` is live/dirty, `perm[q] == 0`
-  means `q` was touched but has not retained data, and `perm[q] < 0` links `q`
-  into the free list headed by `qos_free`. This encoding assumes `perm` uses a
-  signed position type.
+* In thawed/update mode, `perm[q] > 0` means `q` is live/dirty and
+  `perm[q] == 0` means `q` was touched but has not retained data. Multi-writer
+  update mode additionally uses `perm[q] < 0` to link `q` into the free list
+  headed by `qos_free`; that encoding assumes `perm` uses a signed position
+  type.
 * `tbl_count` counts full hash slots.
 * `SingleWriter == true` promises that a newly created `(p, i)` has at most one
   writer before it is published to the table. In that case update mode caches
@@ -37,7 +38,7 @@ Implementation invariants:
   missing key. Generated update code keeps a small linear pending stack of
   `(p, i, q, live-count)` records. Pending entries are not published to the
   hash table; the last live writer either publishes a retained `q` or returns
-  it to the free list.
+  it to the multi-writer free list.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -631,7 +632,15 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
             empty!($(lvl.tbl_val))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
-            $(lvl.qos_free) = 0
+            $(
+                if lvl.single_writer
+                    nothing
+                else
+                    quote
+                        $(lvl.qos_free) = 0
+                    end
+                end
+            )
             $(lvl.tbl_count) = 0
             $(lvl.stk_stop) = 0
             resize!($(lvl.perm), 0)
@@ -739,7 +748,15 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         ctx,
         quote
             $(lvl.qos_stop) = 0
-            $(lvl.qos_free) = 0
+            $(
+                if lvl.single_writer
+                    nothing
+                else
+                    quote
+                        $(lvl.qos_free) = 0
+                    end
+                end
+            )
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
@@ -752,20 +769,28 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
             $(lvl.stk_stop) = 0
             Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
             Finch.fill_range!($(lvl.perm), 0, 1, $(lvl.qos_stop))
-            # Restore update-mode perm: live q maps to itself, and unused q
-            # values become negative free-list links below.
+            # Restore update-mode perm: live q maps to itself.
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
                 if $v > 0
                     $(lvl.perm)[$v] = $v
                 end
             end
-            for $p in ($(lvl.qos_stop)):-1:1
-                if $(lvl.perm)[$p] == 0
-                    $(lvl.perm)[$p] = -$(lvl.qos_free)
-                    $(lvl.qos_free) = $p
+            $(
+                if lvl.single_writer
+                    nothing
+                else
+                    quote
+                        # Link unused q values into the multi-writer free list.
+                        for $p in ($(lvl.qos_stop)):-1:1
+                            if $(lvl.perm)[$p] == 0
+                                $(lvl.perm)[$p] = -$(lvl.qos_free)
+                                $(lvl.qos_free) = $p
+                            end
+                        end
+                    end
                 end
-            end
+            )
         end,
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
@@ -916,7 +941,13 @@ function unfurl(
                     $tbl_idx = $(lvl.tbl_idx)
                     $tbl_ctrl = $(lvl.tbl_ctrl)
                     $tbl_val = $(lvl.tbl_val)
-                    if $qos_free == 0 && $qos_stop == length($(lvl.perm))
+                    if $(
+                        if lvl.single_writer
+                            :($qos_stop == length($(lvl.perm)))
+                        else
+                            :($qos_free == 0 && $qos_stop == length($(lvl.perm)))
+                        end
+                    )
                         $old = length($(lvl.perm)) + 1
                         $p = $old
                         $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
@@ -975,19 +1006,22 @@ function unfurl(
                     )
                     if $qos == 0
                         # If the qos is not in the table or pending stack, allocate it.
-                        if $qos_free != 0
-                            $qos = $qos_free
-                            $qos_free = -$(lvl.perm)[$qos]
-                            $(lvl.perm)[$qos] = 0
-                        else
-                            $qos = $qos_stop + 1
-                            $qos_stop = $qos
-                        end
                         $(
                             if lvl.single_writer
-                                nothing
+                                quote
+                                    $qos = $qos_stop + 1
+                                    $qos_stop = $qos
+                                end
                             else
                                 quote
+                                    if $qos_free != 0
+                                        $qos = $qos_free
+                                        $qos_free = -$(lvl.perm)[$qos]
+                                        $(lvl.perm)[$qos] = 0
+                                    else
+                                        $qos = $qos_stop + 1
+                                        $qos_stop = $qos
+                                    end
                                     ($stk_slot, $(lvl.stk_stop)) =
                                         Finch.sparse_hash_stack_push!(
                                             $(lvl.stk_pos),
@@ -1013,7 +1047,7 @@ function unfurl(
                 epilogue=if lvl.single_writer
                     quote
                         if $dirty
-                            if $(lvl.perm)[$qos] <= 0
+                            if $(lvl.perm)[$qos] == 0
                                 Finch.sparse_hash_table_insert_at_slot!(
                                     $tbl_pos,
                                     $tbl_idx,
@@ -1028,9 +1062,6 @@ function unfurl(
                                 $(lvl.perm)[$qos] = $qos
                             end
                             $(fbr.dirty) = true
-                        elseif $(lvl.perm)[$qos] == 0
-                            $(lvl.perm)[$qos] = -$qos_free
-                            $qos_free = $qos
                         end
                     end
                 else
