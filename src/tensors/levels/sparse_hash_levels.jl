@@ -94,18 +94,16 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 @inline sparse_hash_hash_ctrl(h::UInt) =
     SPARSE_HASH_CTRL_FULL |
     UInt8((h >> SPARSE_HASH_CTRL_SHIFT) & UInt(SPARSE_HASH_CTRL_HASH_MASK))
-@inline sparse_hash_ctrl_is_full(ctrl) = (ctrl & SPARSE_HASH_CTRL_FULL) != 0
 
 @inline function sparse_hash_table_resize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, cap)
-    old_ctrl = copy(tbl_ctrl)
     old_val = copy(tbl_val)
     resize!(tbl_ctrl, cap)
     resize!(tbl_val, cap)
     fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
     fill!(tbl_val, zero(eltype(tbl_val)))
     @inbounds for h in eachindex(old_val)
-        if sparse_hash_ctrl_is_full(old_ctrl[h])
-            v = old_val[h]
+        v = old_val[h]
+        if v > 0
             sparse_hash_table_insert_noresize!(
                 tbl_pos, tbl_idx, tbl_ctrl, tbl_val, tbl_pos[v], tbl_idx[v], v
             )
@@ -159,19 +157,12 @@ end
     return 0
 end
 
-@inline function sparse_hash_table_insert_slot_noresize!(
+@inline function sparse_hash_table_insert_noresize!(
     tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v
 )
     h = sparse_hash_table_lookup_insert_slot(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i)
     h == 0 && error("SparseHash linear-probing table is full")
     sparse_hash_table_insert_at_slot!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, h, p, i, v)
-    return h
-end
-
-@inline function sparse_hash_table_insert_noresize!(
-    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v
-)
-    sparse_hash_table_insert_slot_noresize!(tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, i, v)
     return v
 end
 
@@ -254,56 +245,6 @@ end
         stk_stop -= 1
     end
     return stk_stop
-end
-
-function sparse_hash_table_rebuild!(
-    tbl_pos, tbl_idx, tbl_ctrl, tbl_val, ptr, idx, val, pos_stop
-)
-    nnz = isempty(ptr) ? 0 : ptr[pos_stop + 1] - 1
-    qos_stop = zero(eltype(tbl_val))
-    @inbounds for q in 1:nnz
-        qos_stop = max(qos_stop, val[q])
-    end
-    resize!(tbl_pos, qos_stop)
-    resize!(tbl_idx, qos_stop)
-    resize!(tbl_ctrl, sparse_hash_table_capacity(nnz))
-    resize!(tbl_val, sparse_hash_table_capacity(nnz))
-    fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
-    fill!(tbl_val, zero(eltype(tbl_val)))
-    @inbounds for p in 1:pos_stop
-        for q in ptr[p]:(ptr[p + 1] - 1)
-            sparse_hash_table_insert_noresize!(
-                tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, idx[q], val[q]
-            )
-        end
-    end
-    return tbl_pos, tbl_idx, tbl_ctrl, tbl_val
-end
-
-function sparse_hash_table_rebuild_perm!(
-    perm, tbl_pos, tbl_idx, tbl_ctrl, tbl_val, ptr, idx, val, pos_stop
-)
-    nnz = isempty(ptr) ? 0 : ptr[pos_stop + 1] - 1
-    qos_stop = zero(eltype(tbl_val))
-    @inbounds for q in 1:nnz
-        qos_stop = max(qos_stop, val[q])
-    end
-    resize!(tbl_pos, qos_stop)
-    resize!(tbl_idx, qos_stop)
-    resize!(tbl_ctrl, sparse_hash_table_capacity(nnz))
-    resize!(tbl_val, sparse_hash_table_capacity(nnz))
-    fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
-    fill!(tbl_val, zero(eltype(tbl_val)))
-    resize!(perm, nnz)
-    @inbounds for p in 1:pos_stop
-        for q in ptr[p]:(ptr[p + 1] - 1)
-            sparse_hash_table_insert_slot_noresize!(
-                tbl_pos, tbl_idx, tbl_ctrl, tbl_val, p, idx[q], val[q]
-            )
-            perm[q] = val[q]
-        end
-    end
-    return perm, tbl_pos, tbl_idx, tbl_ctrl, tbl_val
 end
 
 SparseHashLevel(lvl) = SparseHashLevel{Int}(lvl)
@@ -698,7 +639,6 @@ postype(lvl::VirtualSparseHashLevel) = postype(lvl.lvl)
 
 function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos, init)
     #TODO check that init == fill_value
-    Ti = lvl.Ti
     Tp = postype(lvl)
     qos = freshen(ctx, lvl.tag, :qos)
     push_preamble!(
@@ -726,7 +666,6 @@ function assemble_level!(ctx, lvl::VirtualSparseHashLevel, pos_start, pos_stop)
 end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_stop)
-    p = freshen(ctx, :p)
     Tp = postype(lvl)
     Ti = lvl.Ti
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
@@ -760,13 +699,13 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 end
             end
             $tbl_count = $q
-            resize!($(lvl.perm), $tbl_count)
+            $val_tmp = Vector{$Tp}(undef, $tbl_count)
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
                 if $v > 0
                     $q += 1
-                    $(lvl.perm)[$q] = $v
+                    $val_tmp[$q] = $v
                 end
             end
             resize!($(lvl.tbl_pos), $qos_max)
@@ -776,8 +715,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
+            resize!($(lvl.perm), $tbl_count)
             $idx_tmp = Vector{$Ti}(undef, $tbl_count)
-            $val_tmp = copy($(lvl.perm))
             @inbounds for $q in eachindex($val_tmp)
                 $v = $val_tmp[$q]
                 $idx_tmp[$q] = $(lvl.tbl_idx)[$v]
@@ -815,7 +754,6 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
     v = freshen(ctx, :v)
     h = freshen(ctx, :h)
     tbl_count = lvl.tbl_count
-    pos_stop = ctx(cache!(ctx, :pos_stop, simplify(ctx, pos_stop)))
     push_preamble!(
         ctx,
         quote
@@ -824,7 +762,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
             $q = 0
             for $h in eachindex($(lvl.tbl_val))
                 $v = $(lvl.tbl_val)[$h]
-                if Finch.sparse_hash_ctrl_is_full($(lvl.tbl_ctrl)[$h])
+                if $v > 0
                     $q += 1
                     $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
                 end
@@ -836,8 +774,8 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
             # Rebuild update-mode perm: live q maps to itself, and unused q
             # values become negative free-list links below.
             for $h in eachindex($(lvl.tbl_val))
-                if Finch.sparse_hash_ctrl_is_full($(lvl.tbl_ctrl)[$h])
-                    $v = $(lvl.tbl_val)[$h]
+                $v = $(lvl.tbl_val)[$h]
+                if $v > 0
                     $(lvl.perm)[$v] = $v
                 end
             end
