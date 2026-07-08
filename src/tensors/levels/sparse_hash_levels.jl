@@ -65,8 +65,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <:
-       AbstractLevel
+mutable struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     subtables::Int
@@ -102,12 +101,12 @@ end
 
 @inline sparse_hash_hash(p, i) = hash((p, i))
 @inline sparse_hash_hash_slot(h::UInt, n) = Int(h & UInt(n - 1)) + 1
+@inline sparse_hash_hash_subtable(h::UInt, subtables) = Int(h & UInt(subtables - 1)) + 1
 @inline function sparse_hash_hash_slot_parts(h::UInt, n, subtables)
     subtable_len = n ÷ subtables
-    h0 = sparse_hash_hash_slot(h, n) - 1
     mask = subtable_len - 1
-    base = (h0 & ~mask) + 1
-    off = Int(h & UInt(mask))
+    base = (sparse_hash_hash_subtable(h, subtables) - 1) * subtable_len + 1
+    off = Int((h >>> trailing_zeros(subtables)) & UInt(mask))
     return base, off, mask
 end
 @inline sparse_hash_hash_ctrl(h::UInt) =
@@ -117,7 +116,22 @@ end
 @inline sparse_hash_entry_pos(entry) = entry[1]
 @inline sparse_hash_entry_idx(entry) = entry[2]
 @inline sparse_hash_entry_val(entry) = entry[3]
+@inline sparse_hash_entry_idx_type(::Type{Tuple{Tp,Ti,Tv}}) where {Tp,Ti,Tv} = Ti
 @inline sparse_hash_entry_val_zero(::Type{Tuple{Tp,Ti,Tv}}) where {Tp,Ti,Tv} = zero(Tv)
+
+@inline function sparse_hash_perm_pos_lower_bound(tbl, perm, p)
+    lo = firstindex(perm)
+    hi = lastindex(perm) + 1
+    @inbounds while lo < hi
+        mid = (lo + hi) >>> 1
+        if sparse_hash_entry_pos(tbl[perm[mid]]) < p
+            lo = mid + 1
+        else
+            hi = mid
+        end
+    end
+    return lo
+end
 
 @inline function sparse_hash_table_resize!(tbl_ctrl, tbl, cap, subtables=1)
     old_ctrl = copy(tbl_ctrl)
@@ -406,6 +420,23 @@ function similar_level(
 ) where {Ti,SingleWriter}
     SparseHashLevel{Ti,SingleWriter}(
         similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables
+    )
+end
+
+coalesce_similar_level(lvl, P) = lvl
+function coalesce_similar_level(
+    lvl::SparseHashLevel{Ti,SingleWriter}, P
+) where {Ti,SingleWriter}
+    sparse_hash_check_subtables(P)
+    SparseHashLevel{Ti,SingleWriter}(
+        coalesce_similar_level(lvl.lvl, P),
+        lvl.shape,
+        P,
+        lvl.ptr,
+        lvl.tbl_ctrl,
+        lvl.tbl,
+        lvl.pool,
+        lvl.perm,
     )
 end
 
@@ -1269,7 +1300,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::SparseHashLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
     if factor > 1
         global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
@@ -1278,47 +1309,224 @@ function coalesce_level!(
         factor = 1
     end
 
-    hashes = Vector{Vector{Int}}(undef, P)
-    hash_perms = Vector{Vector{Int}}(undef, P)
-    hash_buckets = Vector{Vector{Int}}(undef, P)
-    subtables = nextpow2(P)
-    threads.@threads for tid in 1:P
-        #lvl.tbl should be MultiChannelBuffer
-        tbl = lvl.tbl.data[tid]
-        tbl_ctrl = lvl.tbl_ctrl.data[tid]
-        perm = lvl.perm.data[tid]
-        hashes[tid] = Vector{Int}(undef, length(perm))
-        hash_buckets[tid] = zeros(Int, P + 1)
-        for i in 1:length(perm)
-            pos, idx, val = tbl[perm[i]]
-            h = Finch.sparse_hash_hash((pos, idx))
-            slot = Int(h & UInt(n - 1)) + 1
-            base, off, mask = sparse_hash_hash_slot_parts(h, n, subtables)
-            hash_buckets[tid][base + 1] += 1
-            hashes[tid][i] = slot
+    tbls = lvl.tbl.data
+    tbl_ctrls = lvl.tbl_ctrl.data
+    perms = lvl.perm.data
+    sparse_hash_check_subtables(P)
+    coalescent.subtables = Int(P)
+    subtables = coalescent.subtables
+
+    ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
+    sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
+
+    ptrs = lvl.ptr.data
+    task_offsets = Vector{Int}(undef, P)
+    task_offset = 0
+    @inbounds for tid in 1:P
+        task_offsets[tid] = task_offset
+        task_offset += length(ptrs[tid]) - 1
+    end
+
+    total_entries = 0
+    @inbounds for tid in 1:P
+        tbl_ctrl = tbl_ctrls[tid]
+        for h in perms[tid]
+            total_entries += tbl_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
         end
-        for p = 1:P
-            hash_buckets[tid][base + 1] += hash_buckets[tid][base]
+    end
+
+    if total_entries == 0
+        empty!(coalescent.tbl_ctrl)
+        empty!(coalescent.tbl)
+        empty!(coalescent.pool)
+        resize!(coalescent.perm, 0)
+        resize!(coalescent.ptr, 1)
+        coalescent.ptr[1] = 1
+        return coalescent
+    end
+
+    bucket_counts = [zeros(Int, subtables) for _ in 1:P]
+    bucket_offsets = [zeros(Int, subtables + 1) for _ in 1:P]
+    bucketed_perm = [Int[] for _ in 1:P]
+    entry_buckets = [Vector{Int}(undef, length(perms[tid])) for tid in 1:P]
+    entry_global_p = [Vector{Int}(undef, length(perms[tid])) for tid in 1:P]
+    bucket_unique_count = zeros(Int, subtables)
+    bucket_input_count = zeros(Int, subtables)
+    idx_type = sparse_hash_entry_idx_type(eltype(coalescent.tbl))
+
+    Threads.@threads for tid in 1:P
+        fill!(bucket_counts[tid], 0)
+        tbl = tbls[tid]
+        tbl_ctrl = tbl_ctrls[tid]
+        perm = perms[tid]
+        buckets = entry_buckets[tid]
+        globals = entry_global_p[tid]
+        task_offset = task_offsets[tid]
+        @inbounds for r in eachindex(perm)
+            h = perm[r]
+            if tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY
+                buckets[r] = 0
+            else
+                entry = tbl[h]
+                local_p = sparse_hash_entry_pos(entry)
+                global_p = global_fbr_map[sorter[task_offset + local_p]]
+                globals[r] = global_p
+                hsh = sparse_hash_hash(global_p, sparse_hash_entry_idx(entry))
+                bucket = sparse_hash_hash_subtable(hsh, subtables)
+                buckets[r] = bucket
+                bucket_counts[tid][bucket] += 1
+            end
+        end
+
+        offsets = bucket_offsets[tid]
+        offsets[1] = 1
+        @inbounds for bucket in 1:subtables
+            offsets[bucket + 1] = offsets[bucket] + bucket_counts[tid][bucket]
+        end
+
+        resize!(bucketed_perm[tid], offsets[end] - 1)
+        cursor = copy(offsets)
+        @inbounds for r in eachindex(perm)
+            bucket = buckets[r]
+            if bucket != 0
+                dst = cursor[bucket]
+                bucketed_perm[tid][dst] = r
+                cursor[bucket] += 1
+            end
         end
     end
 
-    threads.@threads for tid in 1:P
-        Each thread computes the number of unique outputs of the tid^th bucket by computing
-        number of unique (pos=global_fbr_map, idx=idx)
+    fill!(bucket_input_count, 0)
+    @inbounds for bucket in 1:subtables
+        for tid in 1:P
+            bucket_input_count[bucket] += bucket_counts[tid][bucket]
+        end
     end
 
-    size the output based on number of unique
-    do a prefix sum of number of unique in each bucket to give to child.
-
-    threads.@threads for tid in 1:P
-        Each thread hashes (pos=global_fbr_map, idx=idx) into the output table within their own bucket.
-        each thread computes the child positions based on local position plus number of unique in previous buckets from the prefix sum.
-        Compute task, local_fiber_map, etc. for the child on each thread here
+    Threads.@threads for bucket in 1:subtables
+        seen = Set{Tuple{Int,idx_type}}()
+        @inbounds for tid in 1:P
+            tbl = tbls[tid]
+            offsets = bucket_offsets[tid]
+            perm = perms[tid]
+            bucketed = bucketed_perm[tid]
+            globals = entry_global_p[tid]
+            for r in offsets[bucket]:(offsets[bucket + 1] - 1)
+                s = bucketed[r]
+                entry = tbl[perm[s]]
+                key = (
+                    globals[s],
+                    sparse_hash_entry_idx(entry),
+                )
+                push!(seen, key)
+            end
+        end
+        bucket_unique_count[bucket] = length(seen)
     end
 
-    one big global parallel sort to produce perm
+    unique_prefix = Vector{Int}(undef, subtables + 1)
+    input_prefix = Vector{Int}(undef, subtables + 1)
+    unique_prefix[1] = 1
+    input_prefix[1] = 1
+    @inbounds for bucket in 1:subtables
+        unique_prefix[bucket + 1] = unique_prefix[bucket] + bucket_unique_count[bucket]
+        input_prefix[bucket + 1] = input_prefix[bucket] + bucket_input_count[bucket]
+    end
+    output_nnz = unique_prefix[end] - 1
+    max_bucket_unique = maximum(bucket_unique_count)
+    bucket_cap = subtables * max(4, max_bucket_unique <= 1 ? 4 : nextpow(2, 2 * max_bucket_unique))
+    output_cap = max(sparse_hash_table_capacity(output_nnz, subtables), bucket_cap)
 
-    parallel pass to count stuff to make ptr. 
+    resize!(coalescent.tbl_ctrl, output_cap)
+    resize!(coalescent.tbl, output_cap)
+    fill!(coalescent.tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
+    empty!(coalescent.pool)
+    resize!(coalescent.perm, output_nnz)
 
-    return global_fbr_map2, local_fbr_map, task_map
+    child_global_fbr_map = Vector{Int}(undef, total_entries)
+    child_local_fbr_map = Vector{Int}(undef, total_entries)
+    child_task_map = Vector{Int}(undef, total_entries)
+
+    Threads.@threads for bucket in 1:subtables
+        next_q = unique_prefix[bucket]
+        next_child = input_prefix[bucket]
+        @inbounds for tid in 1:P
+            tbl = tbls[tid]
+            offsets = bucket_offsets[tid]
+            perm = perms[tid]
+            bucketed = bucketed_perm[tid]
+            globals = entry_global_p[tid]
+            for r in offsets[bucket]:(offsets[bucket + 1] - 1)
+                s = bucketed[r]
+                entry = tbl[perm[s]]
+                idx = sparse_hash_entry_idx(entry)
+                local_q = sparse_hash_entry_val(entry)
+                global_p = globals[s]
+                hsh = sparse_hash_hash(global_p, idx)
+                ctrl = sparse_hash_hash_ctrl(hsh)
+                slot = sparse_hash_table_lookup_insert_slot(
+                    coalescent.tbl_ctrl,
+                    coalescent.tbl,
+                    global_p,
+                    idx,
+                    hsh,
+                    ctrl,
+                    output_cap,
+                    subtables,
+                )
+                if coalescent.tbl_ctrl[slot] == SPARSE_HASH_CTRL_EMPTY
+                    q = next_q
+                    next_q += 1
+                    sparse_hash_table_insert_at_slot!(
+                        coalescent.tbl_ctrl,
+                        coalescent.tbl,
+                        slot,
+                        global_p,
+                        idx,
+                        q,
+                        ctrl,
+                    )
+                    coalescent.perm[q] = slot
+                else
+                    q = sparse_hash_entry_val(coalescent.tbl[slot])
+                end
+
+                child_global_fbr_map[next_child] = q
+                child_local_fbr_map[next_child] = local_q
+                child_task_map[next_child] = tid
+                next_child += 1
+            end
+        end
+    end
+
+    ordering = Base.Order.By(j -> child_global_fbr_map[j])
+    child_order = AcceleratedKernels.sortperm(
+        collect(1:total_entries); order=ordering
+    )
+    child_global_fbr_map = p_permute(child_order, child_global_fbr_map)
+    child_local_fbr_map = p_permute(child_order, child_local_fbr_map)
+    child_task_map = p_permute(child_order, child_task_map)
+
+    coalesce_level!(
+        lvl.lvl,
+        child_global_fbr_map,
+        child_local_fbr_map,
+        child_task_map,
+        factor,
+        P,
+        coalescent.lvl,
+    )
+
+    max_level_dim = maximum(global_fbr_map)
+    resize!(coalescent.ptr, max_level_dim + 1)
+
+    AcceleratedKernels.sort!(coalescent.perm; by=h -> coalescent.tbl[h])
+    Threads.@threads for p in 1:max_level_dim
+        @inbounds coalescent.ptr[p] = sparse_hash_perm_pos_lower_bound(
+            coalescent.tbl, coalescent.perm, p
+        )
+    end
+    coalescent.ptr[max_level_dim + 1] = output_nnz + 1
+
+    return coalescent
 end

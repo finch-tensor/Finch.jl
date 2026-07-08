@@ -34,13 +34,15 @@ function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     while typeof(coal_lvl) <: CoalesceLevel
         coal_lvl = coal_lvl.lvl
     end
+    P = get_num_tasks(device)
     coalescent = similar_level(
         coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
     )
+    coalescent = coalesce_similar_level(coalescent, P)
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
-        transfer(MultiChannelMemory(device, get_num_tasks(device)), lvl),
+        transfer(MultiChannelMemory(device, P), lvl),
         coalescent,
         schedule,
     )
