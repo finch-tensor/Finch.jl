@@ -454,9 +454,26 @@ function transfer(
     )
 end
 
+countstored_level_at(lvl, pos) =
+    countstored_level(lvl, pos) - countstored_level(lvl, pos - 1)
+
+function countstored_level_at(lvl::SparseHashLevel, pos)
+    count = 0
+    for r in lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)
+        q = sparse_hash_entry_val(lvl.tbl[lvl.perm[r]])
+        count += countstored_level_at(lvl.lvl, q)
+    end
+    return count
+end
+
 function countstored_level(lvl::SparseHashLevel, pos)
     pos == 0 && return countstored_level(lvl.lvl, pos)
-    countstored_level(lvl.lvl, lvl.ptr[pos + 1] - 1)
+    count = 0
+    for r in lvl.ptr[1]:(lvl.ptr[pos + 1] - 1)
+        q = sparse_hash_entry_val(lvl.tbl[lvl.perm[r]])
+        count += countstored_level_at(lvl.lvl, q)
+    end
+    return count
 end
 
 function pattern!(
@@ -829,12 +846,14 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
             $q = 0
             $qos_max = $(Tp(0))
+            resize!($(lvl.perm), length($(lvl.tbl_ctrl)))
             for $h in eachindex($(lvl.tbl_ctrl))
                 if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
                     $entry = $(lvl.tbl)[$h]
                     $p = Finch.sparse_hash_entry_pos($entry)
                     $v = Finch.sparse_hash_entry_val($entry)
                     $q += 1
+                    $(lvl.perm)[$q] = $h
                     $qos_max = max($qos_max, $v)
                     if $p < $(ctx(pos_stop))
                         $(lvl.ptr)[$p + 2] += 1
@@ -843,13 +862,6 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             end
             $tbl_count = $q
             resize!($(lvl.perm), $tbl_count)
-            $q = 0
-            for $h in eachindex($(lvl.tbl_ctrl))
-                if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
-                    $q += 1
-                    $(lvl.perm)[$q] = $h
-                end
-            end
             # After the prefix sum, ptr[p + 1] is the current write cursor for
             # bucket p, initialized to bucket p's final start.
             for $p in 2:($(ctx(pos_stop)) + 1)
