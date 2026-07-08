@@ -1256,7 +1256,7 @@ function unfurl(
     )
 end
 
-
+#=
 function coalesce_level!(
     lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
@@ -1411,3 +1411,4 @@ Base.@propagate_inbounds function process_next_lvl_hash(
 
     return global_fbr_map2, local_fbr_map, task_map
 end
+=#
