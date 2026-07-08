@@ -65,7 +65,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-mutable struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <: AbstractLevel
+struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     subtables::Int
@@ -1327,13 +1327,16 @@ function coalesce_level!(
         task_offset += length(ptrs[tid]) - 1
     end
 
-    total_entries = 0
-    @inbounds for tid in 1:P
+    task_entry_counts = zeros(Int, P)
+    Threads.@threads for tid in 1:P
         tbl_ctrl = tbl_ctrls[tid]
+        count = 0
         for h in perms[tid]
-            total_entries += tbl_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
+            count += tbl_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
         end
+        task_entry_counts[tid] = count
     end
+    total_entries = sum(task_entry_counts)
 
     if total_entries == 0
         empty!(coalescent.tbl_ctrl)
@@ -1414,11 +1417,7 @@ function coalesce_level!(
             for r in offsets[bucket]:(offsets[bucket + 1] - 1)
                 s = bucketed[r]
                 entry = tbl[perm[s]]
-                key = (
-                    globals[s],
-                    sparse_hash_entry_idx(entry),
-                )
-                push!(seen, key)
+                push!(seen, (globals[s], sparse_hash_entry_idx(entry)))
             end
         end
         bucket_unique_count[bucket] = length(seen)
@@ -1439,15 +1438,22 @@ function coalesce_level!(
 
     resize!(coalescent.tbl_ctrl, output_cap)
     resize!(coalescent.tbl, output_cap)
-    fill!(coalescent.tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
     empty!(coalescent.pool)
     resize!(coalescent.perm, output_nnz)
 
+    child_q_counts = zeros(Int, output_nnz)
     child_global_fbr_map = Vector{Int}(undef, total_entries)
     child_local_fbr_map = Vector{Int}(undef, total_entries)
     child_task_map = Vector{Int}(undef, total_entries)
 
+    subtable_len = output_cap ÷ subtables
     Threads.@threads for bucket in 1:subtables
+        h_start = (bucket - 1) * subtable_len + 1
+        h_stop = bucket * subtable_len
+        @inbounds for h in h_start:h_stop
+            coalescent.tbl_ctrl[h] = SPARSE_HASH_CTRL_EMPTY
+        end
+
         next_q = unique_prefix[bucket]
         next_child = input_prefix[bucket]
         @inbounds for tid in 1:P
@@ -1494,24 +1500,38 @@ function coalesce_level!(
                 child_global_fbr_map[next_child] = q
                 child_local_fbr_map[next_child] = local_q
                 child_task_map[next_child] = tid
+                child_q_counts[q] += 1
                 next_child += 1
             end
         end
     end
 
-    ordering = Base.Order.By(j -> child_global_fbr_map[j])
-    child_order = AcceleratedKernels.sortperm(
-        collect(1:total_entries); order=ordering
-    )
-    child_global_fbr_map = p_permute(child_order, child_global_fbr_map)
-    child_local_fbr_map = p_permute(child_order, child_local_fbr_map)
-    child_task_map = p_permute(child_order, child_task_map)
+    child_q_ptr = Vector{Int}(undef, output_nnz + 1)
+    child_q_ptr[1] = 1
+    @inbounds for q in 1:output_nnz
+        child_q_ptr[q + 1] = child_q_ptr[q] + child_q_counts[q]
+    end
+
+    child_global_fbr_map_s = Vector{Int}(undef, total_entries)
+    child_local_fbr_map_s = Vector{Int}(undef, total_entries)
+    child_task_map_s = Vector{Int}(undef, total_entries)
+    child_cursor = copy(child_q_ptr)
+    Threads.@threads for bucket in 1:subtables
+        @inbounds for child in input_prefix[bucket]:(input_prefix[bucket + 1] - 1)
+            q = child_global_fbr_map[child]
+            dst = child_cursor[q]
+            child_global_fbr_map_s[dst] = q
+            child_local_fbr_map_s[dst] = child_local_fbr_map[child]
+            child_task_map_s[dst] = child_task_map[child]
+            child_cursor[q] += 1
+        end
+    end
 
     coalesce_level!(
         lvl.lvl,
-        child_global_fbr_map,
-        child_local_fbr_map,
-        child_task_map,
+        child_global_fbr_map_s,
+        child_local_fbr_map_s,
+        child_task_map_s,
         factor,
         P,
         coalescent.lvl,
