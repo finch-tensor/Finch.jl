@@ -24,11 +24,11 @@ Implementation invariants:
   fingerprint screening are independent.
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a table slot `h`. Each parent range is sorted by `tbl[h][2]`.
-* In thawed/update mode, `perm[q] > 0` is the table slot for retained `q`, and
-  `perm[q] == 0` means `q` was touched but has not retained data.
+* In thawed/update mode, `perm` is only kept large enough to record child
+  position capacity. It is not a q-indexed presence or dirty map.
 * `pool` is a stack of vacant `q` values for multi-writer update mode. It is
-  rebuilt by thaw, cleared by freeze/declaration, and unused by single-writer
-  update mode.
+  retained across freeze/thaw, cleared by declaration, and unused by
+  single-writer update mode.
 * `tbl_count` counts full hash slots.
 * `SingleWriter == true` promises that a newly created `(p, i)` has at most one
   writer before it is published to the table. In that case update mode caches
@@ -36,7 +36,7 @@ Implementation invariants:
   reports that it retained data.
 * `SingleWriter == false` may have several simultaneous writers for the same
   missing key. Generated update code keeps a small linear pending stack of
-  `(p, i, q)` records plus a separate live count. Pending entries are not
+  `(p, i, q)` records plus separate live and dirty state. Pending entries are not
   published to the hash table; the last live writer either publishes a retained
   `q` or returns it to `pool`.
 
@@ -257,18 +257,20 @@ end
 end
 
 @inline function sparse_hash_stack_push!(
-    stk, stk_cnt, stk_stop, p, i, v
+    stk, stk_cnt, stk_dirty, stk_stop, p, i, v
 )
     s = sparse_hash_stack_first_free(stk_cnt, stk_stop)
     if s == 0
         stk_stop += 1
         resize!(stk, stk_stop)
         resize!(stk_cnt, stk_stop)
+        resize!(stk_dirty, stk_stop)
         s = stk_stop
     end
     @inbounds begin
         stk[s] = (p, i, v)
         stk_cnt[s] = 1
+        stk_dirty[s] = false
     end
     return s, stk_stop
 end
@@ -545,6 +547,7 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     tbl_count
     stk
     stk_cnt
+    stk_dirty
     stk_stop
 end
 
@@ -576,6 +579,7 @@ function virtualize(
     perm = freshen(ctx, tag, :_perm)
     stk = freshen(ctx, tag, :_stk)
     stk_cnt = freshen(ctx, tag, :_stk_cnt)
+    stk_dirty = freshen(ctx, tag, :_stk_dirty)
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -593,6 +597,7 @@ function virtualize(
                     quote
                         $stk = similar($tbl, 0)
                         $stk_cnt = Int[]
+                        $stk_dirty = Bool[]
                     end
                 end
             )
@@ -606,7 +611,7 @@ function virtualize(
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseHashLevel(
         tag, lvl_2, Ti, SingleWriter, ptr, tbl_ctrl, tbl, pool, perm, shape,
-        qos_stop, tbl_count, stk, stk_cnt, stk_stop,
+        qos_stop, tbl_count, stk, stk_cnt, stk_dirty, stk_stop,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
@@ -641,6 +646,7 @@ function distribute_level(
         lvl.tbl_count,
         lvl.stk,
         lvl.stk_cnt,
+        lvl.stk_dirty,
         lvl.stk_stop,
     )
 end
@@ -664,6 +670,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, diff)
             lvl.tbl_count,
             lvl.stk,
             lvl.stk_cnt,
+            lvl.stk_dirty,
             lvl.stk_stop,
         ),
     )
@@ -788,7 +795,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             $(lvl.ptr)[1] = 1
             $(lvl.stk_stop) == 0 ||
                 error("SparseHash pending writer stack is not empty during freeze")
-            empty!($(lvl.pool))
+            for $v in $(lvl.pool)
+                $qos_max = max($qos_max, $v)
+            end
             $qos_stop = $qos_max
         end,
     )
@@ -797,17 +806,14 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
 end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_stop)
-    p = freshen(ctx, :p)
     q = freshen(ctx, :q)
     v = freshen(ctx, :v)
     h = freshen(ctx, :h)
-    entry = freshen(ctx, :entry)
     tbl_count = lvl.tbl_count
     push_preamble!(
         ctx,
         quote
             $(lvl.qos_stop) = 0
-            empty!($(lvl.pool))
             $q = 0
             for $h in eachindex($(lvl.tbl_ctrl))
                 if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
@@ -816,32 +822,12 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
                     $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
                 end
             end
+            for $v in $(lvl.pool)
+                $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
+            end
             $tbl_count = $q
             $(lvl.stk_stop) = 0
             Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
-            Finch.fill_range!($(lvl.perm), 0, 1, $(lvl.qos_stop))
-            # Restore update-mode perm: live q maps to its table slot.
-            for $h in eachindex($(lvl.tbl_ctrl))
-                if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
-                    $entry = $(lvl.tbl)[$h]
-                    $(lvl.perm)[Finch.sparse_hash_entry_val($entry)] = $h
-                end
-            end
-            $(
-                if lvl.single_writer
-                    nothing
-                else
-                    quote
-                        # Rebuild the multi-writer pool from q values not present
-                        # in the table. Update-mode perm stays simple: q or 0.
-                        for $p in ($(lvl.qos_stop)):-1:1
-                            if $(lvl.perm)[$p] == 0
-                                push!($(lvl.pool), $p)
-                            end
-                        end
-                    end
-                end
-            )
         end,
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
@@ -988,6 +974,7 @@ function unfurl(
     tbl_entry = freshen(ctx, tag, :_tbl_entry)
     tbl_p = freshen(ctx, tag, :_tbl_p)
     tbl_i = freshen(ctx, tag, :_tbl_i)
+    tbl_found = freshen(ctx, tag, :_tbl_found)
     tbl_hash = freshen(ctx, tag, :_tbl_hash)
     tbl_ctrl_byte = freshen(ctx, tag, :_tbl_ctrl_byte)
     tbl_slot = freshen(ctx, tag, :_tbl_slot)
@@ -1017,7 +1004,6 @@ function unfurl(
                         $p = $old
                         $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
                         Finch.resize_if_smaller!($(lvl.perm), $q_stop)
-                        Finch.fill_range!($(lvl.perm), 0, $old, $q_stop)
                         $tbl_cap = Finch.sparse_hash_table_capacity($q_stop)
                         Finch.sparse_hash_table_resize!(
                             $tbl_ctrl, $tbl, $tbl_cap
@@ -1044,10 +1030,12 @@ function unfurl(
                         $tbl_ctrl_byte,
                     )
                     $qos = $(Tp(0))
+                    $tbl_found = false
                     if $tbl_slot != 0 &&
                             $tbl_ctrl[$tbl_slot] != Finch.SPARSE_HASH_CTRL_EMPTY
                         $tbl_entry = $tbl[$tbl_slot]
                         $qos = Finch.sparse_hash_entry_val($tbl_entry)
+                        $tbl_found = true
                     end
                     $(
                         if lvl.single_writer
@@ -1083,7 +1071,6 @@ function unfurl(
                                 quote
                                     if !isempty($(lvl.pool))
                                         $qos = pop!($(lvl.pool))
-                                        $(lvl.perm)[$qos] = 0
                                     else
                                         $qos = $qos_stop + 1
                                         $qos_stop = $qos
@@ -1092,6 +1079,7 @@ function unfurl(
                                         Finch.sparse_hash_stack_push!(
                                             $(lvl.stk),
                                             $(lvl.stk_cnt),
+                                            $(lvl.stk_dirty),
                                             $(lvl.stk_stop),
                                             $tbl_p,
                                             $tbl_i,
@@ -1111,7 +1099,7 @@ function unfurl(
                 epilogue=if lvl.single_writer
                     quote
                         if $dirty
-                            if $(lvl.perm)[$qos] == 0
+                            if !$tbl_found
                                 Finch.sparse_hash_table_insert_at_slot!(
                                     $tbl_ctrl,
                                     $tbl,
@@ -1122,7 +1110,6 @@ function unfurl(
                                     $tbl_ctrl_byte,
                                 )
                                 $(lvl.tbl_count) += 1
-                                $(lvl.perm)[$qos] = $tbl_slot
                             end
                             $(fbr.dirty) = true
                         end
@@ -1130,8 +1117,8 @@ function unfurl(
                 else
                     quote
                         if $dirty
-                            if $(lvl.perm)[$qos] == 0
-                                $(lvl.perm)[$qos] = $qos
+                            if $stk_slot != 0
+                                $(lvl.stk_dirty)[$stk_slot] = true
                             end
                             $(fbr.dirty) = true
                         end
@@ -1140,7 +1127,7 @@ function unfurl(
                             if $(lvl.stk_cnt)[$stk_slot] == 0
                                 $stk_entry = $(lvl.stk)[$stk_slot]
                                 $qos = Finch.sparse_hash_entry_val($stk_entry)
-                                if $(lvl.perm)[$qos] > 0
+                                if $(lvl.stk_dirty)[$stk_slot]
                                     $stk_p = Finch.sparse_hash_entry_pos($stk_entry)
                                     $stk_i = Finch.sparse_hash_entry_idx($stk_entry)
                                     $stk_hash = Finch.sparse_hash_hash($stk_p, $stk_i)
@@ -1163,11 +1150,10 @@ function unfurl(
                                         $stk_ctrl,
                                     )
                                     $(lvl.tbl_count) += 1
-                                    $(lvl.perm)[$qos] = $tbl_slot
                                 else
-                                    $(lvl.perm)[$qos] = 0
                                     push!($(lvl.pool), $qos)
                                 end
+                                $(lvl.stk_dirty)[$stk_slot] = false
                                 $(lvl.stk_stop) = Finch.sparse_hash_stack_trim(
                                     $(lvl.stk_cnt), $(lvl.stk_stop)
                                 )
