@@ -739,7 +739,10 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     push_preamble!(
         ctx,
         quote
-            # Count bucket sizes in ptr[p + 1]; ptr[1] is the fixed first start.
+            # Count bucket sizes in ptr[p + 2] so prefixing makes ptr[p + 1]
+            # the write cursor for parent p. The final parent does not need a
+            # count here because scatter advances ptr[pos_stop + 1] to the
+            # final stop.
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
             Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
@@ -752,7 +755,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                     $v = Finch.sparse_hash_entry_val($entry)
                     $q += 1
                     $qos_max = max($qos_max, $v)
-                    $(lvl.ptr)[$p + 1] += 1
+                    if $p < $(ctx(pos_stop))
+                        $(lvl.ptr)[$p + 2] += 1
+                    end
                 end
             end
             $tbl_count = $q
@@ -764,8 +769,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                     $val_tmp[$q] = $h
                 end
             end
-            # After the prefix sum, ptr[p] is the final start for bucket p,
-            # and ptr[p + 1] is the final stop for bucket p.
+            # After the prefix sum, ptr[p + 1] is the current write cursor for
+            # bucket p, initialized to bucket p's final start.
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
@@ -782,17 +787,11 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             @inbounds for $q in $shuffler
                 $h = $val_tmp[$q]
                 $p = Finch.sparse_hash_entry_pos($(lvl.tbl)[$h])
-                $r = $(lvl.ptr)[$p]
+                $r = $(lvl.ptr)[$p + 1]
                 $(lvl.perm)[$r] = $h
-                # Advancing ptr[p] turns bucket p's start into bucket p's stop.
-                $(lvl.ptr)[$p] += 1
+                # Advancing ptr[p + 1] turns bucket p's start into bucket p's stop.
+                $(lvl.ptr)[$p + 1] += 1
             end
-            # Shift the restored stops right: ptr[p + 1] becomes bucket p's stop,
-            # and ptr[1] is reset to the first start.
-            for $p in ($(ctx(pos_stop)) + 1):-1:2
-                $(lvl.ptr)[$p] = $(lvl.ptr)[$p - 1]
-            end
-            $(lvl.ptr)[1] = 1
             $(lvl.stk_stop) == 0 ||
                 error("SparseHash pending writer stack is not empty during freeze")
             for $v in $(lvl.pool)
