@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblCtrl, Tbl, Pool, Perm]}(lvl, [dim])
+    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblCtrl, Tbl, Pool, Perm]}(lvl, [dim], [subtables=1])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -12,16 +12,17 @@ arrays used to store positions and indices.
 
 Implementation invariants:
 
-* `tbl_ctrl` and `tbl` form a linear-probing hash table. A full slot has
-  the high bit set in `tbl_ctrl[h]`, stores seven high hash bits in the low
-  bits, and has `tbl[h] == (p, i, q)`. `0x00` is an empty slot and
-  terminates a probe.
+* `tbl_ctrl` and `tbl` form a linear-probing hash table, logically split into
+  `subtables` independent contiguous tables. A full slot has the high bit set
+  in `tbl_ctrl[h]`, stores seven high hash bits in the low bits, and has
+  `tbl[h] == (p, i, q)`. `0x00` is an empty slot and terminates a probe.
 * Full slots store the parent position, coordinate, and child position together
   so equality checks do not chase through packed side arrays. `q == 0` is
   reserved as the missing sentinel.
-* The hash bucket uses low hash bits because the table capacity is a power of
-  two. The control byte fingerprint uses high hash bits so bucket selection and
-  fingerprint screening are independent.
+* The hash bucket uses low hash bits because each logical sub-table capacity is
+  a power of two. Probes wrap within their sub-table. The control byte
+  fingerprint uses high hash bits so bucket selection and fingerprint screening
+  are independent.
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a table slot `h`. Each parent range is sorted by `tbl[h][2]`.
 * In thawed/update mode, `perm` is only kept large enough to record child
@@ -68,6 +69,7 @@ struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <:
        AbstractLevel
     lvl::Lvl
     shape::Ti
+    subtables::Int
     # In frozen/read mode, ptr is a CSR-style parent pointer into perm.
     ptr::Ptr
     # tbl_ctrl stores a SwissHash-style control byte per slot:
@@ -88,10 +90,26 @@ const SPARSE_HASH_CTRL_FULL = UInt8(0x80)
 const SPARSE_HASH_CTRL_HASH_MASK = UInt8(0x7f)
 const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 
-@inline sparse_hash_table_capacity(n) = max(4, n <= 1 ? 4 : nextpow(2, 2n))
+@inline sparse_hash_table_capacity(n, subtables=1) =
+    max(4 * subtables, n <= 1 ? 4 * subtables : nextpow(2, 2n))
+
+@inline function sparse_hash_check_subtables(subtables)
+    if !(subtables isa Integer) || subtables < 1 || !ispow2(subtables)
+        throw(ArgumentError("SparseHash subtables must be a positive power of two"))
+    end
+    return nothing
+end
 
 @inline sparse_hash_hash(p, i) = hash((p, i))
 @inline sparse_hash_hash_slot(h::UInt, n) = Int(h & UInt(n - 1)) + 1
+@inline function sparse_hash_hash_slot_parts(h::UInt, n, subtables)
+    subtable_len = n ÷ subtables
+    h0 = sparse_hash_hash_slot(h, n) - 1
+    mask = subtable_len - 1
+    base = (h0 & ~mask) + 1
+    off = Int(h & UInt(mask))
+    return base, off, mask
+end
 @inline sparse_hash_hash_ctrl(h::UInt) =
     SPARSE_HASH_CTRL_FULL |
     UInt8((h >> SPARSE_HASH_CTRL_SHIFT) & UInt(SPARSE_HASH_CTRL_HASH_MASK))
@@ -101,7 +119,7 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 @inline sparse_hash_entry_val(entry) = entry[3]
 @inline sparse_hash_entry_val_zero(::Type{Tuple{Tp,Ti,Tv}}) where {Tp,Ti,Tv} = zero(Tv)
 
-@inline function sparse_hash_table_resize!(tbl_ctrl, tbl, cap)
+@inline function sparse_hash_table_resize!(tbl_ctrl, tbl, cap, subtables=1)
     old_ctrl = copy(tbl_ctrl)
     old_tbl = copy(tbl)
     resize!(tbl_ctrl, cap)
@@ -116,6 +134,7 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
                 sparse_hash_entry_pos(entry),
                 sparse_hash_entry_idx(entry),
                 sparse_hash_entry_val(entry),
+                subtables,
             )
         end
     end
@@ -123,18 +142,19 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 end
 
 # An empty slot ends a probe chain.
-@inline function sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i)
+@inline function sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i, subtables=1)
     isempty(tbl) && return 0
     n = length(tbl)
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
-    return sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i, hsh, ctrl, n)
+    return sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables)
 end
 
 @inline function sparse_hash_table_lookup_slot(
-    tbl_ctrl, tbl, p, i, hsh, ctrl, n
+    tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables=1
 )
-    h = sparse_hash_hash_slot(hsh, n)
+    base, off, mask = sparse_hash_hash_slot_parts(hsh, n, subtables)
+    h = base + off
     @inbounds while true
         c = tbl_ctrl[h]
         if c == ctrl
@@ -145,19 +165,20 @@ end
         elseif c == SPARSE_HASH_CTRL_EMPTY
             return 0
         end
-        h = h == n ? 1 : h + 1
+        off = (off + 1) & mask
+        h = base + off
     end
 end
 
 @inline function sparse_hash_table_lookup_insert_slot(
-    tbl_ctrl, tbl, p, i
+    tbl_ctrl, tbl, p, i, subtables=1
 )
     isempty(tbl) && return 0
     n = length(tbl)
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
     return sparse_hash_table_lookup_insert_slot(
-        tbl_ctrl, tbl, p, i, hsh, ctrl, n
+        tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables
     )
 end
 
@@ -167,14 +188,23 @@ end
     isempty(tbl) && return 0
     n = length(tbl)
     return sparse_hash_table_lookup_insert_slot(
-        tbl_ctrl, tbl, p, i, hsh, ctrl, n
+        tbl_ctrl, tbl, p, i, hsh, ctrl, n, 1
     )
 end
 
 @inline function sparse_hash_table_lookup_insert_slot(
     tbl_ctrl, tbl, p, i, hsh, ctrl, n
 )
-    h = sparse_hash_hash_slot(hsh, n)
+    return sparse_hash_table_lookup_insert_slot(
+        tbl_ctrl, tbl, p, i, hsh, ctrl, n, 1
+    )
+end
+
+@inline function sparse_hash_table_lookup_insert_slot(
+    tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables
+)
+    base, off, mask = sparse_hash_hash_slot_parts(hsh, n, subtables)
+    h = base + off
     @inbounds while true
         c = tbl_ctrl[h]
         if c == ctrl
@@ -185,17 +215,19 @@ end
         elseif c == SPARSE_HASH_CTRL_EMPTY
             return h
         end
-        h = h == n ? 1 : h + 1
+        off = (off + 1) & mask
+        h = base + off
     end
 end
 
 @inline function sparse_hash_table_insert_noresize!(
-    tbl_ctrl, tbl, p, i, v
+    tbl_ctrl, tbl, p, i, v, subtables=1
 )
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
+    n = length(tbl)
     h = sparse_hash_table_lookup_insert_slot(
-        tbl_ctrl, tbl, p, i, hsh, ctrl
+        tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables
     )
     sparse_hash_table_insert_at_slot!(
         tbl_ctrl, tbl, h, p, i, v, ctrl
@@ -203,12 +235,12 @@ end
     return v
 end
 
-@inline function sparse_hash_table_lookup(tbl_ctrl, tbl, p, i)
+@inline function sparse_hash_table_lookup(tbl_ctrl, tbl, p, i, subtables=1)
     hsh = sparse_hash_hash(p, i)
     ctrl = sparse_hash_hash_ctrl(hsh)
     n = length(tbl)
     n == 0 && return sparse_hash_entry_val_zero(eltype(tbl))
-    h = sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i, hsh, ctrl, n)
+    h = sparse_hash_table_lookup_slot(tbl_ctrl, tbl, p, i, hsh, ctrl, n, subtables)
     h == 0 && return sparse_hash_entry_val_zero(eltype(tbl))
     @inbounds return sparse_hash_entry_val(tbl[h])
 end
@@ -306,15 +338,26 @@ end
 
 SparseHashLevel(lvl) = SparseHashLevel{Int}(lvl)
 SparseHashLevel(lvl, shape::Ti) where {Ti} = SparseHashLevel{Ti}(lvl, shape)
+SparseHashLevel(lvl, shape::Ti, subtables) where {Ti} =
+    SparseHashLevel{Ti}(lvl, shape, subtables)
 SparseHashLevel{Ti}(lvl) where {Ti} = SparseHashLevel{Ti,true}(lvl)
 SparseHashLevel{Ti}(lvl, shape) where {Ti} = SparseHashLevel{Ti,true}(lvl, shape)
+SparseHashLevel{Ti}(lvl, shape, subtables) where {Ti} =
+    SparseHashLevel{Ti,true}(lvl, shape, subtables)
 function SparseHashLevel{Ti,SingleWriter}(lvl) where {Ti,SingleWriter}
-    SparseHashLevel{Ti,SingleWriter}(lvl, zero(Ti))
+    SparseHashLevel{Ti,SingleWriter}(lvl, zero(Ti), 1)
 end
 function SparseHashLevel{Ti,SingleWriter}(lvl, shape) where {Ti,SingleWriter}
+    SparseHashLevel{Ti,SingleWriter}(lvl, shape, 1)
+end
+function SparseHashLevel{Ti,SingleWriter}(
+    lvl, shape, subtables
+) where {Ti,SingleWriter}
+    sparse_hash_check_subtables(subtables)
     SparseHashLevel{Ti,SingleWriter}(
         lvl,
         shape,
+        Int(subtables),
         postype(lvl)[1],
         UInt8[],
         Tuple{postype(lvl),Ti,postype(lvl)}[],
@@ -332,17 +375,37 @@ function SparseHashLevel{Ti,SingleWriter}(
     pool::Pool,
     perm::Perm,
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+    SparseHashLevel{Ti,SingleWriter}(
+        lvl, shape, 1, ptr, tbl_ctrl, tbl, pool, perm
+    )
+end
+
+function SparseHashLevel{Ti,SingleWriter}(
+    lvl::Lvl,
+    shape,
+    subtables,
+    ptr::Ptr,
+    tbl_ctrl::TblCtrl,
+    tbl::Tbl,
+    pool::Pool,
+    perm::Perm,
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+    sparse_hash_check_subtables(subtables)
     SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}(
-        lvl, shape, ptr, tbl_ctrl, tbl, pool, perm
+        lvl, shape, Int(subtables), ptr, tbl_ctrl, tbl, pool, perm
     )
 end
 
 Base.summary(lvl::SparseHashLevel) = "SparseHash($(summary(lvl.lvl)))"
 function similar_level(
-    lvl::SparseHashLevel{Ti,SingleWriter}, fill_value, eltype::Type, dim, tail...
+    lvl::SparseHashLevel{Ti,SingleWriter},
+    fill_value,
+    eltype::Type,
+    dim,
+    tail...
 ) where {Ti,SingleWriter}
     SparseHashLevel{Ti,SingleWriter}(
-        similar_level(lvl.lvl, fill_value, eltype, tail...), dim
+        similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables
     )
 end
 
@@ -358,6 +421,7 @@ function Base.resize!(
     SparseHashLevel{Ti,SingleWriter}(
         resize!(lvl.lvl, dims[1:(end - 1)]...),
         dims[end],
+        lvl.subtables,
         lvl.ptr,
         lvl.tbl_ctrl,
         lvl.tbl,
@@ -381,6 +445,7 @@ function transfer(
     return SparseHashLevel{Ti,SingleWriter}(
         lvl_2,
         lvl.shape,
+        lvl.subtables,
         ptr_2,
         tbl_ctrl_2,
         tbl_2,
@@ -394,10 +459,13 @@ function countstored_level(lvl::SparseHashLevel, pos)
     countstored_level(lvl.lvl, lvl.ptr[pos + 1] - 1)
 end
 
-function pattern!(lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
+function pattern!(
+    lvl::SparseHashLevel{Ti,SingleWriter}
+) where {Ti,SingleWriter}
     SparseHashLevel{Ti,SingleWriter}(
         pattern!(lvl.lvl),
         lvl.shape,
+        lvl.subtables,
         lvl.ptr,
         lvl.tbl_ctrl,
         lvl.tbl,
@@ -412,6 +480,7 @@ function set_fill_value!(
     SparseHashLevel{Ti,SingleWriter}(
         set_fill_value!(lvl.lvl, init),
         lvl.shape,
+        lvl.subtables,
         lvl.ptr,
         lvl.tbl_ctrl,
         lvl.tbl,
@@ -420,17 +489,25 @@ function set_fill_value!(
     )
 end
 
-function Base.show(io::IO, lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
+function Base.show(
+    io::IO, lvl::SparseHashLevel{Ti,SingleWriter}
+) where {Ti,SingleWriter}
     if get(io, :compact, false)
         print(io, "SparseHash(")
-    elseif SingleWriter
+    elseif SingleWriter && lvl.subtables == 1
         print(io, "SparseHash{$Ti}(")
+    elseif SingleWriter
+        print(io, "SparseHash{$Ti, true}(")
+    elseif lvl.subtables == 1
+        print(io, "SparseHash{$Ti, false}(")
     else
         print(io, "SparseHash{$Ti, false}(")
     end
     show(io, lvl.lvl)
     print(io, ", ")
     show(IOContext(io, :typeinfo => Ti), lvl.shape)
+    print(io, ", ")
+    show(io, lvl.subtables)
     print(io, ", ")
     if get(io, :compact, false)
         print(io, "…")
@@ -507,6 +584,7 @@ end
 
 function isstructequal(a::T, b::T) where {T<:SparseHash}
     a.shape == b.shape &&
+        a.subtables == b.subtables &&
         a.tbl_ctrl == b.tbl_ctrl &&
         a.tbl == b.tbl &&
         a.pool == b.pool &&
@@ -541,6 +619,7 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     pool
     perm
     shape
+    subtables
     qos_stop
     tbl_count
     stk
@@ -588,6 +667,7 @@ function virtualize(
             $tbl = $tag.tbl
             $pool = $tag.pool
             $perm = $tag.perm
+            Finch.sparse_hash_check_subtables($tag.subtables)
             $(
                 if SingleWriter
                     nothing
@@ -606,10 +686,11 @@ function virtualize(
     tbl_count = freshen(ctx, tag, :_tbl_count)
     stk_stop = freshen(ctx, tag, :_stk_stop)
     shape = value(stop, Int)
+    subtables = value(:($tag.subtables), Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseHashLevel(
         tag, lvl_2, Ti, SingleWriter, ptr, tbl_ctrl, tbl, pool, perm, shape,
-        qos_stop, tbl_count, stk, stk_cnt, stk_dirty, stk_stop,
+        subtables, qos_stop, tbl_count, stk, stk_cnt, stk_dirty, stk_stop,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
@@ -617,6 +698,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyl
         $SparseHashLevel{$(lvl.Ti),$(lvl.single_writer)}(
             $(ctx(lvl.lvl)),
             $(ctx(lvl.shape)),
+            $(ctx(lvl.subtables)),
             $(lvl.ptr),
             $(lvl.tbl_ctrl),
             $(lvl.tbl),
@@ -640,6 +722,7 @@ function distribute_level(
         distribute_buffer(ctx, lvl.pool, arch, style),
         distribute_buffer(ctx, lvl.perm, arch, style),
         lvl.shape,
+        lvl.subtables,
         lvl.qos_stop,
         lvl.tbl_count,
         lvl.stk,
@@ -664,6 +747,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, diff)
             lvl.pool,
             lvl.perm,
             lvl.shape,
+            lvl.subtables,
             lvl.qos_stop,
             lvl.tbl_count,
             lvl.stk,
@@ -924,6 +1008,7 @@ function unfurl(
                     $(lvl.tbl),
                     $(ctx(pos)),
                     $(ctx(i)),
+                    $(ctx(lvl.subtables)),
                 )
             end,
             body=(ctx) -> Switch(
@@ -1002,9 +1087,11 @@ function unfurl(
                         $p = $old
                         $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
                         Finch.resize_if_smaller!($(lvl.perm), $q_stop)
-                        $tbl_cap = Finch.sparse_hash_table_capacity($q_stop)
+                        $tbl_cap = Finch.sparse_hash_table_capacity(
+                            $q_stop, $(ctx(lvl.subtables))
+                        )
                         Finch.sparse_hash_table_resize!(
-                            $tbl_ctrl, $tbl, $tbl_cap
+                            $tbl_ctrl, $tbl, $tbl_cap, $(ctx(lvl.subtables))
                         )
                         $(contain(
                             ctx_2 -> assemble_level!(
@@ -1028,6 +1115,7 @@ function unfurl(
                         $tbl_hash,
                         $tbl_ctrl_byte,
                         $tbl_n,
+                        $(ctx(lvl.subtables)),
                     )
                     $qos = $(Tp(0))
                     $tbl_found = false
@@ -1140,6 +1228,7 @@ function unfurl(
                                         $stk_hash,
                                         $stk_ctrl,
                                         $tbl_n,
+                                        $(ctx(lvl.subtables)),
                                     )
                                     Finch.sparse_hash_table_insert_at_slot!(
                                         $tbl_ctrl,
