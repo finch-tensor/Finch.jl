@@ -283,8 +283,8 @@ end
     @inbounds for s in 1:stk_stop
         entry = stk[s]
         if stk_cnt[s] > 0 &&
-                sparse_hash_entry_pos(entry) == p &&
-                sparse_hash_entry_idx(entry) == i
+            sparse_hash_entry_pos(entry) == p &&
+            sparse_hash_entry_idx(entry) == i
             return s
         end
     end
@@ -352,12 +352,14 @@ end
 
 SparseHashLevel(lvl) = SparseHashLevel{Int}(lvl)
 SparseHashLevel(lvl, shape::Ti) where {Ti} = SparseHashLevel{Ti}(lvl, shape)
-SparseHashLevel(lvl, shape::Ti, subtables) where {Ti} =
+function SparseHashLevel(lvl, shape::Ti, subtables) where {Ti}
     SparseHashLevel{Ti}(lvl, shape, subtables)
+end
 SparseHashLevel{Ti}(lvl) where {Ti} = SparseHashLevel{Ti,true}(lvl)
 SparseHashLevel{Ti}(lvl, shape) where {Ti} = SparseHashLevel{Ti,true}(lvl, shape)
-SparseHashLevel{Ti}(lvl, shape, subtables) where {Ti} =
+function SparseHashLevel{Ti}(lvl, shape, subtables) where {Ti}
     SparseHashLevel{Ti,true}(lvl, shape, subtables)
+end
 function SparseHashLevel{Ti,SingleWriter}(lvl) where {Ti,SingleWriter}
     SparseHashLevel{Ti,SingleWriter}(lvl, zero(Ti), 1)
 end
@@ -416,7 +418,7 @@ function similar_level(
     fill_value,
     eltype::Type,
     dim,
-    tail...
+    tail...,
 ) where {Ti,SingleWriter}
     SparseHashLevel{Ti,SingleWriter}(
         similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables
@@ -486,8 +488,9 @@ function transfer(
     )
 end
 
-countstored_level_at(lvl, pos) =
+function countstored_level_at(lvl, pos)
     countstored_level(lvl, pos) - countstored_level(lvl, pos - 1)
+end
 
 function countstored_level_at(lvl::SparseHashLevel, pos)
     count = 0
@@ -606,7 +609,7 @@ end
 @inline level_ndims(
     ::Type{
         <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
-    }
+    },
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseHashLevel) = (level_size(lvl.lvl)..., lvl.shape)
@@ -614,19 +617,19 @@ end
 @inline level_eltype(
     ::Type{
         <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
-    }
+    },
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
     level_eltype(Lvl)
 @inline level_fill_value(
     ::Type{
         <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
-    }
+    },
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
     level_fill_value(Lvl)
 function data_rep_level(
     ::Type{
         <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
-    }
+    },
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
     SparseData(data_rep_level(Lvl))
 end
@@ -653,8 +656,11 @@ function (fbr::SubFiber{<:SparseHashLevel{Ti}})(idxs...) where {Ti}
     r = searchsorted(crds, idxs[end])
     q = lvl.ptr[p] + first(r) - 1
     h = lvl.perm[q]
-    length(r) == 0 ? fill_value(fbr) :
-    SubFiber(lvl.lvl, sparse_hash_entry_val(lvl.tbl[h]))(idxs[1:(end - 1)]...)
+    if length(r) == 0
+        fill_value(fbr)
+    else
+        SubFiber(lvl.lvl, sparse_hash_entry_val(lvl.tbl[h]))(idxs[1:(end - 1)]...)
+    end
 end
 
 mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
@@ -998,7 +1004,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if Finch.sparse_hash_entry_idx($(lvl.tbl)[$(lvl.perm)[$my_q]]) <
-                                $(ctx(getstart(ext)))
+                            $(ctx(getstart(ext)))
                             $my_q = Finch.sparse_hash_scansearch(
                                 $(lvl.tbl),
                                 $(lvl.perm),
@@ -1164,7 +1170,7 @@ function unfurl(
                     $qos = $(Tp(0))
                     $tbl_found = false
                     if $tbl_slot != 0 &&
-                            (@inbounds $tbl_ctrl[$tbl_slot]) != Finch.SPARSE_HASH_CTRL_EMPTY
+                        (@inbounds $tbl_ctrl[$tbl_slot]) != Finch.SPARSE_HASH_CTRL_EMPTY
                         @inbounds $tbl_entry = $tbl[$tbl_slot]
                         $qos = Finch.sparse_hash_entry_val($tbl_entry)
                         $tbl_found = true
@@ -1207,16 +1213,15 @@ function unfurl(
                                         $qos = $qos_stop + 1
                                         $qos_stop = $qos
                                     end
-                                    ($stk_slot, $(lvl.stk_stop)) =
-                                        Finch.sparse_hash_stack_push!(
-                                            $(lvl.stk),
-                                            $(lvl.stk_cnt),
-                                            $(lvl.stk_dirty),
-                                            $(lvl.stk_stop),
-                                            $tbl_p,
-                                            $tbl_i,
-                                            $qos,
-                                        )
+                                    ($stk_slot, $(lvl.stk_stop)) = Finch.sparse_hash_stack_push!(
+                                        $(lvl.stk),
+                                        $(lvl.stk_cnt),
+                                        $(lvl.stk_dirty),
+                                        $(lvl.stk_stop),
+                                        $tbl_p,
+                                        $tbl_i,
+                                        $qos,
+                                    )
                                 end
                             end
                         )
@@ -1433,7 +1438,8 @@ function coalesce_level!(
     end
     output_nnz = unique_prefix[end] - 1
     max_bucket_unique = maximum(bucket_unique_count)
-    bucket_cap = subtables * max(4, max_bucket_unique <= 1 ? 4 : nextpow(2, 2 * max_bucket_unique))
+    bucket_cap =
+        subtables * max(4, max_bucket_unique <= 1 ? 4 : nextpow(2, 2 * max_bucket_unique))
     output_cap = max(sparse_hash_table_capacity(output_nnz, subtables), bucket_cap)
 
     resize!(coalescent.tbl_ctrl, output_cap)
