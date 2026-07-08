@@ -102,17 +102,25 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 @inline sparse_hash_entry_val_zero(::Type{Tuple{Tp,Ti,Tv}}) where {Tp,Ti,Tv} = zero(Tv)
 
 @inline function sparse_hash_table_resize!(tbl_ctrl, tbl, cap)
+    # Rehash without copying the tuple table.  The old control bytes tell us
+    # which resized table slots still hold an old, not-yet-evacuated entry.
+    # When a new insertion wants one of those slots, it writes there and keeps
+    # rehashing the displaced old entry.
     old_ctrl = copy(tbl_ctrl)
-    old_tbl = copy(tbl)
+    old_n = length(old_ctrl)
     resize!(tbl_ctrl, cap)
     resize!(tbl, cap)
     fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
-    @inbounds for h in eachindex(old_ctrl)
+    @inbounds for h in 1:old_n
         if old_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
-            entry = old_tbl[h]
-            sparse_hash_table_insert_noresize!(
+            entry = tbl[h]
+            old_ctrl[h] = SPARSE_HASH_CTRL_EMPTY
+            sparse_hash_table_rehash_insert!(
                 tbl_ctrl,
                 tbl,
+                old_ctrl,
+                old_n,
+                cap,
                 sparse_hash_entry_pos(entry),
                 sparse_hash_entry_idx(entry),
                 sparse_hash_entry_val(entry),
@@ -120,6 +128,42 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
         end
     end
     return tbl_ctrl, tbl
+end
+
+@inline function sparse_hash_table_rehash_insert!(
+    tbl_ctrl, tbl, old_ctrl, old_n, n, p, i, v
+)
+    while true
+        hsh = sparse_hash_hash(p, i)
+        ctrl = sparse_hash_hash_ctrl(hsh)
+        h = sparse_hash_hash_slot(hsh, n)
+        @inbounds while true
+            c = tbl_ctrl[h]
+            if c == ctrl
+                entry = tbl[h]
+                if sparse_hash_entry_pos(entry) == p && sparse_hash_entry_idx(entry) == i
+                    tbl[h] = (p, i, v)
+                    return v
+                end
+            elseif c == SPARSE_HASH_CTRL_EMPTY
+                if h <= old_n && old_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
+                    entry = tbl[h]
+                    old_ctrl[h] = SPARSE_HASH_CTRL_EMPTY
+                    tbl[h] = (p, i, v)
+                    tbl_ctrl[h] = ctrl
+                    p = sparse_hash_entry_pos(entry)
+                    i = sparse_hash_entry_idx(entry)
+                    v = sparse_hash_entry_val(entry)
+                    break
+                else
+                    tbl[h] = (p, i, v)
+                    tbl_ctrl[h] = ctrl
+                    return v
+                end
+            end
+            h = h == n ? 1 : h + 1
+        end
+    end
 end
 
 # An empty slot ends a probe chain.
