@@ -135,7 +135,7 @@ end
     tbl_ctrl, tbl, p, i, hsh, ctrl, n
 )
     h = sparse_hash_hash_slot(hsh, n)
-    @inbounds for _ in 1:n
+    @inbounds while true
         c = tbl_ctrl[h]
         if c == ctrl
             entry = tbl[h]
@@ -147,7 +147,6 @@ end
         end
         h = h == n ? 1 : h + 1
     end
-    return 0
 end
 
 @inline function sparse_hash_table_lookup_insert_slot(
@@ -176,7 +175,7 @@ end
     tbl_ctrl, tbl, p, i, hsh, ctrl, n
 )
     h = sparse_hash_hash_slot(hsh, n)
-    @inbounds for _ in 1:n
+    @inbounds while true
         c = tbl_ctrl[h]
         if c == ctrl
             entry = tbl[h]
@@ -188,7 +187,6 @@ end
         end
         h = h == n ? 1 : h + 1
     end
-    return 0
 end
 
 @inline function sparse_hash_table_insert_noresize!(
@@ -734,7 +732,6 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     h = freshen(ctx, :h)
     r = freshen(ctx, :r)
     idx_tmp = freshen(ctx, :idx_tmp)
-    val_tmp = freshen(ctx, :val_tmp)
     shuffler = freshen(ctx, :shuffler)
     push_preamble!(
         ctx,
@@ -761,12 +758,12 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 end
             end
             $tbl_count = $q
-            $val_tmp = Vector{$Tp}(undef, $tbl_count)
+            resize!($(lvl.perm), $tbl_count)
             $q = 0
             for $h in eachindex($(lvl.tbl_ctrl))
                 if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
                     $q += 1
-                    $val_tmp[$q] = $h
+                    $(lvl.perm)[$q] = $h
                 end
             end
             # After the prefix sum, ptr[p + 1] is the current write cursor for
@@ -774,18 +771,19 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
             for $p in 2:($(ctx(pos_stop)) + 1)
                 $(lvl.ptr)[$p] += $(lvl.ptr)[$p - 1]
             end
-            resize!($(lvl.perm), $tbl_count)
             $idx_tmp = Vector{$Ti}(undef, $tbl_count)
-            @inbounds for $q in eachindex($val_tmp)
-                $h = $val_tmp[$q]
+            @inbounds for $q in eachindex($(lvl.perm))
+                $h = $(lvl.perm)[$q]
                 $idx_tmp[$q] = Finch.sparse_hash_entry_idx($(lvl.tbl)[$h])
             end
             # Sort all live table slots by coordinate, then scatter by parent.
             # Filtering this globally sorted stream into parent ranges leaves
             # each parent range sorted by tbl[h].idx.
             $shuffler = sortperm($idx_tmp)
-            @inbounds for $q in $shuffler
-                $h = $val_tmp[$q]
+            @inbounds for $q in eachindex($shuffler)
+                $shuffler[$q] = $(lvl.perm)[$shuffler[$q]]
+            end
+            @inbounds for $h in $shuffler
                 $p = Finch.sparse_hash_entry_pos($(lvl.tbl)[$h])
                 $r = $(lvl.ptr)[$p + 1]
                 $(lvl.perm)[$r] = $h
@@ -973,6 +971,7 @@ function unfurl(
     tbl_entry = freshen(ctx, tag, :_tbl_entry)
     tbl_p = freshen(ctx, tag, :_tbl_p)
     tbl_i = freshen(ctx, tag, :_tbl_i)
+    tbl_n = freshen(ctx, tag, :_tbl_n)
     tbl_found = freshen(ctx, tag, :_tbl_found)
     tbl_hash = freshen(ctx, tag, :_tbl_hash)
     tbl_ctrl_byte = freshen(ctx, tag, :_tbl_ctrl_byte)
@@ -1019,6 +1018,7 @@ function unfurl(
                     end
                     $tbl_hash = Finch.sparse_hash_hash($tbl_p, $tbl_i)
                     $tbl_ctrl_byte = Finch.sparse_hash_hash_ctrl($tbl_hash)
+                    $tbl_n = length($tbl)
                     $stk_slot = 0
                     $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
                         $tbl_ctrl,
@@ -1027,12 +1027,13 @@ function unfurl(
                         $tbl_i,
                         $tbl_hash,
                         $tbl_ctrl_byte,
+                        $tbl_n,
                     )
                     $qos = $(Tp(0))
                     $tbl_found = false
                     if $tbl_slot != 0 &&
-                            $tbl_ctrl[$tbl_slot] != Finch.SPARSE_HASH_CTRL_EMPTY
-                        $tbl_entry = $tbl[$tbl_slot]
+                            (@inbounds $tbl_ctrl[$tbl_slot]) != Finch.SPARSE_HASH_CTRL_EMPTY
+                        @inbounds $tbl_entry = $tbl[$tbl_slot]
                         $qos = Finch.sparse_hash_entry_val($tbl_entry)
                         $tbl_found = true
                     end
@@ -1138,6 +1139,7 @@ function unfurl(
                                         $stk_i,
                                         $stk_hash,
                                         $stk_ctrl,
+                                        $tbl_n,
                                     )
                                     Finch.sparse_hash_table_insert_at_slot!(
                                         $tbl_ctrl,
