@@ -423,15 +423,16 @@ function similar_level(
     )
 end
 
-coalesce_similar_level(lvl, P) = lvl
+coalesce_similar_level(lvl) = lvl
 function coalesce_similar_level(
-    lvl::SparseHashLevel{Ti,SingleWriter}, P
+    lvl::SparseHashLevel{Ti,SingleWriter}
 ) where {Ti,SingleWriter}
-    sparse_hash_check_subtables(P)
+    subtables = nextpow(2, Threads.nthreads())
+    sparse_hash_check_subtables(subtables)
     SparseHashLevel{Ti,SingleWriter}(
-        coalesce_similar_level(lvl.lvl, P),
+        coalesce_similar_level(lvl.lvl),
         lvl.shape,
-        P,
+        subtables,
         lvl.ptr,
         lvl.tbl_ctrl,
         lvl.tbl,
@@ -1312,9 +1313,8 @@ function coalesce_level!(
     tbls = lvl.tbl.data
     tbl_ctrls = lvl.tbl_ctrl.data
     perms = lvl.perm.data
-    sparse_hash_check_subtables(P)
-    coalescent.subtables = Int(P)
     subtables = coalescent.subtables
+    sparse_hash_check_subtables(subtables)
 
     ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
     sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
