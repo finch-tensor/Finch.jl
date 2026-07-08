@@ -1268,7 +1268,6 @@ function unfurl(
     )
 end
 
-#=
 function coalesce_level!(
     lvl::SparseDictLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
@@ -1279,148 +1278,47 @@ function coalesce_level!(
         factor = 1
     end
 
-    #lvl.idx and lvl.ptr should be MultiChannelBuffers
-    idx = lvl.idx.data
-    ptr = lvl.ptr.data
-    tbl = lvl.tbl.data
-    # val = lvl.val.data
-    max_level_dim = global_fbr_map[length(global_fbr_map)]
-    cutoffs = compute_proc_cutoffs(idx, P)
-
-    #Don't merge zero-ed arrays.
-    if cutoffs[P + 1] == 1
-        return coalescent
-    end
-
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map_hash(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P, tbl
-    )
-    global_fbr_map, local_fbr_map, task_map = process_next_lvl_hash(
-        pos_map, idx_map, tm, lfm, P, max_level_dim, coalescent.ptr, coalescent.idx,
-        coalescent.val, coalescent.tbl,
-    )
-
-    coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-    )
-end
-
-Base.@propagate_inbounds function process_next_lvl_hash(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
-    lvl_idx, lvl_val, lvl_tbl,
-)
-    ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
-    shuffler = AcceleratedKernels.sortperm(
-        collect(1:length(merged_positions)); order=ordering
-    )
-
-    nnz = length(local_fbr_map)
-    global_fbr_map2 = Vector{Int}(undef, nnz)
-
-    merged_positions_s = p_permute(shuffler, merged_positions)
-    merged_indices_s = p_permute(shuffler, merged_indices)
-    task_map = p_permute(shuffler, task_map)
-    local_fbr_map = p_permute(shuffler, local_fbr_map)
-
-    uq_ptr = zeros(Int, P + 1)
-    uq_idx = zeros(Int, P + 1)
-
-    chk_size = fld(nnz + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-
-        if init > length(merged_positions_s)
-            continue
+    hashes = Vector{Vector{Int}}(undef, P)
+    hash_perms = Vector{Vector{Int}}(undef, P)
+    hash_buckets = Vector{Vector{Int}}(undef, P)
+    subtables = nextpow2(P)
+    threads.@threads for tid in 1:P
+        #lvl.tbl should be MultiChannelBuffer
+        tbl = lvl.tbl.data[tid]
+        tbl_ctrl = lvl.tbl_ctrl.data[tid]
+        perm = lvl.perm.data[tid]
+        hashes[tid] = Vector{Int}(undef, length(perm))
+        hash_buckets[tid] = zeros(Int, P + 1)
+        for i in 1:length(perm)
+            pos, idx, val = tbl[perm[i]]
+            h = Finch.sparse_hash_hash((pos, idx))
+            slot = Int(h & UInt(n - 1)) + 1
+            base, off, mask = sparse_hash_hash_slot_parts(h, n, subtables)
+            hash_buckets[tid][base + 1] += 1
+            hashes[tid][i] = slot
         end
-
-        seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
-        prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
-        seen_ptr = 0
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                prev = tup
-                seen += 1
-            end
-
-            p = merged_positions_s[offset]
-            if prev_ptr != p
-                seen_ptr += (p - prev_ptr)
-                prev_ptr = p
-            end
-        end
-        uq_idx[tid + 1] = seen
-        uq_ptr[tid + 1] = seen_ptr
-    end
-    uq_ptr_s = s_prefix_sum(uq_ptr)
-    uq_idx_s = s_prefix_sum(uq_idx)
-
-    Finch.resize_if_smaller!(lvl_ptr, max_level_dim + 1)
-    fill!(lvl_ptr, 0)
-    Finch.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
-    Finch.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
-    tbls = [Dict{Tuple{Int,Int},Int}() for _ in 1:P]
-    sizehint!(lvl_tbl, nnz)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        if init > length(merged_positions_s)
-            continue
-        end
-        seen_ptr = uq_ptr_s[tid] + 2
-        seen_idx = uq_idx_s[tid] + 1
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (1, -1)
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            while seen_ptr < merged_positions_s[offset]
-                lvl_ptr[seen_ptr] = seen_idx
-                seen_ptr += 1
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                lvl_idx[seen_idx] = tup[2]
-                lvl_val[seen_idx] = seen_idx
-
-                p = merged_positions_s[offset]
-                if prev[1] != p
-                    lvl_ptr[seen_ptr] = seen_idx
-                    seen_ptr += 1
-                end
-                prev = tup
-                seen_idx += 1
-            end
-            global_fbr_map2[offset] = seen_idx - 1
-            tbls[tid][tup] = seen_idx - 1
+        for p = 1:P
+            hash_buckets[tid][base + 1] += hash_buckets[tid][base]
         end
     end
 
-    for tbl in tbls
-        merge!(lvl_tbl, tbl)
+    threads.@threads for tid in 1:P
+        Each thread computes the number of unique outputs of the tid^th bucket by computing
+        number of unique (pos=global_fbr_map, idx=idx)
     end
 
-    lvl_ptr[1] = 1
-    i = length(lvl_ptr)
-    while lvl_ptr[i] == 0
-        lvl_ptr[i] = length(lvl_idx) + 1
-        i -= 1
+    size the output based on number of unique
+    do a prefix sum of number of unique in each bucket to give to child.
+
+    threads.@threads for tid in 1:P
+        Each thread hashes (pos=global_fbr_map, idx=idx) into the output table within their own bucket.
+        each thread computes the child positions based on local position plus number of unique in previous buckets from the prefix sum.
+        Compute task, local_fiber_map, etc. for the child on each thread here
     end
+
+    one big global parallel sort to produce perm
+
+    parallel pass to count stuff to make ptr. 
 
     return global_fbr_map2, local_fbr_map, task_map
 end
-=#
