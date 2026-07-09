@@ -657,11 +657,9 @@ function coalesce_level!(
     lvl::SparseByteMapLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
 
-    #lvl.idx and lvl.ptr should be MultiChannelBuffers
     shape = lvl.shape
     srt = lvl.srt.data
-    max_level_dim = global_fbr_map[length(global_fbr_map)]
-    @assert max_level_dim == 1
+    pos_stop = max(maximum(global_fbr_map), factor)
     cutoffs = compute_proc_cutoffs(srt, P)
 
     #Don't merge zero-ed arrays.
@@ -669,118 +667,145 @@ function coalesce_level!(
         return nothing
     end
 
-    global_fbr_map, local_fbr_map, task_map, factor = merge_dense(
-        global_fbr_map, local_fbr_map, task_map, factor, shape, P
-    )
-
-    merge_bytemap(
+    global_fbr_map, local_fbr_map, task_map = merge_bytemap(
         srt,
         coalescent.srt,
         coalescent.tbl,
         coalescent.ptr,
         cutoffs,
         P,
-        max_level_dim,
+        pos_stop,
+        shape,
     )
 
     coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+        lvl.lvl, global_fbr_map, local_fbr_map, task_map, 1, P, coalescent.lvl
     )
 end
 
 Base.@propagate_inbounds function merge_bytemap(
-    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, max_level_dim
+    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, pos_stop, shape
 )
     nnz = cutoffs[P + 1] - 1
-    chk_size = fld(nnz + P - 1, P)
-
-    ##Currently, we only support vector bytemaps.
-    lvl_ptr[1] = 1
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        if init > nnz
-            continue
+    q_stop = pos_stop * shape
+    @inbounds for tid in 1:P
+        if !isempty(srt[tid])
+            q_stop = max(q_stop, srt[tid][end])
         end
+    end
+    pos_stop = max(pos_stop, fld(q_stop - 1, shape) + 1)
 
-        proc_id = binary_search(init, cutoffs)
-        idx_id = init - cutoffs[proc_id] + 1
-
-        # if idx_id > length(srt[proc_id])
-        #     continue
-        # end
-
-        j = 0
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
+    q_cutoffs = Vector{Int}(undef, P + 1)
+    q_cutoffs[1] = 1
+    q_cutoffs[P + 1] = q_stop + 1
+    # Partition the q-domain by approximate input rank. Equal q values stay
+    # within one bracket, so using lvl_tbl as a parallel dedup bitmap is safe.
+    @inbounds for part in 2:P
+        target = fld((part - 1) * nnz, P)
+        lo = 1
+        hi = q_stop + 1
+        while lo < hi
+            mid = (lo + hi) >>> 1
+            count = 0
+            for tid in 1:P
+                count += searchsortedfirst(srt[tid], mid) - 1
             end
-
-            nz_id = j + idx_id
-            srt_entry = srt[proc_id][nz_id]
-            lvl_tbl[srt_entry] = true
-
-            if nz_id >= length(srt[proc_id]) && proc_id < P
-                proc_id += 1
-
-                while proc_id < P && length(srt[proc_id]) < 1
-                    proc_id += 1
-                end
-                idx_id = 1
-                j = 0
+            if count < target
+                lo = mid + 1
             else
-                j += 1
+                hi = mid
+            end
+        end
+        q_cutoffs[part] = lo
+    end
+
+    @assert length(lvl_tbl) >= pos_stop * shape
+
+    chunk_srt = Vector{Vector{Int}}(undef, P)
+    chunk_global = Vector{Vector{Int}}(undef, P)
+    chunk_local = Vector{Vector{Int}}(undef, P)
+    chunk_task = Vector{Vector{Int}}(undef, P)
+    Threads.@threads for part in 1:P
+        lo = q_cutoffs[part]
+        hi = q_cutoffs[part + 1]
+        local_srt = Int[]
+        map_count = 0
+        @inbounds for tid in 1:P
+            xs = srt[tid]
+            start = searchsortedfirst(xs, lo)
+            stop = searchsortedfirst(xs, hi) - 1
+            map_count += max(0, stop - start + 1)
+            for r in start:stop
+                q = xs[r]
+                if !lvl_tbl[q]
+                    lvl_tbl[q] = true
+                    push!(local_srt, q)
+                end
+            end
+        end
+        sort!(local_srt)
+        local_global = Vector{Int}(undef, map_count)
+        local_local = Vector{Int}(undef, map_count)
+        local_task = Vector{Int}(undef, map_count)
+        k = 1
+        @inbounds for q in local_srt
+            for tid in 1:P
+                xs = srt[tid]
+                r = searchsortedfirst(xs, q)
+                if r <= length(xs) && xs[r] == q
+                    local_global[k] = q
+                    local_local[k] = q
+                    local_task[k] = tid
+                    k += 1
+                end
+            end
+        end
+        chunk_srt[part] = local_srt
+        chunk_global[part] = local_global
+        chunk_local[part] = local_local
+        chunk_task[part] = local_task
+    end
+
+    seen = sum(length, chunk_srt)
+    resize!(lvl_srt, seen)
+    global_fbr_map = Vector{Int}(undef, nnz)
+    local_fbr_map = Vector{Int}(undef, nnz)
+    task_map = Vector{Int}(undef, nnz)
+    q_offset = 1
+    map_offset = 1
+    @inbounds for part in 1:P
+        q_len = length(chunk_srt[part])
+        map_len = length(chunk_global[part])
+        if q_len > 0
+            copyto!(lvl_srt, q_offset, chunk_srt[part], 1, q_len)
+        end
+        if map_len > 0
+            copyto!(global_fbr_map, map_offset, chunk_global[part], 1, map_len)
+            copyto!(local_fbr_map, map_offset, chunk_local[part], 1, map_len)
+            copyto!(task_map, map_offset, chunk_task[part], 1, map_len)
+        end
+        q_offset += q_len
+        map_offset += map_len
+    end
+
+    @assert length(lvl_ptr) >= pos_stop + 1
+    if seen == 0
+        lvl_ptr[1] = 1
+    else
+        Threads.@threads for r in 1:seen
+            @inbounds begin
+                p = fld(lvl_srt[r] - 1, shape) + 1
+                p_prev = r == 1 ? 0 : fld(lvl_srt[r - 1] - 1, shape) + 1
+                p_next = r == seen ? 0 : fld(lvl_srt[r + 1] - 1, shape) + 1
+                if p != p_prev
+                    lvl_ptr[p_prev + 1] = r
+                    lvl_ptr[p] = r
+                end
+                if p != p_next
+                    lvl_ptr[p + 1] = r + 1
+                end
             end
         end
     end
-
-    uq_nnz = AcceleratedKernels.cumsum(lvl_tbl)
-
-    resize!(lvl_srt, uq_nnz[length(uq_nnz)])
-    lvl_ptr[2] = uq_nnz[length(uq_nnz)] + 1
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-
-        if init > nnz
-            continue
-        end
-
-        proc_id = binary_search(init, cutoffs)
-        idx_id = init - cutoffs[proc_id] + 1
-
-        j = 0
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            nz_id = j + idx_id
-
-            srt_entry = srt[proc_id][nz_id]
-            mapping = uq_nnz[srt_entry]
-
-            lvl_srt[mapping] = srt_entry
-
-            if nz_id >= length(srt[proc_id]) && proc_id < P
-                proc_id += 1
-
-                while proc_id < P && length(srt[proc_id]) < 1
-                    proc_id += 1
-                end
-
-                if length(srt[proc_id]) < 1
-                    break
-                end
-
-                idx_id = 1
-                j = 0
-            else
-                j += 1
-            end
-        end
-    end
-    nothing
+    return global_fbr_map, local_fbr_map, task_map
 end
