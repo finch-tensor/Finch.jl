@@ -137,7 +137,7 @@ function labelled_children(fbr::SubFiber{<:SparseByteMapLevel})
         LabelledTree(
             cartesian_label(
                 [range_label() for _ in 1:(ndims(fbr) - 1)]...,
-                srt_entry - q_offset
+                srt_entry - q_offset,
             ),
             SubFiber(lvl.lvl, srt_entry),
         )
@@ -303,14 +303,17 @@ virtual_level_fill_value(lvl::VirtualSparseByteMapLevel) = virtual_level_fill_va
 
 postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 
-function sparse_bytemap_parent_position(ctx, lvl::VirtualSparseByteMapLevel, q, pos_stop, srt_shape)
+function sparse_bytemap_parent_position(
+    ctx, lvl::VirtualSparseByteMapLevel, q, pos_stop, srt_shape
+)
     Tp = postype(lvl)
     if prove(ctx, call(==, pos_stop, 1))
         return nothing, :($(Tp(1)))
     elseif prove(ctx, call(==, lvl.shape, 1))
         return nothing, q
     else
-        return :($srt_shape = $(Tp)($(ctx(lvl.shape)))), :(
+        return :($srt_shape = $(Tp)($(ctx(lvl.shape)))),
+        :(
             fld($q - $(Tp(1)), $srt_shape) + $(Tp(1))
         )
     end
@@ -323,8 +326,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
     p = freshen(ctx, lvl.tag, :_p)
     q = freshen(ctx, lvl.tag, :_q)
     srt_shape = freshen(ctx, lvl.tag, :_srt_shape)
-    (srt_shape_init, parent_position) =
-        sparse_bytemap_parent_position(ctx, lvl, q, pos, srt_shape)
+    (srt_shape_init, parent_position) = sparse_bytemap_parent_position(
+        ctx, lvl, q, pos, srt_shape
+    )
     push_preamble!(
         ctx,
         quote
@@ -406,8 +410,9 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     Ti = lvl.Ti
     Tp = postype(lvl)
     srt_entry = :($(lvl.srt)[$r])
-    (srt_shape_init, parent_position) =
-        sparse_bytemap_parent_position(ctx, lvl, srt_entry, pos_stop, srt_shape)
+    (srt_shape_init, parent_position) = sparse_bytemap_parent_position(
+        ctx, lvl, srt_entry, pos_stop, srt_shape
+    )
     push_preamble!(
         ctx,
         quote
@@ -656,7 +661,6 @@ end
 function coalesce_level!(
     lvl::SparseByteMapLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )
-
     shape = lvl.shape
     srt = lvl.srt.data
     pos_stop = max(maximum(global_fbr_map), factor)
