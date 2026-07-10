@@ -38,7 +38,6 @@ function CoalesceLevel(device::Device, lvl::Lvl) where {Device,Lvl}
     coalescent = similar_level(
         coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
     )
-    coalescent = coalesce_similar_level(coalescent)
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
