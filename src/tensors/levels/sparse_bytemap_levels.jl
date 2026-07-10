@@ -779,19 +779,21 @@ Base.@propagate_inbounds function merge_bytemap(
     task_map = Vector{Int}(undef, nnz)
     q_offset = 1
     map_offset = 1
-    @inbounds for part in 1:P
-        q_len = length(chunk_srt[part])
-        map_len = length(chunk_global[part])
-        if q_len > 0
-            copyto!(lvl_srt, q_offset, chunk_srt[part], 1, q_len)
+    Threads.@threads for part in 1:P
+        @inbounds begin
+            q_len = length(chunk_srt[part])
+            map_len = length(chunk_global[part])
+            if q_len > 0
+                copyto!(lvl_srt, q_offset, chunk_srt[part], 1, q_len)
+            end
+            if map_len > 0
+                copyto!(global_fbr_map, map_offset, chunk_global[part], 1, map_len)
+                copyto!(local_fbr_map, map_offset, chunk_local[part], 1, map_len)
+                copyto!(task_map, map_offset, chunk_task[part], 1, map_len)
+            end
+            q_offset += q_len
+            map_offset += map_len
         end
-        if map_len > 0
-            copyto!(global_fbr_map, map_offset, chunk_global[part], 1, map_len)
-            copyto!(local_fbr_map, map_offset, chunk_local[part], 1, map_len)
-            copyto!(task_map, map_offset, chunk_task[part], 1, map_len)
-        end
-        q_offset += q_len
-        map_offset += map_len
     end
 
     @assert length(lvl_ptr) >= pos_stop + 1
