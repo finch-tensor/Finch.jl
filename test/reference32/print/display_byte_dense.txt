@@ -1,4 +1,4 @@
-5×10 Tensor{SparseByteMapLevel{Int32, Vector{Int32}, Vector{Bool}, Vector{Tuple{Int32, Int32}}, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
+5×10 Tensor{SparseByteMapLevel{Int32, Vector{Int32}, Vector{Bool}, Vector{Int32}, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}}:
  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0
  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0
  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0

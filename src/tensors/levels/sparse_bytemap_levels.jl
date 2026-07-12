@@ -772,27 +772,34 @@ Base.@propagate_inbounds function merge_bytemap(
         chunk_task[part] = local_task
     end
 
-    seen = sum(length, chunk_srt)
+    q_offsets = Vector{Int}(undef, P)
+    map_offsets = Vector{Int}(undef, P)
+    q_offset = 1
+    map_offset = 1
+    @inbounds for part in 1:P
+        q_offsets[part] = q_offset
+        map_offsets[part] = map_offset
+        q_offset += length(chunk_srt[part])
+        map_offset += length(chunk_global[part])
+    end
+
+    seen = q_offset - 1
     resize!(lvl_srt, seen)
     global_fbr_map = Vector{Int}(undef, nnz)
     local_fbr_map = Vector{Int}(undef, nnz)
     task_map = Vector{Int}(undef, nnz)
-    q_offset = 1
-    map_offset = 1
     Threads.@threads for part in 1:P
         @inbounds begin
             q_len = length(chunk_srt[part])
             map_len = length(chunk_global[part])
             if q_len > 0
-                copyto!(lvl_srt, q_offset, chunk_srt[part], 1, q_len)
+                copyto!(lvl_srt, q_offsets[part], chunk_srt[part], 1, q_len)
             end
             if map_len > 0
-                copyto!(global_fbr_map, map_offset, chunk_global[part], 1, map_len)
-                copyto!(local_fbr_map, map_offset, chunk_local[part], 1, map_len)
-                copyto!(task_map, map_offset, chunk_task[part], 1, map_len)
+                copyto!(global_fbr_map, map_offsets[part], chunk_global[part], 1, map_len)
+                copyto!(local_fbr_map, map_offsets[part], chunk_local[part], 1, map_len)
+                copyto!(task_map, map_offsets[part], chunk_task[part], 1, map_len)
             end
-            q_offset += q_len
-            map_offset += map_len
         end
     end
 
