@@ -266,23 +266,12 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::DenseLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::DenseLevel, global_fbr_map, factor, max_dim, P, coalescent
 )
-    shape = lvl.shape
-    global_fbr_map, local_fbr_map, task_map, factor = merge_dense(
-        global_fbr_map, local_fbr_map, task_map, factor, shape, P
-    )
-
     if factor < 1
         return nothing
     end
 
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,
-        factor, P, coalescent.lvl)
-end
-
-Base.@propagate_inbounds function merge_dense(
-    global_fbr_map, local_fbr_map, task_map, factor, shape, P
-)
-    return global_fbr_map, local_fbr_map, task_map, factor * shape
+    coalesce_level!(lvl.lvl, global_fbr_map,
+        factor * lvl.shape, max_dim * lvl.shape, P, coalescent.lvl)
 end

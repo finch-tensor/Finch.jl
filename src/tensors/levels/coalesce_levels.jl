@@ -522,23 +522,22 @@ supports_reassembly(::VirtualCoalesceLevel) = false
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
     P = ctx(get_num_tasks(lvl.device))
-    lvl_e = ctx(lvl.lvl)
+    lvl_e = ctx(lvl)
     lvl_c = ctx(lvl.coalescent)
+    
+    ##On init, factor is both a dimensional maximum and communicates unwrapping for Dense(Coalesce(Sparse)) data
     factor = ctx(pos)
+    max_pos = factor
 
-    task_map = freshen(ctx, :tm)
     global_fbr_map = freshen(ctx, :gfm)
-    local_fbr_map = freshen(ctx, :lfm)
 
     push_preamble!(
         ctx,
         quote
-            $task_map = collect(1:($P))
-            $global_fbr_map = ones(Int, $P)
-            $local_fbr_map = ones(Int, $P)
+            $global_fbr_map = [[1] for _ in 1:$P]
 
             Finch.coalesce_level!(
-                $(lvl_e), $global_fbr_map, $local_fbr_map, $task_map, $factor, $P, $(lvl_c)
+                $(lvl_e), $global_fbr_map, $factor, $max_pos, $P, $(lvl_c)
             )
         end,
     )
@@ -591,11 +590,11 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
 end
 
 function coalesce_level!(
-    lvl::CoalesceLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::CoalesceLevel, global_fbr_map, factor, max_dim, P, coalescent
 )
-    if factor < 1
+    if max_dim < 1
         return nothing
     end
 
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent)
+    coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent)
 end

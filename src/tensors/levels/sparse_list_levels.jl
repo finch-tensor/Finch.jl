@@ -594,259 +594,399 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
+    lvl::SparseListLevel, global_fbr_map, factor, max_dim, P, coalescent
 )
-    if factor > 1
-        global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
-            global_fbr_map, local_fbr_map, task_map, factor, P
-        )
-        factor = 1
-    end
-
-    #lvl.idx and lvl.ptr should be MultiChannelBuffers
     idx = lvl.idx.data
     ptr = lvl.ptr.data
-    max_level_dim = global_fbr_map[length(global_fbr_map)]
-    cutoffs = compute_proc_cutoffs(idx, P)
+    
+    lvl_ptr = coalescent.ptr
+    lvl_idx = coalescent.idx
+    max_idx = lvl.shape
 
-    #Don't merge zero-ed arrays.
-    if cutoffs[P + 1] <= 1
+    if sum(length, idx) < 1
         return nothing
     end
 
-    ptr_2 = coalescent.ptr
-    idx_2 = coalescent.idx
+    if factor > 1
+        unwrap_dense(global_fbr_map, factor, P)
+        was_dense = true
+        factor = 1
+    else
+        was_dense = false
+    end
 
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
-    )
-    global_fbr_map, local_fbr_map, task_map = process_next_lvl(
-        pos_map, idx_map, tm, lfm, P, max_level_dim, ptr_2, idx_2
-    )
+    gfm2, max_dim2 = merge_splist(global_fbr_map, ptr, idx, P, max_dim, max_idx, was_dense, lvl_ptr, lvl_idx)
 
     coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
+        lvl.lvl, gfm2, factor, max_dim2, P, coalescent.lvl
     )
 end
 
-Base.@propagate_inbounds function unroll_dense_coalesce(
-    global_fbr_map, local_fbr_map, task_map, factor, P
-)
-    unrolled_size = factor * length(global_fbr_map)
+Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_idx, was_dense, lvl_ptr, lvl_idx)
+    resize!(lvl_ptr, max_pos + 1)
+    lvl_ptr[1] = 0
+    uq_pairs = Vector{Int}(undef, P + 1)
+    uq_pairs[1] = 0
+    gfm2 = Vector{Vector{Int}}(undef, P)
+    nnz = 0
+    for p in 1:P
+        gfm2[p] = Vector{Int}(undef, length(idx[p]))
+        nnz += length(idx[p])
+    end
+    prefixes = Vector{Int}(undef, P + 1)
+    prefixes[1] = 1
 
-    global_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
-    local_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
-    task_map_unrolled = Vector{Int64}(undef, unrolled_size)
-
-    chk_size = fld(length(global_fbr_map) + P - 1, P)
-
+    chk_size = fld(max_pos + P - 1, P)
+    chk_nnz = fld(nnz + P - 1, P)
     Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        for i in 0:(chk_size - 1)
-            offset = init + i
+        uq_pairs[tid + 1] = 0
+        pos = (tid - 1) * chk_size + 1 #global position to be merged
+        cap = min(tid * chk_size + 1, max_pos + 1)
+        work_lb = (tid - 1) * chk_nnz
+        work_ub = min(tid * chk_nnz, nnz) ##Processor is responsible for [pos_lb, pos_ub) nonzeroes
 
-            if offset > length(global_fbr_map)
-                break
+        if tid == 1
+            lb = (1, 1)
+        else
+            lb = find_split(work_lb, max_pos, max_idx, ptr, idx, gfm, P)
+        end
+
+        if tid == P
+            ub = (max_pos, max_idx)
+        else
+            split = find_split(work_ub, max_pos, max_idx, ptr, idx, gfm, P)
+            ub = split[2] > 1 ? (split[1], split[2] - 1) : (split[1] - 1, max_idx)
+        end
+    
+        pos = lb[1]
+        cap = ub[1] + 1
+        idxlb = lb[2]
+        idxub = ub[2]
+
+        posdata = Vector{Tuple{Int, Int, Int, Int}}(undef, P + 1)
+        ord = Base.Order.Lt((i, j) -> lowerfbr(posdata[i], posdata[j]))
+        heap = BinaryHeap{Int}(ord)
+        sizehint!(heap, P)
+
+        for proc in 1:P
+            lo, hi = 1, length(gfm[proc])
+            lfbr = binary_search_lb(pos, gfm[proc], lo, hi)
+
+            if lfbr < 1
+                continue
             end
-            start_write = (offset - 1) * factor + 1
-            finish_write = offset * factor
 
-            gfbr = (global_fbr_map[offset] - 1) * factor + 1
-            lfbr = (local_fbr_map[offset] - 1) * factor + 1
-            task = task_map[offset]
-
-            for j in start_write:finish_write
-                global_fbr_map_unrolled[j] = gfbr
-                local_fbr_map_unrolled[j] = lfbr
-                task_map_unrolled[j] = task
-
-                gfbr += 1
+            ##skip zeroes.
+            while ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && lfbr < length(ptr[proc]) && gfm[proc][lfbr] < cap
+                lvl_ptr[gfm[proc][lfbr] + 1] = 0
                 lfbr += 1
             end
-        end
-    end
-
-    return global_fbr_map_unrolled, local_fbr_map_unrolled, task_map_unrolled
-end
-
-Base.@propagate_inbounds function gen_pos_idx_map(
-    global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P
-)
-    ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
-    sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
-
-    nnz = cutoffs[length(cutoffs)] - 1
-    merged_positions = Vector{Int}(undef, nnz)
-    merged_indices = Vector{Int}(undef, nnz)
-
-    task_map2 = Vector{Int}(undef, nnz)
-    local_fbr_map2 = Vector{Int}(undef, nnz)
-
-    chk_size = fld(nnz + P - 1, P)
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        proc_id = binary_search(init, cutoffs)
-        idx_id = init - cutoffs[proc_id] + 1
-
-        local_fbr = binary_search(idx_id, ptr[proc_id])
-
-        tag = get_permute_idx(proc_id, ptr) + local_fbr
-
-        @assert local_fbr > 0
-        @assert tag > 0
-
-        global_fbr = global_fbr_map[sorter[tag]]
-        local_fbr_id_child = init - cutoffs[proc_id] + 1
-
-        j = 0
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
+            if lfbr >= length(ptr[proc])
+                continue
             end
-
-            nz_id = j + idx_id
-            idx = index[proc_id][nz_id]
-            merged_positions[offset] = global_fbr
-            merged_indices[offset] = idx
-            task_map2[offset] = proc_id
-            local_fbr_map2[offset] = local_fbr_id_child
-
-            if nz_id >= length(index[proc_id]) && proc_id < P
-                proc_id += 1
-
-                while proc_id < P && length(index[proc_id]) < 1
-                    proc_id += 1
+            adj_pos = gfm[proc][lfbr]
+            if adj_pos >= cap
+                continue
+            end
+            if adj_pos == pos
+                i = binary_search_lb(idxlb, idx[proc], ptr[proc][lfbr], ptr[proc][lfbr+1] - 1)
+                if i < 1
+                    lfbr += 1
+                    while lfbr < length(ptr[proc]) && ptr[proc][lfbr+1] - ptr[proc][lfbr] < 1 && gfm[proc][lfbr] < cap
+                        lfbr += 1
+                    end
+                    (lfbr >= length(ptr[proc])) && continue
+                    adj_pos = gfm[proc][lfbr]
+                    adj_pos >= cap && continue
+                    i = ptr[proc][lfbr]
                 end
-
-                if length(index[proc_id]) < 1
-                    break
-                end
-
-                idx_id = 1
-                j = 0
-                local_fbr_id_child = 1
-
-                local_fbr = binary_search(idx_id, ptr[proc_id])
-                tag = get_permute_idx(proc_id, ptr) + local_fbr
-
-                global_fbr = global_fbr_map[sorter[tag]]
-            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) &&
-                ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
-                local_fbr = binary_search(nz_id + 1, ptr[proc_id])
-
-                tag = get_permute_idx(proc_id, ptr) + local_fbr
-                global_fbr = global_fbr_map[sorter[tag]]
-                local_fbr_id_child += 1
-                j += 1
             else
-                j += 1
-                local_fbr_id_child += 1
+                i = ptr[proc][lfbr]
             end
+            posdata[proc] = (adj_pos, idx[proc][i], lfbr, i - ptr[proc][lfbr])
+            push!(heap, proc)
+        end
+        
+        posdata[end] = (typemax(Int), typemax(Int), -1, -1)
+        push!(heap, P + 1)
+
+        c_proc = pop!(heap)
+        c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+        prev = (c_pos, -1)
+        seen = 0
+        start_pos = was_dense ? pos : c_pos
+        deferred = false
+        while !isempty(heap)
+            if c_pos == cap - 1 && c_idx > idxub
+                deferred = true #another thread owns the data
+                c_proc = pop!(heap)
+                c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+                continue
+            end
+            if (c_pos, c_idx) != prev
+                ##New position, otherwise just a new index
+                if prev[1] != c_pos
+                    lvl_ptr[prev[1]+1] = seen
+                    seen = 0
+                end
+                seen += 1
+                uq_pairs[tid+1] += 1
+                prev = (c_pos, c_idx)
+            end
+            delta = ptr[c_proc][c_lfbr + 1] - ptr[c_proc][c_lfbr]
+            c_nz += 1
+
+            if c_nz >= delta
+                c_nz = 0
+                c_lfbr += 1
+
+                while c_lfbr < length(ptr[c_proc]) && ptr[c_proc][c_lfbr + 1] - ptr[c_proc][c_lfbr] < 1 && gfm[c_proc][c_lfbr] < cap
+                    lvl_ptr[gfm[c_proc][c_lfbr] + 1] = 0
+                    c_lfbr += 1
+                end
+            end
+
+            if c_lfbr < length(ptr[c_proc])
+                c_gpos = gfm[c_proc][c_lfbr]
+                c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
+                if c_gpos < cap
+                    posdata[c_proc] = (c_gpos, c_idx, c_lfbr, c_nz)
+                    push!(heap,  c_proc)
+                end
+            end
+ 
+            c_proc = pop!(heap)
+            c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+        end
+
+        boundary = cap - 1
+        is_writer = (prev[1] < boundary) || !deferred
+        if is_writer
+            lvl_ptr[prev[1] + 1] = seen
+            cap = prev[1] + 1
+        else
+            cap = boundary
+        end
+
+        if tid == P
+            cap = length(lvl_ptr)
+        end
+
+        for p in start_pos+2:cap
+            lvl_ptr[p] = lvl_ptr[p] + lvl_ptr[p-1]
+        end
+
+        prefixes[tid + 1] = uq_pairs[tid + 1]
+    end
+    for p in 2:P + 1
+        uq_pairs[p] += uq_pairs[p - 1]
+        prefixes[p] += prefixes[p - 1]
+    end
+
+    resize!(lvl_idx, uq_pairs[end])
+    lvl_ptr[1] = 1
+
+    ##Phase 2: Compute idx and gfm2.
+    Threads.@threads for tid in 1:P
+        pos = (tid - 1) * chk_size + 1 #global position to be merged
+        cap = min(tid * chk_size + 1, max_pos + 1)
+        work_lb = (tid - 1) * chk_nnz
+        work_ub = min(tid * chk_nnz, nnz) ##Processor is responsible for [pos_lb, pos_ub) nonzeroes
+
+        if tid == 1
+            lb = (1, 1)
+        else
+            lb = find_split(work_lb, max_pos, max_idx, ptr, idx, gfm, P)
+        end
+
+        if tid == P
+            ub = (max_pos, max_idx)
+        else
+            split = find_split(work_ub, max_pos, max_idx, ptr, idx, gfm, P)
+            ub = split[2] > 1 ? (split[1], split[2] - 1) : (split[1] - 1, max_idx)
+        end
+
+        pos = lb[1]
+        cap = ub[1] + 1
+        idxlb = lb[2]
+        idxub = ub[2]
+
+        posdata = Vector{Tuple{Int, Int, Int, Int}}(undef, P + 1)
+        ord = Base.Order.Lt((i, j) -> lowerfbr(posdata[i], posdata[j]))
+        heap = BinaryHeap{Int}(ord)
+        sizehint!(heap, P)
+        ##Can probably reduce this preprocessing.
+        for proc in 1:P
+            lo, hi = 1, length(gfm[proc])
+            lfbr = binary_search_lb(pos, gfm[proc], lo, hi)
+            if lfbr < 1
+                continue
+            end
+
+            ##skip zeroes.
+            while ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && lfbr < length(ptr[proc]) && gfm[proc][lfbr] < cap
+                lfbr += 1
+            end
+            if lfbr >= length(ptr[proc])
+                continue
+            end
+            adj_pos = gfm[proc][lfbr]
+            if adj_pos >= cap
+                continue
+            end
+            if adj_pos == pos
+                i = binary_search_lb(idxlb, idx[proc], ptr[proc][lfbr], ptr[proc][lfbr+1] - 1)
+                if i < 1
+                    lfbr += 1
+                    while lfbr < length(ptr[proc]) && ptr[proc][lfbr+1] - ptr[proc][lfbr] < 1 && gfm[proc][lfbr] < cap
+                        lfbr += 1
+                    end
+                    (lfbr >= length(ptr[proc])) && continue
+                    adj_pos = gfm[proc][lfbr]
+                    adj_pos >= cap && continue
+                    i = ptr[proc][lfbr]
+                end
+            else
+                i = ptr[proc][lfbr]
+            end
+            posdata[proc] = (adj_pos, idx[proc][i], lfbr, i - ptr[proc][lfbr])
+            push!(heap, proc)
+        end
+        posdata[end] = (typemax(Int), typemax(Int), -1, -1)
+        push!(heap, P + 1)
+
+        c_proc = pop!(heap)
+        c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+        prev = (c_pos, -1)
+        seen = 0
+        start_pos = was_dense ? pos : c_pos
+        deferred = false
+
+        while !isempty(heap)
+            if c_pos == cap - 1 && c_idx > idxub
+                deferred = true
+                c_proc = pop!(heap)
+                c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+                continue
+            end
+            if (c_pos, c_idx) != prev
+                ##Every unique pair is a unique index.
+                lvl_idx[uq_pairs[tid] + seen + 1] = c_idx
+                seen += 1
+                prev = (c_pos, c_idx)
+            end
+            gfm2[c_proc][ptr[c_proc][c_lfbr] + c_nz] = uq_pairs[tid] + seen
+
+            delta = ptr[c_proc][c_lfbr + 1] - ptr[c_proc][c_lfbr]
+            c_nz += 1
+
+            if c_nz >= delta
+                c_nz = 0
+                c_lfbr += 1
+
+                while c_lfbr < length(ptr[c_proc]) && ptr[c_proc][c_lfbr + 1] - ptr[c_proc][c_lfbr] < 1
+                    c_lfbr += 1
+                end
+            end
+            
+            if c_lfbr < length(ptr[c_proc])
+                c_gpos = gfm[c_proc][c_lfbr]
+                c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
+                if c_gpos < cap
+                    posdata[c_proc] = (c_gpos, c_idx, c_lfbr, c_nz)
+                    push!(heap,  c_proc)
+                end
+            end
+ 
+            c_proc = pop!(heap)
+            c_pos, c_idx, c_lfbr, c_nz = posdata[c_proc]
+        end
+
+        boundary = cap - 1
+        is_writer = (prev[1] < boundary) || !deferred
+        cap = is_writer ? prev[1] + 1 : boundary
+
+        if tid == P
+            cap = length(lvl_ptr)
+        end
+
+        for p in start_pos+1:cap
+            lvl_ptr[p] += prefixes[tid]
         end
     end
-    return merged_positions, merged_indices, local_fbr_map2, task_map2
+    return gfm2, uq_pairs[end]
 end
 
-Base.@propagate_inbounds function process_next_lvl(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
-    lvl_idx,
-)
-    ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
-    shuffler = AcceleratedKernels.sortperm(
-        collect(1:length(merged_positions)); order=ordering
-    )
+Base.@propagate_inbounds function lowerfbr(a::Tuple{Int,Int,Int,Int}, b::Tuple{Int,Int,Int,Int})
+    if a[1] < b[1]
+        return true
+    elseif a[1] == b[1] && a[2] < b[2]
+        return true
+    else
+        return false
+    end
+end
 
-    nnz = length(local_fbr_map)
-    global_fbr_map2 = Vector{Int}(undef, nnz)
+Base.@propagate_inbounds function total_pos(candidate, ptr, gfm, P)
+    total = 0
+    for proc in 1:P
+        lfbr = binary_search_lb(candidate, gfm[proc], 1, length(gfm[proc]))
+        lfbr < 1 && continue
+        total += ptr[proc][lfbr+1] - 1
+    end
+    return total
+end
 
-    merged_positions_s = p_permute(shuffler, merged_positions)
-    merged_indices_s = p_permute(shuffler, merged_indices)
-    task_map = p_permute(shuffler, task_map)
-    local_fbr_map = p_permute(shuffler, local_fbr_map)
+Base.@propagate_inbounds function total_idx(candidate, pos, ptr, idx, gfm, P)
+    total = 0
+    for proc in 1:P
+        lfbr = binary_search_lb(pos, gfm[proc], 1, length(gfm[proc]))
+        lfbr < 1 && continue
+        total += ptr[proc][lfbr] - 1
 
-    uq_ptr = zeros(Int, P + 1)
-    uq_idx = zeros(Int, P + 1)
+        lo_b = ptr[proc][lfbr]
+        hi_b = ptr[proc][lfbr+1] - 1
+        hi_b < lo_b && continue  # empty fiber, nothing more to add
 
-    chk_size = fld(nnz + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
-        prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
-        seen_ptr = 0
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                prev = tup
-                seen += 1
-            end
-
-            p = merged_positions_s[offset]
-            if prev_ptr != p
-                seen_ptr += (p - prev_ptr)
-                prev_ptr = p
+        gidx = binary_search_lb(candidate, idx[proc], lo_b, hi_b)
+        if gidx < 1
+            total += hi_b - lo_b + 1   #if we "own" more idx than present, claim all the indices.
+        else
+            total += gidx - lo_b
+            if idx[proc][gidx] == candidate
+                total += 1
             end
         end
-        uq_idx[tid + 1] = seen
-        uq_ptr[tid + 1] = seen_ptr
     end
-    uq_ptr_s = s_prefix_sum(uq_ptr)
-    uq_idx_s = s_prefix_sum(uq_idx)
+    return total
+end
 
-    resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
-    resize_if_smaller!(lvl_ptr, max_level_dim + 1)
-    fill!(lvl_ptr, 0)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen_ptr = uq_ptr_s[tid] + 2
-        seen_idx = uq_idx_s[tid] + 1
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (1, -1)
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            while seen_ptr < merged_positions_s[offset]
-                lvl_ptr[seen_ptr] = seen_idx
-                seen_ptr += 1
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                lvl_idx[seen_idx] = tup[2]
-
-                p = merged_positions_s[offset]
-                if prev[1] != p
-                    lvl_ptr[seen_ptr] = seen_idx
-                    seen_ptr += 1
-                end
-                prev = tup
-                seen_idx += 1
-            end
-            global_fbr_map2[offset] = seen_idx - 1
+Base.@propagate_inbounds function find_split(target, max_pos, max_idx, ptr, idx, gfm, P)
+    posx = -1
+    lo, hi = 1, max_pos
+    while lo <= hi
+        candidate = div(lo + hi, 2)
+        total = total_pos(candidate, ptr, gfm, P)
+        if total >= target
+            posx = candidate
+            hi = candidate - 1
+        else
+            lo = candidate + 1
         end
     end
+    posx == -1 && return (max_pos, max_idx)
 
-    lvl_ptr[1] = 1
-    i = length(lvl_ptr)
-    while lvl_ptr[i] == 0
-        lvl_ptr[i] = length(lvl_idx) + 1
-        i -= 1
+    idxx = -1
+    lo, hi = 1, max_idx
+    while lo <= hi
+        candidate = div(lo + hi, 2)
+        total = total_idx(candidate, posx, ptr, idx, gfm, P)
+        if total >= target
+            idxx = candidate
+            hi = candidate - 1
+        else
+            lo = candidate + 1
+        end
     end
-
-    return global_fbr_map2, local_fbr_map, task_map
+    return (posx, idxx)
 end

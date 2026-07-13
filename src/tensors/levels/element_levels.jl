@@ -238,89 +238,65 @@ end
 function coalesce_level!(
     lvl::ElementLevel{Vf,Tv,Tp,Val},
     global_fbr_map,
-    local_fbr_map,
-    task_map,
     factor,
+    max_dim,
     P,
     coalescent,
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
-    val2 = coalescent.val
+    lvl_val = coalescent.val
 
     if length(val) < 1
         return nothing
     end
-    if length(val2) == 1 && global_fbr_map[end] == 1 && local_fbr_map[end] == 1
-        merge_element_scalar(val, P, val2)
-    elseif factor > 1
-        merge_dense_element_level(
+    if factor > 1
+        merge_dense_element(
             factor, val, P, val2
         )
     else
-        merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P, val2)
+        merge_element(global_fbr_map, val, max_dim, P, lvl_val)
     end
+        
 end
 
-Base.@propagate_inbounds function merge_element_scalar(val, P, lvl_val)
-    lvl_val[1] = 0
-    for t in 1:P
-        @fastmath lvl_val[1] += val[t][1]
-    end
-end
-
-Base.@propagate_inbounds function merge_element_level(
-    global_fbr_map, local_fbr_map, task_map, val, P, val_merged
-)
-    chk_size = fld(length(global_fbr_map) + P - 1, P)
-    resize_if_smaller!(val_merged, global_fbr_map[length(global_fbr_map)])
+Base.@propagate_inbounds function merge_element(gfm, val, max_pos, P, lvl_val)
+    resize!(lvl_val, max_pos)
+    chk = fld(max_pos + P - 1, P)
 
     Threads.@threads for tid in 1:P
-        start, finish = 0, 0
+        pos_start = (tid - 1) * chk + 1
+        pos_stop = min(tid * chk, max_pos)
+        if pos_start > max_pos
+            continue
+        end
+        
+        for p in pos_start:pos_stop
+            lvl_val[p] = 0
+        end
 
-        if tid > 1
-            offset_start = (tid - 1) * chk_size + 1
-            if offset_start > length(global_fbr_map)
+        for proc in 1:P
+            lo, hi = 1, length(gfm[proc])
+            lfbr = binary_search_lb(pos_start, gfm[proc], lo, hi)
+
+            ##Can prove the processor doesn't contain the range.
+            if lfbr < 1
                 continue
             end
-            last_idx = global_fbr_map[offset_start - 1]
 
-            while offset_start > 1 && offset_start <= length(global_fbr_map) &&
-                      global_fbr_map[offset_start] == last_idx
-                offset_start += 1
+            curr = gfm[proc][lfbr]
+
+            while lfbr <= length(val[proc]) && (curr = gfm[proc][lfbr]) <= pos_stop
+                @fastmath lvl_val[curr] += val[proc][lfbr]
+                lfbr += 1
             end
-            start = offset_start
-        else
-            start = 1
         end
 
-        if tid < P
-            offset_finish = tid * chk_size + 1
-            if offset_finish > length(global_fbr_map)
-                finish = length(global_fbr_map) + 1
-            else
-                last_idx = global_fbr_map[offset_finish - 1]
-
-                while offset_finish <= length(global_fbr_map) &&
-                    global_fbr_map[offset_finish] == last_idx
-                    offset_finish += 1
-                end
-                finish = offset_finish
-            end
-        else
-            finish = length(global_fbr_map) + 1
-        end
-
-        for i in start:(finish - 1)
-            val_merged[global_fbr_map[i]] = 0
-        end
-
-        for i in start:(finish - 1)
-            @fastmath val_merged[global_fbr_map[i]] += val[task_map[i]][local_fbr_map[i]]
-        end
     end
 end
 
-Base.@propagate_inbounds function merge_dense_element_level(factor, val, P, val2)
+##TODO: Rewrite to new API and double check correctness.
+##As it stands this is probably wrong > 1 mode tensors.
+Base.@propagate_inbounds function merge_dense_element(factor, val, P, val2)
     Threads.@threads for i in 1:factor
         for proc_id in 1:P
             @fastmath val2[i] += val[proc_id][i]
