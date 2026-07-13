@@ -37,7 +37,7 @@ jobs:
           - os: windows-latest
             arch: x64
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.WILLOW_BOT_TOKEN }}
       - uses: julia-actions/setup-julia@v1
@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           echo "JULIA_NUM_THREADS=2" >> $GITHUB_ENV
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts
         with:

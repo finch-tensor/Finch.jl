@@ -103,7 +103,7 @@ function resize_if_smaller!(buff::MultiChannelBuffer, n::Integer)
 end
 
 #Make less horrifically hacky if necessary
-function length(::MultiChannelBuffer{Vector{Tuple{Int,Int}}})
+function Base.length(::MultiChannelBuffer{<:AbstractVector})
     return 0
 end
 

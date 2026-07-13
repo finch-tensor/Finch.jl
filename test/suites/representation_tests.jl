@@ -518,4 +518,26 @@ end
         @test res == ref
         @test isequal(res, ref)
     end
+
+    @testset "dense_bytemap_2d_convert" begin
+        ref = Tensor(
+            Dense(SparseByteMap(Element(0))), [0 2 0 4; 5 0 0 8; 0 10 0 0; 13 0 15 0]
+        )
+        tmp = Tensor(Dense(Coalesce(dev_2d, SparseByteMap(Element(0)))), 4, 4)
+        res = Tensor(Dense(SparseByteMap(Element(0))), 4, 4)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+
+        write_2d(ref, tmp, res)
+
+        @test size(res) == size(ref)
+        @test axes(res) == axes(ref)
+        @test ndims(res) == ndims(ref)
+        @test eltype(res) == eltype(ref)
+        @test res == ref
+        @test isequal(res, ref)
+    end
 end
