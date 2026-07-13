@@ -115,6 +115,14 @@ function transfer(device::MultiChannelMemory, arr::AbstractArray)
     MultiChannelBuffer(device, data)
 end
 
+function transfer(device::MultiChannelMemory, arr::PlusOneVector{T}) where {T}
+    data = [
+        PlusOneVector{T}(transfer(device.device, copy(parent(arr)))) for
+        _ in 1:(device.n)
+    ]
+    MultiChannelBuffer(device, data)
+end
+
 function transfer(device::MultiChannelMemory, arr::AbstractDict)
     data = [transfer(device.device, copy(arr)) for _ in 1:(device.n)]
     MultiChannelBuffer(device, data)
