@@ -624,7 +624,7 @@ end
 
 Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_idx, was_dense, lvl_ptr, lvl_idx)
     resize!(lvl_ptr, max_pos + 1)
-    lvl_ptr[1] = 0
+    fill!(lvl_ptr, 0)
     uq_pairs = Vector{Int}(undef, P + 1)
     uq_pairs[1] = 0
     gfm2 = Vector{Vector{Int}}(undef, P)
@@ -678,7 +678,6 @@ Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_id
 
             ##skip zeroes.
             while ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && lfbr < length(ptr[proc]) && gfm[proc][lfbr] < cap
-                lvl_ptr[gfm[proc][lfbr] + 1] = 0
                 lfbr += 1
             end
             if lfbr >= length(ptr[proc])
