@@ -322,8 +322,8 @@ function sparse_bytemap_parent_position(
     else
         return :($srt_shape = $(Tp)($(ctx(lvl.shape)))),
         :(
-            Finch.sparse_bytemap_parent($q, $srt_shape)
-        )
+        Finch.sparse_bytemap_parent($q, $srt_shape)
+)
     end
 end
 

@@ -156,6 +156,7 @@ if parsed_args["nprocs"] == 0
     end
 
     @testset "Finch" begin
+        include("suites/style_tests.jl")
         include("modules/checkoutput_testsetup.jl")
         include("suites/algebra_tests.jl")
         include("suites/constructors_tests.jl")
@@ -175,7 +176,6 @@ if parsed_args["nprocs"] == 0
         include("suites/representation_tests.jl")
         include("suites/scheduler_tests.jl")
         include("suites/simple_tests.jl")
-        include("suites/style_tests.jl")
         include("suites/typical_tests.jl")
     end
 
