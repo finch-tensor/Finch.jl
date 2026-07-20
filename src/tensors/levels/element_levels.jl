@@ -242,6 +242,7 @@ function coalesce_level!(
     max_dim,
     P,
     coalescent,
+    weak
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
     lvl_val = coalescent.val

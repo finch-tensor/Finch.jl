@@ -266,12 +266,12 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::DenseLevel, global_fbr_map, factor, max_dim, P, coalescent
+    lvl::DenseLevel, global_fbr_map, factor, max_dim, P, coalescent, weak
 )
     if factor < 1
         return nothing
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map,
-        factor * lvl.shape, max_dim * lvl.shape, P, coalescent.lvl)
+        factor * lvl.shape, max_dim * lvl.shape, P, coalescent.lvl, weak)
 end
