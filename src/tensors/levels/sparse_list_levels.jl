@@ -677,7 +677,7 @@ Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_id
             end
 
             ##skip zeroes.
-            while ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && lfbr < length(ptr[proc]) && gfm[proc][lfbr] < cap
+            while lfbr < length(ptr[proc]) && ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && gfm[proc][lfbr] < cap
                 lfbr += 1
             end
             if lfbr >= length(ptr[proc])
@@ -747,8 +747,8 @@ Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_id
 
             if c_lfbr < length(ptr[c_proc])
                 c_gpos = gfm[c_proc][c_lfbr]
-                c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
                 if c_gpos < cap
+                    c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
                     posdata[c_proc] = (c_gpos, c_idx, c_lfbr, c_nz)
                     push!(heap,  c_proc)
                 end
@@ -823,7 +823,7 @@ Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_id
             end
 
             ##skip zeroes.
-            while ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && lfbr < length(ptr[proc]) && gfm[proc][lfbr] < cap
+            while lfbr < length(ptr[proc]) && ptr[proc][lfbr + 1] - ptr[proc][lfbr] < 1 && gfm[proc][lfbr] < cap
                 lfbr += 1
             end
             if lfbr >= length(ptr[proc])
@@ -890,8 +890,8 @@ Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_id
             
             if c_lfbr < length(ptr[c_proc])
                 c_gpos = gfm[c_proc][c_lfbr]
-                c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
                 if c_gpos < cap
+                    c_idx = idx[c_proc][ptr[c_proc][c_lfbr] + c_nz]
                     posdata[c_proc] = (c_gpos, c_idx, c_lfbr, c_nz)
                     push!(heap,  c_proc)
                 end
