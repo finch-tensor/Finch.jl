@@ -527,6 +527,7 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
+init_gfm(P) = [[1] for _ in 1:P]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
@@ -543,7 +544,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     push_preamble!(
         ctx,
         quote
-            $global_fbr_map = [[1] for _ in 1:$P]
+            $global_fbr_map = Finch.init_gfm($P)
 
             Finch.coalesce_level!(
                 $(lvl_e), $global_fbr_map, $factor, $max_pos, $P, $(lvl_c), $(lvl.weak)
