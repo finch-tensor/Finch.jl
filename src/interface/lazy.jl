@@ -352,6 +352,28 @@ function Base.permutedims(arg::LazyTensor{Vf,Tv,N}, perm) where {Vf,Tv,N}
 end
 Base.permutedims(arr::SwizzleArray, perm) = swizzle(arr, perm...)
 
+"""
+    transpose(arr::LazyTensor)
+
+Lazily transpose a 2-dimensional `LazyTensor` (equivalent to `permutedims`).
+"""
+LinearAlgebra.transpose(arr::LazyTensor{Vf,Tv,2}) where {Vf,Tv} = permutedims(arr)
+
+"""
+    adjoint(arr::LazyTensor)
+
+Lazily form the conjugate transpose of a 2-dimensional `LazyTensor`. For real
+element types this is equivalent to `transpose`; for complex element types the
+elements are conjugated.
+"""
+function LinearAlgebra.adjoint(arr::LazyTensor{Vf,Tv,2}) where {Vf,Tv}
+    if Tv <: Real
+        return permutedims(arr)
+    else
+        return map(conj, permutedims(arr))
+    end
+end
+
 function Base.:+(
     x::LazyTensor,
     y::Union{LazyTensor,AbstractTensor,Base.AbstractArrayOrBroadcasted,Number},
