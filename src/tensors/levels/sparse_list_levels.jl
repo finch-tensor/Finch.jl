@@ -594,7 +594,7 @@ function unfurl(
 end
 
 function coalesce_level!(
-    lvl::SparseListLevel, global_fbr_map, factor, max_dim, P, coalescent, weak
+    lvl::SparseListLevel, global_fbr_map, factor, max_dim, P, coalescent, mode
 )
     idx = lvl.idx.data
     ptr = lvl.ptr.data
@@ -615,15 +615,170 @@ function coalesce_level!(
         was_dense = false
     end
 
-    if weak
+    if mode == :weak
         gfm2, max_dim2 = merge_splist_weak(global_fbr_map, ptr, idx, P, max_dim, max_idx, was_dense, lvl_ptr, lvl_idx)
     else
         gfm2, max_dim2 = merge_splist(global_fbr_map, ptr, idx, P, max_dim, max_idx, was_dense, lvl_ptr, lvl_idx)
     end
 
     coalesce_level!(
-        lvl.lvl, gfm2, factor, max_dim2, P, coalescent.lvl, weak
+        lvl.lvl, gfm2, factor, max_dim2, P, coalescent.lvl, mode
     )
+end
+
+function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent)
+    lvl_ptr = coalescent.ptr
+    lvl_idx = coalescent.idx
+    nnz = sum(length, lvl.idx.data)
+    if nnz < 1
+        return false
+    end
+    resize!(lvl_idx, nnz)
+    resize!(lvl_ptr, max_pos + 1) ##maybe need fill 0
+
+    lvl_ptr[1] = 1
+    lvl_ptr[end] = nnz + 1
+    
+    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl)
+end
+
+function coalesce_fast!(tid, meta, P, lvl::SparseListLevel, coalescent, was_dense)
+    ptr = lvl.ptr.data
+    idx = lvl.idx.data
+    lvl_ptr = coalescent.ptr
+    lvl_idx = coalescent.idx
+
+    fastmerge_splist(tid, ptr, idx, P, lvl_ptr, lvl_idx, meta, was_dense)
+    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, false)
+end
+
+@inbounds function fastmerge_splist(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, was_dense)
+    nnz_cutoffs = Vector{Int}(undef, P + 1)
+    nnz_cutoffs[1] = 1
+    for p in 2:P+1
+        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(idx[p - 1])
+    end
+    nnz = nnz_cutoffs[end] - 1
+    max_pos = length(lvl_ptr) - 1
+
+    base, rem = divrem(nnz, P)
+    offset = (tid - 1) * base + min(tid - 1, rem)
+    chunksize = base + (tid <= rem ? 1 : 0)
+    work_lb = 1 + offset
+
+    proc_id_lower = binary_search(work_lb, nnz_cutoffs)
+    nz_id_lower = work_lb - nnz_cutoffs[proc_id_lower] + 1
+
+    if was_dense
+        ##Optimize this pass, currently O(P * npos / P), way too slow.
+        proc = proc_id_lower
+        idx_read = nz_id_lower
+        idx_write = nnz_cutoffs[proc] + nz_id_lower - 1
+        ceil = idx_write + chunksize
+        while idx_write < ceil
+            lvl_idx[idx_write] = idx[proc][idx_read]
+            idx_read += 1
+            idx_write += 1
+
+            if idx_read > length(idx[proc])
+                idx_read = 1
+                proc += 1
+            end
+        end
+
+        pos_base, pos_rem = divrem(max_pos - 1, P)
+        pos_offset = (tid - 1) * pos_base + min(tid - 1, pos_rem)
+        pos_chunksize = pos_base + (tid <= pos_rem ? 1 : 0)
+        pos_lb = 2 + pos_offset
+        pos_ub = pos_lb + pos_chunksize - 1
+
+        for pos in pos_lb:pos_ub
+            total = 1
+            for p in 1:P
+                total += ptr[p][pos] - 1
+            end
+            lvl_ptr[pos] = total
+        end
+    else
+        work_ub = work_lb + chunksize - 1
+        proc_id_upper = binary_search(work_ub, nnz_cutoffs)
+        nz_id_upper = work_ub - nnz_cutoffs[proc_id_upper] + 1
+        lfbr_lower = binary_search(nz_id_lower, ptr[proc_id_lower])
+        lfbr_upper = binary_search(nz_id_upper, ptr[proc_id_upper])
+
+        pos_lb = pos_offsets[tid][proc_id_lower] + lfbr_lower - 1
+        pos_ub = min(pos_offsets[tid][proc_id_upper] + lfbr_upper - 1, max_pos - 1)
+
+        if nz_id_upper < ptr[proc_id_upper][lfbr_upper + 1] - 1
+            shares_border = true
+        elseif lfbr_upper < length(ptr[proc_id_upper]) - 1
+            shares_border = false
+        elseif proc_id_upper < P
+            shares_border = pos_offsets[tid][proc_id_upper + 1] == pos_ub
+        else
+            shares_border = false
+        end
+
+        ##copy idx
+        proc = proc_id_lower
+        idx_read = nz_id_lower
+        idx_write = nnz_cutoffs[proc] + nz_id_lower - 1
+        ceil = idx_write + chunksize
+        while idx_write < ceil
+            lvl_idx[idx_write] = idx[proc][idx_read]
+            idx_read += 1
+            idx_write += 1
+
+            if idx_read > length(idx[proc])
+                idx_read = 1
+                proc += 1
+            end
+        end
+
+        ##copy pos
+        proc = proc_id_lower
+        pos_read = lfbr_lower
+
+        pos_write = 2
+        for p in 1:proc - 1
+            pos_write += length(ptr[p]) - 1
+            pos_offsets[tid][p + 1] == pos_offsets[tid][p] + length(ptr[p]) - 2 && (pos_write -= 1)
+        end
+        pos_write += lfbr_lower - 1
+
+        ceil = 3
+        for p in 1:proc_id_upper - 1
+            ceil += length(ptr[p]) - 1
+            pos_offsets[tid][p + 1] == pos_offsets[tid][p] + length(ptr[p]) - 2 && (ceil -= 1)
+        end
+        ceil += lfbr_upper - 1
+        shares_border && (ceil -= 1)
+
+        prefix = ptr[proc][pos_read] + nnz_cutoffs[proc] - 1
+        while pos_write < ceil
+            delta = ptr[proc][pos_read + 1] - ptr[proc][pos_read ]
+            prefix += delta
+            lvl_ptr[pos_write] = prefix
+            pos_write += 1
+            pos_read += 1
+
+            if pos_read > length(ptr[proc]) - 1
+                pos_read = 1
+                old_proc = proc
+                proc += 1
+                if proc > P
+                    break
+                end
+                if pos_offsets[tid][old_proc + 1] == pos_offsets[tid][old_proc] + length(ptr[old_proc]) - 2
+                    pos_write -= 1
+                end
+            end
+        end
+
+        for p in 1:P
+            pos_offsets[tid][p] = nnz_cutoffs[p]
+        end
+    end
 end
 
 Base.@propagate_inbounds function merge_splist(gfm, ptr, idx, P, max_pos, max_idx, was_dense, lvl_ptr, lvl_idx)

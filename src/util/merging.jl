@@ -26,3 +26,26 @@ Base.@propagate_inbounds function unwrap_dense(gfm, factor, P)
         end
     end
 end
+
+@inbounds function binary_search(target::Int, arr)
+    lo = 1
+    hi = length(arr)
+    @assert target > 0
+
+    if target >= arr[hi]
+        return -1
+    end
+
+    while lo <= hi
+        mid = div(lo + hi, 2)
+        if arr[mid] <= target && arr[mid + 1] > target
+            return mid
+        elseif arr[mid] > target
+            hi = mid
+        else
+            lo = mid
+        end
+    end
+
+    return -1
+end

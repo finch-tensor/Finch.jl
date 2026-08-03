@@ -20,7 +20,7 @@ julia> tensor_tree(Tensor(Dense(Coalesce(cpu(:t, 2), Element(0.0))), 4))
    └─ [4]: Coalesce(4) -> 
 ```
 """
-struct CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule} <: AbstractLevel
+struct CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule} <: AbstractLevel
     device::Device
     lvl::Lvl
     coalescent::Coalescent
@@ -28,7 +28,7 @@ struct CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule} <: AbstractLevel
 end
 const Coalesce = CoalesceLevel
 
-isweak(lvl::CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}) where {weak,Device,Lvl,Coalescent,Schedule} = weak
+getmode(lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}) where {mode,Device,Lvl,Coalescent,Schedule} = mode
 
 function CoalesceLevel(device::Device, lvl::Lvl; kwargs...) where {Device,Lvl}
     Tp = postype(lvl)
@@ -55,22 +55,22 @@ function CoalesceLevel(device, lvl, coalescent, schedule; kwargs...)
 end
 
 function CoalesceLevel{Device}(
-    device, lvl::Lvl, coalescent::Coalescent, schedule::Schedule; weak=false
+    device, lvl::Lvl, coalescent::Coalescent, schedule::Schedule; mode=:strong
 ) where {Device,Lvl,Coalescent,Schedule}
-    CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}(
+    CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}(
         device, lvl, coalescent, schedule
     )
 end
 
 function Base.summary(
-    ::Coalesce{weak,Device,Lvl,Coalescent,Schedule}
-) where {weak,Device,Lvl,Coalescent,Schedule}
+    ::Coalesce{mode,Device,Lvl,Coalescent,Schedule}
+) where {mode,Device,Lvl,Coalescent,Schedule}
     "Coalesce($(Lvl))"
 end
 
 function similar_level(
-    lvl::Coalesce{weak,Device,Lvl,Coalescent,Schedule}, fill_value, eltype::Type, dims...
-) where {weak,Device,Lvl,Coalescent,Schedule}
+    lvl::Coalesce{mode,Device,Lvl,Coalescent,Schedule}, fill_value, eltype::Type, dims...
+) where {mode,Device,Lvl,Coalescent,Schedule}
     lvl_2 = similar_level(lvl.lvl, fill_value, eltype, dims...)
     coal_2 = similar_level(lvl.coalescent, fill_value, eltype, dims...)
     CoalesceLevel(
@@ -78,24 +78,24 @@ function similar_level(
         lvl_2,
         coal_2,
         lvl.schedule;
-        weak=isweak(lvl)
+        mode=getmode(lvl)
     )
 end
 
 function postype(
-    ::Type{<:Coalesce{weak,Device,Lvl,Coalescent,Schedule}}
-) where {weak,Device,Lvl,Coalescent,Schedule}
+    ::Type{<:Coalesce{mode,Device,Lvl,Coalescent,Schedule}}
+) where {mode,Device,Lvl,Coalescent,Schedule}
     postype(Lvl)
 end
 
 function transfer(device, lvl::CoalesceLevel)
     lvl_2 = transfer(device, lvl.lvl)
     coal_2 = transfer(device, lvl.coalescent)
-    return CoalesceLevel(lvl.device, lvl_2, coal_2, lvl.schedule; weak=isweak(lvl))
+    return CoalesceLevel(lvl.device, lvl_2, coal_2, lvl.schedule; mode=getmode(lvl))
 end
 
 function pattern!(lvl::CoalesceLevel)
-    CoalesceLevel(lvl.device, pattern!(lvl.lvl), lvl.coalescent, lvl.schedule; weak=isweak(lvl))
+    CoalesceLevel(lvl.device, pattern!(lvl.lvl), lvl.coalescent, lvl.schedule; mode=getmode(lvl))
 end
 
 function set_fill_value!(lvl::CoalesceLevel, init)
@@ -104,7 +104,7 @@ function set_fill_value!(lvl::CoalesceLevel, init)
         set_fill_value!(lvl.lvl, init),
         set_fill_value!(lvl.coalescent, init),
         lvl.schedule;
-        weak=isweak(lvl)
+        mode=getmode(lvl)
     )
 end
 
@@ -114,13 +114,13 @@ function Base.resize!(lvl::CoalesceLevel, dims...)
         resize!(lvl.lvl, dims...),
         resize!(lvl.coalescent, dims...),
         lvl.schedule;
-        weak=isweak(lvl)
+        mode=getmode(lvl)
     )
 end
 
 function Base.show(
-    io::IO, lvl::CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}
-) where {weak,Device,Lvl,Coalescent,Schedule}
+    io::IO, lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
+) where {mode,Device,Lvl,Coalescent,Schedule}
     print(io, "Coalesce(")
     if get(io, :compact, false)
         print(io, "…")
@@ -158,20 +158,20 @@ function labelled_children(fbr::SubFiber{<:CoalesceLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}}
-) where {weak,Device,Lvl,Coalescent,Schedule} = level_ndims(Lvl)
+    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
+) where {mode,Device,Lvl,Coalescent,Schedule} = level_ndims(Lvl)
 @inline level_size(
-    lvl::CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}
-) where {weak,Device,Lvl,Coalescent,Schedule} = level_size(lvl.lvl)
+    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
+) where {mode,Device,Lvl,Coalescent,Schedule} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}
-) where {weak,Device,Lvl,Coalescent,Schedule} = level_axes(lvl.lvl)
+    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
+) where {mode,Device,Lvl,Coalescent,Schedule} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}}
-) where {weak,Device,Lvl,Coalescent,Schedule} = level_eltype(Lvl)
+    ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
+) where {mode,Device,Lvl,Coalescent,Schedule} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}}
-) where {weak,Device,Lvl,Coalescent,Schedule} = level_fill_value(Lvl)
+    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
+) where {mode,Device,Lvl,Coalescent,Schedule} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     lvl = fbr.lvl
@@ -223,7 +223,7 @@ mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     Coalescent
     Schedule
     qos_stop
-    weak
+    mode
 end
 
 postype(lvl::VirtualCoalesceLevel) = postype(lvl.lvl)
@@ -247,14 +247,14 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
             $(ctx(lvl.lvl)),
             $(ctx(lvl.coalescent)),
             $(lvl.tag).schedule;
-            weak=($(lvl.weak)),
+            mode=($(QuoteNode(lvl.mode))),
         )
     end
 end
 
 function virtualize(
-    ctx, ex, ::Type{CoalesceLevel{weak,Device,Lvl,Coalescent,Schedule}}, tag=:lvl
-) where {weak,Device,Lvl,Coalescent,Schedule}
+    ctx, ex, ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}, tag=:lvl
+) where {mode,Device,Lvl,Coalescent,Schedule}
     tag = freshen(ctx, tag)
     schedule = freshen(ctx, tag, :_schedule)
 
@@ -282,7 +282,7 @@ function virtualize(
         Coalescent,
         Schedule,
         qos_stop,
-        weak,
+        mode,
     )
 end
 
@@ -301,7 +301,7 @@ function distribute_level(
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        lvl.weak,
+        lvl.mode,
     )
 end
 
@@ -320,7 +320,7 @@ function distribute_level(
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        lvl.weak,
+        lvl.mode,
     )
 end
 
@@ -339,7 +339,7 @@ function distribute_level(
         lvl.Coalescent,
         lvl.Schedule,
         lvl.qos_stop,
-        lvl.weak,
+        lvl.mode,
     )
 end
 
@@ -372,7 +372,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            lvl.weak,
+            lvl.mode,
         )
     else
         dev = get_device(get_device(arch))
@@ -389,7 +389,7 @@ function distribute_level(
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            lvl.weak,
+            lvl.mode,
         )
     end
 end
@@ -410,7 +410,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
             lvl.Coalescent,
             lvl.Schedule,
             lvl.qos_stop,
-            lvl.weak,
+            lvl.mode,
         ),
     )
 end
@@ -528,6 +528,7 @@ end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
 init_gfm(P) = [[1] for _ in 1:P]
+init_fast_meta(P) = [ones(P) for _ in 1:P]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
@@ -538,19 +539,37 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     ##On init, factor is both a dimensional maximum and communicates unwrapping for Dense(Coalesce(Sparse)) data
     factor = ctx(pos)
     max_pos = factor
+    mode = lvl.mode
 
     global_fbr_map = freshen(ctx, :gfm)
+    lastpos = freshen(ctx, :lastpos)
+    tid = freshen(ctx, :tid)
+    dec = freshen(ctx, :declared)
+    if mode == :fast
+        push_preamble!(
+            ctx,
+            quote
+                $dec = Finch.setup_coalesce!($(lvl_e), $max_pos, $(lvl_c))
+                $lastpos = Finch.init_fast_meta($P)
+                if $dec
+                    Threads.@threads for $tid in 1:($P)
+                        Finch.coalesce_fast!($tid, $lastpos, $P, $(lvl_e), $(lvl_c), false)
+                    end
+                end
+            end,
+        )
+    else
+        push_preamble!(
+            ctx,
+            quote
+                $global_fbr_map = Finch.init_gfm($P)
 
-    push_preamble!(
-        ctx,
-        quote
-            $global_fbr_map = Finch.init_gfm($P)
-
-            Finch.coalesce_level!(
-                $(lvl_e), $global_fbr_map, $factor, $max_pos, $P, $(lvl_c), $(lvl.weak)
-            )
-        end,
-    )
+                Finch.coalesce_level!(
+                    $(lvl_e), $global_fbr_map, $factor, $max_pos, $P, $(lvl_c), $(lvl.mode)
+                )
+            end,
+        )
+    end
     return lvl
 end
 
@@ -599,12 +618,20 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
     )
 end
 
+function setup_coalesce!(lvl::CoalesceLevel, max_pos, coalescent)
+    return setup_coalesce!(lvl.lvl, max_pos, coalescent)
+end
+
 function coalesce_level!(
-    lvl::CoalesceLevel, global_fbr_map, factor, max_dim, P, coalescent, weak
+    lvl::CoalesceLevel, global_fbr_map, factor, max_dim, P, coalescent, mode
 )
     if max_dim < 1
         return nothing
     end
 
-    coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent, weak)
+    coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent, mode)
+end
+
+function coalesce_fast!(tid, meta, P, lvl::CoalesceLevel, coalescent, was_dense)
+    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent, was_dense)
 end

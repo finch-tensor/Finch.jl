@@ -275,3 +275,7 @@ function coalesce_level!(
     coalesce_level!(lvl.lvl, global_fbr_map,
         factor * lvl.shape, max_dim * lvl.shape, P, coalescent.lvl, weak)
 end
+
+function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent)
+    setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl)
+end

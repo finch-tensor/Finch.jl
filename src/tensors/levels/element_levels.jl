@@ -257,7 +257,47 @@ function coalesce_level!(
     else
         merge_element(global_fbr_map, val, max_dim, P, lvl_val)
     end
-        
+end
+
+function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent)
+    resize!(coalescent.val, max_pos)
+    return true
+end
+
+function coalesce_fast!(tid, meta, P, lvl::ElementLevel, coalescent, was_dense)
+    val = lvl.val.data
+    lvl_val = coalescent.val
+
+    fastmerge_element(tid, val, P, lvl_val)
+end
+
+@inbounds function fastmerge_element(tid, val, P, lvl_val)
+    nnz_cutoffs = Vector{Int}(undef, P + 1)
+    nnz_cutoffs[1] = 1
+    for p in 2:P+1
+        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(val[p - 1])
+    end
+    nnz = nnz_cutoffs[end] - 1
+
+    base, rem = divrem(nnz, P)
+    offset = (tid - 1) * base + min(tid - 1, rem)
+    chunksize = base + (tid <= rem ? 1 : 0)
+    work_lb = 1 + offset
+    work_ub = work_lb + chunksize - 1
+
+    proc_id_lower = binary_search(work_lb, nnz_cutoffs)
+    nz_offset = work_lb - nnz_cutoffs[proc_id_lower] + 1
+    proc = proc_id_lower
+    write_idx = work_lb
+    while write_idx <= work_ub
+        lvl_val[write_idx] = val[proc][nz_offset]
+        write_idx += 1
+        nz_offset += 1
+        if nz_offset > length(val[proc])
+            proc += 1
+            nz_offset = 1
+        end
+    end
 end
 
 Base.@propagate_inbounds function merge_element(gfm, val, max_pos, P, lvl_val)
