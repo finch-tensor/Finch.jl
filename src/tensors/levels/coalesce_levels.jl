@@ -528,7 +528,7 @@ end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
 init_gfm(P) = [[1] for _ in 1:P]
-init_fast_meta(P) = [ones(P) for _ in 1:P]
+init_fast_meta(P) = [ones(Int, P) for _ in 1:P]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     @assert !is_on_device(ctx, lvl.device)
