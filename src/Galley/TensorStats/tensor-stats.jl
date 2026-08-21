@@ -707,7 +707,7 @@ function _4d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     n_l, n_k, n_j, n_i = size(s)
     d_ijkl = Scalar(0)
     @finch begin
-        d_ijk .= 0
+        d_ijkl .= 0
         for i in _
             for j in _
                 for k in _
