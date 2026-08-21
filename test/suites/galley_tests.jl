@@ -410,6 +410,14 @@
     @testset "NaiveStats" begin end
 
     @testset verbose = true "DCStats" begin
+        @testset "4d sparse structure" begin
+            A = Tensor(
+                Dense(Sparse(Sparse(Sparse(Element(0.0))))), fsprand(5, 5, 5, 5, 0.3)
+            )
+            stats = DCStats(A, [:i, :j, :k, :l])
+            @test estimate_nnz(stats) >= 0
+        end
+
         @testset "Single Tensor Card" begin
             i = IndexExpr("i")
             j = IndexExpr("j")
