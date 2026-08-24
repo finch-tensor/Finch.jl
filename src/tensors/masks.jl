@@ -213,6 +213,169 @@ function unfurl(ctx, arr::VirtualBandMaskColumn, ext, mode, proto::typeof(defaul
     ])
 end
 
+struct TupleMask{N, Ti} <: AbstractTensor
+    lb::NTuple{N, Ti}
+    ub::NTuple{N, Ti}
+end
+
+Base.ndims(::TupleMask{N, Ti}) where {N, Ti} = N
+Base.ndims(::Type{TupleMask{N, Ti}}) where {N, Ti} = N
+Base.eltype(::TupleMask) = Bool
+Base.eltype(::Type{TupleMask{N, Ti}}) where {N, Ti} = Bool
+Base.size(tns::TupleMask) = map(max, tns.lb, tns.ub)
+Base.axes(tns::TupleMask) = map(s -> 1:s, size(tns))
+fill_value(::TupleMask) = false
+fill_value(::Type{TupleMask{N, Ti}}) where {N, Ti} = false
+
+"""
+    tuplemask
+
+Similar to bandmask, but instead compares tuples, `tuplemask[i, j, k] = j <= i <= k`.
+Note that unlike bandmask, `i`, `j`, and `k` are all tuples, and comparison happens lexiographically.
+"""
+tuplemask(lb, ub) = TupleMask(lb, ub)
+
+function Base.summary(io::IO, ex::TupleMask)
+    print(io, "tuplemask(", ex.lb, ", ", ex.ub, ")")
+end
+
+struct VirtualTupleMask
+    ndims
+    lb
+    ub
+end
+
+function virtualize(ctx, ex, ::Type{TupleMask{N, Ti}}) where {N, Ti}
+    lb = freshen(ctx, :lb)
+    ub = freshen(ctx, :ub)
+
+    push_preamble!(ctx,
+        quote
+            $lb = reverse($ex.lb)
+            $ub = reverse($ex.ub)
+        end,
+    )
+    VirtualTupleMask(N, value(lb, NTuple{N, Ti}), value(ub, NTuple{N, Ti}))
+end
+
+FinchNotation.finch_leaf(x::VirtualTupleMask) = virtual(x)
+function virtual_size(ctx, arr::VirtualTupleMask)
+    ntuple(_ -> auto, arr.ndims)
+end
+virtual_fill_value(ctx, arr::VirtualTupleMask) = false
+virtual_eltype(ctx, arr::VirtualTupleMask) = Bool
+
+struct VirtualTupleMaskDim
+    arr
+    dim
+end
+FinchNotation.finch_leaf(x::VirtualTupleMaskDim) = virtual(x)
+
+function unfurl(ctx, arr::VirtualTupleMask, ext, mode, proto::typeof(defaultread))
+    Unfurled(;
+        arr=arr,
+        body=unfurl(ctx, VirtualTupleMaskDim(arr, 1), ext, mode, proto),
+    )
+end
+
+function unfurl(ctx, arr::VirtualTupleMaskDim, ext, mode, proto::typeof(defaultread))
+    dim = arr.dim
+    lb_d = call(getindex, arr.arr.lb, dim)
+    ub_d = call(getindex, arr.arr.ub, dim)
+
+    both_tied_body = if dim == arr.arr.ndims
+        (ctx, ext) -> Run(; body=FillLeaf(true))
+    else
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDim(arr.arr, dim + 1))
+    end
+    lb_tied_body = if dim == arr.arr.ndims
+        (ctx, ext) -> Run(; body=FillLeaf(true))
+    else
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim + 1))
+    end
+    ub_tied_body = if dim == arr.arr.ndims
+        (ctx, ext) -> Run(; body=FillLeaf(true))
+    else
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim + 1))
+    end
+
+    Switch([
+        call(==, lb_d, ub_d) => Sequence([
+            Phase(;
+                stop=(ctx, ext) -> call(-, lb_d, 1),
+                body=(ctx, ext) -> Run(; body=FillLeaf(false)),
+            ),
+            Phase(; stop=(ctx, ext) -> lb_d, body=both_tied_body),
+            Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
+        ]),
+        literal(true) => Sequence([
+            Phase(;
+                stop=(ctx, ext) -> call(-, lb_d, 1),
+                body=(ctx, ext) -> Run(; body=FillLeaf(false)),
+            ),
+            Phase(; stop=(ctx, ext) -> lb_d, body=lb_tied_body),
+            Phase(;
+                stop=(ctx, ext) -> call(-, ub_d, 1),
+                body=(ctx, ext) -> Run(; body=FillLeaf(true)),
+            ),
+            Phase(; stop=(ctx, ext) -> ub_d, body=ub_tied_body),
+            Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
+        ]),
+    ])
+end
+
+struct VirtualTupleMaskDimLb
+    arr
+    dim
+end
+FinchNotation.finch_leaf(x::VirtualTupleMaskDimLb) = virtual(x)
+
+function unfurl(ctx, arr::VirtualTupleMaskDimLb, ext, mode, proto::typeof(defaultread))
+    dim = arr.dim
+    lb_d = call(getindex, arr.arr.lb, dim)
+
+    tied_body = if dim == arr.arr.ndims
+        (ctx, ext) -> Run(; body=FillLeaf(true))
+    else
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim + 1))
+    end
+
+    Sequence([
+        Phase(;
+            stop=(ctx, ext) -> call(-, lb_d, 1),
+            body=(ctx, ext) -> Run(; body=FillLeaf(false)),
+        ),
+        Phase(; stop=(ctx, ext) -> lb_d, body=tied_body),
+        Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(true))),
+    ])
+end
+
+struct VirtualTupleMaskDimUb
+    arr
+    dim
+end
+FinchNotation.finch_leaf(x::VirtualTupleMaskDimUb) = virtual(x)
+
+function unfurl(ctx, arr::VirtualTupleMaskDimUb, ext, mode, proto::typeof(defaultread))
+    dim = arr.dim
+    ub_d = call(getindex, arr.arr.ub, dim)
+
+    tied_body = if dim == arr.arr.ndims
+        (ctx, ext) -> Run(; body=FillLeaf(true))
+    else
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim + 1))
+    end
+
+    Sequence([
+        Phase(;
+            stop=(ctx, ext) -> call(-, ub_d, 1),
+            body=(ctx, ext) -> Run(; body=FillLeaf(true)),
+        ),
+        Phase(; stop=(ctx, ext) -> ub_d, body=tied_body),
+        Phase(; body=(ctx, ext) -> Run(; body=FillLeaf(false))),
+    ])
+end
+
 struct SplitMask{Ti} <: AbstractTensor
     stop::Ti
     P::Int
