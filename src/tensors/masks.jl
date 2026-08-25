@@ -232,6 +232,8 @@ fill_value(::Type{TupleMask{N, Ti}}) where {N, Ti} = false
 
 Similar to bandmask, but instead compares tuples, `tuplemask[i, j, k] = j <= i <= k`.
 Note that unlike bandmask, `i`, `j`, and `k` are all tuples, and comparison happens lexiographically.
+Comparison is reverse-ordered; meaning that the most significant digits start on the rightmost end of the tuple.
+For example, (4, 1, 6) < (1, 1, 7) because 6 < 7.
 """
 tuplemask(lb, ub) = TupleMask(lb, ub)
 
