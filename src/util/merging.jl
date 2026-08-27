@@ -12,6 +12,20 @@ Base.@propagate_inbounds function binary_search_lb(target, arr, lo, hi)
     return result
 end
 
+Base.@propagate_inbounds function binary_search_ub(target, arr, lo, hi)
+    result = -1
+    while lo <= hi
+        mid = div(lo + hi, 2)
+        if arr[mid] <= target
+            result = mid
+            lo = mid + 1
+        else
+            hi = mid - 1
+        end
+    end
+    return result
+end
+
 Base.@propagate_inbounds function unwrap_dense(gfm, factor, P)
     Threads.@threads for tid in 1:P
         v = gfm[tid]

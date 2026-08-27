@@ -68,8 +68,32 @@ function transfer(Tm, lvl::SparseListLevel{Ti,Ptr,Idx,Lvl}) where {Ti,Ptr,Idx,Lv
     return SparseListLevel{Ti}(lvl_2, lvl.shape, ptr_2, idx_2)
 end
 
+function get_shape(lvl::SparseListLevel)
+    lvl.shape
+end
+
 function countstored_level(lvl::SparseListLevel, pos)
     countstored_level(lvl.lvl, lvl.ptr[pos + 1] - 1)
+end
+
+function countstored_level(lvl::SparseListLevel, pos, idxs, proc, active)
+    q_start = lvl.ptr[pos]
+    q_stop = lvl.ptr[pos + 1] - 1
+    
+    ##First, find if there are indices underneath the target index.
+    r = binary_search_ub(idx, lvl.idx, q_start, q_stop)
+
+    ##If not, do a cumulative sum of the previous position (or return 0 if at position 1, as there is no position 0)
+    ##If yes, that becomes the new position, we recurse on that.
+    if r == -1
+        q_start == 1 && (active[proc] = false ; return 0)
+        count = countstored_level(lvl.lvl, q_start - 1, get_shape(lvl.lvl), proc, active)
+    else
+        count = countstored_level(lvl.lvl, r, get_shape(lvl.lvl), proc, active)
+    end
+
+    count == 0 && (active[proc] = false)
+    return count
 end
 
 function pattern!(lvl::SparseListLevel{Ti}) where {Ti}

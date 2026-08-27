@@ -83,7 +83,9 @@ function (fbr::SubFiber{<:ElementLevel})()
     return fbr.lvl.val[q]
 end
 
+get_shape(lvl::ElementLevel) = 0
 countstored_level(lvl::ElementLevel, pos) = pos
+countstored_level(lvl::ElementLevel, pos, idx, proc, active) = pos
 
 mutable struct VirtualElementLevel <: AbstractVirtualLevel
     tag
