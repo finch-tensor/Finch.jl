@@ -88,6 +88,12 @@ function countstored_level(lvl::DenseLevel, pos)
     countstored_level(lvl.lvl, pos * lvl.shape)
 end
 
+function countstored_level(lvl::DenseLevel, pos, idxs, dim, proc, exact)
+    idx = exact ? idxs[length(idxs) - dim] : lvl.shape
+    q = (pos - 1) * lvl.shape + idx
+    countstored_level(lvl.lvl, q, idxs, dim + 1, proc, exact)
+end
+
 function Base.show(io::IO, lvl::DenseLevel{Ti}) where {Ti}
     if get(io, :compact, false)
         print(io, "Dense(")

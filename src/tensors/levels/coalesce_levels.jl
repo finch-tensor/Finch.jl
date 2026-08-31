@@ -20,17 +20,18 @@ julia> tensor_tree(Tensor(Dense(Coalesce(cpu(:t, 2), Element(0.0))), 4))
    └─ [4]: Coalesce(4) -> 
 ```
 """
-struct CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule} <: AbstractLevel
+struct CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator} <: AbstractLevel
     device::Device
     lvl::Lvl
     coalescent::Coalescent
     schedule::Schedule
+    accumulator::Accumulator
 end
 const Coalesce = CoalesceLevel
 
-getmode(lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}) where {mode,Device,Lvl,Coalescent,Schedule} = mode
+getmode(lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = mode
 
-function CoalesceLevel(device::Device, lvl::Lvl; kwargs...) where {Device,Lvl}
+function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
     Tp = postype(lvl)
     coal_lvl = lvl
     while typeof(coal_lvl) <: CoalesceLevel
@@ -38,64 +39,73 @@ function CoalesceLevel(device::Device, lvl::Lvl; kwargs...) where {Device,Lvl}
     end
     P = get_num_tasks(device)
     coalescent = similar_level(
-        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(lvl)...
+        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
     )
+    if mode == :fast
+        accum = nothing
+    else
+        accum = similar_level(
+            coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
+        )
+    end
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
         transfer(MultiChannelMemory(device, P), lvl),
         coalescent,
-        schedule;
-        kwargs...
+        schedule,
+        transfer(MultiChannelMemory(device, P), accum),;
+        mode
     )
 end
 
-function CoalesceLevel(device, lvl, coalescent, schedule; kwargs...)
-    CoalesceLevel{typeof(device)}(device, lvl, coalescent, schedule; kwargs...)
+function CoalesceLevel(device, lvl, coalescent, schedule, accumulator; mode=:normalize)
+    CoalesceLevel{typeof(device)}(device, lvl, coalescent, schedule, accumulator; mode)
 end
 
 function CoalesceLevel{Device}(
-    device, lvl::Lvl, coalescent::Coalescent, schedule::Schedule; mode=:strong
-) where {Device,Lvl,Coalescent,Schedule}
-    CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}(
-        device, lvl, coalescent, schedule
+    device, lvl::Lvl, coalescent::Coalescent, schedule::Schedule, accumulator::Accumulator; mode=:normalize
+) where {Device,Lvl,Coalescent,Schedule,Accumulator}
+    CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}(
+        device, lvl, coalescent, schedule, accumulator
     )
 end
 
 function Base.summary(
-    ::Coalesce{mode,Device,Lvl,Coalescent,Schedule}
-) where {mode,Device,Lvl,Coalescent,Schedule}
+    ::Coalesce{mode,Device,Lvl,Coalescent,Schedule,Accumulator}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator}
     "Coalesce($(Lvl))"
 end
 
 function similar_level(
-    lvl::Coalesce{mode,Device,Lvl,Coalescent,Schedule}, fill_value, eltype::Type, dims...
-) where {mode,Device,Lvl,Coalescent,Schedule}
+    lvl::Coalesce{mode,Device,Lvl,Coalescent,Schedule,Accumulator}, fill_value, eltype::Type, dims...
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator}
     lvl_2 = similar_level(lvl.lvl, fill_value, eltype, dims...)
     coal_2 = similar_level(lvl.coalescent, fill_value, eltype, dims...)
     CoalesceLevel(
         lvl.device,
         lvl_2,
         coal_2,
-        lvl.schedule;
+        lvl.schedule,
+        lvl.accumulator;
         mode=getmode(lvl)
     )
 end
 
 function postype(
-    ::Type{<:Coalesce{mode,Device,Lvl,Coalescent,Schedule}}
-) where {mode,Device,Lvl,Coalescent,Schedule}
+    ::Type{<:Coalesce{mode,Device,Lvl,Coalescent,Schedule,Accumulator}}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator}
     postype(Lvl)
 end
 
 function transfer(device, lvl::CoalesceLevel)
     lvl_2 = transfer(device, lvl.lvl)
     coal_2 = transfer(device, lvl.coalescent)
-    return CoalesceLevel(lvl.device, lvl_2, coal_2, lvl.schedule; mode=getmode(lvl))
+    return CoalesceLevel(lvl.device, lvl_2, coal_2, lvl.schedule, lvl.accumulator; mode=getmode(lvl))
 end
 
 function pattern!(lvl::CoalesceLevel)
-    CoalesceLevel(lvl.device, pattern!(lvl.lvl), lvl.coalescent, lvl.schedule; mode=getmode(lvl))
+    CoalesceLevel(lvl.device, pattern!(lvl.lvl), lvl.coalescent, lvl.schedule, lvl.accumulator; mode=getmode(lvl))
 end
 
 function set_fill_value!(lvl::CoalesceLevel, init)
@@ -103,7 +113,8 @@ function set_fill_value!(lvl::CoalesceLevel, init)
         lvl.device,
         set_fill_value!(lvl.lvl, init),
         set_fill_value!(lvl.coalescent, init),
-        lvl.schedule;
+        lvl.schedule,
+        lvl.accumulator;
         mode=getmode(lvl)
     )
 end
@@ -113,14 +124,15 @@ function Base.resize!(lvl::CoalesceLevel, dims...)
         lvl.device,
         resize!(lvl.lvl, dims...),
         resize!(lvl.coalescent, dims...),
-        lvl.schedule;
+        lvl.schedule,
+        lvl.accumulator;
         mode=getmode(lvl)
     )
 end
 
 function Base.show(
-    io::IO, lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
-) where {mode,Device,Lvl,Coalescent,Schedule}
+    io::IO, lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator}
     print(io, "Coalesce(")
     if get(io, :compact, false)
         print(io, "…")
@@ -158,20 +170,20 @@ function labelled_children(fbr::SubFiber{<:CoalesceLevel})
 end
 
 @inline level_ndims(
-    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
-) where {mode,Device,Lvl,Coalescent,Schedule} = level_ndims(Lvl)
+    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = level_ndims(Lvl)
 @inline level_size(
-    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
-) where {mode,Device,Lvl,Coalescent,Schedule} = level_size(lvl.lvl)
+    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = level_size(lvl.lvl)
 @inline level_axes(
-    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}
-) where {mode,Device,Lvl,Coalescent,Schedule} = level_axes(lvl.lvl)
+    lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = level_axes(lvl.lvl)
 @inline level_eltype(
-    ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
-) where {mode,Device,Lvl,Coalescent,Schedule} = level_eltype(Lvl)
+    ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}
-) where {mode,Device,Lvl,Coalescent,Schedule} = level_fill_value(Lvl)
+    ::Type{<:CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}}
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = level_fill_value(Lvl)
 
 function (fbr::SubFiber{<:CoalesceLevel})(idxs...)
     lvl = fbr.lvl
@@ -217,6 +229,7 @@ mutable struct VirtualCoalesceLevel <: AbstractVirtualLevel
     lvl
     coalescent
     schedule
+    accumulator
     Tv
     Device
     Lvl
@@ -246,15 +259,16 @@ function lower(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, ::DefaultStyle)
             $(ctx(lvl.device)),
             $(ctx(lvl.lvl)),
             $(ctx(lvl.coalescent)),
-            $(lvl.tag).schedule;
+            $(lvl.tag).schedule,
+            $(ctx(lvl.accumulator));
             mode=($(QuoteNode(lvl.mode))),
         )
     end
 end
 
 function virtualize(
-    ctx, ex, ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule}}, tag=:lvl
-) where {mode,Device,Lvl,Coalescent,Schedule}
+    ctx, ex, ::Type{CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}}, tag=:lvl
+) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator}
     tag = freshen(ctx, tag)
     schedule = freshen(ctx, tag, :_schedule)
 
@@ -269,6 +283,7 @@ function virtualize(
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     coalescent_2 = virtualize(ctx, :($tag.coalescent), Coalescent, tag)
     schedule_2 = virtualize(ctx, :($tag.schedule), Schedule, tag)
+    accumulator_2 = virtualize(ctx, :($tag.accumulator), Accumulator, tag)
     qos_stop = freshen(ctx, tag, :_qos_stop)
     VirtualCoalesceLevel(
         tag,
@@ -276,6 +291,7 @@ function virtualize(
         lvl_2,
         coalescent_2,
         schedule_2,
+        accumulator_2,
         typeof(level_fill_value(Lvl)),
         Device,
         Lvl,
@@ -295,6 +311,7 @@ function distribute_level(
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.coalescent,
         lvl.schedule,
+        lvl.accumulator,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -314,6 +331,7 @@ function distribute_level(
         lvl.lvl,
         distribute_level(ctx, lvl.coalescent, arch, diff, style),
         lvl.schedule,
+        lvl.accumulator,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -333,6 +351,7 @@ function distribute_level(
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         distribute_level(ctx, lvl.coalescent, arch, diff, style),
         lvl.schedule,
+        lvl.accumulator,
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -366,6 +385,7 @@ function distribute_level(
             lvl_2,
             lvl.coalescent,
             lvl.schedule,
+            lvl.accumulator,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -383,6 +403,7 @@ function distribute_level(
             distribute_level(ctx, lvl.lvl, arch, diff, style),
             distribute_level(ctx, lvl.coalescent, arch, diff, style),
             lvl.schedule,
+            lvl.accumulator,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -404,6 +425,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualCoalesceLevel, diff)
             redistribute(ctx, lvl.lvl, diff),
             lvl.coalescent,
             lvl.schedule,
+            lvl.accumulator,
             lvl.Tv,
             lvl.Device,
             lvl.Lvl,
@@ -558,17 +580,24 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                 end
             end,
         )
+    ## emit parfor loop tid
+    ##   load balance shards
+    ##   make tuplemask
+    ##   transfer accumulator buffer to tid channel (distribute buffer to memory channel on tid)
+    ##   declare the third accumulator buffer, literally just copied shard structure.
+    ##   emit serial for sid
+    ##     transfer shard (original lvl) to sid's channel
+    ##     lowered (pre written and contained) finch program that uses tuplemask * read to sum the shard into the accumulator
+    ##.    transfer back?
+    ##   transfer back?
+    ##freeze accumulator
     else
-        push_preamble!(
-            ctx,
-            quote
-                $global_fbr_map = Finch.init_gfm($P)
-
-                Finch.coalesce_level!(
-                    $(lvl_e), $global_fbr_map, $factor, $max_pos, $P, $(lvl_c), $(lvl.mode)
-                )
-            end,
-        )
+        lb = freshen(ctx, :lb)
+        ub = freshen(ctx, :ub)
+        mask = freshen(ctx, :mask)
+        code = contain(ctx) do ctx_2
+            
+        end
     end
     return lvl
 end

@@ -253,8 +253,8 @@ function virtualize(ctx, ex, ::Type{TupleMask{N, Ti}}) where {N, Ti}
 
     push_preamble!(ctx,
         quote
-            $lb = reverse($ex.lb)
-            $ub = reverse($ex.ub)
+            $lb = $ex.lb
+            $ub = $ex.ub
         end,
     )
     VirtualTupleMask(N, value(lb, NTuple{N, Ti}), value(ub, NTuple{N, Ti}))
@@ -276,7 +276,7 @@ FinchNotation.finch_leaf(x::VirtualTupleMaskDim) = virtual(x)
 function unfurl(ctx, arr::VirtualTupleMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
         arr=arr,
-        body=unfurl(ctx, VirtualTupleMaskDim(arr, 1), ext, mode, proto),
+        body=unfurl(ctx, VirtualTupleMaskDim(arr, arr.ndims), ext, mode, proto),
     )
 end
 
@@ -285,20 +285,20 @@ function unfurl(ctx, arr::VirtualTupleMaskDim, ext, mode, proto::typeof(defaultr
     lb_d = call(getindex, arr.arr.lb, dim)
     ub_d = call(getindex, arr.arr.ub, dim)
 
-    both_tied_body = if dim == arr.arr.ndims
+    both_tied_body = if dim == 1
         (ctx, ext) -> Run(; body=FillLeaf(true))
     else
-        (ctx, ext) -> Run(; body=VirtualTupleMaskDim(arr.arr, dim + 1))
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDim(arr.arr, dim - 1))
     end
-    lb_tied_body = if dim == arr.arr.ndims
+    lb_tied_body = if dim == 1
         (ctx, ext) -> Run(; body=FillLeaf(true))
     else
-        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim + 1))
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim - 1))
     end
-    ub_tied_body = if dim == arr.arr.ndims
+    ub_tied_body = if dim == 1
         (ctx, ext) -> Run(; body=FillLeaf(true))
     else
-        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim + 1))
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim - 1))
     end
 
     Switch([
@@ -336,10 +336,10 @@ function unfurl(ctx, arr::VirtualTupleMaskDimLb, ext, mode, proto::typeof(defaul
     dim = arr.dim
     lb_d = call(getindex, arr.arr.lb, dim)
 
-    tied_body = if dim == arr.arr.ndims
+    tied_body = if dim == 1
         (ctx, ext) -> Run(; body=FillLeaf(true))
     else
-        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim + 1))
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimLb(arr.arr, dim - 1))
     end
 
     Sequence([
@@ -362,10 +362,10 @@ function unfurl(ctx, arr::VirtualTupleMaskDimUb, ext, mode, proto::typeof(defaul
     dim = arr.dim
     ub_d = call(getindex, arr.arr.ub, dim)
 
-    tied_body = if dim == arr.arr.ndims
+    tied_body = if dim == 1
         (ctx, ext) -> Run(; body=FillLeaf(true))
     else
-        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim + 1))
+        (ctx, ext) -> Run(; body=VirtualTupleMaskDimUb(arr.arr, dim - 1))
     end
 
     Sequence([
