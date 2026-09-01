@@ -595,8 +595,59 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
         mask = freshen(ctx, :mask)
+        nnz = freshen(ctx, :nnz)
+        push_preamble!(ctx,
+            quote
+                $nnz = Finch.get_total_nnz($(lvl_e))
+                Threads.@threads for $tid in 1:($P)
+                    $lb, $ub = Finch.balance($(lvl_e).lvl, $tid, $P, $nnz, Finch.MergeNormalization())
+                    $mask = Finch.tuplemask($lb, $ub)
+
+                    contain(ctx) do ctx_2
+                        diff = Dict()
+                        channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
+                        channel_task = VirtualMemoryChannel(value(tid), channel_dev, get_task(ctx_2))
+                        accum_2 = distribute_level(ctx_2, lvl.accumulator, channel_task, diff, DeviceShared())
+                        declare_level!(ctx_2, accum_2, literal(0), literal(0))
+                        for sid in 1:value(P)
+                            channel_dev_2 = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
+                            channel_task_2 = VirtualMemoryChannel(value(tid), channel_dev_2, get_task(ctx_2))
+                            shard_2 = distribute_level(ctx_2, lvl.lvl, channel_task_2, diff, DeviceShared())
+                            ##insert finch program that sums a shard.
+                        end
+                    end
+                end
+            end,
+        )
         code = contain(ctx) do ctx_2
-            
+            shard_var = variable(freshen(ctx_2, :shard))
+            set_binding!(ctx_2, shard_var, virtual(VirtualSubFiber(lvl.lvl, literal(1))))
+
+            accumulator_var = variable(freshen(ctx_2, :accumulator))
+            set_binding!(
+                ctx_2, accumulator_var, virtual(VirtualSubFiber(lvl.accumulator, literal(1)))
+            )
+
+            N = level_ndims(lvl.Lvl)
+            Tp = postype(lvl)
+            mask_var = variable(freshen(ctx_2, :mask))
+            set_binding!(ctx_2, mask_var, virtual(virtualize(ctx_2, mask, TupleMask{N,Tp})))
+
+            exts = virtual_level_size(ctx_2, lvl.lvl)
+            inds = [index(freshen(ctx_2, :i, n)) for n in 1:length(exts)]
+
+            op = literal(+)
+            prgm = assign(
+                access(accumulator_var, updater(op), inds...),
+                op,
+                access(shard_var, reader(), inds...),
+            )
+            prgm = sieve(access(mask_var, reader(), inds...), prgm)
+            for (ind, ext) in zip(inds, exts)
+                prgm = loop(ind, ext, prgm)
+            end
+            prgm = instantiate!(ctx_2, prgm)
+            ctx_2(prgm)
         end
     end
     return lvl
@@ -663,4 +714,83 @@ end
 
 function coalesce_fast!(tid, meta, P, lvl::CoalesceLevel, coalescent, was_dense)
     coalesce_fast!(tid, meta, P, lvl.lvl, coalescent, was_dense)
+end
+
+###Load balancer stuff
+
+struct MergeNormalization end
+
+@inbounds function decrement_idxs(idxs, shapes)
+    idxs = copy(idxs)
+    pos = 1
+    while pos <= length(idxs)
+        if idxs[pos] > 1
+            idxs[pos] -= 1
+            return idxs
+        else
+            idxs[pos] = shapes[pos]
+            pos += 1
+        end
+    end
+    error("nnz too small to load balance across P processors")
+end
+
+@inbounds function balance(lvl, tid, P, nnz, style::Union{MergeNormalization})
+    shapes = collect(Finch.level_size(lvl))
+    max_dim = length(shapes)
+
+    base = div(nnz, P)
+    remainder = nnz % P
+    lower_work = (tid - 1) * base + min(tid - 1, remainder)
+    upper_work = tid * base + min(tid, remainder)
+
+    if tid == 1
+        lb_idxs = ntuple(_ -> 1, max_dim)
+    else
+        lb_idxs = find_normalizer_split(lvl, lower_work, P, copy(shapes), max_dim)
+    end
+    lb = Tuple(lb_idxs)
+
+    if tid == P
+        ub_idxs = shapes
+    else
+        next_lb_idxs = find_normalizer_split(lvl, upper_work, P, copy(shapes), max_dim)
+        ub_idxs = decrement_idxs(next_lb_idxs, shapes)
+    end
+    ub = Tuple(ub_idxs)
+
+    return (lb, ub)
+end
+
+@inbounds function find_normalizer_split(lvl, target_work, P, idxs, max_dim)
+    dim = 0
+    while dim < max_dim
+        lo = 1
+        hi = idxs[max_dim - dim]
+        truth = -1
+        while lo <= hi
+            candidate = div(lo + hi, 2)
+            idxs[max_dim - dim] = candidate
+            stored = 0
+            for p in 1:P
+                stored += Finch.countstored_level(lvl, 1, idxs, 0, p, true)
+            end
+            if stored >= target_work
+                truth = candidate
+                hi = candidate - 1
+            else
+                lo = candidate + 1
+            end
+        end
+        idxs[max_dim - dim] = truth
+        dim += 1
+    end
+    return idxs
+end
+
+function get_total_nnz(lvl::AbstractLevel)
+    while typeof(lvl) != ElementLevel
+        lvl = lvl.lvl
+    end
+    sum(length, lvl.val.data)
 end
