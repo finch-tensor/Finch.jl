@@ -614,64 +614,178 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             quote
                 $nnz = Finch.get_total_nnz($(lvl_e))
                 if $nnz > 0
-                Threads.@threads for $tid in 1:($P)
-                    $lb, $ub = Finch.balance($(lvl_e).lvl, $tid, $P, $nnz, Finch.MergeNormalization())
-                    $mask = Finch.tuplemask($lb, $ub)
-
-                    $(contain(ctx) do ctx_2
-                        diff = Dict()
-                        channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
-                        channel_task = VirtualMemoryChannel(value(tid, Int), channel_dev, get_task(ctx_2))
-                        accum_2 = distribute_level(ctx_2, lvl.accumulator, channel_task, diff, DeviceShared())
-                        accum_2 = declare_level!(ctx_2, accum_2, literal(0), literal(0))
-                        push_preamble!(ctx_2, assemble_level!(ctx_2, accum_2, literal(1), literal(1)))
-
-                        N = level_ndims(lvl.Lvl)
-                        Tp = postype(lvl)
-
-                        accumulator_var = variable(freshen(ctx_2, :accumulator))
-                        set_binding!(
-                            ctx_2, accumulator_var, virtual(VirtualSubFiber(accum_2, literal(1)))
+                    Threads.@threads for $tid in 1:($P)
+                        $lb, $ub = Finch.balance(
+                            $(lvl_e).lvl, $tid, $P, $nnz, Finch.MergeNormalization()
                         )
+                        $mask = Finch.tuplemask($lb, $ub)
 
-                        push_preamble!(ctx_2,
-                            quote
-                                for $sid in 1:($P)
-                                    $(contain(ctx_2) do ctx_3
-                                        channel_dev_2 = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
-                                        channel_task_2 = VirtualMemoryChannel(value(sid, Int), channel_dev_2, get_task(ctx_3))
-                                        shard_2 = distribute_level(ctx_3, lvl.lvl, channel_task_2, diff, DeviceShared())
+                        $(contain(ctx) do ctx_2
+                            diff = Dict()
+                            channel_dev = VirtualMultiChannelMemory(
+                                lvl.device, get_num_tasks(lvl.device)
+                            )
+                            channel_task = VirtualMemoryChannel(
+                                value(tid, Int), channel_dev, get_task(ctx_2)
+                            )
+                            accum_2 = distribute_level(
+                                ctx_2, lvl.accumulator, channel_task, diff, DeviceShared()
+                            )
+                            accum_2 = declare_level!(ctx_2, accum_2, literal(0), literal(0))
+                            push_preamble!(
+                                ctx_2,
+                                assemble_level!(ctx_2, accum_2, literal(1), literal(1)),
+                            )
 
-                                        shard_var = variable(freshen(ctx_3, :shard))
-                                        set_binding!(ctx_3, shard_var, virtual(VirtualSubFiber(shard_2, literal(1))))
+                            N = level_ndims(lvl.Lvl)
+                            Tp = postype(lvl)
 
-                                        mask_var = variable(freshen(ctx_3, :mask))
-                                        set_binding!(ctx_3, mask_var, virtual(virtualize(ctx_3, mask, TupleMask{N,Tp})))
+                            accumulator_var = variable(freshen(ctx_2, :accumulator))
+                            set_binding!(
+                                ctx_2, accumulator_var,
+                                virtual(VirtualSubFiber(accum_2, literal(1)))
+                            )
 
-                                        exts = virtual_level_size(ctx_3, shard_2)
-                                        inds = [index(freshen(ctx_3, :i, n)) for n in 1:length(exts)]
+                            push_preamble!(ctx_2,
+                                quote
+                                    for $sid in 1:($P)
+                                        $(contain(ctx_2) do ctx_3
+                                            channel_dev_2 = VirtualMultiChannelMemory(
+                                                lvl.device, get_num_tasks(lvl.device)
+                                            )
+                                            channel_task_2 = VirtualMemoryChannel(
+                                                value(sid, Int),
+                                                channel_dev_2,
+                                                get_task(ctx_3),
+                                            )
+                                            shard_2 = distribute_level(
+                                                ctx_3,
+                                                lvl.lvl,
+                                                channel_task_2,
+                                                diff,
+                                                DeviceShared(),
+                                            )
 
-                                        op = literal(+)
-                                        prgm = assign(
-                                            access(accumulator_var, updater(op), inds...),
-                                            op,
-                                            access(shard_var, reader(), inds...),
-                                        )
-                                        prgm = sieve(access(mask_var, reader(), inds...), prgm)
-                                        for (ind, ext) in zip(inds, exts)
-                                            prgm = loop(ind, ext, prgm)
-                                        end
-                                        prgm = instantiate!(ctx_3, prgm)
-                                        ctx_3(prgm)
-                                    end)
+                                            shard_var = variable(freshen(ctx_3, :shard))
+                                            set_binding!(
+                                                ctx_3,
+                                                shard_var,
+                                                virtual(
+                                                    VirtualSubFiber(shard_2, literal(1))
+                                                ),
+                                            )
+
+                                            mask_var = variable(freshen(ctx_3, :mask))
+                                            set_binding!(
+                                                ctx_3,
+                                                mask_var,
+                                                virtual(
+                                                    virtualize(ctx_3, mask, TupleMask{N,Tp})
+                                                ),
+                                            )
+
+                                            exts = virtual_level_size(ctx_3, shard_2)
+                                            inds = [
+                                                index(freshen(ctx_3, :i, n)) for
+                                                n in 1:length(exts)
+                                            ]
+
+                                            op = literal(+)
+                                            prgm = assign(
+                                                access(
+                                                    accumulator_var, updater(op), inds...
+                                                ),
+                                                op,
+                                                access(shard_var, reader(), inds...),
+                                            )
+                                            prgm = sieve(
+                                                access(mask_var, reader(), inds...), prgm
+                                            )
+                                            for (ind, ext) in zip(inds, exts)
+                                                prgm = loop(ind, ext, prgm)
+                                            end
+                                            prgm = instantiate!(ctx_3, prgm)
+                                            ctx_3(prgm)
+                                        end)
+                                    end
+                                end)
+                            accum_2 = freeze_level!(ctx_2, accum_2, literal(1))
+                            nothing
+                        end)
+                    end
+
+                    $dec = Finch.setup_coalesce!($(lvl_e).accumulator, $max_pos, $(lvl_c))
+                    if $dec
+                        Threads.@threads for $tid in 1:($P)
+                            Finch.coalesce_fast!(
+                                $tid, nothing, $P, $(lvl_e), $(lvl_c), false
+                            )
+                        end
+                    else
+                        Threads.@threads for $tid in 1:($P)
+                            $(contain(ctx) do ctx_2
+                                diff = Dict()
+                                channel_dev = VirtualMultiChannelMemory(
+                                    lvl.device, get_num_tasks(lvl.device)
+                                )
+                                channel_task = VirtualMemoryChannel(
+                                    value(tid, Int), channel_dev, get_task(ctx_2)
+                                )
+                                accum_2 = distribute_level(
+                                    ctx_2, lvl.accumulator, channel_task, diff,
+                                    DeviceShared(),
+                                )
+
+                                own_2 = distribute_level(
+                                    ctx_2, lvl.lvl, channel_task, diff, DeviceShared()
+                                )
+                                own_2 = declare_level!(ctx_2, own_2, literal(0), literal(0))
+                                push_preamble!(
+                                    ctx_2,
+                                    assemble_level!(ctx_2, own_2, literal(1), literal(1)),
+                                )
+
+                                own_var = variable(freshen(ctx_2, :own))
+                                set_binding!(
+                                    ctx_2, own_var,
+                                    virtual(VirtualSubFiber(own_2, literal(1))),
+                                )
+
+                                accum_r_var = variable(freshen(ctx_2, :accum_r))
+                                set_binding!(
+                                    ctx_2, accum_r_var,
+                                    virtual(VirtualSubFiber(accum_2, literal(1))),
+                                )
+
+                                exts_cp = virtual_level_size(ctx_2, own_2)
+                                inds_cp = [
+                                    index(freshen(ctx_2, :k, n)) for n in 1:length(exts_cp)
+                                ]
+
+                                op_cp = literal(initwrite(virtual_level_fill_value(own_2)))
+                                prgm_cp = assign(
+                                    access(own_var, updater(op_cp), inds_cp...),
+                                    op_cp,
+                                    access(accum_r_var, reader(), inds_cp...),
+                                )
+                                for (ind, ext) in zip(inds_cp, exts_cp)
+                                    prgm_cp = loop(ind, ext, prgm_cp)
                                 end
-                            end)
-                        accum_2 = freeze_level!(ctx_2, accum_2, literal(1))
-                        nothing
-                    end)
-                end
+                                prgm_cp = instantiate!(ctx_2, prgm_cp)
+                                push_preamble!(ctx_2, ctx_2(prgm_cp))
 
-                $dec = Finch.setup_coalesce!($(lvl_e).accumulator, $max_pos, $(lvl_c))
+                                own_2 = freeze_level!(ctx_2, own_2, literal(1))
+                                nothing
+                            end)
+                        end
+                        
+                        $lastpos = Finch.init_fast_meta($P)
+                        Threads.@threads for $tid in 1:($P)
+                            Finch.coalesce_fast!(
+                                $tid, $lastpos, $P, $(lvl_e).lvl, $(lvl_c), false
+                            )
+                        end
+                    end
                 end
             end,
         )

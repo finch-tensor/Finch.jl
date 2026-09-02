@@ -285,3 +285,7 @@ end
 function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent)
     setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl)
 end
+
+function coalesce_fast!(tid, meta, P, lvl::DenseLevel, coalescent::DenseLevel, was_dense)
+    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
+end

@@ -681,6 +681,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, coalescent::SparseListLe
     lvl_ptr[end] = nnz + 1
 
     setup_coalesce!(lvl.lvl, nnz, coalescent.lvl)
+    return false
 end
 
 function coalesce_fast!(tid, meta, P, lvl::SparseListLevel, coalescent, was_dense)
@@ -689,11 +690,11 @@ function coalesce_fast!(tid, meta, P, lvl::SparseListLevel, coalescent, was_dens
     lvl_ptr = coalescent.ptr
     lvl_idx = coalescent.idx
 
-    fastmerge_splist(tid, ptr, idx, P, lvl_ptr, lvl_idx, meta, was_dense)
+    fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, meta, was_dense)
     coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, false)
 end
 
-@inbounds function fastmerge_splist(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, was_dense)
+@inbounds function fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, was_dense)
     nnz_cutoffs = Vector{Int}(undef, P + 1)
     nnz_cutoffs[1] = 1
     for p in 2:P+1
@@ -711,7 +712,6 @@ end
     nz_id_lower = work_lb - nnz_cutoffs[proc_id_lower] + 1
 
     if was_dense
-        ##Optimize this pass, currently O(P * npos / P), way too slow.
         proc = proc_id_lower
         idx_read = nz_id_lower
         idx_write = nnz_cutoffs[proc] + nz_id_lower - 1
