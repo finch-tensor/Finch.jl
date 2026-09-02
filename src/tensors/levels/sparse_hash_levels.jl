@@ -778,12 +778,12 @@ function distribute_level(
         distribute_buffer(ctx, lvl.perm, arch, style),
         lvl.shape,
         lvl.subtables,
-        lvl.qos_stop,
-        lvl.tbl_count,
-        lvl.stk,
-        lvl.stk_cnt,
-        lvl.stk_dirty,
-        lvl.stk_stop,
+        freshen(ctx, lvl.tag, :qos_stop),
+        freshen(ctx, lvl.tag, :tbl_count),
+        freshen(ctx, lvl.tag, :stk),
+        freshen(ctx, lvl.tag, :stk_cnt),
+        freshen(ctx, lvl.tag, :stk_dirty),
+        freshen(ctx, lvl.tag, :stk_stop),
     )
 end
 

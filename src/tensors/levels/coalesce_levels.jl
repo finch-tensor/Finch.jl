@@ -31,6 +31,19 @@ const Coalesce = CoalesceLevel
 
 getmode(lvl::CoalesceLevel{mode,Device,Lvl,Coalescent,Schedule,Accumulator}) where {mode,Device,Lvl,Coalescent,Schedule,Accumulator} = mode
 
+gen_accumulator(lvl::AbstractLevel, fill_value, eltype::Type, dims...) =
+    similar_level(lvl, fill_value, eltype, dims...)
+
+function gen_accumulator(lvl::DenseLevel, fill_value, eltype::Type, dims...)
+    Dense(gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end])
+end
+
+function gen_accumulator(
+    lvl::SparseListLevel{Ti}, fill_value, eltype::Type, dim, tail...
+) where {Ti}
+    SparseHashLevel{Ti,true}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
+end
+
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
     Tp = postype(lvl)
     coal_lvl = lvl
@@ -44,7 +57,7 @@ function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,
     if mode == :fast
         accum = nothing
     else
-        accum = similar_level(
+        accum = gen_accumulator(
             coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
         )
     end
@@ -125,7 +138,7 @@ function Base.resize!(lvl::CoalesceLevel, dims...)
         resize!(lvl.lvl, dims...),
         resize!(lvl.coalescent, dims...),
         lvl.schedule,
-        lvl.accumulator;
+        resize!(lvl.accumulator, dims...);
         mode=getmode(lvl)
     )
 end
@@ -596,59 +609,72 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         ub = freshen(ctx, :ub)
         mask = freshen(ctx, :mask)
         nnz = freshen(ctx, :nnz)
+        sid = freshen(ctx, :sid)
         push_preamble!(ctx,
             quote
                 $nnz = Finch.get_total_nnz($(lvl_e))
+                if $nnz > 0
                 Threads.@threads for $tid in 1:($P)
                     $lb, $ub = Finch.balance($(lvl_e).lvl, $tid, $P, $nnz, Finch.MergeNormalization())
                     $mask = Finch.tuplemask($lb, $ub)
 
-                    contain(ctx) do ctx_2
+                    $(contain(ctx) do ctx_2
                         diff = Dict()
                         channel_dev = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
-                        channel_task = VirtualMemoryChannel(value(tid), channel_dev, get_task(ctx_2))
+                        channel_task = VirtualMemoryChannel(value(tid, Int), channel_dev, get_task(ctx_2))
                         accum_2 = distribute_level(ctx_2, lvl.accumulator, channel_task, diff, DeviceShared())
-                        declare_level!(ctx_2, accum_2, literal(0), literal(0))
-                        for sid in 1:value(P)
-                            channel_dev_2 = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
-                            channel_task_2 = VirtualMemoryChannel(value(tid), channel_dev_2, get_task(ctx_2))
-                            shard_2 = distribute_level(ctx_2, lvl.lvl, channel_task_2, diff, DeviceShared())
-                            ##insert finch program that sums a shard.
-                        end
-                    end
+                        accum_2 = declare_level!(ctx_2, accum_2, literal(0), literal(0))
+                        push_preamble!(ctx_2, assemble_level!(ctx_2, accum_2, literal(1), literal(1)))
+
+                        N = level_ndims(lvl.Lvl)
+                        Tp = postype(lvl)
+
+                        accumulator_var = variable(freshen(ctx_2, :accumulator))
+                        set_binding!(
+                            ctx_2, accumulator_var, virtual(VirtualSubFiber(accum_2, literal(1)))
+                        )
+
+                        push_preamble!(ctx_2,
+                            quote
+                                for $sid in 1:($P)
+                                    $(contain(ctx_2) do ctx_3
+                                        channel_dev_2 = VirtualMultiChannelMemory(lvl.device, get_num_tasks(lvl.device))
+                                        channel_task_2 = VirtualMemoryChannel(value(sid, Int), channel_dev_2, get_task(ctx_3))
+                                        shard_2 = distribute_level(ctx_3, lvl.lvl, channel_task_2, diff, DeviceShared())
+
+                                        shard_var = variable(freshen(ctx_3, :shard))
+                                        set_binding!(ctx_3, shard_var, virtual(VirtualSubFiber(shard_2, literal(1))))
+
+                                        mask_var = variable(freshen(ctx_3, :mask))
+                                        set_binding!(ctx_3, mask_var, virtual(virtualize(ctx_3, mask, TupleMask{N,Tp})))
+
+                                        exts = virtual_level_size(ctx_3, shard_2)
+                                        inds = [index(freshen(ctx_3, :i, n)) for n in 1:length(exts)]
+
+                                        op = literal(+)
+                                        prgm = assign(
+                                            access(accumulator_var, updater(op), inds...),
+                                            op,
+                                            access(shard_var, reader(), inds...),
+                                        )
+                                        prgm = sieve(access(mask_var, reader(), inds...), prgm)
+                                        for (ind, ext) in zip(inds, exts)
+                                            prgm = loop(ind, ext, prgm)
+                                        end
+                                        prgm = instantiate!(ctx_3, prgm)
+                                        ctx_3(prgm)
+                                    end)
+                                end
+                            end)
+                        accum_2 = freeze_level!(ctx_2, accum_2, literal(1))
+                        nothing
+                    end)
+                end
+
+                $dec = Finch.setup_coalesce!($(lvl_e).accumulator, $max_pos, $(lvl_c))
                 end
             end,
         )
-        code = contain(ctx) do ctx_2
-            shard_var = variable(freshen(ctx_2, :shard))
-            set_binding!(ctx_2, shard_var, virtual(VirtualSubFiber(lvl.lvl, literal(1))))
-
-            accumulator_var = variable(freshen(ctx_2, :accumulator))
-            set_binding!(
-                ctx_2, accumulator_var, virtual(VirtualSubFiber(lvl.accumulator, literal(1)))
-            )
-
-            N = level_ndims(lvl.Lvl)
-            Tp = postype(lvl)
-            mask_var = variable(freshen(ctx_2, :mask))
-            set_binding!(ctx_2, mask_var, virtual(virtualize(ctx_2, mask, TupleMask{N,Tp})))
-
-            exts = virtual_level_size(ctx_2, lvl.lvl)
-            inds = [index(freshen(ctx_2, :i, n)) for n in 1:length(exts)]
-
-            op = literal(+)
-            prgm = assign(
-                access(accumulator_var, updater(op), inds...),
-                op,
-                access(shard_var, reader(), inds...),
-            )
-            prgm = sieve(access(mask_var, reader(), inds...), prgm)
-            for (ind, ext) in zip(inds, exts)
-                prgm = loop(ind, ext, prgm)
-            end
-            prgm = instantiate!(ctx_2, prgm)
-            ctx_2(prgm)
-        end
     end
     return lvl
 end
@@ -789,7 +815,7 @@ end
 end
 
 function get_total_nnz(lvl::AbstractLevel)
-    while typeof(lvl) != ElementLevel
+    while !(lvl isa ElementLevel)
         lvl = lvl.lvl
     end
     sum(length, lvl.val.data)
