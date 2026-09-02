@@ -593,17 +593,6 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                 end
             end,
         )
-    ## emit parfor loop tid
-    ##   load balance shards
-    ##   make tuplemask
-    ##   transfer accumulator buffer to tid channel (distribute buffer to memory channel on tid)
-    ##   declare the third accumulator buffer, literally just copied shard structure.
-    ##   emit serial for sid
-    ##     transfer shard (original lvl) to sid's channel
-    ##     lowered (pre written and contained) finch program that uses tuplemask * read to sum the shard into the accumulator
-    ##.    transfer back?
-    ##   transfer back?
-    ##freeze accumulator
     else
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
