@@ -269,10 +269,10 @@ function coalesce_fast!(tid, meta, P, lvl::ElementLevel, coalescent, was_dense)
     val = lvl.val.data
     lvl_val = coalescent.val
 
-    fastmerge_element(tid, val, P, lvl_val)
+    fastmerge_element!(tid, val, P, lvl_val)
 end
 
-@inbounds function fastmerge_element(tid, val, P, lvl_val)
+@inbounds function fastmerge_element!(tid, val, P, lvl_val)
     nnz_cutoffs = Vector{Int}(undef, P + 1)
     nnz_cutoffs[1] = 1
     for p in 2:P+1
@@ -297,51 +297,6 @@ end
         if nz_offset > length(val[proc])
             proc += 1
             nz_offset = 1
-        end
-    end
-end
-
-Base.@propagate_inbounds function merge_element(gfm, val, max_pos, P, lvl_val)
-    resize!(lvl_val, max_pos)
-    chk = fld(max_pos + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        pos_start = (tid - 1) * chk + 1
-        pos_stop = min(tid * chk, max_pos)
-        if pos_start > max_pos
-            continue
-        end
-        
-        for p in pos_start:pos_stop
-            lvl_val[p] = 0
-        end
-
-        for proc in 1:P
-            lo, hi = 1, length(gfm[proc])
-            lfbr = binary_search_lb(pos_start, gfm[proc], lo, hi)
-
-            ##Can prove the processor doesn't contain the range.
-            if lfbr < 1
-                continue
-            end
-
-            curr = gfm[proc][lfbr]
-
-            while lfbr <= length(val[proc]) && (curr = gfm[proc][lfbr]) <= pos_stop
-                @fastmath lvl_val[curr] += val[proc][lfbr]
-                lfbr += 1
-            end
-        end
-
-    end
-end
-
-##TODO: Rewrite to new API and double check correctness.
-##As it stands this is probably wrong > 1 mode tensors.
-Base.@propagate_inbounds function merge_dense_element(factor, val, P, val2)
-    Threads.@threads for i in 1:factor
-        for proc_id in 1:P
-            @fastmath val2[i] += val[proc_id][i]
         end
     end
 end

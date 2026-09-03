@@ -44,6 +44,12 @@ function gen_accumulator(
     SparseHashLevel{Ti,true}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
 end
 
+function gen_accumulator(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims...)
+    SparseByteMap(
+        gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end]
+    )
+end
+
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
     Tp = postype(lvl)
     coal_lvl = lvl

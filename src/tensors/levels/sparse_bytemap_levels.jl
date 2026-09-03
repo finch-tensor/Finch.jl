@@ -91,6 +91,12 @@ function countstored_level(lvl::SparseByteMapLevel, pos)
     countstored_level(lvl.lvl, pos * lvl.shape)
 end
 
+function countstored_level(lvl::SparseByteMapLevel, pos, idxs, dim, proc, exact)
+    idx = exact ? idxs[length(idxs) - dim] : lvl.shape
+    q = (pos - 1) * lvl.shape + idx
+    countstored_level(lvl.lvl, q, idxs, dim + 1, proc, exact)
+end
+
 function Base.show(
     io::IO, lvl::SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}
 ) where {Ti,Ptr,Tbl,Srt,Lvl}
@@ -658,6 +664,58 @@ function unfurl(
             ),
         ),
     )
+end
+
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, coalescent)
+    lvl_ptr = coalescent.ptr
+    lvl_tbl = coalescent.tbl
+    lvl_srt = coalescent.srt
+
+    nnz = sum(length, lvl.srt.data)
+    if nnz < 1
+        return false
+    end
+
+    resize!(lvl_ptr, max_pos + 1)
+    resize!(lvl_tbl, max_pos * lvl.shape)
+    resize!(lvl_srt, nnz)
+
+    lvl_ptr[1] = 1
+
+    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl)
+end
+
+function coalesce_fast!(tid, meta, P, lvl::SparseByteMapLevel, coalescent, was_dense)
+    ptr = lvl.ptr.data
+    srt = lvl.srt.data
+    tbl = lvl.tbl.data
+    lvl_ptr = coalescent.ptr
+    lvl_tbl = coalescent.tbl
+    lvl_srt = coalescent.srt
+
+    fastmerge_spbytemap!(tid, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl)
+    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
+end
+
+@inbounds function fastmerge_spbytemap!(tid, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl)
+    nnz_cutoffs = Vector{Int}(undef, P + 1)
+    nnz_cutoffs[1] = 1
+
+    for p in 2:P+1
+        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(srt[p - 1])
+    end
+    
+    prefix = nnz_cutoffs[tid]
+
+    total_nnz = nnz_cutoffs[end] - 1
+    max_pos = length(lvl_ptr) - 1
+
+    base, rem = divrem(total_nnz, P)
+    offset = (tid - 1) * base + min(tid - 1, rem)
+    chunksize = base + (tid <= rem ? 1 : 0)
+    q_lb = 1 + offset
+    q_ub = q_lb + chunksize - 1
+
 end
 
 function coalesce_level!(
