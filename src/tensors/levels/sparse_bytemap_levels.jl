@@ -698,24 +698,68 @@ function coalesce_fast!(tid, meta, P, lvl::SparseByteMapLevel, coalescent, was_d
 end
 
 @inbounds function fastmerge_spbytemap!(tid, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl)
+    ##Init table via parallel zeroing
+    tbl_total = length(lvl_tbl)
+    tbl_base, tbl_rem = divrem(tbl_total, P)
+    tbl_offset = (tid - 1) * tbl_base + min(tid - 1, tbl_rem)
+    tbl_chunksize = tbl_base + (tid <= tbl_rem ? 1 : 0)
+    tbl_lb = 1 + tbl_offset
+    tbl_ub = tbl_lb + tbl_chunksize - 1
+    for q in tbl_lb:tbl_ub
+        lvl_tbl[q] = false
+    end
+
+    ##Merge the nonzeroes into srt
     nnz_cutoffs = Vector{Int}(undef, P + 1)
     nnz_cutoffs[1] = 1
 
     for p in 2:P+1
         nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(srt[p - 1])
     end
-    
-    prefix = nnz_cutoffs[tid]
 
     total_nnz = nnz_cutoffs[end] - 1
-    max_pos = length(lvl_ptr) - 1
-
     base, rem = divrem(total_nnz, P)
     offset = (tid - 1) * base + min(tid - 1, rem)
     chunksize = base + (tid <= rem ? 1 : 0)
     q_lb = 1 + offset
     q_ub = q_lb + chunksize - 1
 
+    proc_id_lower = binary_search(q_lb, nnz_cutoffs)
+    nz_id_lower = q_lb - nnz_cutoffs[proc_id_lower] + 1
+
+    proc = proc_id_lower
+    srt_read = nz_id_lower
+    srt_write = nnz_cutoffs[proc] + nz_id_lower - 1
+    srt_ceil = srt_write + chunksize
+    first_nz = srt[proc][srt_read]
+
+    while srt_write < srt_ceil
+        lvl_srt[srt_write] = srt[proc][srt_read]
+        srt_read += 1
+        srt_write += 1
+
+        if srt_read > length(srt[proc])
+            srt_read = 1
+            proc += 1
+        end
+    end
+
+    ##Merge ptr and handle prefix sum
+    max_pos = length(lvl_ptr) - 1
+
+    pos_base, pos_rem = divrem(max_pos - 1, P)
+    pos_offset = (tid - 1) * pos_base + min(tid - 1, pos_rem)
+    pos_chunksize = pos_base + (tid <= pos_rem ? 1 : 0)
+    pos_lb = 2 + pos_offset
+    pos_ub = pos_lb + pos_chunksize - 1
+
+    for pos in pos_lb:pos_ub
+        lvl_ptr[pos] = 0
+    end
+
+    proc = proc_id_lower
+    pos_read = fld(first_nz - 1, shape) + 1
+    pos_write = 2
 end
 
 function coalesce_level!(
