@@ -104,6 +104,9 @@
                 @test size(res) == (10, 5)
                 @test fill_value(res) == 2 && eltype(res) == ComplexF64
 
+                res = similar(fbr)
+                @test all(isequal(fill_value(res)), Array(res))
+
                 if key == "SparsePoint" || key == "SparseInterval"
                     continue  # don't test copyto! for Single*
                 end
