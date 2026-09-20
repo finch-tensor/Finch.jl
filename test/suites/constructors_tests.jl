@@ -337,6 +337,7 @@
         #Test shard ShardLevel
         ncpu = cpu(:t, 4)
         A = Tensor(Dense(Shard(ncpu, Element(0.0))), 4)
+        @test Finch.pattern!(A.lvl) isa Finch.DenseLevel
         B = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
         C = Tensor(Dense(Shard(ncpu, Dense(Element(0.0)))), 4, 4)
 
@@ -431,5 +432,12 @@
         @test tens[1, 2] == 4
         @test tens[2, 1] == 6
         @test tens[2, 2] == 8
+    end
+
+    @testset "SparseRunList merge flag" begin
+        for merge in (true, false)
+            lvl = SparseRunListLevel(Element(0.0), 10; merge=merge)
+            @test Finch.getmerge(similar(Tensor(lvl)).lvl) == merge
+        end
     end
 end

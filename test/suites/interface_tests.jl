@@ -251,6 +251,15 @@ end
         @test check_output("interface/permutedims.txt", String(take!(io)))
     end
 
+    @testset "scalar arithmetic" begin
+        A = Tensor(Dense(Dense(Element(0.0))), [1.0 2.0; 3.0 4.0])
+        a = Array(A)
+        @test Array(10 - A) == 10 .- a
+        @test Array(10 - swizzle(A, 2, 1)) == 10 .- permutedims(a)
+        @test Array(A - 10) == a .- 10
+        @test Array(ones(2, 2) - A) == ones(2, 2) .- a
+    end
+
     @testset "reshape" begin
         io = IOBuffer()
         println(io, "reshape tests")
@@ -260,6 +269,9 @@ end
         @test reshape(LinearIndices((6, 6)), (3, 12)) == reshape(A, (3, 12))
         @test reshape(LinearIndices((6, 6)), 3, 12) == reshape(A, 3, 12)
         @test reshape(LinearIndices((6, 6)), 3, :) == reshape(A, 3, :)
+        @test Finch.reshape!(
+            Tensor(Dense(Dense(Element(0))), 3, 12), A, (3, 12)
+        ) == reshape(LinearIndices((6, 6)), (3, 12))
 
         @repl io reshape(A, (3, 2, 6))
         @test reshape(LinearIndices((6, 6)), (3, 2, 6)) == reshape(A, (3, 2, 6))

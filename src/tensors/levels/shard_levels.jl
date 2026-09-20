@@ -87,7 +87,15 @@ function transfer(device, lvl::ShardLevel)
 end
 
 function pattern!(lvl::ShardLevel)
-    ShardLevel(pattern!(lvl.lvl), lvl.ptr, lvl.task, lvl.used, lvl.alloc)
+    ShardLevel(
+        lvl.device,
+        pattern!(lvl.lvl),
+        lvl.ptr,
+        lvl.task,
+        lvl.used,
+        lvl.alloc,
+        lvl.schedule,
+    )
 end
 
 function set_fill_value!(lvl::ShardLevel, init)
