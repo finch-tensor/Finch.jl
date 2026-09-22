@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FIFO="${FINCH_SERVER_FIFO:-}"
+if [[ -z "$FIFO" ]]; then
+  echo "error: FINCH_SERVER_FIFO environment variable is not set" >&2
+  exit 1
+fi
+
+RESP_DIR=$(mktemp -d)
+RESP="${RESP_DIR}/resp.json"
+trap 'rm -rf "$RESP_DIR"' EXIT
+
+python3 -c '
+import json, sys
+cmd = sys.argv[1]
+resp = sys.argv[2]
+args = sys.argv[3:]
+print(json.dumps({"cmd": cmd, "args": args, "response": resp}))
+' "binsparse_to_binsparse" "$RESP" "$@" > "$FIFO"
+
+while [[ ! -f "$RESP" ]]; do
+  sleep 0.001
+done
+
+EXIT_CODE=$(python3 -c '
+import json, sys
+try:
+    res = json.load(open(sys.argv[1]))
+    print(res.get("exit_code", 1))
+except Exception:
+    print(1)
+' "$RESP")
+
+ERR_MSG=$(python3 -c '
+import json, sys
+try:
+    res = json.load(open(sys.argv[1]))
+    print(res.get("error", ""))
+except Exception as e:
+    print(str(e))
+' "$RESP")
+
+if [[ -n "$ERR_MSG" ]]; then
+  echo "$ERR_MSG" >&2
+fi
+
+exit "$EXIT_CODE"

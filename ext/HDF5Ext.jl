@@ -6,6 +6,8 @@ using Finch.DataStructures
 
 isdefined(Base, :get_extension) ? (using HDF5) : (using ..HDF5)
 
+const HDF5Node = Union{HDF5.File,HDF5.Group}
+
 function Finch.bspread_h5(fname::AbstractString)
     h5open(fname, "r") do io
         Finch.bspread(io)
@@ -19,9 +21,9 @@ function Finch.bspwrite_h5(fname::AbstractString, arr, attrs=OrderedDict())
     fname
 end
 
-Finch.bspread_header(f::HDF5.File) = JSON.parse(read(attributes(f)["binsparse"]))
-Finch.bspwrite_header(f::HDF5.File, str::String) = (attributes(f)["binsparse"] = str)
-Finch.bspread_vector(g::HDF5.File, key) = read(g[key])
-Finch.bspwrite_vector(g::HDF5.File, vec, key) = (g[key] = vec)
+Finch.bspread_header(f::HDF5Node) = JSON.parse(read(attributes(f)["binsparse"]))
+Finch.bspwrite_header(f::HDF5Node, str::String) = (attributes(f)["binsparse"] = str)
+Finch.bspread_vector(g::HDF5Node, key) = read(g[key])
+Finch.bspwrite_vector(g::HDF5Node, vec, key) = (g[key] = vec)
 
 end
