@@ -17,7 +17,6 @@ using DataStructures
 using Statistics
 using JSON
 using Distributions: Binomial, Normal, Poisson
-using SparseArrays
 using TOML
 using UUIDs
 using Preferences

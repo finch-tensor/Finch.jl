@@ -204,6 +204,13 @@ end
         expected = [1.0 3.0 5.0; 2.0 4.0 6.0]
         @test Array(Finch.fmmread(fname)) == expected
         @test Array(fread(fname)) == expected
+
+        # Writing a sparse tensor requires the SparseArrays extension as well.
+        expected = [0.0 3.0 0.0; 2.0 0.0 6.0]
+        tensor = Tensor(Dense(SparseList(Element(0.0))), expected)
+        fwrite(fname, tensor)
+        @test MatrixMarket.mmread(fname) == expected
+        @test Array(fread(fname)) == expected
     end
 end
 

@@ -33,8 +33,9 @@ TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77"
 
 [extensions]
 HDF5Ext = "HDF5"
-MatrixMarketExt = "MatrixMarket"
+MatrixMarketExt = ["MatrixMarket", "SparseArrays"]
 NPZExt = "NPZ"
+SparseArraysExt = "SparseArrays"
 TensorMarketExt = "TensorMarket"
 
 [compat]
