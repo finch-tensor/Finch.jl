@@ -283,6 +283,8 @@ end
 end
 
 @testitem "binsparse_compliance" skip = (!Sys.isunix()) begin
+    harness_tests = normpath(joinpath(@__DIR__, "..", "compliance", "test_harness.py"))
+    @test success(pipeline(`python3 $harness_tests`; stdout=stdout, stderr=stderr))
     script = normpath(joinpath(@__DIR__, "..", "compliance", "run-binsparse-tests.sh"))
-    @test success(`bash $script`)
+    @test success(pipeline(`bash $script`; stdout=stdout, stderr=stderr))
 end
