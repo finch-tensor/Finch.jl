@@ -30,6 +30,7 @@ using Finch
 using HDF5
 using NPZ
 using JSON
+using DataStructures: OrderedDict
 using SparseArrays
 
 # ─── binsparse_to_npy ────────────────────────────────────────────────
@@ -52,8 +53,8 @@ function cmd_binsparse_to_npy(args)
     dense = Array(tns)
     npzwrite(tensor_out, dense)
 
-    # Explicit-storage pattern (Bool → UInt8 for numpy bint8 compat)
-    pat = UInt8.(Array(pattern!(tns)))
+    # Explicit-storage pattern uses NumPy's boolean dtype.
+    pat = Bool.(Array(pattern!(tns)))
     npzwrite(pattern_out, pat)
 
     # Fill value as 0-D array
@@ -89,7 +90,25 @@ function cmd_npy_to_binsparse(args)
     tns = _construct_tensor_by_format(dense, fill_val, fmt)
 
     h5open(tensor_out, "w") do io
-        Finch.bspwrite_tensor(io, tns, DataStructures.OrderedDict(), version)
+        Finch.bspwrite_tensor(io, tns, OrderedDict(), version)
+        custom = get(header, "custom", nothing)
+        data_types = get(header, "data_types", nothing)
+        if data_types !== nothing ||
+            (fmt == "custom" && custom !== nothing && haskey(custom, "transpose"))
+            written = Finch.bspread_header(io)
+            if data_types !== nothing
+                for (key, value) in data_types
+                    if haskey(written["binsparse"]["data_types"], key)
+                        written["binsparse"]["data_types"][key] = value
+                    end
+                end
+            end
+            if fmt == "custom" && custom !== nothing && haskey(custom, "transpose")
+                written["binsparse"]["custom"]["transpose"] = custom["transpose"]
+            end
+            delete!(HDF5.attrs(io), "binsparse")
+            Finch.bspwrite_header(io, JSON.json(written))
+        end
     end
 
     return nothing
@@ -169,12 +188,33 @@ function cmd_binsparse_to_binsparse(args)
         error("binsparse_to_binsparse requires 2 args: tensor_in tensor_out")
     tensor_in, tensor_out = args
 
+    input_header = h5open(tensor_in, "r") do io
+        Finch.bspread_header(io)
+    end
     tns = h5open(tensor_in, "r") do io
         Finch.bspread(io)
     end
+    version = input_header["binsparse"]["version"]
 
     h5open(tensor_out, "w") do io
-        Finch.bspwrite(io, tns)
+        Finch.bspwrite_tensor(io, tns, OrderedDict(), version)
+        custom = get(input_header["binsparse"], "custom", nothing)
+        data_types = get(input_header["binsparse"], "data_types", nothing)
+        if data_types !== nothing || (custom !== nothing && haskey(custom, "transpose"))
+            written = Finch.bspread_header(io)
+            if data_types !== nothing
+                for (key, value) in data_types
+                    if haskey(written["binsparse"]["data_types"], key)
+                        written["binsparse"]["data_types"][key] = value
+                    end
+                end
+            end
+            if custom !== nothing && haskey(custom, "transpose")
+                written["binsparse"]["custom"]["transpose"] = custom["transpose"]
+            end
+            delete!(HDF5.attrs(io), "binsparse")
+            Finch.bspwrite_header(io, JSON.json(written))
+        end
     end
 
     return nothing
