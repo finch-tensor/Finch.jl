@@ -1,3 +1,53 @@
+@testitem "binsparse_versions" begin
+    using HDF5
+    using JSON
+    using NPZ
+    using Finch: NPYPath
+
+    @test isnothing(Finch.bspread_check_version("0.1.2", v"0.1.10"))
+    @test isnothing(Finch.bspread_check_version("0.1.10", v"0.1.10"))
+    @test_throws ArgumentError Finch.bspread_check_version("0.1.10", v"0.1.2")
+    @test_throws ArgumentError Finch.bspread_check_version("0.0.9", v"0.1.10")
+
+    mktempdir() do dir
+        A = Tensor(Dense(Element(0)), [1, 2])
+        function write_version_fixture(io, version)
+            bspwrite(io, A)
+            header = Finch.bspread_header(io)
+            @test header["binsparse"]["version"] == "0.1.0"
+            header["binsparse"]["version"] = version
+            if io isa HDF5.File
+                HDF5.delete_attribute(io, "binsparse")
+            end
+            Finch.bspwrite_header(io, JSON.json(header))
+        end
+
+        for container in ("hdf5", "npy")
+            @testset "$container" begin
+                function write_version(version)
+                    if container == "hdf5"
+                        fname = joinpath(dir, "version.bsp.h5")
+                        h5open(fname, "w") do io
+                            write_version_fixture(io, version)
+                        end
+                    else
+                        fname = joinpath(dir, "version.bspnpy")
+                        write_version_fixture(NPYPath(fname), version)
+                    end
+                    return fname
+                end
+
+                for version in ("0.1", "0.1.0", "0.1.0+build.1")
+                    @test bspread(write_version(version)) == A
+                end
+                for version in ("0.0.9", "0.1.1", "0.1.10", "0.2.0", "1.1.0", "invalid")
+                    @test_throws ArgumentError bspread(write_version(version))
+                end
+            end
+        end
+    end
+end
+
 @testitem "fileio" setup = [CheckOutput] begin
     using MatrixMarket
     using Pkg

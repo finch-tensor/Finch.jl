@@ -1,4 +1,4 @@
-const BINSPARSE_VERSION = "0.1"
+const BINSPARSE_VERSION = v"0.1.0"
 
 """
     bspwrite(::AbstractString, tns)
@@ -25,6 +25,9 @@ bspread(::HDF5.File)
 bspread(::NPYPath)
 
 Read the [Binsparse](https://github.com/GraphBLAS/binsparse-specification) file into a Finch tensor.
+
+The file version must have the same major and minor versions as
+`BINSPARSE_VERSION` and an equal or lower patch version.
 
 Supported file extensions are:
 
@@ -277,20 +280,14 @@ function bspwrite(fname::AbstractString, arr, attrs=OrderedDict())
         error("Unknown file extension for file $fname")
     end
 end
-bspwrite(fname, arr, attrs=OrderedDict(), version=BINSPARSE_VERSION) =
-    bspwrite_tensor(fname, arr, attrs, version)
+bspwrite(fname, arr, attrs=OrderedDict()) = bspwrite_tensor(fname, arr, attrs)
 
-function bspwrite_tensor(
-    io, fbr::Tensor, attrs=OrderedDict(), version=BINSPARSE_VERSION
-)
-    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs, version)
+function bspwrite_tensor(io, fbr::Tensor, attrs=OrderedDict())
+    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs)
 end
 
 function bspwrite_tensor(
-    io,
-    arr::SwizzleArray{dims,<:Tensor},
-    attrs=OrderedDict(),
-    version=BINSPARSE_VERSION,
+    io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict()
 ) where {dims}
     desc = OrderedDict(
         "custom" => OrderedDict{Any,Any}(
@@ -299,7 +296,7 @@ function bspwrite_tensor(
         "fill" => true,
         "shape" => map(Int, size(arr)),
         "data_types" => OrderedDict(),
-        "version" => "$version",
+        "version" => "$BINSPARSE_VERSION",
         "number_of_stored_values" => countstored(arr),
     )
     if !isempty(attrs)
@@ -347,9 +344,23 @@ end
 
 function bspread_header end
 
+function bspread_check_version(version, supported=BINSPARSE_VERSION)
+    version = VersionNumber(version)
+    if version.major != supported.major || version.minor != supported.minor ||
+        version.patch > supported.patch
+        throw(
+            ArgumentError(
+                "unsupported Binsparse version $version; expected " *
+                "$(supported.major).$(supported.minor).x <= $supported",
+            ),
+        )
+    end
+    return nothing
+end
+
 function bspread(f)
     desc = bspread_header(f)["binsparse"]
-    @assert desc["version"] == "$BINSPARSE_VERSION"
+    bspread_check_version(desc["version"])
 
     if get(desc, "format", nothing) == "COO" && length(desc["shape"]) == 2
         return bspread_coo_matrix(f, desc)

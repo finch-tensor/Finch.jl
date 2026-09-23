@@ -30,7 +30,6 @@ using Finch
 using HDF5
 using NPZ
 using JSON
-using DataStructures: OrderedDict
 using SparseArrays
 
 # ─── binsparse_to_npy ────────────────────────────────────────────────
@@ -85,12 +84,11 @@ function cmd_npy_to_binsparse(args)
 
     header = JSON.parsefile(header_in)
     fmt = get(header, "format", nothing)
-    version = get(header, "version", "0.1")
 
     tns = _construct_tensor_by_format(dense, fill_val, fmt)
 
     h5open(tensor_out, "w") do io
-        Finch.bspwrite_tensor(io, tns, OrderedDict(), version)
+        Finch.bspwrite(io, tns)
         custom = get(header, "custom", nothing)
         data_types = get(header, "data_types", nothing)
         if data_types !== nothing ||
@@ -194,10 +192,9 @@ function cmd_binsparse_to_binsparse(args)
     tns = h5open(tensor_in, "r") do io
         Finch.bspread(io)
     end
-    version = input_header["binsparse"]["version"]
 
     h5open(tensor_out, "w") do io
-        Finch.bspwrite_tensor(io, tns, OrderedDict(), version)
+        Finch.bspwrite(io, tns)
         custom = get(input_header["binsparse"], "custom", nothing)
         data_types = get(input_header["binsparse"], "data_types", nothing)
         if data_types !== nothing || (custom !== nothing && haskey(custom, "transpose"))
