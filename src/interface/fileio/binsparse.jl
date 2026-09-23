@@ -349,7 +349,7 @@ function bspread_header end
 
 function bspread(f)
     desc = bspread_header(f)["binsparse"]
-    @assert desc["version"] in ("0.1", "0.1.0") "unsupported Binsparse version $(desc["version"]); expected 0.1 or 0.1.0"
+    @assert desc["version"] == "$BINSPARSE_VERSION"
 
     if get(desc, "format", nothing) == "COO" && length(desc["shape"]) == 2
         return bspread_coo_matrix(f, desc)
@@ -395,7 +395,7 @@ function bspread_apply_structure(fbr, structure::AbstractString)
     structure == "general" && return fbr
 
     ndims(fbr) == 2 || throw(
-        ArgumentError("binsparse structure field currently only supported for matrices")
+        ArgumentError("binsparse structure field currently only supported for matrices"),
     )
 
     I, J, V = ffindnz(fbr)
