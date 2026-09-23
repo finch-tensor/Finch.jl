@@ -55,7 +55,7 @@ end
 function fmmwrite(args...)
     throw(
         FinchExtensionError(
-            "MatrixMarket.jl must be loaded to use write .mtx files",
+            "MatrixMarket.jl must be loaded to use write .mtx files"
         ),
     )
 end
@@ -63,7 +63,7 @@ end
 function fmmread(args...)
     throw(
         FinchExtensionError(
-            "MatrixMarket.jl must be loaded to use read .mtx files",
+            "MatrixMarket.jl must be loaded to use read .mtx files"
         ),
     )
 end
