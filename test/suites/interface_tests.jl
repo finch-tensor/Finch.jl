@@ -251,6 +251,35 @@ end
         @test check_output("interface/permutedims.txt", String(take!(io)))
     end
 
+    @testset "copy and collect" begin
+        m = [1.0 0 0 2.0; 0 0 3.0 0; 0 0 0 0]
+        for lvl in (
+            Dense(Dense(Element(0.0))),
+            Dense(SparseList(Element(0.0))),
+            SparseCOO{2}(Element(0.0)),
+        )
+            A = Tensor(lvl, m)
+
+            B = Tensor(A)
+            @test typeof(B) == typeof(A)
+            @test Array(B) == m
+            @test countstored(B) == countstored(A)
+
+            C = copy(A)
+            @test typeof(C) == typeof(A)
+            @test Array(C) == m
+
+            @test collect(A) isa Array
+            @test collect(A) == m
+        end
+
+        A = Tensor(Dense(Dense(Element(0.0))), m)
+        sw = swizzle(A, 2, 1)
+        @test typeof(copy(sw)) == typeof(sw)
+        @test Array(copy(sw)) == permutedims(m)
+        @test collect(sw) == permutedims(m)
+    end
+
     @testset "reshape" begin
         io = IOBuffer()
         println(io, "reshape tests")

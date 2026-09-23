@@ -187,6 +187,21 @@ function Base.Array(fbr::Union{Tensor,SwizzleArray})
     return copyto!(arr, fbr)
 end
 
+"""
+    copy(tns::AbstractTensor)
+
+Construct a tensor with the same format and contents as `tns`, sharing no
+storage with it.
+"""
+Base.copy(tns::AbstractTensor) = copyto!(similar(tns), tns)
+
+"""
+    collect(tns::AbstractTensor)
+
+Construct an array from a tensor or swizzle, densifying it as `Array` does.
+"""
+Base.collect(tns::AbstractTensor) = Array(tns)
+
 struct AsArray{T,N,Fbr} <: AbstractArray{T,N}
     fbr::Fbr
     function AsArray{T,N,Fbr}(fbr::Fbr) where {T,N,Fbr}

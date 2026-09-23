@@ -68,6 +68,13 @@ function Tensor(arr::AbstractArray{Tv,N}, fill_value::Tv=zero(eltype(arr))) wher
     Base.copyto!(Tensor((DenseLevel^(ndims(arr)))(Element{zero(eltype(arr))}())), arr)
 end
 
+"""
+    Tensor(tns::Tensor)
+
+Copy `tns` into a new `Tensor` with the same format.
+"""
+Tensor(tns::Tensor) = copy(tns)
+
 mutable struct VirtualFiber{Lvl} <: AbstractVirtualFiber{Lvl}
     lvl::Lvl
 end
