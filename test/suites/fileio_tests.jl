@@ -205,12 +205,39 @@ end
         @test Array(Finch.fmmread(fname)) == expected
         @test Array(fread(fname)) == expected
 
-        # Writing a sparse tensor requires the SparseArrays extension as well.
+        for expected in (
+            [0.0 3.0 0.0 0.0; 2.0 0.0 6.0 0.0; 0.0 0.0 0.0 0.0],
+            Int64[0 3 0; 2 0 6],
+            [false true false; true false true],
+            ComplexF64[0+0im 3+2im 0+0im; 2-1im 0+0im 6+0im],
+            ComplexF64[1 2+3im; 2-3im 4],
+            zeros(2, 3),
+            zeros(0, 3),
+        )
+            @testset "roundtrip $(eltype(expected)) $(size(expected))" begin
+                for tensor in (
+                    Tensor(Dense(SparseList(Element(zero(eltype(expected))))), expected),
+                    Tensor(SparseCOO{2}(Element(zero(eltype(expected)))), expected),
+                    Tensor(expected),
+                )
+                    fwrite(fname, tensor)
+                    actual = MatrixMarket.mmread(fname)
+                    @test actual == expected
+                    @test eltype(actual) == eltype(expected)
+                    @test Array(fread(fname)) == expected
+                end
+            end
+        end
+
         expected = [0.0 3.0 0.0; 2.0 0.0 6.0]
-        tensor = Tensor(Dense(SparseList(Element(0.0))), expected)
+        tensor = swizzle(Tensor(SparseCOO{2}(Element(0.0)), permutedims(expected)), 2, 1)
         fwrite(fname, tensor)
-        @test MatrixMarket.mmread(fname) == expected
         @test Array(fread(fname)) == expected
+
+        @test_throws ArgumentError fwrite(fname, Tensor([1.0, 2.0]))
+        @test_throws ArgumentError fwrite(
+            fname, Tensor(Dense(SparseList(Element(1.0))), ones(2, 3))
+        )
     end
 end
 
