@@ -1,62 +1,8 @@
-@testitem "binsparse_versions" begin
-    using HDF5
-    using JSON
-    using NPZ
-    using Finch: NPYPath
-
-    @test isnothing(Finch.bspread_check_version("0.1.2", v"0.1.10"))
-    @test isnothing(Finch.bspread_check_version("0.1.10", v"0.1.10"))
-    @test_throws ArgumentError Finch.bspread_check_version("0.1.10", v"0.1.2")
-    @test_throws ArgumentError Finch.bspread_check_version("0.0.9", v"0.1.10")
-
-    mktempdir() do dir
-        A = Tensor(Dense(Element(0)), [1, 2])
-        function write_version_fixture(io, version)
-            bspwrite(io, A)
-            header = Finch.bspread_header(io)
-            @test header["binsparse"]["version"] == "0.1.0"
-            header["binsparse"]["version"] = version
-            if io isa HDF5.File
-                HDF5.delete_attribute(io, "binsparse")
-            end
-            Finch.bspwrite_header(io, JSON.json(header))
-        end
-
-        for container in ("hdf5", "npy")
-            @testset "$container" begin
-                function write_version(version)
-                    if container == "hdf5"
-                        fname = joinpath(dir, "version.bsp.h5")
-                        h5open(fname, "w") do io
-                            write_version_fixture(io, version)
-                        end
-                    else
-                        fname = joinpath(dir, "version.bspnpy")
-                        write_version_fixture(NPYPath(fname), version)
-                    end
-                    return fname
-                end
-
-                for version in ("0.1", "0.1.0", "0.1.0+build.1")
-                    @test bspread(write_version(version)) == A
-                end
-                for version in ("0.0.9", "0.1.1", "0.1.10", "0.2.0", "1.1.0", "invalid")
-                    @test_throws ArgumentError bspread(write_version(version))
-                end
-            end
-        end
-    end
-end
-
 @testitem "fileio" setup = [CheckOutput] begin
     using MatrixMarket
     using Pkg
     using HDF5
-    using JSON
-    using SparseArrays
     using Finch: Structure
-    const FINCH_REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-    const FINCH_BIN_DIR = joinpath(FINCH_REPO_ROOT, "bin")
     @testset "h5 binsparse" begin
         let f = mktempdir()
             A = [0.0 1.0 2.0 2.0;
@@ -116,50 +62,6 @@ end
                 fname = joinpath(f, "foo.bsp.h5")
                 bspwrite(fname, B)
                 @test Structure(B) == Structure(bspread(fname))
-            end
-
-            @testset "binsparse iso symmetric_lower" begin
-                fname = joinpath(f, "symmetric_iso.bsp.h5")
-                header = JSON.json(
-                    Dict(
-                        "binsparse" => Dict(
-                            "version" => "0.1",
-                            "format" => "COO",
-                            "shape" => [3, 3],
-                            "number_of_stored_values" => 2,
-                            "structure" => "symmetric_lower",
-                            "data_types" => Dict(
-                                "values" => "iso[bint8]",
-                                "indices_0" => "uint8",
-                                "indices_1" => "uint8",
-                            ),
-                        ),
-                    ),
-                )
-                h5open(fname, "w") do io
-                    attributes(io)["binsparse"] = header
-                    io["values"] = Bool[true]
-                    io["indices_0"] = UInt8[1, 2]
-                    io["indices_1"] = UInt8[0, 1]
-                end
-
-                A = fread(fname)
-                A_expected = sparse(Bool[0 1 0; 1 0 1; 0 1 0])
-                @test SparseMatrixCSC(A) == A_expected
-            end
-
-            @testset "binsparse hdf5 group" begin
-                fname = joinpath(f, "grouped.bsp.h5")
-                A = Tensor(sparse([0.0 2.0 0.0; 2.0 0.0 1.0; 0.0 1.0 0.0]))
-                h5open(fname, "w") do io
-                    matrices = create_group(io, "matrices")
-                    Finch.bspwrite(create_group(matrices, "primary"), A)
-                end
-                @test SparseMatrixCSC(
-                    h5open(fname, "r") do io
-                        Finch.bspread(io["matrices"]["primary"])
-                    end,
-                ) == SparseMatrixCSC(A)
             end
         end
     end
@@ -267,64 +169,6 @@ end
         end
     end
 
-    @testset "fileio cli" begin
-        let f = mktempdir()
-            mtx2bsp = joinpath(FINCH_BIN_DIR, "mtx2bsp")
-            bsp2mtx = joinpath(FINCH_BIN_DIR, "bsp2mtx")
-            check_equivalence = joinpath(FINCH_BIN_DIR, "check_equivalence")
-            check_canonical_equivalence = joinpath(
-                FINCH_BIN_DIR, "check_canonical_equivalence"
-            )
-
-            source = joinpath(f, "sym.mtx")
-            open(source, "w") do io
-                write(io, "%%MatrixMarket matrix coordinate pattern symmetric\n")
-                write(io, "3 3 2\n")
-                write(io, "2 1\n")
-                write(io, "3 2\n")
-            end
-
-            grouped_bsp = joinpath(f, "sym.bsp.h5:matrices/primary")
-            regenerated = joinpath(f, "sym_out.mtx")
-
-            run(`$mtx2bsp $source $grouped_bsp`)
-            run(`$bsp2mtx $grouped_bsp $regenerated`)
-            run(`$check_equivalence $source $grouped_bsp`)
-            run(`$check_equivalence $grouped_bsp $regenerated`)
-
-            canonical = joinpath(f, "sym.canonical.h5")
-            A_expected = Bool[0 1 0; 1 0 1; 0 1 0]
-            h5open(canonical, "w") do io
-                io["matrix"] = permutedims(UInt8.(A_expected))
-                io["pattern"] = permutedims(UInt8.(A_expected))
-                attributes(io)["source_field"] = "pattern"
-                attributes(io)["structure"] = "symmetric_lower"
-                attributes(io)["is_iso"] = 1
-            end
-            run(`$check_canonical_equivalence $canonical $grouped_bsp`)
-        end
-    end
-
-    @testset "matrix market symmetric" begin
-        let f = mktempdir()
-            fname = joinpath(f, "sym.mtx")
-            open(fname, "w") do io
-                write(io, "%%MatrixMarket matrix coordinate pattern symmetric\n")
-                write(io, "3 3 2\n")
-                write(io, "2 1\n")
-                write(io, "3 2\n")
-            end
-
-            A = fread(fname)
-            A_expected = sparse(Bool[0 1 0; 1 0 1; 0 1 0])
-            @test SparseMatrixCSC(A) == A_expected
-
-            out = joinpath(f, "sym_out.mtx")
-            fwrite(out, Tensor(A_expected))
-            @test occursin("symmetric", lowercase(first(split(read(out, String), '\n'))))
-        end
-    end
-
     #https://github.com/finch-tensor/Finch.jl/issues/500
     let
         using NPZ
@@ -336,4 +180,9 @@ end
             @test A == B
         end
     end
+end
+
+@testitem "binsparse_compliance" skip = (!Sys.isunix()) begin
+    script = normpath(joinpath(@__DIR__, "..", "compliance", "run-binsparse-tests.sh"))
+    @test success(`bash $script`)
 end

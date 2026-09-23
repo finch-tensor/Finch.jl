@@ -362,8 +362,8 @@ function bspread(f)
     desc = bspread_header(f)["binsparse"]
     bspread_check_version(desc["version"])
 
-    if get(desc, "format", nothing) == "COO" && length(desc["shape"]) == 2
-        return bspread_coo_matrix(f, desc)
+    if get(desc, "structure", "general") != "general"
+        throw(ArgumentError("binsparse structure field currently unsupported"))
     end
 
     fmt = OrderedDict{Any,Any}(
@@ -380,77 +380,7 @@ function bspread(f)
     if !issorted(reverse(fmt["transpose"]))
         fbr = swizzle(fbr, reverse(fmt["transpose"] .+ 1)...)
     end
-    structure = get(desc, "structure", "general")
-    bspread_apply_structure(fbr, structure)
-end
-
-function bspread_coo_matrix(f, desc)
-    row = Int.(bspread_data(f, desc, "indices_0")) .+ 1
-    col = Int.(bspread_data(f, desc, "indices_1")) .+ 1
-    val = convert(Vector, bspread_data(f, desc, "values"))
-    shape = Tuple(Int.(desc["shape"]))
-
-    if haskey(f, "fill_value")
-        Vf = bspread_data(f, desc, "fill_value")[1]
-    else
-        Vf = zero(eltype(val))
-    end
-
-    fbr = Tensor(sparse(row, col, val, shape...))
-    structure = get(desc, "structure", "general")
-    fbr = bspread_apply_structure(fbr, structure)
     return fbr
-end
-
-function bspread_apply_structure(fbr, structure::AbstractString)
-    structure == "general" && return fbr
-
-    ndims(fbr) == 2 || throw(
-        ArgumentError("binsparse structure field currently only supported for matrices"),
-    )
-
-    I, J, V = ffindnz(fbr)
-    fill = fill_value(fbr)
-
-    if startswith(structure, "symmetric")
-        keep = I .!= J
-        return bspread_matrix_from_coords(
-            [I; J[keep]],
-            [J; I[keep]],
-            [V; V[keep]],
-            size(fbr),
-            fill,
-        )
-    elseif startswith(structure, "skew_symmetric")
-        keep = I .!= J
-        return bspread_matrix_from_coords(
-            [I; J[keep]],
-            [J; I[keep]],
-            [V; -V[keep]],
-            size(fbr),
-            fill,
-        )
-    elseif startswith(structure, "hermitian")
-        keep = I .!= J
-        return bspread_matrix_from_coords(
-            [I; J[keep]],
-            [J; I[keep]],
-            [V; conj.(V[keep])],
-            size(fbr),
-            fill,
-        )
-    else
-        throw(ArgumentError("unsupported binsparse structure field: $structure"))
-    end
-end
-
-function bspread_matrix_from_coords(I, J, V, shape, fill)
-    fill == zero(eltype(V)) || throw(
-        ArgumentError(
-            "binsparse structured matrices with nonzero fill_value are not currently supported"
-        ),
-    )
-    return Tensor(sparse(I, J, V, shape...))
 end
 
 bspread_level(f, desc, fmt) = bspread_level(f, desc, fmt, Val(Symbol(fmt["level_desc"])))
