@@ -182,6 +182,72 @@
     end
 end
 
+@testitem "fileio_mtx" begin
+    using MatrixMarket
+
+    mktempdir() do dir
+        fname = joinpath(dir, "matrix.mtx")
+        write(
+            fname,
+            """
+            %%MatrixMarket matrix array real general
+            2 3
+            1.0
+            2.0
+            3.0
+            4.0
+            5.0
+            6.0
+            """,
+        )
+        # MatrixMarket arrays store entries in column-major order.
+        expected = [1.0 3.0 5.0; 2.0 4.0 6.0]
+        @test Array(Finch.fmmread(fname)) == expected
+        @test Array(fread(fname)) == expected
+    end
+end
+
+@testitem "fileio_ttx" begin
+    using TensorMarket
+
+    mktempdir() do dir
+        fname = joinpath(dir, "matrix.ttx")
+        write(
+            fname,
+            """
+            %%MatrixMarket matrix array real general
+            2 3
+            1.0
+            2.0
+            3.0
+            4.0
+            5.0
+            6.0
+            """,
+        )
+        # TensorMarket arrays store entries in row-major order.
+        expected = [1.0 2.0 3.0; 4.0 5.0 6.0]
+        @test Array(fttread(fname)) == expected
+        @test Array(fread(fname)) == expected
+
+        fname = joinpath(dir, "tensor.ttx")
+        write(
+            fname,
+            """
+            %%MatrixMarket tensor coordinate real general
+            2 3 4 2
+            1 2 3 4.5
+            2 1 4 -2.0
+            """,
+        )
+        expected = zeros(2, 3, 4)
+        expected[1, 2, 3] = 4.5
+        expected[2, 1, 4] = -2.0
+        @test Array(fttread(fname)) == expected
+        @test Array(fread(fname)) == expected
+    end
+end
+
 @testitem "binsparse_compliance" skip = (!Sys.isunix()) begin
     script = normpath(joinpath(@__DIR__, "..", "compliance", "run-binsparse-tests.sh"))
     @test success(`bash $script`)
