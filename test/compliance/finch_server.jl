@@ -115,7 +115,9 @@ function finch_level(fmt, A, coords, parents, depth, fill_value)
             block = [(p..., Tuple(i)...) for i in CartesianIndices(shape)]
             append!(children, sort!(vec(block)))
         else
-            append!(children, unique(c[1:(depth + rank)] for c in coords if c[1:depth] == p))
+            append!(
+                children, unique(c[1:(depth + rank)] for c in coords if c[1:depth] == p)
+            )
         end
         push!(ptr, length(children) + 1)
     end

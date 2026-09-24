@@ -25,7 +25,8 @@ cases = [
     ([1 2 3; 4 5 6], trues(2, 3), 0, "custom",
         Dict("transpose" => [0, 1], "level" => dense(element, 2)), "int64"),
     (values_3d, pattern_3d, Int64(7), "custom",
-        Dict("transpose" => [2, 0, 1], "level" => sparse(dense(sparse(element)))), "int64"),
+        Dict("transpose" => [2, 0, 1], "level" => sparse(dense(sparse(element)))), "int64",
+    ),
     (values_3d, pattern_3d, Int64(7), "custom",
         Dict("transpose" => [1, 2, 0], "level" => sparse(element, 3)), "int64"),
 ]
@@ -70,7 +71,8 @@ mktempdir() do dir
             @test get(desc, "custom", nothing) == custom
             @test desc["number_of_stored_values"] == count(pat)
             @test desc["data_types"]["values"] == dtype
-            @test roundtrip[1]["format"] == get(Dict("DMAT" => "DMATR", "COO" => "COOR"), format, format)
+            @test roundtrip[1]["format"] ==
+                get(Dict("DMAT" => "DMATR", "COO" => "COOR"), format, format)
             roundtrip[1]["format"] = format
             @test roundtrip == output
         end
