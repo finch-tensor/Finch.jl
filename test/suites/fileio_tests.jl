@@ -182,6 +182,49 @@
     end
 end
 
+@testitem "fileio_binsparse_iso" begin
+    using HDF5
+    using Finch: JSON
+
+    mktempdir() do dir
+        for (T, type_name) in ((Float32, "float32"), (Float64, "float64")), n in (0, 1, 4)
+            @testset "iso[complex[$type_name]] with $n values" begin
+                value = Complex{T}(2.5, -3.25)
+                fill_value = Complex{T}(-1, 2)
+                fname = joinpath(dir, "iso.bsp.h5")
+                h5open(fname, "w") do io
+                    desc = Dict(
+                        "version" => string(Finch.BINSPARSE_VERSION),
+                        "format" => "DVEC",
+                        "shape" => [n],
+                        "number_of_stored_values" => n,
+                        "data_types" => Dict(
+                            "values" => "iso[complex[$type_name]]",
+                            "fill_value" => "complex[$type_name]",
+                        ),
+                    )
+                    io["values"] = n == 0 ? T[] : T[real(value), imag(value)]
+                    io["fill_value"] = T[real(fill_value), imag(fill_value)]
+                    original = deepcopy(desc)
+                    @test Finch.bspread_data(io, desc, "values") == fill(value, n)
+                    @test Finch.bspread_data(io, desc, "fill_value") == [fill_value]
+                    @test desc == original
+                    Finch.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
+
+                    desc["data_types"]["values"] = "iso[complex[unknown]]"
+                    original = deepcopy(desc)
+                    @test_throws ArgumentError Finch.bspread_data(io, desc, "values")
+                    @test desc == original
+                end
+                tensor = bspread(fname)
+                @test eltype(tensor) == Complex{T}
+                @test Array(tensor) == fill(value, n)
+                @test Finch.fill_value(tensor) == fill_value
+            end
+        end
+    end
+end
+
 @testitem "fileio_mtx" begin
     using MatrixMarket
 

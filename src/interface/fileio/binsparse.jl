@@ -59,14 +59,9 @@ bspread_type_lookup = OrderedDict(
 function bspread_vector end
 function bspwrite_vector end
 
-function bspread_data(f, desc, key)
-    t = desc["data_types"][key]
-    if (m = match(r"^iso\[([^\[]*)\]$", t)) !== nothing
-        inner_type = m.captures[1]
-        original = desc["data_types"][key]
-        desc["data_types"][key] = inner_type
-        data = bspread_data(f, desc, key)
-        desc["data_types"][key] = original
+function bspread_data(f, desc, key, t=desc["data_types"][key])
+    if (m = match(r"^iso\[(.+)\]$", t)) !== nothing
+        data = bspread_data(f, desc, key, m.captures[1])
 
         n = key == "values" ? Int(desc["number_of_stored_values"]) : length(data)
         if n == 0
@@ -74,8 +69,7 @@ function bspread_data(f, desc, key)
         end
         return fill(data[1], n)
     elseif (m = match(r"^complex\[([^\[]*)\]$", t)) !== nothing
-        desc["data_types"][key] = m.captures[1]
-        data = bspread_data(f, desc, key)
+        data = bspread_data(f, desc, key, m.captures[1])
         return reinterpret(Complex{eltype(data)}, data)
     elseif (m = match(r"^[^\]]*$", t)) !== nothing
         haskey(bspread_type_lookup, t) || throw(ArgumentError("unknown binsparse type $t"))
