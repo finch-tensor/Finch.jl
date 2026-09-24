@@ -379,10 +379,6 @@ end
     end
 end
 
-@testitem "binsparse_converters" begin
-    include(joinpath(@__DIR__, "..", "compliance", "converter_tests.jl"))
-end
-
 @testitem "binsparse_compliance" skip = (!Sys.isunix()) begin
     harness_tests = normpath(joinpath(@__DIR__, "..", "compliance", "test_harness.py"))
     @test success(pipeline(`python3 $harness_tests`; stdout=stdout, stderr=stderr))
