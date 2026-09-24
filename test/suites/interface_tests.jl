@@ -1024,6 +1024,23 @@ end
                     B = compute(expanddims(sum(lazy(A)); dims=1))
                     @test size(B) == (1,)
                 end
+
+                #https://github.com/finch-tensor/Finch.jl/issues/768
+                let
+                    io = IOBuffer()
+
+                    @repl io A = Tensor(CSCFormat(), [1.0 0.0; 0.0 1.0])
+                    @repl io b = [1.0, 1.0]
+                    @repl io A \ b
+                    @repl io c = [1.0, 0.0]
+                    @repl io D = Tensor(CSCFormat(), [1.0 1.0; 0.0 0.0])
+                    @repl io c \ D
+                    @repl io E = Tensor(CSCFormat(), [1.0 0.0; 0.0 1.0])
+                    @repl io F = Tensor(CSCFormat(), [1.0 1.0; 1.0 1.0])
+                    @repl io E \ F
+
+                    @test check_output("interface/sparsearrays_matdiv.txt", String(take!(io)))
+                end
             end
         end
     end

@@ -110,27 +110,27 @@ function Base.:+(
     map(+, x, y, z...)
 end
 Base.:*(
-    x::AbstractTensor,
-    y::Number,
-    z::Number...,
+x::AbstractTensor,
+y::Number,
+z::Number...
 ) = map(*, x, y, z...)
 Base.:*(
-    x::Number,
-    y::AbstractTensor,
-    z::Number...,
+x::Number,
+y::AbstractTensor,
+z::Number...
 ) = map(*, y, x, z...)
 
 Base.:*(
-    A::AbstractTensor,
-    B::Union{AbstractTensor,AbstractArray},
+A::AbstractTensor,
+B::Union{AbstractTensor,AbstractArray}
 ) = tensordot(A, B, (2, 1))
 Base.:*(
-    A::Union{AbstractTensor,AbstractArray},
-    B::AbstractTensor,
+A::Union{AbstractTensor,AbstractArray},
+B::AbstractTensor
 ) = tensordot(A, B, (2, 1))
 Base.:*(
-    A::AbstractTensor,
-    B::AbstractTensor,
+A::AbstractTensor,
+B::AbstractTensor
 ) = tensordot(A, B, (2, 1))
 
 Base.:-(x::AbstractTensor) = map(-, x)
@@ -141,6 +141,35 @@ Base.:-(x::AbstractTensor, y::AbstractTensor) = map(-, x, y)
 
 Base.:/(x::AbstractTensor, y::Number) = map(/, x, y)
 Base.:/(x::Number, y::AbstractTensor) = map(\, y, x)
+
+function Base.:\(A::AbstractTensor, b::AbstractTensor)
+    throw(
+        FinchExtensionError(
+            "SparseArrays.jl must be loaded to do matrix division (\\) (hint: `using SparseArays`)"
+        ),
+    )
+end
+function Base.:\(A::AbstractTensor, b::AbstractVector)
+    throw(
+        FinchExtensionError(
+            "SparseArrays.jl must be loaded to do matrix division (\\) (hint: `using SparseArays`)"
+        ),
+    )
+end
+function Base.:\(A::AbstractVector, b::AbstractTensor)
+    throw(
+        FinchExtensionError(
+            "SparseArrays.jl must be loaded to do matrix division (\\) (hint: `using SparseArays`)"
+        ),
+    )
+end
+function Base.:\(A::AbstractVector, b::AbstractVector)
+    throw(
+        FinchExtensionError(
+            "SparseArrays.jl must be loaded to do matrix division (\\) (hint: `using SparseArays`)"
+        ),
+    )
+end
 
 const AbstractTensorOrBroadcast = Union{
     <:AbstractTensor,<:Broadcasted{FinchStyle{N}} where {N}
@@ -510,8 +539,7 @@ end
     return unblock(striplines(res))
 end
 
-Base.reshape(tns::AbstractTensor, dims::Union{Integer,Colon}...) =
-    reshape(tns, (dims...,))
+Base.reshape(tns::AbstractTensor, dims::Union{Integer,Colon}...) = reshape(tns, (dims...,))
 function Base.reshape(
     tns::SwizzleArray{perm}, dims::Tuple{Vararg{Union{Integer,Colon}}}
 ) where {perm}
