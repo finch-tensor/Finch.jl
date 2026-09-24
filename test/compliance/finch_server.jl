@@ -51,8 +51,11 @@ end
 # fill value and layout in the compliance suite.
 dense_array(tns::Tensor) = [tns(Tuple(i)...) for i in CartesianIndices(size(tns))]
 function dense_array(tns::Finch.SwizzleArray{dims}) where {dims}
-    permutedims(dense_array(tns.body), dims)
+    permutedims_(dense_array(tns.body), dims)
 end
+
+# Julia 1.10's permutedims errors on 0-d arrays.
+permutedims_(A, perm) = ndims(A) == 0 ? copy(A) : permutedims(A, perm)
 
 # ─── npy_to_binsparse ────────────────────────────────────────────────
 # Read dense .npy, pattern .npy, fill-value .npy, and a partial JSON
@@ -84,8 +87,8 @@ function finch_tensor(dense, pat, fill_value, header)
     fmt = binsparse_format(header)
     # Stored dimension i is logical dimension transpose[i], outermost first.
     transpose = Vector{Int}(get(fmt, "transpose", 0:(ndims(dense) - 1))) .+ 1
-    stored = permutedims(dense, transpose)
-    coords = sort!(map(Tuple, findall(permutedims(pat, transpose))))
+    stored = permutedims_(dense, transpose)
+    coords = sort!(map(Tuple, findall(permutedims_(pat, transpose))))
     fill_value = convert(eltype(dense), fill_value)
     lvl = finch_level(fmt["level"], stored, coords, [()], 0, fill_value)
     # Finch lists dimensions innermost first.
