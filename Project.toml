@@ -1,6 +1,6 @@
 name = "Finch"
 uuid = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
-version = "1.5.0"
+version = "1.6.0"
 authors = ["Willow Ahrens"]
 
 [deps]
