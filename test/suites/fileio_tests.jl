@@ -325,6 +325,64 @@ end
     end
 end
 
+@testitem "fileio_binsparse_layouts" begin
+    using HDF5
+    using Finch: JSON
+
+    mktempdir() do dir
+        # Stored dimensions are (j, i, k). Finch's internal order (k, i, j)
+        # requires a non-self-inverse permutation to recover logical (i, j, k).
+        expected = zeros(Int64, 2, 3, 4)
+        expected[2, 1, 4] = 5
+        expected[1, 3, 2] = 7
+        custom = Dict(
+            "transpose" => [1, 0, 2],
+            "level" => Dict(
+                "level_desc" => "sparse", "rank" => 3,
+                "level" => Dict("level_desc" => "element"),
+            ),
+        )
+        path = joinpath(dir, "coordinates.h5")
+        h5open(path, "w") do io
+            desc = Dict(
+                "version" => string(Finch.BINSPARSE_VERSION),
+                "format" => "custom", "custom" => custom,
+                "shape" => [2, 3, 4], "number_of_stored_values" => 2,
+                "data_types" => Dict(
+                    key => "int64" for
+                    key in ("indices_0", "indices_1", "indices_2", "values")
+                ),
+            )
+            io["indices_0"] = Int64[0, 2]
+            io["indices_1"] = Int64[1, 0]
+            io["indices_2"] = Int64[3, 1]
+            io["values"] = Int64[5, 7]
+            Finch.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
+        end
+        tensor_read = bspread(path)
+        @test Array(tensor_read) == expected
+        @test Array(pattern!(tensor_read)) == (expected .!= 0)
+        tensor = swizzle(
+            Tensor(SparseCOO{3}(Element(Int64(0))), permutedims(expected, (3, 1, 2))),
+            2,
+            3,
+            1,
+        )
+        bspwrite(path, tensor)
+        h5open(path, "r") do io
+            @test Finch.bspread_header(io)["binsparse"]["custom"] == custom
+            @test read(io["indices_0"]) == [0, 2]
+            @test read(io["indices_1"]) == [1, 0]
+            @test read(io["indices_2"]) == [3, 1]
+            @test read(io["values"]) == [5, 7]
+        end
+    end
+end
+
+@testitem "binsparse_converters" begin
+    include(joinpath(@__DIR__, "..", "compliance", "converter_tests.jl"))
+end
+
 @testitem "binsparse_compliance" skip = (!Sys.isunix()) begin
     harness_tests = normpath(joinpath(@__DIR__, "..", "compliance", "test_harness.py"))
     @test success(pipeline(`python3 $harness_tests`; stdout=stdout, stderr=stderr))

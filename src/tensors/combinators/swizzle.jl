@@ -16,6 +16,7 @@ Base.similar(arr::SwizzleArray{dims}) where {dims} = SwizzleArray{dims}(similar(
 isstructequal(a::T, b::T) where {T<:Finch.SwizzleArray} = isstructequal(a.body, b.body)
 
 countstored(arr::SwizzleArray) = countstored(arr.body)
+pattern!(arr::SwizzleArray{dims}) where {dims} = swizzle(pattern!(arr.body), dims...)
 
 Base.size(arr::SwizzleArray{dims}) where {dims} = map(n -> size(arr.body)[n], dims)
 

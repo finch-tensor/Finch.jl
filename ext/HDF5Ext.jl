@@ -14,9 +14,9 @@ function Finch.bspread_h5(fname::AbstractString)
     end
 end
 
-function Finch.bspwrite_h5(fname::AbstractString, arr, attrs=OrderedDict())
+function Finch.bspwrite_h5(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
     h5open(fname, "w") do io
-        Finch.bspwrite(io, arr, attrs)
+        Finch.bspwrite(io, arr, attrs; kwargs...)
     end
     fname
 end

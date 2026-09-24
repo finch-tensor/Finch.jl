@@ -30,7 +30,6 @@ using Finch
 using HDF5
 using NPZ
 using JSON
-using SparseArrays
 
 # ─── binsparse_to_npy ────────────────────────────────────────────────
 # Read a Binsparse HDF5 file with Finch, then write its dense values,
@@ -41,180 +40,164 @@ function cmd_binsparse_to_npy(args)
         "binsparse_to_npy requires 4 args: tensor_in tensor_out pattern_out fill_value_out"
     )
     tensor_in, tensor_out, pattern_out, fill_value_out = args
-
-    tns = h5open(tensor_in, "r") do io
-        Finch.bspread(io)
-    end
-
-    Vf = Finch.fill_value(tns)
-
-    # Dense values — Finch Array() materialises to a Julia dense array
-    dense = Array(tns)
-    npzwrite(tensor_out, dense)
-
-    # Explicit-storage pattern uses NumPy's boolean dtype.
-    pat = Bool.(Array(pattern!(tns)))
-    npzwrite(pattern_out, pat)
-
-    # Fill value as 0-D array
-    npzwrite(fill_value_out, fill(Vf))
-
+    tns = h5open(Finch.bspread, tensor_in, "r")
+    npzwrite(tensor_out, dense_array(tns))
+    npzwrite(pattern_out, dense_array(pattern!(tns)))
+    npzwrite(fill_value_out, fill(Finch.fill_value(tns)))
     return nothing
+end
+
+# Scalar access avoids compiling a new copy kernel for every generated
+# fill value and layout in the compliance suite.
+dense_array(tns::Tensor) = [tns(Tuple(i)...) for i in CartesianIndices(size(tns))]
+function dense_array(tns::Finch.SwizzleArray{dims}) where {dims}
+    permutedims(dense_array(tns.body), dims)
 end
 
 # ─── npy_to_binsparse ────────────────────────────────────────────────
 # Read dense .npy, pattern .npy, fill-value .npy, and a partial JSON
 # header, then write a Binsparse HDF5 file using Finch.
-#
-# The header JSON may contain "format", "shape", "data_types", etc.
-# We honour the format if Finch recognises it, otherwise fall back to
-# letting bspwrite choose.
 
 function cmd_npy_to_binsparse(args)
     length(args) == 5 || error(
-        "npy_to_binsparse requires 5 args: tensor_in pattern_in fill_value_in header_in tensor_out (got $(length(args)): $args)"
+        "npy_to_binsparse requires 5 args: tensor_in pattern_in fill_value_in header_in tensor_out"
     )
     tensor_in, pattern_in, fill_value_in, header_in, tensor_out = args
-
-    dense = npzread(tensor_in)
-    pat = npzread(pattern_in)
-    fill_arr = npzread(fill_value_in)
-    # fill_value is stored as a 0-D npy array
-    fill_val = ndims(fill_arr) == 0 ? fill_arr[] : fill_arr[1]
-
+    dense = read_array(tensor_in)
+    pat = read_array(pattern_in)
+    fill_value = only(npzread(fill_value_in))
     header = JSON.parsefile(header_in)
-    fmt = get(header, "format", nothing)
-
-    tns = _construct_tensor_by_format(dense, fill_val, fmt)
-
+    tns = finch_tensor(dense, pat, fill_value, header)
     h5open(tensor_out, "w") do io
-        Finch.bspwrite(io, tns)
-        custom = get(header, "custom", nothing)
-        data_types = get(header, "data_types", nothing)
-        if data_types !== nothing ||
-            (fmt == "custom" && custom !== nothing && haskey(custom, "transpose"))
-            written = Finch.bspread_header(io)
-            if data_types !== nothing
-                for (key, value) in data_types
-                    if haskey(written["binsparse"]["data_types"], key)
-                        written["binsparse"]["data_types"][key] = value
-                    end
-                end
-            end
-            if fmt == "custom" && custom !== nothing && haskey(custom, "transpose")
-                written["binsparse"]["custom"]["transpose"] = custom["transpose"]
-            end
-            delete!(HDF5.attrs(io), "binsparse")
-            Finch.bspwrite_header(io, JSON.json(written))
-        end
+        Finch.bspwrite(io, tns; alias=header["format"] != "custom")
+        match_header!(io, header)
     end
-
     return nothing
 end
 
-function _construct_tensor_by_format(dense, fill_val, fmt)
-    T = eltype(dense)
-    N = ndims(dense)
+# NPZ.jl reads 0-d arrays as scalars.
+read_array(path) = (x = npzread(path); x isa AbstractArray ? x : fill(x))
 
-    if N == 0
-        return Tensor(Element{fill_val,T,Int}([dense[]]))
-    end
+# Build the Finch tensor with the header's layout, storing exactly the entries
+# marked in `pat` (including those equal to the fill value).
+function finch_tensor(dense, pat, fill_value, header)
+    fmt = binsparse_format(header)
+    # Stored dimension i is logical dimension transpose[i], outermost first.
+    transpose = Vector{Int}(get(fmt, "transpose", 0:(ndims(dense) - 1))) .+ 1
+    stored = permutedims(dense, transpose)
+    coords = sort!(map(Tuple, findall(permutedims(pat, transpose))))
+    fill_value = convert(eltype(dense), fill_value)
+    lvl = finch_level(fmt["level"], stored, coords, [()], 0, fill_value)
+    # Finch lists dimensions innermost first.
+    return swizzle(Tensor(lvl), invperm(reverse(transpose))...)
+end
 
-    if fmt == "CSR" && N == 2
-        tns = Tensor(Dense(SparseList(Element(fill_val))))
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "CSC" && N == 2
-        tns = swizzle(Tensor(Dense(SparseList(Element(fill_val)))), 2, 1)
-        copyto!(tns, dense)
-        return tns
-    elseif (fmt == "COO" || fmt == "COOR") && N == 2
-        tns = Tensor(SparseCOO{2}(Element(fill_val)))
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "COOC" && N == 2
-        tns = swizzle(Tensor(SparseCOO{2}(Element(fill_val))), 2, 1)
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "CVEC" && N == 1
-        tns = Tensor(SparseList(Element(fill_val)))
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "DVEC" && N == 1
-        tns = Tensor(Dense(Element(fill_val)))
-        copyto!(tns, dense)
-        return tns
-    elseif (fmt == "DMAT" || fmt == "DMATR") && N == 2
-        tns = Tensor(Dense(Dense(Element(fill_val))))
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "DMATC" && N == 2
-        tns = swizzle(Tensor(Dense(Dense(Element(fill_val)))), 2, 1)
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "DCSR" && N == 2
-        tns = Tensor(SparseList(SparseList(Element(fill_val))))
-        copyto!(tns, dense)
-        return tns
-    elseif fmt == "DCSC" && N == 2
-        tns = swizzle(Tensor(SparseList(SparseList(Element(fill_val)))), 2, 1)
-        copyto!(tns, dense)
-        return tns
+function binsparse_format(header)
+    if header["format"] == "custom"
+        header["custom"]
     else
-        tns = Tensor(_build_dense_levels(T, fill_val, size(dense)...))
-        copyto!(tns, dense)
-        return tns
+        Finch.bspread_tensor_lookup[header["format"]]
     end
 end
 
-# Build nested Dense(Dense(...Element)) levels for an N-D tensor.
-function _build_dense_levels(T, fill_val, dims...)
-    if isempty(dims)
-        return Element{fill_val,T,Int}(T[])
+# Build the level for stored dimensions `depth + 1` onwards. `parents` lists the
+# coordinate prefixes stored by the enclosing levels, in storage order.
+function finch_level(fmt, A, coords, parents, depth, fill_value)
+    if fmt["level_desc"] == "element"
+        return Element(fill_value, eltype(A)[A[p...] for p in parents])
     end
-    inner = _build_dense_levels(T, fill_val, dims[2:end]...)
-    return DenseLevel(inner, dims[1])
+    rank = fmt["rank"]
+    shape = size(A)[(depth + 1):(depth + rank)]
+    children = Tuple[]
+    ptr = [1]
+    for p in parents
+        if fmt["level_desc"] == "dense"
+            block = [(p..., Tuple(i)...) for i in CartesianIndices(shape)]
+            append!(children, sort!(vec(block)))
+        else
+            append!(children, unique(c[1:(depth + rank)] for c in coords if c[1:depth] == p))
+        end
+        push!(ptr, length(children) + 1)
+    end
+    lvl = finch_level(fmt["level"], A, coords, children, depth + rank, fill_value)
+    # Finch levels list dimensions innermost first.
+    if fmt["level_desc"] == "dense"
+        for n in reverse(shape)
+            lvl = Dense(lvl, n)
+        end
+        return lvl
+    elseif rank == 1
+        return SparseList{Int}(lvl, only(shape), ptr, Int[c[end] for c in children])
+    else
+        tbl = ntuple(r -> Int[c[depth + rank + 1 - r] for c in children], rank)
+        return SparseCOO{rank}(lvl, reverse(shape), ptr, tbl)
+    end
 end
 
 # ─── binsparse_to_binsparse ──────────────────────────────────────────
-# Read a Binsparse file with Finch, then write it back out.
-# The roundtrip forces Finch to fully materialise the tensor through
-# its own internal representation.
+# Read the file into Finch, then write it back out with the input's header.
+# Like the reference, write DMAT and COO under their canonical names.
 
 function cmd_binsparse_to_binsparse(args)
     length(args) == 2 ||
         error("binsparse_to_binsparse requires 2 args: tensor_in tensor_out")
     tensor_in, tensor_out = args
-
-    input_header = h5open(tensor_in, "r") do io
-        Finch.bspread_header(io)
+    header, tns = h5open(tensor_in, "r") do io
+        Finch.bspread_header(io)["binsparse"], Finch.bspread(io)
     end
-    tns = h5open(tensor_in, "r") do io
-        Finch.bspread(io)
-    end
-
     h5open(tensor_out, "w") do io
-        Finch.bspwrite(io, tns)
-        custom = get(input_header["binsparse"], "custom", nothing)
-        data_types = get(input_header["binsparse"], "data_types", nothing)
-        if data_types !== nothing || (custom !== nothing && haskey(custom, "transpose"))
-            written = Finch.bspread_header(io)
-            if data_types !== nothing
-                for (key, value) in data_types
-                    if haskey(written["binsparse"]["data_types"], key)
-                        written["binsparse"]["data_types"][key] = value
-                    end
-                end
-            end
-            if custom !== nothing && haskey(custom, "transpose")
-                written["binsparse"]["custom"]["transpose"] = custom["transpose"]
-            end
-            delete!(HDF5.attrs(io), "binsparse")
-            Finch.bspwrite_header(io, JSON.json(written))
+        Finch.bspwrite(io, tns; alias=header["format"] != "custom")
+        match_header!(io, header; rename_aliases=false)
+    end
+    return nothing
+end
+
+# ─── header matching ─────────────────────────────────────────────────
+# The harness expects the requested header verbatim, but some spellings have no
+# Finch equivalent: DMAT and COO are written as DMATR and COOR, dense levels of
+# rank r are written as r levels of rank 1, identity transposes are omitted,
+# and ISO values are expanded. Adopt the requested spelling wherever it
+# describes what Finch wrote. Anything else is left for the harness to report.
+
+function match_header!(io, requested; rename_aliases=true)
+    desc = Finch.bspread_header(io)
+    actual = desc["binsparse"]
+    custom = requested["format"] == "custom"
+    if (actual["format"] == "custom") == custom && (custom || rename_aliases) &&
+        layout(actual) == layout(requested)
+        actual["format"] = requested["format"]
+        delete!(actual, "custom")
+        haskey(requested, "custom") && (actual["custom"] = requested["custom"])
+    end
+    for (key, dtype) in requested["data_types"]
+        if dtype == "iso[$(get(actual["data_types"], key, nothing))]"
+            data = read(io[key])
+            width = startswith(dtype, "iso[complex[") ? 2 : 1
+            value = data[1:min(width, end)]
+            data == repeat(value, length(data) ÷ width) ||
+                error("$key must have identical stored values to be written as $dtype")
+            delete_object(io, key)
+            io[key] = value
+            actual["data_types"][key] = dtype
         end
     end
+    delete_attribute(io, "binsparse")
+    Finch.bspwrite_header(io, JSON.json(desc, 4))
+end
 
-    return nothing
+# The transpose and a list of (level_desc, rank) pairs, with dense ranks split.
+function layout(header)
+    fmt = binsparse_format(header)
+    transpose = Vector{Int}(get(fmt, "transpose", 0:(length(header["shape"]) - 1)))
+    return (transpose, levels(fmt["level"]))
+end
+
+function levels(fmt)
+    kind = fmt["level_desc"]
+    kind == "element" && return [(kind, 0)]
+    rank = fmt["rank"]
+    here = kind == "dense" ? fill((kind, 1), rank) : [(kind, rank)]
+    return [here; levels(fmt["level"])]
 end
 
 # ─── server loop ──────────────────────────────────────────────────────
@@ -303,4 +286,6 @@ function server_main()
     end
 end
 
-server_main()
+if abspath(PROGRAM_FILE) == @__FILE__
+    server_main()
+end

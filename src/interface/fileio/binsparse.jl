@@ -13,6 +13,11 @@ Supported file extensions are:
 - `.bsp.h5`: HDF5 file format ([HDF5](https://github.com/JuliaIO/HDF5.jl) must be loaded)
 - `.bspnpy`: NumPy and JSON directory format ([NPZ](https://github.com/fhs/NPZ.jl) must be loaded)
 
+The `alias` keyword controls whether a predefined format name (e.g. `"CSR"`) is
+used for the output. When `alias=false`, the output always uses a `"custom"`
+format. Otherwise (`alias=true` or `alias=nothing`), a predefined format name
+is used whenever one describes the tensor's layout.
+
 !!! warning
     The Binsparse spec is under development. Additionally, this function may not
     be fully conformant. Please file bug reports if you see anything amiss.
@@ -250,14 +255,14 @@ struct NPYPath
     dirname::String
 end
 
-function bspwrite_h5(args...)
+function bspwrite_h5(args...; kwargs...)
     throw(
         FinchExtensionError(
             "HDF5.jl must be loaded to write .bsp.h5 files (hint: `using HDF5`)"
         ),
     )
 end
-function bspwrite_bspnpy(args...)
+function bspwrite_bspnpy(args...; kwargs...)
     throw(
         FinchExtensionError(
             "NPZ.jl must be loaded to write .bspnpy files (hint: `using NPZ`)"
@@ -265,23 +270,25 @@ function bspwrite_bspnpy(args...)
     )
 end
 
-function bspwrite(fname::AbstractString, arr, attrs=OrderedDict())
+function bspwrite(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
     if endswith(fname, ".h5") || endswith(fname, ".hdf5")
-        bspwrite_h5(fname, arr, attrs)
+        bspwrite_h5(fname, arr, attrs; kwargs...)
     elseif endswith(fname, ".bspnpy")
-        bspwrite_bspnpy(fname, arr, attrs)
+        bspwrite_bspnpy(fname, arr, attrs; kwargs...)
     else
         error("Unknown file extension for file $fname")
     end
 end
-bspwrite(fname, arr, attrs=OrderedDict()) = bspwrite_tensor(fname, arr, attrs)
+function bspwrite(fname, arr, attrs=OrderedDict(); kwargs...)
+    bspwrite_tensor(fname, arr, attrs; kwargs...)
+end
 
-function bspwrite_tensor(io, fbr::Tensor, attrs=OrderedDict())
-    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs)
+function bspwrite_tensor(io, fbr::Tensor, attrs=OrderedDict(); kwargs...)
+    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs; kwargs...)
 end
 
 function bspwrite_tensor(
-    io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict()
+    io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict(); alias=nothing
 ) where {dims}
     desc = OrderedDict(
         "custom" => OrderedDict{Any,Any}(
@@ -296,11 +303,13 @@ function bspwrite_tensor(
     if !isempty(attrs)
         desc["attrs"] = attrs
     end
-    if !issorted(reverse(collect(dims)))
-        desc["custom"]["transpose"] = reverse(collect(dims)) .- 1
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    transpose = reverse(invperm(Int[dims...])) .- 1
+    if !issorted(transpose)
+        desc["custom"]["transpose"] = transpose
     end
     bspwrite_level(io, desc, desc["custom"]["level"], arr.body.lvl)
-    if haskey(bspwrite_format_lookup, desc["custom"])
+    if alias !== false && haskey(bspwrite_format_lookup, desc["custom"])
         desc["format"] = bspwrite_format_lookup[desc["custom"]]
         delete!(desc, "custom")
     else
@@ -366,13 +375,12 @@ function bspread(f)
     if !haskey(fmt, "transpose")
         fmt["transpose"] = collect(0:(length(desc["shape"]) - 1))
     end
-    if !issorted(reverse(fmt["transpose"]))
-        sigma = sortperm(reverse(fmt["transpose"] .+ 1))
-        desc["shape"] = desc["shape"][sigma]
-    end
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    dims = reverse(Vector{Int}(fmt["transpose"]) .+ 1)
+    desc["shape"] = desc["shape"][dims]
     fbr = Tensor(bspread_level(f, desc, fmt["level"]))
-    if !issorted(reverse(fmt["transpose"]))
-        fbr = swizzle(fbr, reverse(fmt["transpose"] .+ 1)...)
+    if !issorted(dims)
+        fbr = swizzle(fbr, invperm(dims)...)
     end
     return fbr
 end
@@ -432,7 +440,7 @@ function bspwrite_level(f, desc, fmt, lvl::SparseCOOLevel{R}) where {R}
         bspwrite_data(f, desc, "pointers_to_$(N - n)", indices_one_to_zero(lvl.ptr))
     end
     for r in 1:R
-        bspwrite_data(f, desc, "indices_$(N - n + r - 1)", indices_one_to_zero(lvl.tbl[r]))
+        bspwrite_data(f, desc, "indices_$(N - n + R - r)", indices_one_to_zero(lvl.tbl[r]))
     end
     fmt["level"] = OrderedDict()
     bspwrite_level(f, desc, fmt["level"], lvl.lvl)
@@ -443,7 +451,7 @@ function bspread_level(f, desc, fmt, ::Val{:sparse})
     n = level_ndims(typeof(lvl)) + R
     N = length(desc["shape"])
     tbl = (map(1:R) do r
-        indices_zero_to_one(bspread_data(f, desc, "indices_$(N - n + r - 1)"))
+        indices_zero_to_one(bspread_data(f, desc, "indices_$(N - n + R - r)"))
     end...,)
     if N - n > 0
         ptr = bspread_data(f, desc, "pointers_to_$(N - n)")
