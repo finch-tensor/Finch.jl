@@ -1,6 +1,6 @@
 name = "Finch"
 uuid = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
-version = "1.5.0"
+version = "1.6.0"
 authors = ["Willow Ahrens"]
 
 [deps]
@@ -26,12 +26,14 @@ UnsafeAtomics = "013be700-e6cd-48c3-b4a1-df204f14c38f"
 
 [weakdeps]
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+MatrixMarket = "4d4711f2-db25-561a-b6b3-d35e7d4047d3"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77"
 
 [extensions]
 HDF5Ext = "HDF5"
+MatrixMarketExt = ["MatrixMarket", "SparseArrays"]
 NPZExt = "NPZ"
 SparseArraysExt = "SparseArrays"
 TensorMarketExt = "TensorMarket"
@@ -46,6 +48,7 @@ Distributions = "0.25"
 HDF5 = "0.17"
 IterTools = "1.10.0"
 JSON = "1.2"
+MatrixMarket = "0.5.2"
 NPZ = "0.4"
 PrecompileTools = "1"
 Preferences = "v1.4.3"

@@ -52,6 +52,10 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        if: runner.os == 'Linux'
+        with:
+          run-install: false
       - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts

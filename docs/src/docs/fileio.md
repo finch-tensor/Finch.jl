@@ -23,6 +23,10 @@ libraries and languages. The Binsparse format represents the tensor format as a
 JSON string in the underlying data container, which can be either HDF5 or a
 combination of NPY or JSON files.  Binsparse arrays are stored 0-indexed.
 
+The repository also ships small CLI wrappers under `bin/` for interoperability
+testing, including the canonical dense-HDF5 checker used by
+`binsparse-tests`.
+
 ```@docs
 bspwrite
 bspread
