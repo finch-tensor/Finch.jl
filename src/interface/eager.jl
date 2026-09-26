@@ -136,7 +136,7 @@ Base.:*(
 Base.:-(x::AbstractTensor) = map(-, x)
 
 Base.:-(x::AbstractTensor, y::Union{Base.AbstractArrayOrBroadcasted,Number}) = map(-, x, y)
-Base.:-(x::Union{Base.AbstractArrayOrBroadcasted,Number}, y::Tensor) = map(-, x, y)
+Base.:-(x::Union{Base.AbstractArrayOrBroadcasted,Number}, y::AbstractTensor) = x .- y
 Base.:-(x::AbstractTensor, y::AbstractTensor) = map(-, x, y)
 
 Base.:/(x::AbstractTensor, y::Number) = map(/, x, y)
@@ -560,6 +560,6 @@ function reshape!(dst, src::SwizzleArray{perm}, dims::Union{Integer,Colon}) wher
     end
 end
 function reshape!(dst, src::AbstractTensor, dims::Tuple{Vararg{Union{Integer,Colon}}})
-    (combine_mask, split_mask) = reshape_plan(tns, dims)
+    (combine_mask, split_mask) = reshape_plan(src, dims)
     reshape_kernel(dst, src, dims, Val(combine_mask), Val(split_mask))
 end
