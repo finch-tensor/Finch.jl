@@ -955,6 +955,28 @@ end
                     end
                 end
 
+                # https://github.com/finch-tensor/Finch.jl/issues/809
+                let
+                    for A_ref in (
+                        ComplexF64[1 + 2im, 3 - 1im],
+                        ComplexF64[3+4im 1-1im; 0 -2im],
+                        ComplexF32[1 + 1im, -1 - 1im],
+                        ComplexF64[0, 0],
+                    )
+                        A = Tensor(A_ref)
+                        for p in [-Inf, 0, 1, 2, 3, Inf]
+                            @test norm(A, p) ≈ norm(A_ref, p)
+                            @test isreal(norm(A, p))
+                        end
+                    end
+                    for A_ref in (Float64[3, -4, 0], Int[1 2; 3 4])
+                        A = Tensor(A_ref)
+                        for p in [-Inf, 0, 1, 2, 3, Inf]
+                            @test norm(A, p) ≈ norm(A_ref, p)
+                        end
+                    end
+                end
+
                 # https://github.com/finch-tensor/Finch.jl/pull/709
                 let
                     A_ref = [1 2 0 4 0; 0 -2 1 0 1]
