@@ -63,7 +63,9 @@ end
 
 Base.summary(lvl::SparseRunListLevel) = "SparseRunList($(summary(lvl.lvl)))"
 function similar_level(lvl::SparseRunListLevel, fill_value, eltype::Type, dim, tail...)
-    SparseRunList(similar_level(lvl.lvl, fill_value, eltype, tail...), dim)
+    SparseRunList(
+        similar_level(lvl.lvl, fill_value, eltype, tail...), dim; merge=getmerge(lvl)
+    )
 end
 
 function postype(
