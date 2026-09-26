@@ -409,268 +409,343 @@
 
     @testset "NaiveStats" begin end
 
-    @testset verbose = true "DCStats" begin
-        @testset "Single Tensor Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            dims = Dict(i => 1000, j => 1000)
-            def = TensorDef(StableSet([i, j]), dims, 0.0, nothing, nothing, nothing)
-            i, j = 1, 2
-            dcs = StableSet([DC(StableSet([i]), StableSet([j]), 5),
-                DC(StableSet([j]), StableSet([i]), 25),
-                DC(StableSet{Int}(), StableSet([i, j]), 50),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2)
-            int_2_idx = Dict(1 => :i, 2 => :j)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            @test estimate_nnz(stat) == 50
+    @testset "BlockedStats end-to-end tests" begin
+        using Finch
+        using Finch.Galley
+        using Finch.Galley: BlockedStats, get_num_blocks, reduce_blocked_stats,
+            transpose_blocked_stats, merge_blocked_stats_union
+        using Finch.Galley: estimate_nnz, AnnotatedQuery, reduce_idx!
+        using Finch: StableSet
+
+        A = Tensor(Dense(Sparse(Element(0.0))), fsprand(10, 10, 0.4))
+        block_sizes = OrderedDict(:i => 5, :j => 5)
+        cardinality = 2
+        stats = BlockedStats(A.def, block_sizes, cardinality)
+
+        @testset "Construction and block counting" begin
+            @test stats isa BlockedStats
+            @test stats.block_cardinality == 2
+            @test stats.block_sizes == block_sizes
+            @test get_num_blocks(stats.def, stats.block_sizes) == 4
         end
 
-        @testset "1 Join DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet{Int}(), StableSet([i, j]), 50),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            @test estimate_nnz(stat) == 50 * 5
+        @testset "Reduction over :j" begin
+            reduced = reduce_blocked_stats(+, 0.0, StableSet(:j), stats)
+            @test keys(reduced.block_sizes) == (:i,)
+            @test get_num_blocks(reduced.def, reduced.block_sizes) == 2
+            @test reduced.block_cardinality ≤ stats.block_cardinality
         end
 
-        @testset "2 Join DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            l = IndexExpr("l")
-            dims = Dict(i => 1000, j => 1000, k => 1000, l => 1000)
-            def = TensorDef(StableSet([i, j, k, l]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k, l = 1, 2, 3, 4
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([l]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3, :l => 4)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k, 4 => :l)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            @test estimate_nnz(stat) == 50 * 5 * 5
+        @testset "Transpose" begin
+            transposed = transpose_blocked_stats([:j, :i], stats)
+            @test keys(transposed.block_sizes) == (:j, :i)
+            @test transposed.block_sizes[:j] == 5
+            @test transposed.block_cardinality == stats.block_cardinality
         end
 
-        @testset "Triangle DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 50),
-                DC(StableSet([i]), StableSet([j]), 5),
-                DC(StableSet([j]), StableSet([i]), 5),
-                DC(StableSet{Int}(), StableSet([j, k]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([j]), 5),
-                DC(StableSet{Int}(), StableSet([i, k]), 50),
-                DC(StableSet([i]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([i]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            @test estimate_nnz(stat) == 50 * 5
+        @testset "Merge (union of two stats)" begin
+            B = Tensor(Dense(Sparse(Element(0.0))), fsprand(10, 10, 0.4))
+            stats2 = BlockedStats(B.def, block_sizes, 1)
+            merged = merge_blocked_stats_union(+, stats.def, block_sizes, stats, stats2)
+            @test merged isa BlockedStats
+            @test merged.block_cardinality ≥
+                max(stats.block_cardinality, stats2.block_cardinality)
+            @test merged.block_cardinality ≤ get_num_blocks(stats.def, block_sizes)
         end
 
-        @testset "Triangle-Small DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            # In this version, |R(i,j)| = 1
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 1),
-                DC(StableSet([i]), StableSet([j]), 1),
-                DC(StableSet([j]), StableSet([i]), 1),
-                DC(StableSet{Int}(), StableSet([j, k]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([j]), 5),
-                DC(StableSet{Int}(), StableSet([i, k]), 50),
-                DC(StableSet([i]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([i]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            @test estimate_nnz(stat) == 1 * 5
+        @testset "Estimate from expression" begin
+            B = Tensor(Dense(Sparse(Element(0.0))), fsprand(10, 10, 0.4))
+            expr = MapJoin(*, Input(A, :i, :j, "a1"), Input(B, :j, :k, "a2"))
+            est = estimate_nnz(expr, BlockedStats)
+            @test est isa BlockedStats
+            @test haskey(est.block_sizes, :i)
+            @test haskey(est.block_sizes, :k)
         end
 
-        @testset "Full Reduce DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 50),
-                DC(StableSet([i]), StableSet([j]), 5),
-                DC(StableSet([j]), StableSet([i]), 5),
-                DC(StableSet{Int}(), StableSet([j, k]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([j]), 5),
-                DC(StableSet{Int}(), StableSet([i, k]), 50),
-                DC(StableSet([i]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([i]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i, :j, :k]), stat)
-            @test estimate_nnz(reduce_stats) == 1
-        end
-
-        @testset "1-Attr Reduce DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 1),
-                DC(StableSet([i]), StableSet([j]), 1),
-                DC(StableSet([j]), StableSet([i]), 1),
-                DC(StableSet{Int}(), StableSet([j, k]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([j]), 5),
-                DC(StableSet{Int}(), StableSet([i, k]), 50),
-                DC(StableSet([i]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([i]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            condense_stats!(stat)
-            reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i, :j]), stat)
-            @test estimate_nnz(reduce_stats) == 5
-        end
-
-        @testset "2-Attr Reduce DC Card" begin
-            i = IndexExpr("i")
-            j = IndexExpr("j")
-            k = IndexExpr("k")
-            dims = Dict(i => 1000, j => 1000, k => 1000)
-            def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
-            i, j, k = 1, 2, 3
-            dcs = StableSet([
-                DC(StableSet{Int}(), StableSet([i, j]), 1),
-                DC(StableSet([i]), StableSet([j]), 1),
-                DC(StableSet([j]), StableSet([i]), 1),
-                DC(StableSet{Int}(), StableSet([j, k]), 50),
-                DC(StableSet([j]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([j]), 5),
-                DC(StableSet{Int}(), StableSet([i, k]), 50),
-                DC(StableSet([i]), StableSet([k]), 5),
-                DC(StableSet([k]), StableSet([i]), 5),
-            ])
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            stat = DCStats(def, idx_2_int, int_2_idx, dcs)
-            reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i]), stat)
-            @test estimate_nnz(reduce_stats) == 5
-        end
-
-        @testset "1D Disjunction DC Card" begin
-            dims = Dict(:i => 1000)
-            def = TensorDef(StableSet([:i]), dims, 0.0, nothing, nothing, nothing)
-            i = 1
-            idx_2_int = Dict(:i => 1)
-            int_2_idx = Dict(1 => :i)
-            dcs1 = StableSet([DC(StableSet{Int}(), StableSet([i]), 1)])
-            stat1 = DCStats(def, idx_2_int, int_2_idx, dcs1)
-            dcs2 = StableSet([DC(StableSet{Int}(), StableSet([i]), 1)])
-            stat2 = DCStats(def, idx_2_int, int_2_idx, dcs2)
-            reduce_stats = merge_tensor_stats(+, stat1, stat2)
-            @test estimate_nnz(reduce_stats) == 2
-        end
-
-        @testset "2D Disjunction DC Card" begin
-            dims = Dict(:i => 1000, :j => 100)
-            def = TensorDef(StableSet([:i, :j]), dims, 0.0, nothing, nothing, nothing)
-            idx_2_int = Dict(:i => 1, :j => 2)
-            int_2_idx = Dict(1 => :i, 2 => :j)
-            dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 1)])
-            stat1 = DCStats(def, idx_2_int, int_2_idx, dcs1)
-            dcs2 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 1)])
-            stat2 = DCStats(def, idx_2_int, int_2_idx, dcs2)
-            merge_stats = merge_tensor_stats(+, stat1, stat2)
-            @test estimate_nnz(merge_stats) == 2
-        end
-
-        @testset "2D Disjoint Disjunction DC Card" begin
-            dims1 = Dict(:i => 1000)
-            def1 = TensorDef(StableSet([:i]), dims1, 0.0, nothing, nothing, nothing)
-            idx_2_int = Dict(:i => 1)
-            int_2_idx = Dict(1 => :i)
-            dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1]), 5)])
-            stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
-            idx_2_int = Dict(:j => 2)
-            int_2_idx = Dict(2 => :j)
-            dims2 = Dict(:j => 100)
-            def2 = TensorDef(StableSet([:j]), dims2, 0.0, nothing, nothing, nothing)
-            dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2]), 10)])
-            stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
-            merge_stats = merge_tensor_stats(+, stat1, stat2)
-            @test estimate_nnz(merge_stats) == (10 * 1000 + 5 * 100)
-        end
-
-        @testset "3D Disjoint Disjunction DC Card" begin
-            dims1 = Dict(:i => 1000, :j => 100)
-            def1 = TensorDef(StableSet([:i, :j]), dims1, 0.0, nothing, nothing, nothing)
-            idx_2_int = Dict(:i => 1, :j => 2)
-            int_2_idx = Dict(1 => :i, 2 => :j)
-            dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 5)])
-            stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
-            dims2 = Dict(:j => 100, :k => 1000)
-            idx_2_int = Dict(:j => 2, :k => 3)
-            int_2_idx = Dict(2 => :j, 3 => :k)
-            def2 = TensorDef(StableSet([:j, :k]), dims2, 0.0, nothing, nothing, nothing)
-            dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2, 3]), 10)])
-            stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
-            merge_stats = merge_tensor_stats(+, stat1, stat2)
-            @test estimate_nnz(merge_stats) == (10 * 1000 + 5 * 1000)
-        end
-
-        @testset "Mixture Disjunction Conjunction DC Card" begin
-            dims1 = Dict(:i => 1000, :j => 100)
-            def1 = TensorDef(StableSet([:i, :j]), dims1, 1, nothing, nothing, nothing)
-            idx_2_int = Dict(:i => 1, :j => 2)
-            int_2_idx = Dict(1 => :i, 2 => :j)
-            dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 5)])
-            stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
-            dims2 = Dict(:j => 100, :k => 1000)
-            def2 = TensorDef(StableSet([:j, :k]), dims2, 1, nothing, nothing, nothing)
-            idx_2_int = Dict(:j => 2, :k => 3)
-            int_2_idx = Dict(2 => :j, 3 => :k)
-            dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2, 3]), 10)])
-            stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
-            dims3 = Dict(:i => 1000, :j => 100, :k => 1000)
-            idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
-            int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
-            def3 = TensorDef(
-                StableSet([:i, :j, :k]), dims3, 0.0, nothing, nothing, nothing
+        @testset "Integration with AnnotatedQuery" begin
+            chain_expr = Query(
+                :out,
+                Materialize(
+                    Aggregate(
+                        +,
+                        0,
+                        :i,
+                        :j,
+                        :k,
+                        MapJoin(*, Input(A, :i, :j, "a1"), Input(A, :j, :k, "a2")),
+                    ),
+                ),
             )
-            dcs3 = StableSet([DC(StableSet{Int}(), StableSet([1, 2, 3]), 10)])
-            stat3 = DCStats(def3, idx_2_int, int_2_idx, dcs3)
-            merge_stats = merge_tensor_stats(*, stat1, stat2, stat3)
-            @test estimate_nnz(merge_stats) == 10
+            aq = AnnotatedQuery(chain_expr, BlockedStats)
+            reduced = reduce_idx!(:i, aq)
+            @test reduced.expr isa Aggregate
+        end
+
+        @testset verbose = true "DCStats" begin
+            @testset "Single Tensor Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                dims = Dict(i => 1000, j => 1000)
+                def = TensorDef(StableSet([i, j]), dims, 0.0, nothing, nothing, nothing)
+                i, j = 1, 2
+                dcs = StableSet([DC(StableSet([i]), StableSet([j]), 5),
+                    DC(StableSet([j]), StableSet([i]), 25),
+                    DC(StableSet{Int}(), StableSet([i, j]), 50),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2)
+                int_2_idx = Dict(1 => :i, 2 => :j)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                @test estimate_nnz(stat) == 50
+            end
+
+            @testset "1 Join DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet{Int}(), StableSet([i, j]), 50),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                @test estimate_nnz(stat) == 50 * 5
+            end
+
+            @testset "2 Join DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                l = IndexExpr("l")
+                dims = Dict(i => 1000, j => 1000, k => 1000, l => 1000)
+                def = TensorDef(
+                    StableSet([i, j, k, l]), dims, 0.0, nothing, nothing, nothing
+                )
+                i, j, k, l = 1, 2, 3, 4
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([l]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3, :l => 4)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k, 4 => :l)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                @test estimate_nnz(stat) == 50 * 5 * 5
+            end
+
+            @testset "Triangle DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 50),
+                    DC(StableSet([i]), StableSet([j]), 5),
+                    DC(StableSet([j]), StableSet([i]), 5),
+                    DC(StableSet{Int}(), StableSet([j, k]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([j]), 5),
+                    DC(StableSet{Int}(), StableSet([i, k]), 50),
+                    DC(StableSet([i]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([i]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                @test estimate_nnz(stat) == 50 * 5
+            end
+
+            @testset "Triangle-Small DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                # In this version, |R(i,j)| = 1
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 1),
+                    DC(StableSet([i]), StableSet([j]), 1),
+                    DC(StableSet([j]), StableSet([i]), 1),
+                    DC(StableSet{Int}(), StableSet([j, k]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([j]), 5),
+                    DC(StableSet{Int}(), StableSet([i, k]), 50),
+                    DC(StableSet([i]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([i]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                @test estimate_nnz(stat) == 1 * 5
+            end
+
+            @testset "Full Reduce DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 50),
+                    DC(StableSet([i]), StableSet([j]), 5),
+                    DC(StableSet([j]), StableSet([i]), 5),
+                    DC(StableSet{Int}(), StableSet([j, k]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([j]), 5),
+                    DC(StableSet{Int}(), StableSet([i, k]), 50),
+                    DC(StableSet([i]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([i]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i, :j, :k]), stat)
+                @test estimate_nnz(reduce_stats) == 1
+            end
+
+            @testset "1-Attr Reduce DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 1),
+                    DC(StableSet([i]), StableSet([j]), 1),
+                    DC(StableSet([j]), StableSet([i]), 1),
+                    DC(StableSet{Int}(), StableSet([j, k]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([j]), 5),
+                    DC(StableSet{Int}(), StableSet([i, k]), 50),
+                    DC(StableSet([i]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([i]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                condense_stats!(stat)
+                reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i, :j]), stat)
+                @test estimate_nnz(reduce_stats) == 5
+            end
+
+            @testset "2-Attr Reduce DC Card" begin
+                i = IndexExpr("i")
+                j = IndexExpr("j")
+                k = IndexExpr("k")
+                dims = Dict(i => 1000, j => 1000, k => 1000)
+                def = TensorDef(StableSet([i, j, k]), dims, 0.0, nothing, nothing, nothing)
+                i, j, k = 1, 2, 3
+                dcs = StableSet([
+                    DC(StableSet{Int}(), StableSet([i, j]), 1),
+                    DC(StableSet([i]), StableSet([j]), 1),
+                    DC(StableSet([j]), StableSet([i]), 1),
+                    DC(StableSet{Int}(), StableSet([j, k]), 50),
+                    DC(StableSet([j]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([j]), 5),
+                    DC(StableSet{Int}(), StableSet([i, k]), 50),
+                    DC(StableSet([i]), StableSet([k]), 5),
+                    DC(StableSet([k]), StableSet([i]), 5),
+                ])
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                stat = DCStats(def, idx_2_int, int_2_idx, dcs)
+                reduce_stats = reduce_tensor_stats(+, 0, StableSet([:i]), stat)
+                @test estimate_nnz(reduce_stats) == 5
+            end
+
+            @testset "1D Disjunction DC Card" begin
+                dims = Dict(:i => 1000)
+                def = TensorDef(StableSet([:i]), dims, 0.0, nothing, nothing, nothing)
+                i = 1
+                idx_2_int = Dict(:i => 1)
+                int_2_idx = Dict(1 => :i)
+                dcs1 = StableSet([DC(StableSet{Int}(), StableSet([i]), 1)])
+                stat1 = DCStats(def, idx_2_int, int_2_idx, dcs1)
+                dcs2 = StableSet([DC(StableSet{Int}(), StableSet([i]), 1)])
+                stat2 = DCStats(def, idx_2_int, int_2_idx, dcs2)
+                reduce_stats = merge_tensor_stats(+, stat1, stat2)
+                @test estimate_nnz(reduce_stats) == 2
+            end
+
+            @testset "2D Disjunction DC Card" begin
+                dims = Dict(:i => 1000, :j => 100)
+                def = TensorDef(StableSet([:i, :j]), dims, 0.0, nothing, nothing, nothing)
+                idx_2_int = Dict(:i => 1, :j => 2)
+                int_2_idx = Dict(1 => :i, 2 => :j)
+                dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 1)])
+                stat1 = DCStats(def, idx_2_int, int_2_idx, dcs1)
+                dcs2 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 1)])
+                stat2 = DCStats(def, idx_2_int, int_2_idx, dcs2)
+                merge_stats = merge_tensor_stats(+, stat1, stat2)
+                @test estimate_nnz(merge_stats) == 2
+            end
+
+            @testset "2D Disjoint Disjunction DC Card" begin
+                dims1 = Dict(:i => 1000)
+                def1 = TensorDef(StableSet([:i]), dims1, 0.0, nothing, nothing, nothing)
+                idx_2_int = Dict(:i => 1)
+                int_2_idx = Dict(1 => :i)
+                dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1]), 5)])
+                stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
+                idx_2_int = Dict(:j => 2)
+                int_2_idx = Dict(2 => :j)
+                dims2 = Dict(:j => 100)
+                def2 = TensorDef(StableSet([:j]), dims2, 0.0, nothing, nothing, nothing)
+                dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2]), 10)])
+                stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
+                merge_stats = merge_tensor_stats(+, stat1, stat2)
+                @test estimate_nnz(merge_stats) == (10 * 1000 + 5 * 100)
+            end
+
+            @testset "3D Disjoint Disjunction DC Card" begin
+                dims1 = Dict(:i => 1000, :j => 100)
+                def1 = TensorDef(StableSet([:i, :j]), dims1, 0.0, nothing, nothing, nothing)
+                idx_2_int = Dict(:i => 1, :j => 2)
+                int_2_idx = Dict(1 => :i, 2 => :j)
+                dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 5)])
+                stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
+                dims2 = Dict(:j => 100, :k => 1000)
+                idx_2_int = Dict(:j => 2, :k => 3)
+                int_2_idx = Dict(2 => :j, 3 => :k)
+                def2 = TensorDef(StableSet([:j, :k]), dims2, 0.0, nothing, nothing, nothing)
+                dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2, 3]), 10)])
+                stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
+                merge_stats = merge_tensor_stats(+, stat1, stat2)
+                @test estimate_nnz(merge_stats) == (10 * 1000 + 5 * 1000)
+            end
+
+            @testset "Mixture Disjunction Conjunction DC Card" begin
+                dims1 = Dict(:i => 1000, :j => 100)
+                def1 = TensorDef(StableSet([:i, :j]), dims1, 1, nothing, nothing, nothing)
+                idx_2_int = Dict(:i => 1, :j => 2)
+                int_2_idx = Dict(1 => :i, 2 => :j)
+                dcs1 = StableSet([DC(StableSet{Int}(), StableSet([1, 2]), 5)])
+                stat1 = DCStats(def1, idx_2_int, int_2_idx, dcs1)
+                dims2 = Dict(:j => 100, :k => 1000)
+                def2 = TensorDef(StableSet([:j, :k]), dims2, 1, nothing, nothing, nothing)
+                idx_2_int = Dict(:j => 2, :k => 3)
+                int_2_idx = Dict(2 => :j, 3 => :k)
+                dcs2 = StableSet([DC(StableSet{Int}(), StableSet([2, 3]), 10)])
+                stat2 = DCStats(def2, idx_2_int, int_2_idx, dcs2)
+                dims3 = Dict(:i => 1000, :j => 100, :k => 1000)
+                idx_2_int = Dict(:i => 1, :j => 2, :k => 3)
+                int_2_idx = Dict(1 => :i, 2 => :j, 3 => :k)
+                def3 = TensorDef(
+                    StableSet([:i, :j, :k]), dims3, 0.0, nothing, nothing, nothing
+                )
+                dcs3 = StableSet([DC(StableSet{Int}(), StableSet([1, 2, 3]), 10)])
+                stat3 = DCStats(def3, idx_2_int, int_2_idx, dcs3)
+                merge_stats = merge_tensor_stats(*, stat1, stat2, stat3)
+                @test estimate_nnz(merge_stats) == 10
+            end
         end
     end
 end
