@@ -1,4 +1,17 @@
 @testitem "print" setup = [CheckOutput] begin
+    @testset "SparseDict snapshot order" begin
+        normalize = CheckOutput.normalize_sparse_dicts
+        for prefix in
+            ("Dict", "Dict{Tuple{Int32, Int16}, Int32}", "Dict{Tuple{Int64, Int16}, Int64}")
+            ordered = "$prefix((1, 2) => 3, (4, 5) => 6)"
+            reversed = "$prefix((4, 5) => 6, (1, 2) => 3)"
+            @test normalize(ordered) == normalize(reversed)
+            @test normalize(ordered) != normalize("$prefix((1, 2) => 6, (4, 5) => 3)")
+            @test normalize(ordered) != normalize("$prefix((1, 3) => 3, (4, 5) => 6)")
+            @test normalize("Tensor($reversed, [2, 1])") == "Tensor($ordered, [2, 1])"
+        end
+    end
+
     A = Tensor([(i + j) % 3 for i in 1:5, j in 1:10])
 
     formats = [

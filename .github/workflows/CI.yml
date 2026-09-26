@@ -11,9 +11,24 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
+  style:
+    name: Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Run style tests
+        run: julia --color=yes test/runtests.jl --include style
+
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    needs: style
     runs-on: ${{ matrix.os }}
+    env:
+      FINCH_TEST_ARGS: --exclude style
     strategy:
       fail-fast: false
       matrix:
@@ -32,12 +47,16 @@ jobs:
           - os: windows-latest
             arch: x64
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v3
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        if: runner.os == 'Linux'
+        with:
+          run-install: false
+      - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts
         with:
@@ -62,9 +81,10 @@ jobs:
 
   docs:
     name: Documentation
+    needs: style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
@@ -76,6 +96,7 @@ jobs:
 
   finch-tensor-tests:
     name: Python tests
+    needs: style
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Finch.jl
@@ -83,15 +104,14 @@ jobs:
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
-          version: '1'
+          # Match the Julia versions supported by the Python backend.
+          version: '1.12'
       - name: Build Finch.jl package
         uses: julia-actions/julia-buildpkg@v1
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
       - name: Checkout finch-tensor
         uses: actions/checkout@v4
         with:
@@ -99,11 +119,32 @@ jobs:
           ref: 'main'
           path: 'finch-tensor'
       - name: Install package
+        working-directory: finch-tensor
         run: |
-          cd finch-tensor
-          poetry install --extras test
-          poetry run python develop.py --path "${GITHUB_WORKSPACE}"
+          python -m pip install --upgrade pip
+          python -m pip install --group test --editable '.[julia]'
+      - name: Use this Finch.jl checkout
+        working-directory: finch-tensor
+        run: |
+          python - <<'PY'
+          import os
+          import juliapkg
+
+          juliapkg.add(
+              "Finch",
+              uuid="9177782c-1635-4eb9-9bfb-d9dfa25e6bce",
+              path=os.environ["GITHUB_WORKSPACE"],
+              dev=True,
+          )
+          juliapkg.resolve()
+
+          from finch.compile_jl.julia import jl
+
+          assert os.path.samefile(
+              str(jl.seval("pkgdir(Finch)")), os.environ["GITHUB_WORKSPACE"]
+          )
+          PY
       - name: Run finch-tensor tests
+        working-directory: finch-tensor
         run: |
-          cd finch-tensor
-          poetry run pytest tests/
+          python -m pytest src/finch/tests/test_julia_backend.py src/finch/tests/test_julia_buffer.py

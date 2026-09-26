@@ -37,11 +37,13 @@ If the environment variable FINCH_TEST_ARGS is set, it will override the given a
     help = "number of threads to use on each processor (if nprocs >= 1)"
 end
 
-if "FINCH_TEST_ARGS" in keys(ENV)
-    ARGS = split(ENV["FINCH_TEST_ARGS"], " ")
+test_args = if "FINCH_TEST_ARGS" in keys(ENV)
+    split(ENV["FINCH_TEST_ARGS"], " ")
+else
+    ARGS
 end
 
-parsed_args = parse_args(ARGS, s)
+parsed_args = parse_args(test_args, s)
 
 function test_filter(name)
     global parsed_args
@@ -156,6 +158,7 @@ if parsed_args["nprocs"] == 0
     end
 
     @testset "Finch" begin
+        include("suites/style_tests.jl")
         include("modules/checkoutput_testsetup.jl")
         include("suites/algebra_tests.jl")
         include("suites/constructors_tests.jl")
@@ -175,7 +178,6 @@ if parsed_args["nprocs"] == 0
         include("suites/representation_tests.jl")
         include("suites/scheduler_tests.jl")
         include("suites/simple_tests.jl")
-        include("suites/style_tests.jl")
         include("suites/typical_tests.jl")
     end
 

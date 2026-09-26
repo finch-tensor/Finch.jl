@@ -33,6 +33,8 @@ export SparseInterval, SparseIntervalLevel
 export Sparse, SparseLevel
 export SparseList, SparseListLevel
 export SparseDict, SparseDictLevel
+export SparseHash, SparseHashLevel
+export ParallelSparseDict, ParallelSparseDictLevel
 export SparsePoint, SparsePointLevel
 export SparseBand, SparseBandLevel
 export SparseCOO, SparseCOOLevel
@@ -50,6 +52,9 @@ export Scalar, SparseScalar, ShortCircuitScalar, SparseShortCircuitScalar
 export walk, gallop, follow, extrude, laminate
 export Tensor, pattern!, dropfills, dropfills!, set_fill_value!
 export diagmask, lotrimask, uptrimask, bandmask, splitmask, chunkmask
+export pairsummask, paircarrymask, reversemask, rollmask, repeatmask, onehotmask, paritymask
+export oddevenmergesortpartnermask, oddevenmergesortlowermask, reshapemask
+export randommask
 export scale, products, offset, permissive, protocolize, swizzle, toeplitz, window
 export PlusOneVector
 
@@ -138,6 +143,8 @@ include("tensors/levels/sparse_point_levels.jl")
 include("tensors/levels/sparse_coo_levels.jl")
 include("tensors/levels/sparse_band_levels.jl")
 include("tensors/levels/sparse_dict_levels.jl")
+include("tensors/levels/sparse_hash_levels.jl")
+include("tensors/levels/parallel_sparse_dict_levels.jl")
 include("tensors/levels/sparse_bytemap_levels.jl")
 include("tensors/levels/sparse_vbl_levels.jl")
 include("tensors/levels/dense_levels.jl")
@@ -312,6 +319,9 @@ export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
             "../ext/SparseArraysExt.jl"
         )
         @require HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f" include("../ext/HDF5Ext.jl")
+        @require MatrixMarket = "4d4711f2-db25-561a-b6b3-d35e7d4047d3" include(
+            "../ext/MatrixMarketExt.jl"
+        )
         @require TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77" include(
             "../ext/TensorMarketExt.jl"
         )
@@ -412,7 +422,7 @@ end
     # Putting some things in `setup` can reduce the size of the
     # precompile file and potentially make loading faster.
     @compile_workload begin
-        Base.invokelatest(workload)
+        #Base.invokelatest(workload)
     end
 end
 
