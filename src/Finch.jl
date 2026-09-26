@@ -52,6 +52,9 @@ export Scalar, SparseScalar, ShortCircuitScalar, SparseShortCircuitScalar
 export walk, gallop, follow, extrude, laminate
 export Tensor, pattern!, dropfills, dropfills!, set_fill_value!
 export diagmask, lotrimask, uptrimask, bandmask, splitmask, chunkmask
+export pairsummask, paircarrymask, reversemask, rollmask, repeatmask, onehotmask, paritymask
+export oddevenmergesortpartnermask, oddevenmergesortlowermask, reshapemask
+export randommask
 export scale, products, offset, permissive, protocolize, swizzle, toeplitz, window
 export PlusOneVector
 
@@ -316,6 +319,9 @@ export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
             "../ext/SparseArraysExt.jl"
         )
         @require HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f" include("../ext/HDF5Ext.jl")
+        @require MatrixMarket = "4d4711f2-db25-561a-b6b3-d35e7d4047d3" include(
+            "../ext/MatrixMarketExt.jl"
+        )
         @require TensorMarket = "8b7d4fe7-0b45-4d0d-9dd8-5cc9b23b4b77" include(
             "../ext/TensorMarketExt.jl"
         )

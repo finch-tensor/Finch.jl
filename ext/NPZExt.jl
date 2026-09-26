@@ -39,8 +39,8 @@ function Finch.bspread_bspnpy(fname::AbstractString)
     bspread(NPYPath(fname))
 end
 
-function Finch.bspwrite_bspnpy(fname::AbstractString, arr, attrs=OrderedDict())
-    bspwrite(NPYPath(fname), arr, attrs)
+function Finch.bspwrite_bspnpy(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
+    bspwrite(NPYPath(fname), arr, attrs; kwargs...)
     fname
 end
 
