@@ -672,5 +672,37 @@
             merge_stats = merge_tensor_stats(*, stat1, stat2, stat3)
             @test estimate_nnz(merge_stats) == 10
         end
+
+        # https://github.com/finch-tensor/Finch.jl/issues/811
+        @testset "issimilar with >= 50 DCs" begin
+            using Finch.Galley: issimilar, DC, copy_def
+
+            A = Tensor(Dense(Dense(Dense(Dense(Element(0.0))))), rand(8, 8, 8, 8))
+            stat = DCStats(A, [:i, :j, :k, :l])
+            @test length(stat.dcs) >= 50
+            @test issimilar(stat, stat, 2.0)
+
+            with_dcs(dcs) = DCStats(
+                copy_def(stat.def), copy(stat.idx_2_int), copy(stat.int_2_idx), dcs
+            )
+            # DCs present in only one of the stats are not compared; indices 5
+            # and 6 don't exist in a 4-index tensor, so this key is never shared
+            unmatched = DC(BitSet([5]), BitSet([6]), 1.0)
+            @test issimilar(stat, with_dcs(StableSet{DC}([stat.dcs..., unmatched])), 2.0)
+            # a matching DC with a very different degree makes the stats dissimilar
+            dc = first(stat.dcs)
+            scaled = [x === dc ? DC(x.X, x.Y, x.d * 1000) : x for x in stat.dcs]
+            @test !issimilar(stat, with_dcs(StableSet{DC}(scaled)), 2.0)
+
+            # AdaptiveExecutor calls issimilar when it revisits a cached plan
+            ctx = Finch.galley_scheduler()
+            for n in (6, 8)
+                A = Tensor(Dense(Dense(Dense(Dense(Element(0.0))))), rand(n, n, n, n))
+                B = Tensor(Dense(Dense(Element(0.0))), rand(n, 4))
+                expected = compute(tensordot(lazy(A), lazy(B), ((4,), (1,))))
+                actual = compute(tensordot(lazy(A), lazy(B), ((4,), (1,))); ctx=ctx)
+                @test Array(actual) ≈ Array(expected)
+            end
+        end
     end
 end
