@@ -280,20 +280,27 @@ function sample(tid, lvl::DenseLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl, meta, P, style)
+function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, P, style::MergeFast)
+    setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl, P, style)
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
+function setup_coalesce!(
+    lvl::DenseLevel, max_pos, coalescent, P, style::MergeNormalization;
+    pos_map=nothing, was_dense=false,
+)
     setup_coalesce!(
-        lvl.lvl, max_pos * lvl.shape, coalescent.lvl, meta, P, style; pos_map=pos_map, was_dense=true
+        lvl.lvl, max_pos * lvl.shape, coalescent.lvl, P, style; pos_map=pos_map, was_dense=true
     )
 end
 
-function coalesce_fast!(tid, meta, P, lvl::DenseLevel, coalescent::DenseLevel, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel, was_dense
+)
+    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true)
 end
 
-function coalesce_dense!(tid, meta, P, lvl::DenseLevel, coalescent::DenseLevel)
-    coalesce_dense!(tid, meta, P, lvl.lvl, coalescent.lvl)
+function coalesce_dense!(
+    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel
+)
+    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl)
 end

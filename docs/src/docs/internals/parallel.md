@@ -87,3 +87,22 @@ local_memory
 shared_memory
 global_memory
 ```
+
+## Coalescing task-local output
+
+`CoalesceLevel` prepares the destination with
+`setup_coalesce!(src, max_pos, dst, P, style; ...)`, then calls
+`coalesce_fast!(tid, pos_offsets, shared_flags, P, src, dst, was_dense)` for
+each merge worker. Each level assembles its own storage and recurses into its
+child level.
+
+`pos_offsets[tid]` contains `P + 1` integer position offsets for the worker.
+`shared_flags[tid]` is a separate vector of `P` Boolean flags, initially false.
+`shared_flags[tid][p]` indicates whether shard `p` shares its final position
+with the next shard. Each worker owns its offset and flag vectors so it can
+update them independently as it descends through the levels.
+
+A `SparseList` merge refreshes the flags when `was_dense` is false, alongside
+rebuilding the offsets. Each flag records whether setup marked the shard's
+trailing index as a duplicate. Dense levels and `SparseByteMap` preserve the
+incoming flags, including when a bytemap changes the offsets.

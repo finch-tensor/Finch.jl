@@ -615,7 +615,9 @@ end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
 init_gfm(P) = [[1] for _ in 1:P]
-init_fast_meta(P) = [vcat(ones(Int, P + 1), zeros(Int, P)) for _ in 1:P]
+# Each merge worker updates its own offsets and flags while descending the level tree.
+init_pos_offsets(P) = [ones(Int, P + 1) for _ in 1:P]
+init_shared_flags(P) = [fill(false, P) for _ in 1:P]
 init_posmap(P) = [1 for _ in 1:(P + 1)]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
@@ -630,20 +632,24 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     max_pos = factor
     mode = lvl.mode
 
-    meta = freshen(ctx, :meta)
+    pos_offsets = freshen(ctx, :pos_offsets)
+    shared_flags = freshen(ctx, :shared_flags)
     tid = freshen(ctx, :tid)
     dec = freshen(ctx, :declared)
     if mode == :fast
         push_preamble!(
             ctx,
             quote
-                $meta = Finch.init_fast_meta($P)
+                $pos_offsets = Finch.init_pos_offsets($P)
+                $shared_flags = Finch.init_shared_flags($P)
                 $dec = Finch.setup_coalesce!(
-                    $(lvl_e), $max_pos, $(lvl_c), nothing, $P, MergeFast()
+                    $(lvl_e), $max_pos, $(lvl_c), $P, MergeFast()
                 )
                 if $dec
                     Threads.@threads for $tid in 1:($P)
-                        Finch.coalesce_fast!($tid, $meta, $P, $(lvl_e), $(lvl_c), false)
+                        Finch.coalesce_fast!(
+                            $tid, $pos_offsets, $shared_flags, $P, $(lvl_e), $(lvl_c), false
+                        )
                     end
                 end
             end,
@@ -830,12 +836,12 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                             end)
                         end
                         $pos_map = Finch.init_posmap($P)
-                        $meta = Finch.init_fast_meta($P)
+                        $pos_offsets = Finch.init_pos_offsets($P)
+                        $shared_flags = Finch.init_shared_flags($P)
                         Finch.setup_coalesce!(
                             $(lvl_e),
                             $max_pos,
                             $(lvl_c),
-                            $meta,
                             $P,
                             MergeNormalization();
                             pos_map=($pos_map),
@@ -843,39 +849,39 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         )
                         Threads.@threads for $tid in 1:($P)
                             Finch.coalesce_fast!(
-                                $tid, $meta, $P, $(lvl_e).lvl, $(lvl_c), false
+                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e).lvl, $(lvl_c), false
                             )
                         end
                     elseif $dense
-                        $meta = Finch.init_fast_meta($P)
+                        $pos_offsets = Finch.init_pos_offsets($P)
+                        $shared_flags = Finch.init_shared_flags($P)
                         Finch.setup_coalesce!(
                             $(lvl_e).accumulator,
                             $max_pos,
                             $(lvl_c),
-                            $meta,
                             $P,
                             MergeNormalization();
                             pos_map=nothing,
                         )
                         Threads.@threads for $tid in 1:($P)
                             Finch.coalesce_dense!(
-                                $tid, $meta, $P, $(lvl_e).accumulator, $(lvl_c)
+                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e).accumulator, $(lvl_c)
                             )
                         end
                     else
-                        $meta = Finch.init_fast_meta($P)
+                        $pos_offsets = Finch.init_pos_offsets($P)
+                        $shared_flags = Finch.init_shared_flags($P)
                         Finch.setup_coalesce!(
                             $(lvl_e).accumulator,
                             $max_pos,
                             $(lvl_c),
-                            $meta,
                             $P,
                             MergeNormalization();
                             pos_map=nothing,
                         )
                         Threads.@threads for $tid in 1:($P)
                             Finch.coalesce_fast!(
-                                $tid, $meta, $P, $(lvl_e), $(lvl_c), false
+                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e), $(lvl_c), false
                             )
                         end
                     end
@@ -935,17 +941,16 @@ function setup_coalesce!(
     lvl::CoalesceLevel,
     max_pos,
     coalescent,
-    meta,
     P,
     style::MergeNormalization;
     pos_map=nothing,
     was_dense=false,
 )
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, meta, P, style; pos_map, was_dense)
+    return setup_coalesce!(lvl.lvl, max_pos, coalescent, P, style; pos_map, was_dense)
 end
 
-function setup_coalesce!(lvl::CoalesceLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, meta, P, style)
+function setup_coalesce!(lvl::CoalesceLevel, max_pos, coalescent, P, style::MergeFast)
+    return setup_coalesce!(lvl.lvl, max_pos, coalescent, P, style)
 end
 
 function coalesce_level!(
@@ -958,8 +963,10 @@ function coalesce_level!(
     coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent, mode)
 end
 
-function coalesce_fast!(tid, meta, P, lvl::CoalesceLevel, coalescent, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent, was_dense)
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::CoalesceLevel, coalescent, was_dense
+)
+    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent, was_dense)
 end
 
 ###Load balancer stuff

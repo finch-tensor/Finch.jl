@@ -631,7 +631,7 @@ function sample(tid, lvl::SparseListLevel)
     return (tup..., idx_2), lfbr
 end
 
-function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, style::MergeFast)
+function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, P, style::MergeFast)
     lvl_ptr = coalescent.ptr
     lvl_idx = coalescent.idx
     nnz = sum(length, lvl.idx.data)
@@ -645,10 +645,13 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, sty
     lvl_ptr[1] = 1
     lvl_ptr[end] = nnz + 1
 
-    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, meta, P, style)
+    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, P, style)
 end
 
-function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
+function setup_coalesce!(
+    lvl::SparseListLevel, max_pos, coalescent, P, style::MergeNormalization;
+    pos_map=nothing, was_dense=false,
+)
     lvl_ptr = coalescent.ptr
     lvl_idx = coalescent.idx
     nnz = sum(length, lvl.idx.data)
@@ -686,20 +689,24 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, sty
     lvl_ptr[1] = 1
     lvl_ptr[end] = nnz + 1
 
-    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, meta, P, style; pos_map)
+    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, P, style; pos_map)
 end
 
-function coalesce_fast!(tid, meta, P, lvl::SparseListLevel, coalescent, was_dense)
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseListLevel, coalescent, was_dense
+)
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     lvl_ptr = coalescent.ptr
     lvl_idx = coalescent.idx
 
-    fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, meta, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, false)
+    fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, shared_flags, was_dense)
+    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, false)
 end
 
-@inbounds function fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, was_dense)
+@inbounds function fastmerge_splist!(
+    tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, shared_flags, was_dense
+)
     nnz_cutoffs = Vector{Int}(undef, P + 1)
     nnz_cutoffs[1] = 1
     for p in 2:P+1
@@ -796,14 +803,14 @@ end
             pos_write = 2
             for p in 1:proc - 1
                 pos_write += length(ptr[p]) - 1
-                (idx[p][end] < 0 || pos_offsets[tid][P + 1 + p] == 1) && (pos_write -= 1)
+                (idx[p][end] < 0 || shared_flags[tid][p]) && (pos_write -= 1)
             end
             pos_write += lfbr_lower - 1
 
             ceil = 3
             for p in 1:proc_id_upper - 1
                 ceil += length(ptr[p]) - 1
-                (idx[p][end] < 0 || pos_offsets[tid][P + 1 + p] == 1) && (ceil -= 1)
+                (idx[p][end] < 0 || shared_flags[tid][p]) && (ceil -= 1)
             end
             ceil += lfbr_upper - 1
             shares_border && (ceil -= 1)
@@ -826,7 +833,7 @@ end
                     if proc > P
                         break
                     end
-                    if idx[old_proc][end] < 0 || pos_offsets[tid][P + 1 + old_proc] == 1
+                    if idx[old_proc][end] < 0 || shared_flags[tid][old_proc]
                         pos_write -= 1
                     end
                 end
@@ -835,11 +842,9 @@ end
 
         for p in 1:P
             pos_offsets[tid][p + 1] = nnz_cutoffs[p]
-            if idx[p][end] < 0
+            shared_flags[tid][p] = idx[p][end] < 0
+            if shared_flags[tid][p]
                 pos_offsets[tid][p + 1] += 1
-                pos_offsets[tid][P + 1 + p] = 1
-            else
-                pos_offsets[tid][P + 1 + p] = 0
             end
         end
     end

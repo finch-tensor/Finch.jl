@@ -70,7 +70,7 @@ end
 end
 
 
-@inbounds function binary_search_meta(target::Int, arr, lo::Int, hi::Int)
+@inbounds function binary_search_offsets(target::Int, arr, lo::Int, hi::Int)
     @assert target > 0
 
     result = hi

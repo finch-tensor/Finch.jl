@@ -674,7 +674,9 @@ function sample(tid, lvl::SparseByteMapLevel)
     return (tup..., idx_2), pos_2
 end
 
-@inbounds function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, coalescent, meta, P, style::MergeFast)
+@inbounds function setup_coalesce!(
+    lvl::SparseByteMapLevel, max_pos, coalescent, P, style::MergeFast
+)
     lvl_ptr = coalescent.ptr
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
@@ -690,10 +692,13 @@ end
 
     lvl_ptr[1] = 1
 
-    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, meta, P, style)
+    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, P, style)
 end
 
-@inbounds function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
+@inbounds function setup_coalesce!(
+    lvl::SparseByteMapLevel, max_pos, coalescent, P, style::MergeNormalization;
+    pos_map=nothing, was_dense=false,
+)
     lvl_ptr = coalescent.ptr
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
@@ -722,10 +727,14 @@ end
         lvl_ptr[end] = nnz + 1
     end
 
-    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, meta, P, style; pos_map=pos_map, was_dense=true)
+    setup_coalesce!(
+        lvl.lvl, length(lvl_tbl), coalescent.lvl, P, style; pos_map, was_dense=true
+    )
 end
 
-function coalesce_fast!(tid, meta, P, lvl::SparseByteMapLevel, coalescent, was_dense)
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent, was_dense
+)
     ptr = lvl.ptr.data
     srt = lvl.srt.data
     tbl = lvl.tbl.data
@@ -733,11 +742,15 @@ function coalesce_fast!(tid, meta, P, lvl::SparseByteMapLevel, coalescent, was_d
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
 
-    fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
+    fastmerge_spbytemap!(
+        tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
+    )
+    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true)
 end
 
-function coalesce_dense!(tid, meta, P, lvl::SparseByteMapLevel, coalescent)
+function coalesce_dense!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent
+)
     ptr = lvl.ptr.data
     srt = lvl.srt.data
     tbl = lvl.tbl.data
@@ -745,11 +758,15 @@ function coalesce_dense!(tid, meta, P, lvl::SparseByteMapLevel, coalescent)
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
 
-    fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl)
-    coalesce_dense!(tid, meta, P, lvl.lvl, coalescent.lvl)
+    fastmerge_spbytemap!(
+        tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
+    )
+    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl)
 end
 
-@inbounds function fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl)
+@inbounds function fastmerge_spbytemap!(
+    tid, pos_offsets, shared_flags, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl
+)
     nnz_cutoffs = Vector{Int}(undef, P + 1)
     nnz_cutoffs[1] = 1
     for p in 2:P+1
@@ -777,8 +794,8 @@ end
         lfbr_lower = binary_search(nz_id_lower, ptr[proc_id_lower])
         lfbr_upper = binary_search(nz_id_upper, ptr[proc_id_upper])
 
-        pos_lb = meta[tid][proc_id_lower + 1] + lfbr_lower - 1
-        pos_ub = min(meta[tid][proc_id_upper + 1] + lfbr_upper - 1, max_pos)
+        pos_lb = pos_offsets[tid][proc_id_lower + 1] + lfbr_lower - 1
+        pos_ub = min(pos_offsets[tid][proc_id_upper + 1] + lfbr_upper - 1, max_pos)
 
 
         if nz_id_upper < ptr[proc_id_upper][lfbr_upper + 1] - 1
@@ -786,7 +803,7 @@ end
         elseif lfbr_upper < length(ptr[proc_id_upper]) - 1
             shares_border = false
         elseif proc_id_upper < P
-            shares_border = meta[tid][proc_id_upper + 2] == pos_ub
+            shares_border = pos_offsets[tid][proc_id_upper + 2] == pos_ub
         else
             shares_border = false
         end
@@ -796,7 +813,7 @@ end
         srt_write = work_lb
         srt_ceil = srt_write + chunksize
         while srt_write < srt_ceil
-            raw_start = meta[tid][proc + 1] - (meta[tid][P + 1 + proc] == 1 ? 1 : 0)
+            raw_start = pos_offsets[tid][proc + 1] - (shared_flags[tid][proc] ? 1 : 0)
             pos_shift = (raw_start - 1) * shape
             ele = srt[proc][srt_read] + pos_shift
             if ele > 0
@@ -819,14 +836,14 @@ end
             pos_write = 2
             for p in 1:proc - 1
                 pos_write += length(ptr[p]) - 1
-                meta[tid][P + 1 + p] == 1 && (pos_write -= 1)
+                shared_flags[tid][p] && (pos_write -= 1)
             end
             pos_write += lfbr_lower - 1
 
             ceil = 3
             for p in 1:proc_id_upper - 1
                 ceil += length(ptr[p]) - 1
-                meta[tid][P + 1 + p] == 1 && (ceil -= 1)
+                shared_flags[tid][p] && (ceil -= 1)
             end
             ceil += lfbr_upper - 1
             shares_border && (ceil -= 1)
@@ -847,7 +864,7 @@ end
                     if proc > P
                         break
                     end
-                    if meta[tid][P + 1 + old_proc] == 1
+                    if shared_flags[tid][old_proc]
                         pos_write -= 1
                     end
                 end
@@ -857,14 +874,11 @@ end
 
     last_pos = 0
     for p in 1:P
-        ancestor_shared = meta[tid][P + 1 + p] == 1
+        ancestor_shared = shared_flags[tid][p]
         last_pos += length(ptr[p]) - 1
-        meta[tid][p + 1] = last_pos
+        pos_offsets[tid][p + 1] = last_pos
         if ancestor_shared
-            meta[tid][P + 1 + p] = 1
             last_pos -= 1
-        else
-            meta[tid][P + 1 + p] = 0
         end
     end
 end

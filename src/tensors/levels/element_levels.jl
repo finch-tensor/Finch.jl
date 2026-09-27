@@ -266,24 +266,29 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, meta, P, style::MergeFast)
+function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, P, style::MergeFast)
     resize!(coalescent.val, max_pos)
     return true
 end
 
-function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
+function setup_coalesce!(
+    lvl::ElementLevel, max_pos, coalescent, P, style::MergeNormalization;
+    pos_map=nothing, was_dense=false,
+)
     resize!(coalescent.val, max_pos)
     return true
 end
 
-function coalesce_fast!(tid, meta, P, lvl::ElementLevel{Vf}, coalescent, was_dense) where {Vf}
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::ElementLevel{Vf}, coalescent, was_dense
+) where {Vf}
     val = lvl.val.data
     lvl_val = coalescent.val
 
-    fastmerge_element!(tid, meta, val, P, lvl_val, was_dense, Vf)
+    fastmerge_element!(tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf)
 end
 
-function coalesce_dense!(tid, meta, P, lvl::ElementLevel, coalescent)
+function coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent)
     val = lvl.val.data
     lvl_val = coalescent.val
 
@@ -301,10 +306,12 @@ end
     end
 end
 
-@inbounds function fastmerge_element!(tid, meta, val, P, lvl_val, was_dense, Vf)
+@inbounds function fastmerge_element!(
+    tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf
+)
     if was_dense
         total = length(lvl_val)
-        max_pos = meta[tid][P + 1]
+        max_pos = pos_offsets[tid][P + 1]
         shape = max_pos > 0 ? total ÷ max_pos : total
 
         base, rem = divrem(max_pos, P)
@@ -314,14 +321,14 @@ end
         pos_ub = pos_lb + chunksize - 1
 
         if chunksize > 0
-            proc = binary_search_meta(pos_lb, meta[tid], 1, P)
-            shared_with_prev = proc > 1 && meta[tid][P + proc] == 1
-            base = proc > 1 ? meta[tid][proc] : 0
+            proc = binary_search_offsets(pos_lb, pos_offsets[tid], 1, P)
+            shared_with_prev = proc > 1 && shared_flags[tid][proc - 1]
+            base = proc > 1 ? pos_offsets[tid][proc] : 0
             local_pos = pos_lb - base + (shared_with_prev ? 1 : 0)
             for pos in pos_lb:pos_ub
-                while proc < P && pos > meta[tid][proc + 1]
+                while proc < P && pos > pos_offsets[tid][proc + 1]
                     proc += 1
-                    local_pos = meta[tid][P + proc] == 1 ? 2 : 1
+                    local_pos = shared_flags[tid][proc - 1] ? 2 : 1
                 end
                 channel = proc
                 dst_base = (pos - 1) * shape
@@ -330,8 +337,8 @@ end
                     lvl_val[dst_base + k] = val[channel][src_base + k]
                 end
 
-                if channel < P && pos == meta[tid][channel + 1] &&
-                    meta[tid][P + 1 + channel] == 1
+                if channel < P && pos == pos_offsets[tid][channel + 1] &&
+                    shared_flags[tid][channel]
                     for k in 1:shape
                         if lvl_val[dst_base + k] == Vf
                             pv = val[channel + 1][k]
