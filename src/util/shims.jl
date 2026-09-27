@@ -43,6 +43,35 @@ Base.@propagate_inbounds function scansearch(
     return hi
 end
 
+"""
+    scansearch_perm(v, perm, x, lo, hi)
+
+Like [`scansearch`](@ref), but compares `v[perm[p]]` instead of `v[p]`.
+"""
+Base.@propagate_inbounds function scansearch_perm(
+    v, perm, x, lo::T1, hi::T2
+) where {T1<:Integer,T2<:Integer}
+    u = T1(1)
+    d = T1(1)
+    p = lo
+    while p < hi && v[perm[p]] < x
+        d <<= 0x01
+        p += d
+    end
+    lo = p - d
+    hi = min(p, hi) + u
+
+    while lo < hi - u
+        m = lo + ((hi - lo) >>> 0x01)
+        if v[perm[m]] < x
+            lo = m
+        else
+            hi = m
+        end
+    end
+    return hi
+end
+
 Base.@propagate_inbounds function bin_scansearch(
     v, x, lo::T1, hi::T2
 ) where {T1<:Integer,T2<:Integer} # TODO types for `lo` and `hi` #406

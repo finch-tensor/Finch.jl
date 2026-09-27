@@ -26,7 +26,7 @@ julia> tensor_tree(Tensor(Dense(SparseRunListLevel(Element(0.0))), [10 0 20; 30 
 ```
 """
 struct SparseRunListLevel{
-    Ti,Ptr<:AbstractVector,Left<:AbstractVector,Right<:AbstractVector,merge,Lvl
+    Ti,Ptr,Left,Right,merge,Lvl
 } <: AbstractLevel
     lvl::Lvl
     shape::Ti
@@ -79,7 +79,7 @@ function transfer(device, lvl::SparseRunListLevel{Ti}) where {Ti}
     right = transfer(device, lvl.right)
     buf = transfer(device, lvl.buf)
     return SparseRunListLevel{Ti}(
-        lvl_2, lvl.shape, lvl.ptr, lvl.left, lvl.right, lvl.buf; merge=getmerge(lvl)
+        lvl_2, lvl.shape, ptr, left, right, buf; merge=getmerge(lvl)
     )
 end
 
@@ -320,6 +320,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, dif
             lvl.tag,
             redistribute(ctx, lvl.lvl, diff),
             lvl.Ti,
+            lvl.shape,
             lvl.qos_fill,
             lvl.qos_stop,
             lvl.ptr,
@@ -582,7 +583,9 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, pos_
             end
         end,
     )
-    (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
+    if !lvl.merge
+        (lvl.lvl, lvl.buf) = (lvl.buf, lvl.lvl)
+    end
     lvl.buf = thaw_level!(ctx, lvl.buf, value(qos_stop))
     return lvl
 end

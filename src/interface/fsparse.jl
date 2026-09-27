@@ -25,7 +25,7 @@ zeros use [`dropfills`](@ref).
 See also: [`sparse`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.sparse)
 
 # Examples
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> I = ([1, 2, 3], [1, 2, 3], [1, 2, 3]);
 
 julia> V = [1.0, 2.0, 3.0];
@@ -300,7 +300,7 @@ tensor is in COO format.
 See also: [`spzeros`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.spzeros)
 
 # Examples
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> A = fspzeros(Bool, 3, 3)
 3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{false, Bool, Int64, Vector{Bool}}}}:
  0  0  0

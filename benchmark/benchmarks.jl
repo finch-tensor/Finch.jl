@@ -29,10 +29,8 @@ If the environment variable FINCH_BENCHMARK_ARGS is set, it will override the gi
     help = "list of benchmark suites to exclude, e.g., --exclude compile graphs"
 end
 
-if "FINCH_BENCHMARK_ARGS" in keys(ENV)
-    ARGS = split(ENV["FINCH_BENCHMARK_ARGS"], " ")
-end
-parsed_args = parse_args([], s) # TODO https://github.com/carlobaldassi/ArgParse.jl/issues/135
+benchmark_args = get(ENV, "FINCH_BENCHMARK_ARGS", join(ARGS, " "))
+parsed_args = parse_args(isempty(benchmark_args) ? String[] : split(benchmark_args), s)
 
 include(joinpath(@__DIR__, "../docs/examples/bfs.jl"))
 include(joinpath(@__DIR__, "../docs/examples/pagerank.jl"))

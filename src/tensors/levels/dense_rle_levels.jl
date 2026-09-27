@@ -28,7 +28,7 @@ julia> tensor_tree(Tensor(Dense(RunListLevel(Element(0.0))), [10 0 20; 30 0 0; 0
       └─ [3:3]: 40.0
 ```
 """
-struct RunListLevel{Ti,Ptr<:AbstractVector,Right<:AbstractVector,merge,Lvl} <: AbstractLevel
+struct RunListLevel{Ti,Ptr,Right,merge,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     ptr::Ptr
@@ -70,7 +70,7 @@ function transfer(device, lvl::RunListLevel{Ti}) where {Ti}
     right = transfer(device, lvl.right)
     buf = transfer(device, lvl.buf)
     return RunListLevel{Ti}(
-        lvl_2, lvl.shape, lvl.ptr, lvl.right, lvl.buf; merge=getmerge(lvl)
+        lvl_2, lvl.shape, ptr, right, buf; merge=getmerge(lvl)
     )
 end
 

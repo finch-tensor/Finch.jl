@@ -1,4 +1,4 @@
-5×10 Tensor{DenseLevel{Int64, SparseByteMapLevel{Int64, Vector{Int64}, Vector{Bool}, Vector{Tuple{Int64, Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+5×10 Tensor{DenseLevel{Int64, SparseByteMapLevel{Int64, Vector{Int64}, Vector{Bool}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0
  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0
  1.0  2.0  0.0  1.0  2.0  0.0  1.0  2.0  0.0  1.0

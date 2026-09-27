@@ -4,26 +4,33 @@ struct PlusOneVector{T,A<:AbstractVector{T}} <: AbstractVector{T}
     data::A
 end
 
+@inline plus_one_offset(x) = x + 0x01
+@inline plus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} =
+    ntuple(i -> plus_one_offset(x[i]), Val(N))
+@inline minus_one_offset(x) = x - 0x01
+@inline minus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} =
+    ntuple(i -> minus_one_offset(x[i]), Val(N))
+
 @propagate_inbounds function Base.getindex(vec::PlusOneVector{T},
     index::Int) where {T}
-    return vec.data[index] + 0x01
+    return plus_one_offset(vec.data[index])
 end
 
 @propagate_inbounds function Base.getindex(vec::PlusOneVector{T},
     index::Vararg{Int}) where {T}
-    return vec.data[index...] + 0x01
+    return plus_one_offset(vec.data[index...])
 end
 
 @propagate_inbounds function Base.setindex!(vec::PlusOneVector{T},
     val::T,
     index::Int) where {T}
-    vec.data[index] = val - 0x01
+    vec.data[index] = minus_one_offset(val)
 end
 
 @propagate_inbounds function Base.setindex!(vec::PlusOneVector{T},
     val::T,
     index::Vararg{Int}) where {T}
-    vec.data[index...] = val - 0x01
+    vec.data[index...] = minus_one_offset(val)
 end
 
 Base.parent(vec::PlusOneVector{T}) where {T} = vec.data

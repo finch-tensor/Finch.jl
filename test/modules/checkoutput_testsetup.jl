@@ -31,6 +31,23 @@ macro repl(io, ex, quiet=false)
     end
 end
 
+function normalize_sparse_dicts(output)
+    # Dict iteration order can change between Julia versions. Sort only the
+    # integer coordinate-to-position entries printed by SparseDict levels.
+    entry = raw"\(-?\d+, -?\d+\) => -?\d+"
+    dict = Regex(
+        raw"\bDict(?:\{Tuple\{Int\d+, Int\d+\}, Int\d+\})?\(" *
+        entry * "(?:, " * entry * raw")*\)",
+    )
+    return replace(
+        output, dict => function (value)
+            prefix = value[1:findfirst('(', value)]
+            entries = [m.match for m in eachmatch(Regex(entry), value)]
+            return prefix * join(sort!(entries), ", ") * ")"
+        end
+    )
+end
+
 """
 check_output(fname, arg)
 
@@ -51,7 +68,7 @@ function check_output(fname, arg)
     else
         reference = replace(read(ref_file, String), "\r" => "")
         result = replace(sprint(println, arg), "\r" => "")
-        if reference == result
+        if normalize_sparse_dicts(reference) == normalize_sparse_dicts(result)
             return true
         else
             println("disagreement with reference output")

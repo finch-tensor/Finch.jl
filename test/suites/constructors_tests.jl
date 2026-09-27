@@ -324,6 +324,13 @@
         @test obov == [2, val, 3, 4] && obov.data == [1, val - 1, 2, 3]
         obov[1:3] .= val
         @test obov == [val, val, val, 4] && obov.data == [val - 1, val - 1, val - 1, 3]
+
+        # test tuple-valued off-by-one storage
+        tbl = Tuple{Int,Int32,Int}[(0, 4, 8)]
+        tuple_obov = PlusOneVector(tbl)
+        @test tuple_obov[1] === (1, Int32(5), 9)
+        tuple_obov[1] = (3, Int32(7), 11)
+        @test tbl[1] === (2, Int32(6), 10)
     end
 
     @testset "ShardLevel" begin
