@@ -1,18 +1,22 @@
 """
-SparseBandLevel{[Ti=Int], [Idx, Ofs]}(lvl, [dim])
+    SparseBandLevel{[Ti=Int], [Idx, Ofs]}(lvl, [dim])
 
 Like the [`SparseBlockListLevel`](@ref), but stores only a single block, and fills in zeros.
 
 ```jldoctest
-julia> Tensor(Dense(SparseBand(Element(0.0))), [10 0 20; 30 40 0; 0 0 50])
-Dense [:,1:3]
-├─[:,1]: SparseList (0.0) [1:3]
-│ ├─[1]: 10.0
-│ ├─[2]: 30.0
-├─[:,2]: SparseList (0.0) [1:3]
-├─[:,3]: SparseList (0.0) [1:3]
-│ ├─[1]: 20.0
-│ ├─[3]: 40.0
+julia> tensor_tree(Tensor(Dense(SparseBand(Element(0.0))), [10 0 20; 30 40 0; 0 0 50]))
+3×3-Tensor
+└─ Dense [:,1:3]
+   ├─ [:, 1]: SparseBand (0.0) [1:3]
+   │  ├─ [1]: 10.0
+   │  └─ [2]: 30.0
+   ├─ [:, 2]: SparseBand (0.0) [1:3]
+   │  └─ [2]: 40.0
+   └─ [:, 3]: SparseBand (0.0) [1:3]
+      ├─ [1]: 20.0
+      ├─ [2]: 0.0
+      └─ [3]: 50.0
+```
 """
 struct SparseBandLevel{Ti,Idx<:AbstractVector,Ofs<:AbstractVector,Lvl} <: AbstractLevel
     lvl::Lvl
