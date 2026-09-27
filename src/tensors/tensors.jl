@@ -340,7 +340,7 @@ function Base.similar(fbr::AbstractFiber, eltype::Type, dims::Tuple)
     similar(fbr, convert(eltype, fill_value(fbr)), eltype, dims)
 end
 function Base.similar(fbr::AbstractFiber, fill_value, eltype::Type, dims::Tuple)
-    Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...))
+    Tensor(similar_level(fbr.lvl, fill_value, eltype, dims...), undef, dims)
 end
 
 transfer(device, tns::Tensor) = Tensor(transfer(device, tns.lvl))
