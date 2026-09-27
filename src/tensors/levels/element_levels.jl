@@ -280,101 +280,110 @@ function setup_coalesce!(
 end
 
 function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::ElementLevel{Vf}, coalescent, was_dense
-) where {Vf}
-    val = lvl.val.data
-    lvl_val = coalescent.val
+    tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent, was_dense
+)
+    total = length(coalescent.val)
+    max_pos = was_dense ? pos_offsets[tid][P + 1] : total
+    shape = max_pos > 0 ? total ÷ max_pos : total
+    base, rem = divrem(max_pos, P)
+    pos_start = ((tid - 1) * base + min(tid - 1, rem)) * shape + 1
+    pos_stop = (tid * base + min(tid, rem)) * shape
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, pos_start, pos_stop
+    )
+end
 
-    fastmerge_element!(tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf)
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::ElementLevel{Vf}, coalescent,
+    was_dense, ranges,
+) where {Vf}
+    fastmerge_element!(
+        tid, pos_offsets, shared_flags, lvl.val.data, P, coalescent.val,
+        was_dense, Vf, ranges,
+    )
 end
 
 function coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent)
-    val = lvl.val.data
-    lvl_val = coalescent.val
-
-    fastmerge_element_dense!(tid, val, P, lvl_val)
+    total = length(coalescent.val)
+    base, rem = divrem(total, P)
+    pos_start = (tid - 1) * base + min(tid - 1, rem) + 1
+    pos_stop = tid * base + min(tid, rem)
+    coalesce_dense!(
+        tid, pos_offsets, shared_flags, P, lvl, coalescent, pos_start, pos_stop
+    )
 end
 
-@inbounds function fastmerge_element_dense!(tid, val, P, lvl_val)
-    total = length(lvl_val)
-    base, rem = divrem(total, P)
-    lower = (tid - 1) * base + min(tid - 1, rem) + 1
-    upper = tid * base + min(tid, rem)
-
-    for k in lower:upper
-        lvl_val[k] = val[tid][k]
+function coalesce_dense!(
+    tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent, ranges
+)
+    src = lvl.val.data[tid]
+    for range in ranges
+        isempty(range) && continue
+        coalesce_copy!(coalescent.val, first(range), src, first(range), length(range))
     end
 end
 
-@inbounds function fastmerge_element!(
-    tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf
+@inline function coalesce_copy!(dst, dst_start, src, src_start, count)
+    if count <= 16
+        @inbounds for k in 0:(count - 1)
+            dst[dst_start + k] = src[src_start + k]
+        end
+    else
+        copyto!(dst, dst_start, src, src_start, count)
+    end
+end
+
+function fastmerge_element!(
+    tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf, ranges
 )
+    proc = 1
     if was_dense
-        total = length(lvl_val)
-        max_pos = pos_offsets[tid][P + 1]
-        shape = max_pos > 0 ? total ÷ max_pos : total
-
-        base, rem = divrem(max_pos, P)
-        offset = (tid - 1) * base + min(tid - 1, rem)
-        chunksize = base + (tid <= rem ? 1 : 0)
-        pos_lb = 1 + offset
-        pos_ub = pos_lb + chunksize - 1
-
-        if chunksize > 0
-            proc = binary_search_offsets(pos_lb, pos_offsets[tid], 1, P)
-            shared_with_prev = proc > 1 && shared_flags[tid][proc - 1]
-            base = proc > 1 ? pos_offsets[tid][proc] : 0
-            local_pos = pos_lb - base + (shared_with_prev ? 1 : 0)
-            for pos in pos_lb:pos_ub
-                while proc < P && pos > pos_offsets[tid][proc + 1]
+        offsets = pos_offsets[tid]
+        flags = shared_flags[tid]
+        max_pos = offsets[P + 1]
+        shape = max_pos > 0 ? length(lvl_val) ÷ max_pos : length(lvl_val)
+        shard_stop = offsets[proc + 1] * shape
+        src_shift = 0
+        for range in ranges
+            pos = first(range)
+            pos_stop = last(range)
+            while pos <= pos_stop
+                while pos > shard_stop
+                    proc < P || throw(BoundsError(lvl_val, pos))
                     proc += 1
-                    local_pos = shared_flags[tid][proc - 1] ? 2 : 1
+                    src_shift = (offsets[proc] - flags[proc - 1]) * shape
+                    shard_stop = offsets[proc + 1] * shape
                 end
-                channel = proc
-                dst_base = (pos - 1) * shape
-                src_base = (local_pos - 1) * shape
-                for k in 1:shape
-                    lvl_val[dst_base + k] = val[channel][src_base + k]
-                end
-
-                if channel < P && pos == pos_offsets[tid][channel + 1] &&
-                    shared_flags[tid][channel]
-                    for k in 1:shape
-                        if lvl_val[dst_base + k] == Vf
-                            pv = val[channel + 1][k]
-                            pv != Vf && (lvl_val[dst_base + k] = pv)
+                stop = min(pos_stop, shard_stop)
+                coalesce_copy!(lvl_val, pos, val[proc], pos - src_shift, stop - pos + 1)
+                if proc < P && flags[proc]
+                    boundary_start = shard_stop - shape + 1
+                    @inbounds for k in max(pos, boundary_start):stop
+                        if lvl_val[k] == Vf
+                            pv = val[proc + 1][k - boundary_start + 1]
+                            pv != Vf && (lvl_val[k] = pv)
                         end
                     end
                 end
-
-                local_pos += 1
+                pos = stop + 1
             end
         end
     else
-        nnz_cutoffs = Vector{Int}(undef, P + 1)
-        nnz_cutoffs[1] = 1
-        for p in 2:P+1
-            nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(val[p - 1])
-        end
-        nnz = nnz_cutoffs[end] - 1
-
-        base, rem = divrem(nnz, P)
-        offset = (tid - 1) * base + min(tid - 1, rem)
-        chunksize = base + (tid <= rem ? 1 : 0)
-        work_lb = 1 + offset
-        work_ub = work_lb + chunksize - 1
-
-        proc_id_lower = binary_search(work_lb, nnz_cutoffs)
-        nz_offset = work_lb - nnz_cutoffs[proc_id_lower] + 1
-        proc = proc_id_lower
-        write_idx = work_lb
-        while write_idx <= work_ub
-            lvl_val[write_idx] = val[proc][nz_offset]
-            write_idx += 1
-            nz_offset += 1
-            if nz_offset > length(val[proc])
-                proc += 1
-                nz_offset = 1
+        src_shift = 0
+        shard_stop = length(val[proc])
+        for range in ranges
+            pos = first(range)
+            pos_stop = last(range)
+            while pos <= pos_stop
+                while pos > shard_stop
+                    proc < P || throw(BoundsError(lvl_val, pos))
+                    proc += 1
+                    src_shift = shard_stop
+                    shard_stop += length(val[proc])
+                end
+                stop = min(pos_stop, shard_stop)
+                coalesce_copy!(lvl_val, pos, val[proc], pos - src_shift, stop - pos + 1)
+                pos = stop + 1
             end
         end
     end

@@ -304,3 +304,20 @@ function coalesce_dense!(
 )
     coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl)
 end
+
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel,
+    was_dense, ranges,
+)
+    child_ranges = (((first(r) - 1) * lvl.shape + 1):(last(r) * lvl.shape) for r in ranges)
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true, child_ranges
+    )
+end
+
+function coalesce_dense!(
+    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel, ranges
+)
+    child_ranges = (((first(r) - 1) * lvl.shape + 1):(last(r) * lvl.shape) for r in ranges)
+    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, child_ranges)
+end

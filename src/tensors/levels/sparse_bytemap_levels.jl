@@ -742,10 +742,13 @@ function coalesce_fast!(
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
 
-    fastmerge_spbytemap!(
+    work_start, work_stop = fastmerge_spbytemap!(
         tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
     )
-    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true)
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true,
+        CoalesceRanges(lvl_srt, work_start, work_stop),
+    )
 end
 
 function coalesce_dense!(
@@ -758,10 +761,23 @@ function coalesce_dense!(
     lvl_tbl = coalescent.tbl
     lvl_srt = coalescent.srt
 
-    fastmerge_spbytemap!(
+    work_start, work_stop = fastmerge_spbytemap!(
         tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
     )
-    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl)
+    cutoff = 1
+    for proc in 1:P
+        shared = !isempty(srt[proc]) && srt[proc][end] < 0
+        next_cutoff = cutoff + length(srt[proc]) - shared
+        start = max(work_start, cutoff)
+        stop = min(work_stop, next_cutoff - 1)
+        if start <= stop
+            coalesce_dense!(
+                proc, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl,
+                CoalesceRanges(lvl_srt, start, stop),
+            )
+        end
+        cutoff = next_cutoff
+    end
 end
 
 @inbounds function fastmerge_spbytemap!(
@@ -881,4 +897,75 @@ end
             last_pos -= 1
         end
     end
+    return 1 + offset, offset + chunksize
+end
+
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent,
+    was_dense, ranges,
+)
+    ptr = lvl.ptr.data
+    srt = lvl.srt.data
+    shifts = coalesce_parent_shifts(
+        tid, pos_offsets, shared_flags, P, length(coalescent.ptr) - 1, was_dense
+    )
+    cutoffs = ones(Int, P + 1)
+    for p in 1:P
+        shared = !isempty(srt[p]) && srt[p][end] < 0
+        cutoffs[p + 1] = cutoffs[p] + length(srt[p]) - shared
+    end
+    for range in ranges
+        isempty(range) && continue
+        for pos in first(range):(last(range) + 1)
+            prefix = 1
+            for p in 1:P
+                local_pos = clamp(pos - shifts[p], 1, length(ptr[p]))
+                prefix += min(ptr[p][local_pos] - 1, cutoffs[p + 1] - cutoffs[p])
+            end
+            coalescent.ptr[pos] = prefix
+        end
+    end
+    slots = (coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], r)
+        for p in 1:P for r in ranges)
+    for p in 1:P, range in ranges
+        for r in coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], range)
+            q = srt[p][r - cutoffs[p] + 1] + shifts[p] * lvl.shape
+            coalescent.tbl[q] = true
+            coalescent.srt[r] = q
+        end
+    end
+    child_ranges = Iterators.flatten(
+        CoalesceRanges(coalescent.srt, first(r), last(r)) for r in slots
+    )
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true, child_ranges
+    )
+end
+
+function coalesce_dense!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent, ranges
+)
+    ptr = lvl.ptr.data
+    srt = lvl.srt.data
+    cutoff = 1
+    for p in 1:(tid - 1)
+        cutoff += length(srt[p]) - (!isempty(srt[p]) && srt[p][end] < 0)
+    end
+    next_cutoff = cutoff + length(srt[tid]) - (!isempty(srt[tid]) && srt[tid][end] < 0)
+    for range in ranges
+        isempty(range) && continue
+        for pos in first(range):(last(range) + 1)
+            coalescent.ptr[pos] = 1 + sum(ptr[p][pos] - 1 for p in 1:P)
+        end
+        for r in coalesce_child_range(ptr[tid], 0, cutoff, next_cutoff, range)
+            q = srt[tid][r - cutoff + 1]
+            coalescent.tbl[q] = true
+            coalescent.srt[r] = q
+        end
+    end
+    slots = (coalesce_child_range(ptr[tid], 0, cutoff, next_cutoff, r) for r in ranges)
+    child_ranges = Iterators.flatten(
+        CoalesceRanges(coalescent.srt, first(r), last(r)) for r in slots
+    )
+    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, child_ranges)
 end

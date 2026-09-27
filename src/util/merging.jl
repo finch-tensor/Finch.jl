@@ -3,6 +3,40 @@ struct MergeNormalization end
 struct MergeRandom end
 struct MergeDense end
 
+# A restartable, allocation-free iterator over consecutive runs in sorted positions.
+struct CoalesceRanges{V}
+    positions::V
+    start::Int
+    stop::Int
+end
+
+Base.IteratorSize(::Type{<:CoalesceRanges}) = Base.SizeUnknown()
+Base.eltype(::Type{<:CoalesceRanges}) = UnitRange{Int}
+
+@inline function Base.iterate(ranges::CoalesceRanges, r=ranges.start)
+    r > ranges.stop && return nothing
+    pos_start = pos_stop = Int(ranges.positions[r])
+    r += 1
+    while r <= ranges.stop && ranges.positions[r] == pos_stop + 1
+        pos_stop += 1
+        r += 1
+    end
+    return pos_start:pos_stop, r
+end
+
+# Keep the single-range interface as a one-element batch.
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, pos_start, pos_stop
+)
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, (pos_start:pos_stop,)
+    )
+end
+
+function coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl, coalescent, pos_start, pos_stop)
+    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl, coalescent, (pos_start:pos_stop,))
+end
+
 Base.@propagate_inbounds function binary_search_lb(target, arr, lo, hi)
     result = -1
     while lo <= hi
@@ -108,4 +142,14 @@ end
     end
 
     return -1
+end
+
+# Translate a parent range to this shard's compacted child slots.
+@inline function coalesce_child_range(ptr, shift, cutoff, next_cutoff, range)
+    isempty(range) && return 1:0
+    local_start = clamp(first(range) - shift, 1, length(ptr))
+    local_stop = clamp(last(range) - shift + 1, 1, length(ptr))
+    start = cutoff + ptr[local_start] - 1
+    stop = cutoff + min(ptr[local_stop] - 1, next_cutoff - cutoff) - 1
+    return start:stop
 end

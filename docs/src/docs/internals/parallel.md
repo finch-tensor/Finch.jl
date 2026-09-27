@@ -93,8 +93,29 @@ global_memory
 `CoalesceLevel` prepares the destination with
 `setup_coalesce!(src, max_pos, dst, P, style; ...)`, then calls
 `coalesce_fast!(tid, pos_offsets, shared_flags, P, src, dst, was_dense)` for
-each merge worker. Each level assembles its own storage and recurses into its
-child level.
+each merge worker. This entry point partitions the work among workers.
+
+Recursive calls can specify an inclusive destination position range with
+`coalesce_fast!(tid, pos_offsets, shared_flags, P, src, dst, was_dense, pos_start, pos_stop)`.
+These calls merge exactly that range without repartitioning it or resizing the
+destination; an empty range does nothing. Like `assemble_level!`, a `Dense` level
+expands the range to `(pos_start - 1) * shape + 1:pos_stop * shape` in its child.
+A batch can instead be passed as
+`coalesce_fast!(tid, pos_offsets, shared_flags, P, src, dst, was_dense, ranges)`.
+Here `ranges` is a restartable iterable of sorted, nonoverlapping inclusive unit
+ranges in the destination position space. Empty ranges and empty batches are
+allowed. A single start/stop pair is forwarded as a one-element batch.
+
+A `SparseByteMap` passes a lazy `CoalesceRanges(srt, start, stop)` iterator over
+its worker's occupied positions, leaving unoccupied child storage untouched.
+`Dense` expands these ranges lazily. Element merges retain their source-shard
+cursor across ranges and copy contiguous spans, with separate handling for
+shared boundaries. Sparse children prepare their offsets and flags once per
+batch without changing their parent's mapping. Dense bytemap copies batch work
+by source shard, which need not be the same as the merge worker.
+
+`coalesce_dense!` also accepts either `pos_start, pos_stop` or `ranges` for dense
+child copies.
 
 `pos_offsets[tid]` contains `P + 1` integer position offsets for the worker.
 `shared_flags[tid]` is a separate vector of `P` Boolean flags, initially false.

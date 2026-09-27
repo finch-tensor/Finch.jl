@@ -969,6 +969,27 @@ function coalesce_fast!(
     coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent, was_dense)
 end
 
+# Map each shard's local parent positions into the destination position space.
+function coalesce_parent_shifts(tid, pos_offsets, shared_flags, P, max_pos, was_dense)
+    offsets = pos_offsets[tid]
+    flags = shared_flags[tid]
+    if was_dense
+        shape = offsets[P + 1] > 0 ? max_pos ÷ offsets[P + 1] : max_pos
+        return [(p == 1 ? 0 : offsets[p] - flags[p - 1]) * shape for p in 1:P]
+    end
+    return [offsets[p + 1] - flags[p] - 1 for p in 1:P]
+end
+
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::CoalesceLevel, coalescent,
+    was_dense, ranges,
+)
+    coalesce_fast!(
+        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent,
+        was_dense, ranges,
+    )
+end
+
 ###Load balancer stuff
 
 @inbounds function decrement_idxs(idxs, shapes)

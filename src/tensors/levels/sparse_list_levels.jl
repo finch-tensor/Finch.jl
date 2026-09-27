@@ -849,3 +849,47 @@ end
         end
     end
 end
+
+function coalesce_fast!(
+    tid, pos_offsets, shared_flags, P, lvl::SparseListLevel, coalescent,
+    was_dense, ranges,
+)
+    ptr = lvl.ptr.data
+    idx = lvl.idx.data
+    shifts = coalesce_parent_shifts(
+        tid, pos_offsets, shared_flags, P, length(coalescent.ptr) - 1, was_dense
+    )
+    cutoffs = ones(Int, P + 1)
+    child_offsets = copy(pos_offsets)
+    child_flags = copy(shared_flags)
+    child_offsets[tid] = ones(Int, P + 1)
+    child_flags[tid] = fill(false, P)
+    for p in 1:P
+        shared = !isempty(idx[p]) && idx[p][end] < 0
+        cutoffs[p + 1] = cutoffs[p] + length(idx[p]) - shared
+        child_offsets[tid][p + 1] = cutoffs[p + 1] - 1 + shared
+        child_flags[tid][p] = shared
+    end
+
+    for range in ranges
+        isempty(range) && continue
+        for pos in first(range):(last(range) + 1)
+            prefix = 1
+            for p in 1:P
+                local_pos = clamp(pos - shifts[p], 1, length(ptr[p]))
+                prefix += min(ptr[p][local_pos] - 1, cutoffs[p + 1] - cutoffs[p])
+            end
+            coalescent.ptr[pos] = prefix
+        end
+    end
+    for p in 1:P, range in ranges
+        for q in coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], range)
+            coalescent.idx[q] = idx[p][q - cutoffs[p] + 1]
+        end
+    end
+    child_ranges = (coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], r)
+        for p in 1:P for r in ranges)
+    coalesce_fast!(
+        tid, child_offsets, child_flags, P, lvl.lvl, coalescent.lvl, true, child_ranges
+    )
+end
