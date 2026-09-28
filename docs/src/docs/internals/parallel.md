@@ -96,28 +96,32 @@ disjoint: everything shard `p` stores precedes, in outermost-first index order,
 everything shard `p + 1` stores, so the result is their concatenation. The only
 overlap is at a band boundary, where neighboring shards can both store the same
 parent entry. The earlier shard owns it, and both shards' children land under it.
+Dense blocks under a shared entry overlap too, since every shard stores fill
+values outside its band; there, values merge by copying only non-fill values into
+a destination of fill.
 
 In the default `:normalize` mode, task `tid` first sums every shard's entries in
-its band `bands[tid] = (lb, ub)` into its own accumulator, so the shards meet
-this contract. Dense levels store fill values outside their band, so the merge
-clips dense blocks on the band's edges. In `:fast` mode, tasks write their shards
-directly and `bands` is `nothing`; dense blocks then merge by copying only stored
-non-fill values.
+its band `(lb, ub)` into its own accumulator, so the shards meet this contract,
+and `bands[tid]` is that band as a range of flat indices. Bands keep each shard
+from scanning dense storage outside its band. In `:fast` mode, tasks write their
+shards directly and `bands` is `nothing`, so all dense storage may overlap.
 
 The merge makes two passes over the levels:
 
-- `setup_coalesce!(lvl, max_pos, dst, P, shift)` runs once. It sizes each
-  destination level and returns a plan recording where each shard's positions
-  land (`dst_pos = pos + shift[p]`) and whether its first entry is shared with
-  the previous shard. Levels that compute child positions from their parent
-  (`Dense`, `SparseByteMap`) scale the shift by their shape; levels that store
-  children in their own slots (`SparseList`) shift by the entries earlier shards
-  own. A merge in which every shard shares one position space is the case
-  where every shift is zero.
-- `coalesce_shard!(tid, plan, lvl, dst, runs, band)` then runs in parallel,
-  copying shard `tid`. `runs` are the shard's parent positions to merge, and
-  `band` is a `CoalesceBand` giving the positions on the band's edges, or
-  `nothing`. Sparse levels merge all their shard's entries; each pointer entry
-  is written by the one shard owning the first entry at or after it.
+- `setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)` runs once. It sizes
+  each destination level and returns a plan recording where each shard's
+  positions land (`dst_pos = pos + shift[p]`), whether its first entry is shared
+  with the previous shard, and whether shards' leaves can overlap below it.
+  Levels that compute child positions from their parent (`Dense`,
+  `SparseByteMap`) scale the shift by their shape; levels that store children in
+  their own slots (`SparseList`) shift by the entries earlier shards own. A merge
+  in which every shard shares one position space is the case where every shift
+  is zero.
+- `coalesce_shard!(tid, plan, lvl, dst, runs)` then runs in parallel, copying
+  shard `tid`. `runs` iterates ranges of leaf positions (positions at the
+  `Element` level) under which the shard stores values. `Dense` levels leave leaf
+  positions unchanged, so they pass `runs` through. Sparse levels merge all
+  their shard's entries and pass on the leaves under them; each pointer entry is
+  written by the one shard owning the first entry at or after it.
   `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
   only around occupied positions, so the merge stays O(nnz).

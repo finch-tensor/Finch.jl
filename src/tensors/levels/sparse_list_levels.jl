@@ -631,7 +631,7 @@ function sample(tid, lvl::SparseListLevel)
     return (tup..., idx_2), lfbr
 end
 
-function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift)
+function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     shared = fill(false, P)
@@ -654,13 +654,14 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift)
     resize!(dst.idx, nnz)
     resize!(dst.ptr, max_pos + 1)
     nnz == 0 && fill!(dst.ptr, 1)
-    child = setup_coalesce!(lvl.lvl, nnz, dst.lvl, P, off .- shared)
+    # Both shards' leaves under a shared entry overlap.
+    child = setup_coalesce!(lvl.lvl, nnz, dst.lvl, P, off .- shared, any(shared))
     return (; shift, shared, off, prev, nnz, child)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
 # entry is written by the shard owning the first entry at or after it.
-function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs, band)
+function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     ptr = lvl.ptr.data[tid]
     idx = lvl.idx.data[tid]
     n = length(idx)
@@ -692,10 +693,5 @@ function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs, band)
 
     # Recurse on every entry, owned or not: a shared entry's children are split
     # between both shards.
-    child_band = isnothing(band) ? nothing : coalesce_band(
-        band,
-        coalesce_edge(band.lo, pos_first, idx[1], last(band.lb), 1),
-        coalesce_edge(band.hi, pos_last, idx[n], last(band.ub), n),
-    )
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, (1:n,), child_band)
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, (1:(n * coalesce_leaves(lvl.lvl)),))
 end

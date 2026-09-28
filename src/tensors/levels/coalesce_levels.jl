@@ -629,7 +629,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
     tid = freshen(ctx, :tid)
     if mode == :fast
-        # Tasks wrote their shards directly; their bands are unknown.
+        # Tasks wrote their shards directly, without accumulating.
         push_preamble!(
             ctx,
             quote
@@ -640,6 +640,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
         bands = freshen(ctx, :bands)
+        ranges = freshen(ctx, :ranges)
         mask = freshen(ctx, :mask)
         nnz = freshen(ctx, :nnz)
         sid = freshen(ctx, :sid)
@@ -663,6 +664,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
                     $bands = [$band for $tid in 1:($P)]
+                    $ranges = [Finch.band_range(b..., $shapes) for b in $bands]
                     Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
@@ -763,7 +765,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
                     if $unordered
                         Finch.coalesce_shards!(
-                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $bands
+                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $ranges
                         )
                     else
                         # SparseList output accumulates into hash tables, so copy
@@ -825,7 +827,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                                 nothing
                             end)
                         end
-                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $bands)
+                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $ranges)
                     end
                 end
             end,

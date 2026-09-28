@@ -280,22 +280,13 @@ function sample(tid, lvl::DenseLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift)
-    child = setup_coalesce!(lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape)
+function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift, overlap)
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape, overlap
+    )
     return (; child)
 end
 
-# A block on the band's edge keeps only its part inside the band.
-function coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs, band)
-    shape = lvl.shape
-    lo, hi = isnothing(band) ? (0, 0) : (band.lo, band.hi)
-    i_lo, i_hi = isnothing(band) ? (1, shape) : (last(band.lb), last(band.ub))
-    child_runs = (
-        ((first(r) - 1) * shape + (first(r) == lo ? i_lo : 1)):((last(r) - 1) * shape + (last(r) == hi ? i_hi : shape))
-        for r in runs if !isempty(r)
-    )
-    child_band = coalesce_band(
-        band, lo > 0 ? (lo - 1) * shape + i_lo : 0, hi > 0 ? (hi - 1) * shape + i_hi : 0
-    )
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs, child_band)
-end
+# Dense leaves positions below it where they were.
+coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs) =
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, runs)

@@ -266,21 +266,28 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(lvl::ElementLevel{Vf}, max_pos, dst, P, shift) where {Vf}
+function setup_coalesce!(
+    lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap
+) where {Vf}
     coalesce_resize!(dst.val, max_pos, Vf)
-    return (; shift)
+    return (; shift, overlap)
 end
 
-function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs, band) where {Vf}
+function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
     src = lvl.val.data[tid]
     shift = plan.shift[tid]
     for run in runs
-        if !isnothing(band)
-            coalesce_copy!(dst.val, first(run) + shift, src, first(run), length(run))
-        else
-            # Without bands, dense blocks can overlap; copy only stored values.
+        if plan.overlap
+            # Shards store fill values outside their band, so where runs
+            # overlap, copy only stored values.
             for i in run
                 src[i] != Vf && (dst.val[i + shift] = src[i])
+            end
+        elseif length(run) > 16
+            copyto!(dst.val, first(run) + shift, src, first(run), length(run))
+        else
+            for i in run
+                dst.val[i + shift] = src[i]
             end
         end
     end

@@ -674,7 +674,7 @@ function sample(tid, lvl::SparseByteMapLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift)
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overlap)
     srt = lvl.srt.data
     shape = lvl.shape
     shared = fill(false, P)
@@ -695,14 +695,17 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift)
     coalesce_resize!(dst.tbl, max_pos * shape, false)
     resize!(dst.srt, nnz)
     dst.ptr[1] = 1
-    child = setup_coalesce!(lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape)
+    # Both shards' leaves under a shared entry overlap.
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape, any(shared)
+    )
     return (; shift, shared, off, prev, nnz, child)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. ptr keeps
 # freeze_level!'s layout, with bounds only around occupied positions, so the merge
 # stays O(nnz). The shard owning a position's first entry writes its bounds.
-function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs, band)
+function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
     src = lvl.srt.data[tid]
     isempty(src) && return nothing
     shape = lvl.shape
@@ -727,13 +730,7 @@ function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs, band)
 
     # Recurse on every entry, owned or not: a shared entry's children are split
     # between both shards.
-    q_lo, q_hi = src[1], src[end]
-    child_band = isnothing(band) ? nothing : coalesce_band(
-        band,
-        coalesce_edge(band.lo, fld(q_lo - 1, shape) + 1, mod1(q_lo, shape), last(band.lb), q_lo),
-        coalesce_edge(band.hi, fld(q_hi - 1, shape) + 1, mod1(q_hi, shape), last(band.ub), q_hi),
-    )
-    coalesce_shard!(
-        tid, plan.child, lvl.lvl, dst.lvl, CoalesceRanges(src, 1, length(src)), child_band
-    )
+    leaves = coalesce_leaves(lvl.lvl)
+    child_runs = (((q - 1) * leaves + 1):(q * leaves) for q in src)
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
 end

@@ -29,24 +29,18 @@
                 )
             end
         end
-        bands = map(cuts) do cut
-            isempty(cut) && return Finch.empty_band(size(data))
-            idxs(i) = Tuple(Finch.idxs_at_flat(i, size(data)))
-            (idxs(first(cut)), idxs(last(cut)))
-        end
-        return stack(shards), bands
+        return stack(shards)
     end
 
-    # Merging must give exactly the storage of a tensor built directly, both
-    # with bands and without (copying only stored values of dense blocks).
+    # Merging must give exactly the storage of a tensor built directly, whether
+    # or not the merge knows each shard's band.
     function check_merge(fmt, data, cuts)
-        src, bands = band_shards(fmt, data, cuts)
-        ref = Tensor(fmt(), data)
-        for bs in (bands, nothing)
+        src = band_shards(fmt, data, cuts)
+        for bands in (cuts, nothing)
             # Destinations arrive cleared, as assemble_level! leaves them.
             dst = Tensor(fmt(), zero(data)).lvl
-            Finch.coalesce_shards!(src, dst, length(cuts), 1, bs)
-            @test Finch.isstructequal(dst, ref.lvl)
+            Finch.coalesce_shards!(src, dst, length(cuts), 1, bands)
+            @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
             @test Array(Tensor(dst)) == data
         end
     end
