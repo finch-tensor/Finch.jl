@@ -280,44 +280,22 @@ function sample(tid, lvl::DenseLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, P, style::MergeFast)
-    setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl, P, style)
+function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift)
+    child = setup_coalesce!(lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape)
+    return (; child)
 end
 
-function setup_coalesce!(
-    lvl::DenseLevel, max_pos, coalescent, P, style::MergeNormalization;
-    pos_map=nothing, was_dense=false,
-)
-    setup_coalesce!(
-        lvl.lvl, max_pos * lvl.shape, coalescent.lvl, P, style; pos_map=pos_map, was_dense=true
+# A block on the band's edge keeps only its part inside the band.
+function coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs, band)
+    shape = lvl.shape
+    lo, hi = isnothing(band) ? (0, 0) : (band.lo, band.hi)
+    i_lo, i_hi = isnothing(band) ? (1, shape) : (last(band.lb), last(band.ub))
+    child_runs = (
+        ((first(r) - 1) * shape + (first(r) == lo ? i_lo : 1)):((last(r) - 1) * shape + (last(r) == hi ? i_hi : shape))
+        for r in runs if !isempty(r)
     )
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel, was_dense
-)
-    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true)
-end
-
-function coalesce_dense!(
-    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel
-)
-    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl)
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel,
-    was_dense, ranges,
-)
-    child_ranges = (((first(r) - 1) * lvl.shape + 1):(last(r) * lvl.shape) for r in ranges)
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true, child_ranges
+    child_band = coalesce_band(
+        band, lo > 0 ? (lo - 1) * shape + i_lo : 0, hi > 0 ? (hi - 1) * shape + i_hi : 0
     )
-end
-
-function coalesce_dense!(
-    tid, pos_offsets, shared_flags, P, lvl::DenseLevel, coalescent::DenseLevel, ranges
-)
-    child_ranges = (((first(r) - 1) * lvl.shape + 1):(last(r) * lvl.shape) for r in ranges)
-    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, child_ranges)
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs, child_band)
 end

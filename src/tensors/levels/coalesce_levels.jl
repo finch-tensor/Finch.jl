@@ -614,11 +614,6 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
-init_gfm(P) = [[1] for _ in 1:P]
-# Each merge worker updates its own offsets and flags while descending the level tree.
-init_pos_offsets(P) = [ones(Int, P + 1) for _ in 1:P]
-init_shared_flags(P) = [fill(false, P) for _ in 1:P]
-init_posmap(P) = [1 for _ in 1:(P + 1)]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     lvl.declared || return lvl
@@ -632,39 +627,31 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     max_pos = factor
     mode = lvl.mode
 
-    pos_offsets = freshen(ctx, :pos_offsets)
-    shared_flags = freshen(ctx, :shared_flags)
     tid = freshen(ctx, :tid)
-    dec = freshen(ctx, :declared)
     if mode == :fast
+        # Tasks wrote their shards directly; their bands are unknown.
         push_preamble!(
             ctx,
             quote
-                $pos_offsets = Finch.init_pos_offsets($P)
-                $shared_flags = Finch.init_shared_flags($P)
-                $dec = Finch.setup_coalesce!(
-                    $(lvl_e), $max_pos, $(lvl_c), $P, MergeFast()
-                )
-                if $dec
-                    Threads.@threads for $tid in 1:($P)
-                        Finch.coalesce_fast!(
-                            $tid, $pos_offsets, $shared_flags, $P, $(lvl_e), $(lvl_c), false
-                        )
-                    end
-                end
+                Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, nothing)
             end,
         )
     else
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
+        bands = freshen(ctx, :bands)
         mask = freshen(ctx, :mask)
         nnz = freshen(ctx, :nnz)
         sid = freshen(ctx, :sid)
         unordered = freshen(ctx, :unordered)
-        pos_map = freshen(ctx, :pos_map)
         shapes = freshen(ctx, :shapes)
         tsize = sample_dims(lvl)
         dense = all_dense(lvl)
+        band = if dense
+            :(Finch.balance($tid, $P, $shapes, MergeDense()))
+        else
+            :(Finch.balance($(lvl.sampler), $tid, $P, $shapes, MergeRandom()))
+        end
 
         push_preamble!(ctx,
             quote
@@ -674,14 +661,10 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                     if !$dense
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
+                    # Task tid sums every shard's entries in its band into its accumulator.
+                    $bands = [$band for $tid in 1:($P)]
                     Threads.@threads for $tid in 1:($P)
-                        if !$dense
-                            $lb, $ub = Finch.balance(
-                                $(lvl.sampler), $tid, $P, $shapes, MergeRandom()
-                            )
-                        else
-                            $lb, $ub = Finch.balance($tid, $P, $shapes, MergeDense()) ##all dense pass, can make optimization
-                        end
+                        $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
 
                         $(contain(ctx) do ctx_2
@@ -712,7 +695,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
                             push_preamble!(ctx_2,
                                 quote
-                                    for $sid in 1:($P)
+                                    Finch.isempty_band($lb, $ub) || for $sid in 1:($P)
                                         $(contain(ctx_2) do ctx_3
                                             channel_dev_2 = VirtualMultiChannelMemory(
                                                 lvl.device, get_num_tasks(lvl.device)
@@ -778,8 +761,15 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         end)
                     end
 
-                    if !unordered
+                    if $unordered
+                        Finch.coalesce_shards!(
+                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $bands
+                        )
+                    else
+                        # SparseList output accumulates into hash tables, so copy
+                        # each band back into the output format before merging.
                         Threads.@threads for $tid in 1:($P)
+
                             $(contain(ctx) do ctx_2
                                 diff = Dict()
                                 channel_dev = VirtualMultiChannelMemory(
@@ -835,55 +825,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                                 nothing
                             end)
                         end
-                        $pos_map = Finch.init_posmap($P)
-                        $pos_offsets = Finch.init_pos_offsets($P)
-                        $shared_flags = Finch.init_shared_flags($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e),
-                            $max_pos,
-                            $(lvl_c),
-                            $P,
-                            MergeNormalization();
-                            pos_map=($pos_map),
-                            was_dense=false,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_fast!(
-                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e).lvl, $(lvl_c), false
-                            )
-                        end
-                    elseif $dense
-                        $pos_offsets = Finch.init_pos_offsets($P)
-                        $shared_flags = Finch.init_shared_flags($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e).accumulator,
-                            $max_pos,
-                            $(lvl_c),
-                            $P,
-                            MergeNormalization();
-                            pos_map=nothing,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_dense!(
-                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e).accumulator, $(lvl_c)
-                            )
-                        end
-                    else
-                        $pos_offsets = Finch.init_pos_offsets($P)
-                        $shared_flags = Finch.init_shared_flags($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e).accumulator,
-                            $max_pos,
-                            $(lvl_c),
-                            $P,
-                            MergeNormalization();
-                            pos_map=nothing,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_fast!(
-                                $tid, $pos_offsets, $shared_flags, $P, $(lvl_e), $(lvl_c), false
-                            )
-                        end
+                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $bands)
                     end
                 end
             end,
@@ -937,22 +879,6 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
     )
 end
 
-function setup_coalesce!(
-    lvl::CoalesceLevel,
-    max_pos,
-    coalescent,
-    P,
-    style::MergeNormalization;
-    pos_map=nothing,
-    was_dense=false,
-)
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, P, style; pos_map, was_dense)
-end
-
-function setup_coalesce!(lvl::CoalesceLevel, max_pos, coalescent, P, style::MergeFast)
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, P, style)
-end
-
 function coalesce_level!(
     lvl::CoalesceLevel, global_fbr_map, factor, max_dim, P, coalescent, mode
 )
@@ -961,33 +887,6 @@ function coalesce_level!(
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent, mode)
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::CoalesceLevel, coalescent, was_dense
-)
-    coalesce_fast!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent, was_dense)
-end
-
-# Map each shard's local parent positions into the destination position space.
-function coalesce_parent_shifts(tid, pos_offsets, shared_flags, P, max_pos, was_dense)
-    offsets = pos_offsets[tid]
-    flags = shared_flags[tid]
-    if was_dense
-        shape = offsets[P + 1] > 0 ? max_pos ÷ offsets[P + 1] : max_pos
-        return [(p == 1 ? 0 : offsets[p] - flags[p - 1]) * shape for p in 1:P]
-    end
-    return [offsets[p + 1] - flags[p] - 1 for p in 1:P]
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::CoalesceLevel, coalescent,
-    was_dense, ranges,
-)
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent,
-        was_dense, ranges,
-    )
 end
 
 ###Load balancer stuff
@@ -1024,37 +923,13 @@ end
     if tid == P
         ub = Tuple(shapes)
     else
-        ub = Tuple(decrement_idxs(collect(lb_at(tid + 1)), shapes))
+        next = lb_at(tid + 1)
+        # Repeated sample points leave a band empty.
+        all(isone, next) && return empty_band(shapes)
+        ub = Tuple(decrement_idxs(collect(next), shapes))
     end
 
-    return (lb, ub)
-end
-
-@inbounds function balance(lvl, tid, P, nnz, style::Union{MergeNormalization})
-    shapes = collect(Finch.level_size(lvl))
-    max_dim = length(shapes)
-
-    base = div(nnz, P)
-    remainder = nnz % P
-    lower_work = (tid - 1) * base + min(tid - 1, remainder)
-    upper_work = tid * base + min(tid, remainder)
-
-    if tid == 1
-        lb_idxs = ntuple(_ -> 1, max_dim)
-    else
-        lb_idxs = find_normalizer_split(lvl, lower_work, P, copy(shapes), max_dim)
-    end
-    lb = Tuple(lb_idxs)
-
-    if tid == P
-        ub_idxs = shapes
-    else
-        next_lb_idxs = find_normalizer_split(lvl, upper_work, P, copy(shapes), max_dim)
-        ub_idxs = decrement_idxs(next_lb_idxs, shapes)
-    end
-    ub = Tuple(ub_idxs)
-
-    return (lb, ub)
+    return isempty_band(lb, ub) ? empty_band(shapes) : (lb, ub)
 end
 
 @inbounds function idxs_at_flat(flat, shapes)
@@ -1072,37 +947,12 @@ end
     base, rem = divrem(total, P)
     lower = (tid - 1) * base + min(tid - 1, rem) + 1
     upper = tid * base + min(tid, rem)
+    lower > upper && return empty_band(shapes)
 
     lb = Tuple(idxs_at_flat(lower, shapes))
     ub = Tuple(idxs_at_flat(upper, shapes))
 
     return (lb, ub)
-end
-
-@inbounds function find_normalizer_split(lvl, target_work, P, idxs, max_dim)
-    dim = 0
-    while dim < max_dim
-        lo = 1
-        hi = idxs[max_dim - dim]
-        truth = -1
-        while lo <= hi
-            candidate = div(lo + hi, 2)
-            idxs[max_dim - dim] = candidate
-            stored = 0
-            for p in 1:P
-                stored += Finch.countstored_level(lvl, 1, idxs, 0, p, true)
-            end
-            if stored >= target_work
-                truth = candidate
-                hi = candidate - 1
-            else
-                lo = candidate + 1
-            end
-        end
-        idxs[max_dim - dim] = truth
-        dim += 1
-    end
-    return idxs
 end
 
 function get_total_nnz(lvl::AbstractLevel, unordered)

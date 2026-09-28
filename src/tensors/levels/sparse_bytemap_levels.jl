@@ -674,298 +674,66 @@ function sample(tid, lvl::SparseByteMapLevel)
     return (tup..., idx_2), pos_2
 end
 
-@inbounds function setup_coalesce!(
-    lvl::SparseByteMapLevel, max_pos, coalescent, P, style::MergeFast
-)
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    nnz = sum(length, lvl.srt.data)
-    if nnz < 1
-        return false
-    end
-
-    resize!(lvl_ptr, max_pos + 1)
-    resize!(lvl_tbl, max_pos * lvl.shape)
-    resize!(lvl_srt, nnz)
-
-    lvl_ptr[1] = 1
-
-    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, P, style)
-end
-
-@inbounds function setup_coalesce!(
-    lvl::SparseByteMapLevel, max_pos, coalescent, P, style::MergeNormalization;
-    pos_map=nothing, was_dense=false,
-)
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    nnz = sum(length, lvl.srt.data)
-    if nnz < 1
-        return false
-    end
-
-    for p in 1:P - 1
-        srt_p = lvl.srt.data[p]
-        srt_next = lvl.srt.data[p + 1]
-        if !isempty(srt_p) && !isempty(srt_next) && srt_p[end] == srt_next[1]
-            nnz -= 1
-            srt_p[end] = -1
-        end
-    end
-
-
-    resize!(lvl_ptr, max_pos + 1)
-    resize!(lvl_tbl, max_pos * lvl.shape)
-    resize!(lvl_srt, nnz)
-
-    lvl_ptr[1] = 1
-    if max_pos == 1
-        lvl_ptr[end] = nnz + 1
-    end
-
-    setup_coalesce!(
-        lvl.lvl, length(lvl_tbl), coalescent.lvl, P, style; pos_map, was_dense=true
-    )
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent, was_dense
-)
-    ptr = lvl.ptr.data
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift)
     srt = lvl.srt.data
-    tbl = lvl.tbl.data
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    work_start, work_stop = fastmerge_spbytemap!(
-        tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
-    )
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true,
-        CoalesceRanges(lvl_srt, work_start, work_stop),
-    )
-end
-
-function coalesce_dense!(
-    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent
-)
-    ptr = lvl.ptr.data
-    srt = lvl.srt.data
-    tbl = lvl.tbl.data
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    work_start, work_stop = fastmerge_spbytemap!(
-        tid, pos_offsets, shared_flags, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl
-    )
-    cutoff = 1
-    for proc in 1:P
-        shared = !isempty(srt[proc]) && srt[proc][end] < 0
-        next_cutoff = cutoff + length(srt[proc]) - shared
-        start = max(work_start, cutoff)
-        stop = min(work_stop, next_cutoff - 1)
-        if start <= stop
-            coalesce_dense!(
-                proc, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl,
-                CoalesceRanges(lvl_srt, start, stop),
-            )
-        end
-        cutoff = next_cutoff
-    end
-end
-
-@inbounds function fastmerge_spbytemap!(
-    tid, pos_offsets, shared_flags, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl
-)
-    nnz_cutoffs = Vector{Int}(undef, P + 1)
-    nnz_cutoffs[1] = 1
-    for p in 2:P+1
-        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(srt[p - 1])
-        if !isempty(srt[p - 1]) && srt[p - 1][end] < 0
-            nnz_cutoffs[p] -= 1
-        end
-    end
-    nnz = nnz_cutoffs[end] - 1
-    max_pos = length(lvl_ptr) - 1
-
-    base, rem = divrem(nnz, P)
-    offset = (tid - 1) * base + min(tid - 1, rem)
-    chunksize = base + (tid <= rem ? 1 : 0)
-
-    if chunksize > 0
-        work_lb = 1 + offset
-        work_ub = work_lb + chunksize - 1
-
-        proc_id_lower = binary_search(work_lb, nnz_cutoffs)
-        nz_id_lower = work_lb - nnz_cutoffs[proc_id_lower] + 1
-        proc_id_upper = binary_search(work_ub, nnz_cutoffs)
-        nz_id_upper = work_ub - nnz_cutoffs[proc_id_upper] + 1
-
-        lfbr_lower = binary_search(nz_id_lower, ptr[proc_id_lower])
-        lfbr_upper = binary_search(nz_id_upper, ptr[proc_id_upper])
-
-        pos_lb = pos_offsets[tid][proc_id_lower + 1] + lfbr_lower - 1
-        pos_ub = min(pos_offsets[tid][proc_id_upper + 1] + lfbr_upper - 1, max_pos)
-
-
-        if nz_id_upper < ptr[proc_id_upper][lfbr_upper + 1] - 1
-            shares_border = true
-        elseif lfbr_upper < length(ptr[proc_id_upper]) - 1
-            shares_border = false
-        elseif proc_id_upper < P
-            shares_border = pos_offsets[tid][proc_id_upper + 2] == pos_ub
-        else
-            shares_border = false
-        end
-
-        proc = proc_id_lower
-        srt_read = nz_id_lower
-        srt_write = work_lb
-        srt_ceil = srt_write + chunksize
-        while srt_write < srt_ceil
-            raw_start = pos_offsets[tid][proc + 1] - (shared_flags[tid][proc] ? 1 : 0)
-            pos_shift = (raw_start - 1) * shape
-            ele = srt[proc][srt_read] + pos_shift
-            if ele > 0
-                lvl_tbl[ele] = true
-                lvl_srt[srt_write] = ele
-                srt_write += 1
-            end
-            srt_read += 1
-
-            if srt_read > length(srt[proc])
-                srt_read = 1
-                proc += 1
-            end
-        end
-
-        if max_pos != 1
-            proc = proc_id_lower
-            pos_read = lfbr_lower
-
-            pos_write = 2
-            for p in 1:proc - 1
-                pos_write += length(ptr[p]) - 1
-                shared_flags[tid][p] && (pos_write -= 1)
-            end
-            pos_write += lfbr_lower - 1
-
-            ceil = 3
-            for p in 1:proc_id_upper - 1
-                ceil += length(ptr[p]) - 1
-                shared_flags[tid][p] && (ceil -= 1)
-            end
-            ceil += lfbr_upper - 1
-            shares_border && (ceil -= 1)
-
-            prefix = ptr[proc][pos_read] + nnz_cutoffs[proc] - 1
-            while pos_write < ceil
-                delta = ptr[proc][pos_read + 1] - ptr[proc][pos_read]
-                mul = delta > 0
-                prefix += delta * mul
-                lvl_ptr[pos_write] = prefix
-                pos_write += 1
-                pos_read += 1
-
-                if pos_read > length(ptr[proc]) - 1
-                    pos_read = 1
-                    old_proc = proc
-                    proc += 1
-                    if proc > P
-                        break
-                    end
-                    if shared_flags[tid][old_proc]
-                        pos_write -= 1
-                    end
-                end
-            end
-        end
-    end
-
-    last_pos = 0
+    shape = lvl.shape
+    shared = fill(false, P)
+    off = zeros(Int, P)
+    prev = zeros(Int, P)
+    nnz = 0
+    last_q = 0
     for p in 1:P
-        ancestor_shared = shared_flags[tid][p]
-        last_pos += length(ptr[p]) - 1
-        pos_offsets[tid][p + 1] = last_pos
-        if ancestor_shared
-            last_pos -= 1
-        end
+        off[p] = nnz
+        prev[p] = last_q
+        isempty(srt[p]) && continue
+        # A shard shares its first entry if the previous shard ended on it.
+        shared[p] = srt[p][1] + shift[p] * shape == last_q
+        nnz += length(srt[p]) - shared[p]
+        last_q = srt[p][end] + shift[p] * shape
     end
-    return 1 + offset, offset + chunksize
+    coalesce_resize!(dst.ptr, max_pos + 1, 0)
+    coalesce_resize!(dst.tbl, max_pos * shape, false)
+    resize!(dst.srt, nnz)
+    dst.ptr[1] = 1
+    child = setup_coalesce!(lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape)
+    return (; shift, shared, off, prev, nnz, child)
 end
 
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent,
-    was_dense, ranges,
-)
-    ptr = lvl.ptr.data
-    srt = lvl.srt.data
-    shifts = coalesce_parent_shifts(
-        tid, pos_offsets, shared_flags, P, length(coalescent.ptr) - 1, was_dense
-    )
-    cutoffs = ones(Int, P + 1)
-    for p in 1:P
-        shared = !isempty(srt[p]) && srt[p][end] < 0
-        cutoffs[p + 1] = cutoffs[p] + length(srt[p]) - shared
-    end
-    for range in ranges
-        isempty(range) && continue
-        for pos in first(range):(last(range) + 1)
-            prefix = 1
-            for p in 1:P
-                local_pos = clamp(pos - shifts[p], 1, length(ptr[p]))
-                prefix += min(ptr[p][local_pos] - 1, cutoffs[p + 1] - cutoffs[p])
-            end
-            coalescent.ptr[pos] = prefix
+# Owned entries fill consecutive slots after earlier shards' entries. ptr keeps
+# freeze_level!'s layout, with bounds only around occupied positions, so the merge
+# stays O(nnz). The shard owning a position's first entry writes its bounds.
+function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs, band)
+    src = lvl.srt.data[tid]
+    isempty(src) && return nothing
+    shape = lvl.shape
+    q_shift = plan.shift[tid] * shape
+    slot = plan.off[tid] + 1
+    p_prev = fld(plan.prev[tid] - 1, shape) + 1
+    for r in (1 + plan.shared[tid]):length(src)
+        q = src[r] + q_shift
+        dst.srt[slot] = q
+        dst.tbl[q] = true
+        p = fld(q - 1, shape) + 1
+        if p != p_prev
+            dst.ptr[p_prev + 1] = slot
+            dst.ptr[p] = slot
         end
+        p_prev = p
+        slot += 1
     end
-    slots = (coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], r)
-        for p in 1:P for r in ranges)
-    for p in 1:P, range in ranges
-        for r in coalesce_child_range(ptr[p], shifts[p], cutoffs[p], cutoffs[p + 1], range)
-            q = srt[p][r - cutoffs[p] + 1] + shifts[p] * lvl.shape
-            coalescent.tbl[q] = true
-            coalescent.srt[r] = q
-        end
+    if slot - 1 == plan.nnz && slot > plan.off[tid] + 1
+        dst.ptr[p_prev + 1] = slot
     end
-    child_ranges = Iterators.flatten(
-        CoalesceRanges(coalescent.srt, first(r), last(r)) for r in slots
-    )
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, true, child_ranges
-    )
-end
 
-function coalesce_dense!(
-    tid, pos_offsets, shared_flags, P, lvl::SparseByteMapLevel, coalescent, ranges
-)
-    ptr = lvl.ptr.data
-    srt = lvl.srt.data
-    cutoff = 1
-    for p in 1:(tid - 1)
-        cutoff += length(srt[p]) - (!isempty(srt[p]) && srt[p][end] < 0)
-    end
-    next_cutoff = cutoff + length(srt[tid]) - (!isempty(srt[tid]) && srt[tid][end] < 0)
-    for range in ranges
-        isempty(range) && continue
-        for pos in first(range):(last(range) + 1)
-            coalescent.ptr[pos] = 1 + sum(ptr[p][pos] - 1 for p in 1:P)
-        end
-        for r in coalesce_child_range(ptr[tid], 0, cutoff, next_cutoff, range)
-            q = srt[tid][r - cutoff + 1]
-            coalescent.tbl[q] = true
-            coalescent.srt[r] = q
-        end
-    end
-    slots = (coalesce_child_range(ptr[tid], 0, cutoff, next_cutoff, r) for r in ranges)
-    child_ranges = Iterators.flatten(
-        CoalesceRanges(coalescent.srt, first(r), last(r)) for r in slots
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards.
+    q_lo, q_hi = src[1], src[end]
+    child_band = isnothing(band) ? nothing : coalesce_band(
+        band,
+        coalesce_edge(band.lo, fld(q_lo - 1, shape) + 1, mod1(q_lo, shape), last(band.lb), q_lo),
+        coalesce_edge(band.hi, fld(q_hi - 1, shape) + 1, mod1(q_hi, shape), last(band.ub), q_hi),
     )
-    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl.lvl, coalescent.lvl, child_ranges)
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, CoalesceRanges(src, 1, length(src)), child_band
+    )
 end

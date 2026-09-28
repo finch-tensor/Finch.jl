@@ -1,5 +1,4 @@
-struct MergeFast end
-struct MergeNormalization end
+# Load-balancing strategies for the normalizing Coalesce merge.
 struct MergeRandom end
 struct MergeDense end
 
@@ -24,59 +23,89 @@ Base.eltype(::Type{<:CoalesceRanges}) = UnitRange{Int}
     return pos_start:pos_stop, r
 end
 
-# Keep the single-range interface as a one-element batch.
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, pos_start, pos_stop
-)
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, (pos_start:pos_stop,)
-    )
+# Bands are inclusive bounds on index tuples, compared outermost (last) first.
+isempty_band(lb, ub) = isless(reverse(ub), reverse(lb))
+
+# A band with no indices, whatever the shape: its lower bound is past the last
+# index. Tasks with empty bands skip accumulation and merging, since tuplemask
+# assumes `lb <= ub`.
+empty_band(shapes) =
+    ((map(one, Base.front(Tuple(shapes)))..., shapes[end] + 1), Tuple(shapes))
+
+"""
+    CoalesceBand(lo, hi, lb, ub)
+
+The part of a shard's band still to be enforced below some level. `lb` and `ub`
+are the band's inclusive index bounds, innermost first; `last(lb)` bounds the
+index of this level's children. Only the subtrees at the local positions `lo`
+and `hi` lie on the band's lower and upper edges (0 if none); everything
+between them is inside the band.
+"""
+struct CoalesceBand{B}
+    lo::Int
+    hi::Int
+    lb::B
+    ub::B
 end
 
-function coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl, coalescent, pos_start, pos_stop)
-    coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl, coalescent, (pos_start:pos_stop,))
-end
+# The band below a level whose children at `lo` and `hi` stay on its edges.
+coalesce_band(band::CoalesceBand, lo, hi) =
+    CoalesceBand(lo, hi, Base.front(band.lb), Base.front(band.ub))
+coalesce_band(::Nothing, lo, hi) = nothing
 
-Base.@propagate_inbounds function binary_search_lb(target, arr, lo, hi)
-    result = -1
-    while lo <= hi
-        mid = div(lo + hi, 2)
-        if arr[mid] >= target
-            result = mid
-            hi = mid - 1
-        else
-            lo = mid + 1
-        end
-    end
-    return result
-end
+# The child position on an edge, given this level's first or last entry.
+@inline coalesce_edge(edge, pos, i, bound, child) =
+    (edge > 0 && pos == edge && i == bound) ? child : 0
 
-Base.@propagate_inbounds function binary_search_ub(target, arr, lo, hi)
-    result = -1
-    while lo <= hi
-        mid = div(lo + hi, 2)
-        if arr[mid] <= target
-            result = mid
-            lo = mid + 1
-        else
-            hi = mid - 1
-        end
-    end
-    return result
-end
+"""
+    coalesce_shards!(src, dst, P, max_pos, bands)
 
-Base.@propagate_inbounds function unwrap_dense(gfm, factor, P)
+Merge the `P` shards of `src` into `dst`. Shards must be ordered and disjoint:
+everything shard `p` stores precedes, in outermost-first index order, everything
+shard `p + 1` stores. The result is their concatenation. The only overlap is at a
+band boundary, where neighboring shards can both store the same parent entry;
+the earlier shard owns it, and both shards' children land under it.
+
+`bands[tid] = (lb, ub)` bounds shard `tid`'s indices (innermost first). Dense
+levels store fill values outside their shard's band, so the bounds clip dense
+blocks on the band's edges. With `bands = nothing`, dense blocks instead merge
+by copying only non-fill values.
+
+Merging makes two passes over the levels. `setup_coalesce!(lvl, max_pos, dst, P,
+shift)` sizes `dst` and returns a plan saying where each shard's positions land
+(`dst_pos = pos + shift[p]`) and whether its first entry is shared with the
+previous shard. Then, in parallel, `coalesce_shard!(tid, plan, lvl, dst, runs,
+band)` copies shard `tid`: `runs` are its parent positions and `band` is a
+[`CoalesceBand`](@ref) or `nothing`.
+"""
+function coalesce_shards!(src, dst, P, max_pos, bands)
+    plan = setup_coalesce!(src, max_pos, dst, P, zeros(Int, P))
     Threads.@threads for tid in 1:P
-        v = gfm[tid]
-        olddim = length(v)
-        resize!(v, olddim * factor)
-        for i in olddim:-1:1
-            val = v[i]
-            base = (val - 1) * factor
-            for j in factor:-1:1
-                v[(i - 1) * factor + j] = base + j
-            end
+        if isnothing(bands)
+            coalesce_shard!(tid, plan, src, dst, (1:max_pos,), nothing)
+        elseif !isempty_band(bands[tid]...)
+            band = CoalesceBand(1, max_pos, bands[tid]...)
+            coalesce_shard!(tid, plan, src, dst, (1:max_pos,), band)
         end
+    end
+    return dst
+end
+
+# Resize `v` to `n`, clearing any new storage as assemble_level! would.
+function coalesce_resize!(v, n, fill_value)
+    old = length(v)
+    resize!(v, n)
+    n > old && fill!(view(v, (old + 1):n), fill_value)
+    return v
+end
+
+@inline function coalesce_copy!(dst, dst_start, src, src_start, count)
+    if count <= 16
+        @inbounds for k in 0:(count - 1)
+            dst[dst_start + k] = src[src_start + k]
+        end
+    else
+        copyto!(dst, dst_start, src, src_start, count)
     end
 end
 
@@ -103,53 +132,16 @@ end
     return -1
 end
 
-
-@inbounds function binary_search_offsets(target::Int, arr, lo::Int, hi::Int)
-    @assert target > 0
-
-    result = hi
+Base.@propagate_inbounds function binary_search_ub(target, arr, lo, hi)
+    result = -1
     while lo <= hi
         mid = div(lo + hi, 2)
-        if arr[mid + 1] >= target
+        if arr[mid] <= target
             result = mid
-            hi = mid - 1
-        else
             lo = mid + 1
-        end
-    end
-
-    return result
-end
-
-@inbounds function binary_search_first_increase(arr)
-    lo = 1
-    hi = length(arr)
-    target = arr[lo]
-
-    if arr[hi] == target
-        return -1
-    end
-
-    while lo <= hi
-        mid = div(lo + hi, 2)
-        if arr[mid] <= target && arr[mid + 1] > target
-            return mid
-        elseif arr[mid] > target
-            hi = mid
         else
-            lo = mid
+            hi = mid - 1
         end
     end
-
-    return -1
-end
-
-# Translate a parent range to this shard's compacted child slots.
-@inline function coalesce_child_range(ptr, shift, cutoff, next_cutoff, range)
-    isempty(range) && return 1:0
-    local_start = clamp(first(range) - shift, 1, length(ptr))
-    local_stop = clamp(last(range) - shift + 1, 1, length(ptr))
-    start = cutoff + ptr[local_start] - 1
-    stop = cutoff + min(ptr[local_stop] - 1, next_cutoff - cutoff) - 1
-    return start:stop
+    return result
 end

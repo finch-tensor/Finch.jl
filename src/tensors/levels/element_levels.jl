@@ -266,124 +266,21 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, P, style::MergeFast)
-    resize!(coalescent.val, max_pos)
-    return true
+function setup_coalesce!(lvl::ElementLevel{Vf}, max_pos, dst, P, shift) where {Vf}
+    coalesce_resize!(dst.val, max_pos, Vf)
+    return (; shift)
 end
 
-function setup_coalesce!(
-    lvl::ElementLevel, max_pos, coalescent, P, style::MergeNormalization;
-    pos_map=nothing, was_dense=false,
-)
-    resize!(coalescent.val, max_pos)
-    return true
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent, was_dense
-)
-    total = length(coalescent.val)
-    max_pos = was_dense ? pos_offsets[tid][P + 1] : total
-    shape = max_pos > 0 ? total ÷ max_pos : total
-    base, rem = divrem(max_pos, P)
-    pos_start = ((tid - 1) * base + min(tid - 1, rem)) * shape + 1
-    pos_stop = (tid * base + min(tid, rem)) * shape
-    coalesce_fast!(
-        tid, pos_offsets, shared_flags, P, lvl, coalescent, was_dense, pos_start, pos_stop
-    )
-end
-
-function coalesce_fast!(
-    tid, pos_offsets, shared_flags, P, lvl::ElementLevel{Vf}, coalescent,
-    was_dense, ranges,
-) where {Vf}
-    fastmerge_element!(
-        tid, pos_offsets, shared_flags, lvl.val.data, P, coalescent.val,
-        was_dense, Vf, ranges,
-    )
-end
-
-function coalesce_dense!(tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent)
-    total = length(coalescent.val)
-    base, rem = divrem(total, P)
-    pos_start = (tid - 1) * base + min(tid - 1, rem) + 1
-    pos_stop = tid * base + min(tid, rem)
-    coalesce_dense!(
-        tid, pos_offsets, shared_flags, P, lvl, coalescent, pos_start, pos_stop
-    )
-end
-
-function coalesce_dense!(
-    tid, pos_offsets, shared_flags, P, lvl::ElementLevel, coalescent, ranges
-)
+function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs, band) where {Vf}
     src = lvl.val.data[tid]
-    for range in ranges
-        isempty(range) && continue
-        coalesce_copy!(coalescent.val, first(range), src, first(range), length(range))
-    end
-end
-
-@inline function coalesce_copy!(dst, dst_start, src, src_start, count)
-    if count <= 16
-        @inbounds for k in 0:(count - 1)
-            dst[dst_start + k] = src[src_start + k]
-        end
-    else
-        copyto!(dst, dst_start, src, src_start, count)
-    end
-end
-
-function fastmerge_element!(
-    tid, pos_offsets, shared_flags, val, P, lvl_val, was_dense, Vf, ranges
-)
-    proc = 1
-    if was_dense
-        offsets = pos_offsets[tid]
-        flags = shared_flags[tid]
-        max_pos = offsets[P + 1]
-        shape = max_pos > 0 ? length(lvl_val) ÷ max_pos : length(lvl_val)
-        shard_stop = offsets[proc + 1] * shape
-        src_shift = 0
-        for range in ranges
-            pos = first(range)
-            pos_stop = last(range)
-            while pos <= pos_stop
-                while pos > shard_stop
-                    proc < P || throw(BoundsError(lvl_val, pos))
-                    proc += 1
-                    src_shift = (offsets[proc] - flags[proc - 1]) * shape
-                    shard_stop = offsets[proc + 1] * shape
-                end
-                stop = min(pos_stop, shard_stop)
-                coalesce_copy!(lvl_val, pos, val[proc], pos - src_shift, stop - pos + 1)
-                if proc < P && flags[proc]
-                    boundary_start = shard_stop - shape + 1
-                    @inbounds for k in max(pos, boundary_start):stop
-                        if lvl_val[k] == Vf
-                            pv = val[proc + 1][k - boundary_start + 1]
-                            pv != Vf && (lvl_val[k] = pv)
-                        end
-                    end
-                end
-                pos = stop + 1
-            end
-        end
-    else
-        src_shift = 0
-        shard_stop = length(val[proc])
-        for range in ranges
-            pos = first(range)
-            pos_stop = last(range)
-            while pos <= pos_stop
-                while pos > shard_stop
-                    proc < P || throw(BoundsError(lvl_val, pos))
-                    proc += 1
-                    src_shift = shard_stop
-                    shard_stop += length(val[proc])
-                end
-                stop = min(pos_stop, shard_stop)
-                coalesce_copy!(lvl_val, pos, val[proc], pos - src_shift, stop - pos + 1)
-                pos = stop + 1
+    shift = plan.shift[tid]
+    for run in runs
+        if !isnothing(band)
+            coalesce_copy!(dst.val, first(run) + shift, src, first(run), length(run))
+        else
+            # Without bands, dense blocks can overlap; copy only stored values.
+            for i in run
+                src[i] != Vf && (dst.val[i + shift] = src[i])
             end
         end
     end
