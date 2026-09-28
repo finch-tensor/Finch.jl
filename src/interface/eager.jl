@@ -172,6 +172,28 @@ function LinearAlgebra.norm(arr::AbstractTensorOrBroadcast, p::Real=2)
 end
 
 """
+    transpose(arr::AbstractTensor)
+
+Transpose a 2-dimensional tensor, returning a new tensor (equivalent to
+`permutedims`).
+"""
+function LinearAlgebra.transpose(arr::AbstractTensor)
+    @assert ndims(arr) == 2 "transpose is only defined for 2-dimensional tensors"
+    permutedims(arr)
+end
+
+"""
+    adjoint(arr::AbstractTensor)
+
+Form the conjugate transpose of a 2-dimensional tensor, returning a new tensor.
+For real element types this is equivalent to `transpose`.
+"""
+function LinearAlgebra.adjoint(arr::AbstractTensor)
+    @assert ndims(arr) == 2 "adjoint is only defined for 2-dimensional tensors"
+    compute(adjoint(lazy(arr)))
+end
+
+"""
     expanddims(arr::AbstractTensor; dims=:)
 
 Expand the dimensions of an array by inserting a new singleton axis or axes that

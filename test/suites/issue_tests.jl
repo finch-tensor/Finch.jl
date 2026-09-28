@@ -1,6 +1,7 @@
 @testitem "issues" setup = [CheckOutput] begin
     using SparseArrays
     using Finch: Structure
+    using LinearAlgebra
 
     #https://github.com/finch-tensor/Finch.jl/issues/603
     let
@@ -1245,4 +1246,34 @@
         A = Tensor(COOFormat(2, 0.0), fsprand(4, 4, 0.9))
         @test ffindnz!(A)[1] === A.lvl.tbl[1]
     end
+
+    #https://github.com/finch-tensor/Finch.jl/issues/767
+    let
+        # real matrix: transpose == adjoint == permutedims
+        A = [1.0 2.0 3.0; 4.0 5.0 6.0]
+        A_tns = Tensor(Dense(Dense(Element(0.0))), A)
+        @test transpose(A_tns) == permutedims(A)
+        @test adjoint(A_tns) == permutedims(A)
+        @test compute(transpose(lazy(A_tns))) == permutedims(A)
+        @test compute(adjoint(lazy(A_tns))) == permutedims(A)
+
+        # complex matrix: adjoint conjugates, transpose does not
+        C = [1.0+2.0im 3.0-1.0im; 0.0+1.0im 2.0+0.0im]
+        C_tns = Tensor(Dense(Dense(Element(0.0im))), C)
+        @test transpose(C_tns) == permutedims(C)
+        @test adjoint(C_tns) == permutedims(conj.(C))
+        @test compute(transpose(lazy(C_tns))) == permutedims(C)
+        @test compute(adjoint(lazy(C_tns))) == permutedims(conj.(C))
+
+        # sparse input, real
+        S = fsprand(6, 8, 0.3)
+        S_tns = Tensor(Dense(SparseList(Element(0.0))), S)
+        @test adjoint(S_tns) == permutedims(Array(S))
+        @test transpose(S_tns) == permutedims(Array(S))
+
+        # exact reproducer from the issue: adjoint on a COO Bool tensor
+        R = fsprand(Bool, 100, 100, 0.01)
+        @test adjoint(R) == permutedims(Array(R))
+    end
+
 end
