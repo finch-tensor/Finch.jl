@@ -55,16 +55,32 @@ function gen_accumulator(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims
     )
 end
 
+function coalesce_similar_level(lvl::DenseLevel{Ti}, P) where {Ti}
+    DenseLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
+end
+
+function coalesce_similar_level(lvl::SparseListLevel{Ti}, P) where {Ti}
+    SparseListLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape, lvl.ptr, lvl.idx)
+end
+
+function coalesce_similar_level(lvl::SparseByteMapLevel{Ti}, P) where {Ti}
+    SparseByteMapLevel{Ti}(
+        coalesce_similar_level(lvl.lvl, P), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt
+    )
+end
+
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
     Tp = postype(lvl)
+    P = get_num_tasks(device)
     coal_lvl = lvl
     while typeof(coal_lvl) <: CoalesceLevel
         coal_lvl = coal_lvl.lvl
     end
-    P = get_num_tasks(device)
     coalescent = similar_level(
         coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
     )
+    # Configure the fresh destination for the device's P merge workers.
+    coalescent = coalesce_similar_level(coalescent, P)
     if mode == :fast
         accum = nothing
     else

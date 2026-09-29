@@ -1,3 +1,47 @@
+@testitem "coalesce_hash_subtables" begin
+    hash_counts(lvl::Finch.AbstractLevel) =
+        hasproperty(lvl, :lvl) ? hash_counts(lvl.lvl) : Int[]
+    hash_counts(lvl::Finch.SparseHashLevel) = [lvl.subtables; hash_counts(lvl.lvl)]
+
+    @testset "destination follows configured merge workers" begin
+        for P in (1, 2, 3, 5, 8), mode in (:normalize, :fast)
+            for fmt in (
+                () -> SparseHash(Element(0), 7, 16),
+                () -> Dense(SparseHash(Element(0), 7, 16), 3),
+                () -> SparseList(SparseHash(Element(0), 7, 16), 3),
+                () -> SparseByteMap(SparseHash(Element(0), 7, 16), 3),
+                () -> SparseHash(SparseHash{Int32,false}(Element(0), 7, 16), 3, 16),
+            )
+                original = fmt()
+                lvl = Coalesce(cpu(:hash, P), original; mode)
+                @test hash_counts(lvl.coalescent) ==
+                    fill(nextpow(2, P), length(hash_counts(original)))
+                @test all(==(16), hash_counts(lvl.lvl))
+                @test all(==(16), hash_counts(original))
+                if mode == :fast
+                    @test lvl.accumulator === nothing
+                end
+            end
+        end
+        # Generated hash accumulators are task-local, not the merge destination.
+        lvl = Coalesce(cpu(:hash, 5), SparseList(SparseList(Element(0))))
+        @test hash_counts(lvl.accumulator) == [1, 1]
+    end
+
+    @testset "reject non-power-of-two bucket counts" begin
+        for P in (0, 3, 5, 6)
+            @test_throws ArgumentError SparseHash(Element(0), 7, P)
+        end
+        for mode in (:normalize, :fast)
+            @test_throws ArgumentError Coalesce(cpu(:hash, 0), SparseHash(Element(0)); mode)
+            @test_throws ArgumentError Coalesce(
+                cpu(:hash, 0), Dense(SparseHash(Element(0))); mode
+            )
+        end
+        @test_throws ArgumentError SparseHash(Element(0), 7, 1.5)
+    end
+end
+
 @testitem "coalesce_merges" begin
     # Split `data` into shards as the normalizing merge sees them: shard p stores
     # `data` restricted to the flat (column-major) index range `cuts[p]`.
