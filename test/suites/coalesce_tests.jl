@@ -215,3 +215,90 @@ end
         end
     end
 end
+
+
+@testitem "coalesce_hash_sampling" begin
+    using Random
+
+    device = cpu(:sample, 2)
+    mem = Finch.MultiChannelMemory(device, 2)
+    channels(data) = Finch.MultiChannelBuffer(mem, data)
+    function hash_shards(child, entries; parents=2, pools=[Int[], Int[]])
+        controls = [fill(Finch.SPARSE_HASH_CTRL_EMPTY, 16) for _ in entries]
+        tables = [fill((0, 0, 0), 16) for _ in entries]
+        perms = Vector{Int}[]
+        ptrs = Vector{Int}[]
+        for tid in eachindex(entries)
+            for (p, i, q) in entries[tid]
+                Finch.sparse_hash_table_insert_noresize!(controls[tid], tables[tid], p, i, q)
+            end
+            ordered = sort(entries[tid]; by=e -> (e[1], e[2]))
+            push!(perms, [Finch.sparse_hash_table_lookup_slot(
+                controls[tid], tables[tid], p, i
+            ) for (p, i, _) in ordered])
+            push!(ptrs, [1 + count(e -> e[1] < p, ordered) for p in 1:(parents + 1)])
+        end
+        return SparseHash{Int,false}(
+            child, 10, 1, channels(ptrs), channels(controls), channels(tables),
+            channels(pools), channels(perms),
+        )
+    end
+    entries = [[(1, 5, 3), (2, 7, 1), (2, 9, 2)], [(1, 2, 2), (1, 8, 3), (2, 6, 1)]]
+    @testset "child positions differ from traversal order" begin
+        for dense_child in (false, true)
+            leaf = Element(0, channels([collect(1:(dense_child ? 6 : 3)) for _ in 1:2]))
+            child = dense_child ? Dense(leaf, 2) : leaf
+            src = hash_shards(child, entries)
+            for tid in 1:2, seed in 1:30
+                Random.seed!(seed)
+                inner, q = Finch.sample(tid, child)
+                p, i, _ = only(filter(e -> e[3] == q, entries[tid]))
+                Random.seed!(seed)
+                @test Finch.sample(tid, src) == ((inner..., i), p)
+                Random.seed!(seed)
+                @test Finch.sample(tid, Dense(src, 2)) == ((inner..., i, p), 1)
+            end
+            virtual = Finch.virtualize(Finch.FinchCompiler(), :sample_hash, typeof(src))
+            @test Finch.sample_dims(virtual) == (dense_child ? 2 : 1)
+            @test !Finch.all_dense(virtual)
+        end
+    end
+
+    @testset "nested hashes" begin
+        leaf = Element(0, channels([collect(1:3) for _ in 1:2]))
+        inner_entries = [[(1, 4, 2), (2, 3, 3), (3, 8, 1)] for _ in 1:2]
+        inner = hash_shards(leaf, inner_entries; parents=3)
+        src = hash_shards(inner, entries)
+        for tid in 1:2, seed in 1:30
+            Random.seed!(seed)
+            _, q = Finch.sample(tid, leaf)
+            child_pos, i, _ = only(filter(e -> e[3] == q, inner_entries[tid]))
+            parent, j, _ = only(filter(e -> e[3] == child_pos, entries[tid]))
+            Random.seed!(seed)
+            @test Finch.sample(tid, src) == ((i, j), parent)
+        end
+    end
+
+    @testset "unused child positions and empty shards" begin
+        leaf = Element(0, channels([collect(1:4), collect(1:4)]))
+        live = [(1, 5, 3), (2, 7, 1), (2, 9, 4)]
+        src = hash_shards(leaf, [live, Tuple{Int,Int,Int}[]]; pools=[[2], [1, 2, 3, 4]])
+        Random.seed!(1)
+        samples = [Finch.sample(1, src) for _ in 1:100]
+        @test Set(samples) == Set(((i,), p) for (p, i, _) in live)
+        @test_throws ArgumentError Finch.sample(2, src)
+    end
+
+    @testset "coalesce sampler integration" begin
+        leaf = Element(0, channels([collect(1:3) for _ in 1:2]))
+        src = Dense(hash_shards(leaf, entries), 2)
+        dst = Dense(SparseHash(Element(0), 10), 2)
+        lvl = Coalesce(device, src, dst, Finch.FinchStaticSchedule{:dynamic}(), nothing; mode=:fast)
+        nnz, _ = Finch.get_total_nnz(lvl, true)
+        Random.seed!(1)
+        samples = Finch.build_sampler(lvl, 2, nnz, 2)
+        @test length(samples) == 2000
+        @test issorted(samples; by=reverse)
+        @test Set(samples) == Set((i, p) for shard in entries for (p, i, _) in shard)
+    end
+end

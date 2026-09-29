@@ -828,6 +828,8 @@ end
 
 virtual_level_eltype(lvl::VirtualSparseHashLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseHashLevel) = virtual_level_fill_value(lvl.lvl)
+@inline sample_dims(lvl::VirtualSparseHashLevel) = 1 + sample_dims(lvl.lvl)
+@inline all_dense(::VirtualSparseHashLevel) = false
 
 postype(lvl::VirtualSparseHashLevel) = postype(lvl.lvl)
 
@@ -1303,6 +1305,23 @@ function unfurl(
             ),
         ),
     )
+end
+
+function sample(tid, lvl::SparseHashLevel)
+    tbl = lvl.tbl.data[tid]
+    perm = lvl.perm.data[tid]
+    isempty(perm) && throw(ArgumentError("Cannot sample an empty SparseHash shard"))
+    while true
+        tup, pos = sample(tid, lvl.lvl)
+        # perm is ordered by parent and coordinate, not by child position.
+        # Only live entries participate; pooled child positions are retried.
+        for h in perm
+            entry = tbl[h]
+            if sparse_hash_entry_val(entry) == pos
+                return (tup..., sparse_hash_entry_idx(entry)), sparse_hash_entry_pos(entry)
+            end
+        end
+    end
 end
 
 function coalesce_level!(
