@@ -614,6 +614,8 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
+get_bands(f, P) = [f(t) for t in 1:(P)]
+do_band_ranges(shapes, bands) = [Finch.band_range(b..., shapes) for b in bands]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     lvl.declared || return lvl
@@ -663,8 +665,10 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
-                    $bands = [$band for $tid in 1:($P)]
-                    $ranges = [Finch.band_range(b..., $shapes) for b in $bands]
+                    $bands = Finch.get_bands($tid -> $band, $P)
+                    $ranges = Finch.do_band_ranges($shapes, $bands)
+                    # $bands = [$band for $tid in 1:($P)]
+                    # $ranges = [Finch.band_range(b..., $shapes) for b in $bands]
                     Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
