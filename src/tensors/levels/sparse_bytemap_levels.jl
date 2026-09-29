@@ -695,15 +695,24 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
         nnz += length(srt[p]) - (shared[p] != 0)
         last_q = srt[p][end] + shift[p] * shape
     end
-    coalesce_resize!(dst.ptr, max_pos + 1, 0)
-    coalesce_resize!(dst.tbl, max_pos * shape, false)
+    # Unoccupied bounds and bitmap entries retain their cleared values.
+    ptr_start = min(length(dst.ptr), max_pos + 1) + 1
+    tbl_start = min(length(dst.tbl), max_pos * shape) + 1
+    resize!(dst.ptr, max_pos + 1)
+    resize!(dst.tbl, max_pos * shape)
+    empty!(dst.srt)
     resize!(dst.srt, nnz)
     dst.ptr[1] = 1
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
         lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape, any(!iszero, shared)
     )
-    return (; shift, shared, shared_dst, off, prev, nnz, child)
+    # ptr[1] is the sentinel, not an unoccupied parent bound.
+    init = (
+        (dst.ptr, max(2, ptr_start), 0),
+        (dst.tbl, tbl_start, false), child.init...,
+    )
+    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. ptr keeps

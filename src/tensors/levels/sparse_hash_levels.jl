@@ -1324,6 +1324,70 @@ function sample(tid, lvl::SparseHashLevel)
     end
 end
 
+# Prepare hash storage and child offsets. A shared child's destination overrides
+# its shard's offset; recursive child setup must preserve that exception.
+function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
+    tbl = lvl.tbl.data
+    perm = lvl.perm.data
+    subtables = dst.subtables
+    sparse_hash_check_subtables(subtables)
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
+    off = zeros(Int, P)
+    prev = zeros(Int, P)
+    child_shift = zeros(Int, P)
+    max_child_pos = 0
+    bucket_counts = zeros(Int, subtables)
+    nnz = 0
+    last_pos = 0
+    last_idx = 0
+    last_child_pos = 0
+    for p in 1:P
+        off[p] = nnz
+        prev[p] = last_pos
+        child_shift[p] = max_child_pos
+        n = length(perm[p])
+        n == 0 && continue
+        first_entry = tbl[p][first(perm[p])]
+        if sparse_hash_entry_pos(first_entry) + shift[p] == last_pos &&
+            sparse_hash_entry_idx(first_entry) == last_idx
+            shared[p] = sparse_hash_entry_val(first_entry)
+            shared_dst[p] = last_child_pos
+        end
+        # Concatenate child-position spans, including holes. Internal order
+        # does not affect allocation; only the shared entry needs an override.
+        max_q = maximum(h -> sparse_hash_entry_val(tbl[p][h]), perm[p])
+        max_child_pos += max_q
+        for h in perm[p]
+            entry = tbl[p][h]
+            q = sparse_hash_entry_val(entry)
+            q == shared[p] && continue
+            pos = sparse_hash_entry_pos(entry) + shift[p]
+            idx = sparse_hash_entry_idx(entry)
+            bucket = sparse_hash_hash_subtable(sparse_hash_hash(pos, idx), subtables)
+            bucket_counts[bucket] += 1
+        end
+        nnz += n - (shared[p] != 0)
+        last_entry = tbl[p][last(perm[p])]
+        last_pos = sparse_hash_entry_pos(last_entry) + shift[p]
+        last_idx = sparse_hash_entry_idx(last_entry)
+        last_q = sparse_hash_entry_val(last_entry)
+        last_child_pos = last_q == shared[p] ? shared_dst[p] : last_q + child_shift[p]
+    end
+
+    resize!(dst.ptr, max_pos + 1)
+    nnz == 0 && fill!(dst.ptr, 1)
+    resize!(dst.perm, nnz)
+    empty!(dst.pool)
+    # Probing cannot leave its subtable, so size for the busiest bucket rather
+    # than the average occupancy. Keep every subtable at most half full.
+    capacity = subtables * sparse_hash_table_capacity(maximum(bucket_counts))
+    resize!(dst.tbl, capacity)
+    resize!(dst.tbl_ctrl, capacity)
+    fill!(dst.tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
+    return (; shift, shared, shared_dst, off, prev, nnz, child_shift, max_child_pos, bucket_counts)
+end
+
 function coalesce_level!(
     lvl::SparseHashLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
 )

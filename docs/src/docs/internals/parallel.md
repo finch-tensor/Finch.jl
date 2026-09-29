@@ -112,7 +112,7 @@ and `bands[tid]` is that band as a range of flat indices. Bands keep each shard
 from scanning dense storage outside its band. In `:fast` mode, tasks write their
 shards directly and `bands` is `nothing`, so all dense storage may overlap.
 
-The merge makes two passes over the levels:
+The merge plans storage, initializes it, then copies entries:
 
 - `setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)` runs once. It sizes
   each destination level and returns a plan recording where each shard's
@@ -123,6 +123,11 @@ The merge makes two passes over the levels:
   their own slots (`SparseList`) shift by the entries earlier shards own. A merge
   in which every shard shares one position space is the case where every shift
   is zero.
+- The plan's `init` tuples describe `(buffer, start, value)` ranges, including
+  child storage. Allocation and resizing remain serial. `coalesce_shards!`
+  partitions initialization across workers, then waits for every worker before
+  starting the copies. This barrier prevents initialization from overwriting
+  another shard's contributions under a shared boundary entry.
 - `coalesce_shard!(tid, plan, lvl, dst, runs)` then runs in parallel, copying
   shard `tid`. `runs` iterates ranges of leaf positions (positions at the
   `Element` level) under which the shard stores values. `Dense` levels leave leaf
@@ -131,6 +136,23 @@ The merge makes two passes over the levels:
   written by the one shard owning the first entry at or after it.
   `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
   only around occupied positions, so the merge stays O(nnz).
+
+Element and byte-map setup record newly allocated ranges instead of filling
+them. Byte maps use the first and last entries of their sorted dirty list,
+`srt`, to find boundaries; they do not scan the bitmap during setup. Declaration
+already uses that dirty list to clear reused bitmap entries and parent bounds,
+so coalesce initialization only needs to fill newly allocated storage. An empty
+sparse list records its whole pointer array for parallel initialization to `1`.
+
+Buffers whose contents are completely rewritten are emptied before resizing:
+sparse-list indices and pointers, the byte-map dirty list, and hash pointers
+and permutations. This avoids preserving old contents if growth reallocates
+storage. Buffers written only at occupied positions retain their cleared
+regions; setup records only the newly added range for initialization.
+
+Setup's metadata work is O(P) per level, except for sparse-list boundary
+searches, which take O(P log M) for M parent positions. These bounds exclude
+buffer allocation/resizing. Setup does not scan entries or initialize buffers.
 
 ### Shared positions and ownership
 
@@ -161,11 +183,9 @@ subtract `shared[p] != 0`, not `shared[p]`.
 need a shared-position field. Dense levels pass through to their child plan;
 elements copy non-fill values when their positions overlap.
 
-Hash setup reserves each shard's child-position span through its largest live
-`q`, including holes, and concatenates those spans using `child_shift[p]`.
-An ordinary child lands at `q + child_shift[p]`; the shared child instead lands
-at `shared_dst[p]`. This uses one offset and one boundary override per shard,
-without a map for every child. The reserved extent is `max_child_pos`; it can
-exceed the number of owned hash entries, `nnz`. Hash tables are allocated for
-the busiest destination bucket, with at most half occupancy per subtable.
-Recursive hash child setup and shard copying still need to consume this plan.
+The hash setup draft currently identifies shared local positions; child
+destinations (including `shared_dst`), bucket allocation, and copying remain to
+be implemented. The intended ownership is by output bucket: each output worker
+merges the corresponding bucket from every shard and writes only its own
+destination bucket. The generic coalesce interface does not prescribe a hash
+bucket-counting or insertion algorithm.

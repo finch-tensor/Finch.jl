@@ -266,11 +266,11 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(
-    lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap
-) where {Vf}
-    coalesce_resize!(dst.val, max_pos, Vf)
-    return (; shift, overlap)
+function setup_coalesce!(lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap) where {Vf}
+    init_start = min(length(dst.val), max_pos) + 1
+    resize!(dst.val, max_pos)
+    init = ((dst.val, init_start, Vf),)
+    return (; shift, overlap, init)
 end
 
 function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}

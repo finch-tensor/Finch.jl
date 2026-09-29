@@ -655,14 +655,17 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
         last_pos = searchsortedlast(ptr[p], n) + shift[p]
         last_idx = idx[p][n]
     end
+    # Both buffers are rewritten completely; discard old contents before growth.
+    empty!(dst.idx)
     resize!(dst.idx, nnz)
+    empty!(dst.ptr)
     resize!(dst.ptr, max_pos + 1)
-    nnz == 0 && fill!(dst.ptr, 1)
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
         lvl.lvl, nnz, dst.lvl, P, off .- (shared .!= 0), any(!iszero, shared)
     )
-    return (; shift, shared, shared_dst, off, prev, nnz, child)
+    init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
+    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
