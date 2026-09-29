@@ -89,6 +89,33 @@ end
         end
     end
 
+    @testset "shared positions own metadata, not children" begin
+        data = zeros(Int, 2, 6)
+        data[1, 1] = 1
+        data[:, 4] .= [2, 3]
+        data[2, 6] = 4
+        cuts = [1:7, 8:12]
+        for (fmt, shared, shared_dst) in (
+            (() -> SparseList(Dense(Element(0))), 1, 2),
+            (() -> SparseByteMap(Dense(Element(0))), 4, 4),
+        )
+            src = band_shards(fmt, data, cuts)
+            dst = Tensor(fmt(), zero(data)).lvl
+            plan = Finch.setup_coalesce!(src, 1, dst, 2, [0, 0], true)
+            @test eltype(plan.shared) == Int
+            @test plan.shared == [0, shared]
+            @test plan.shared_dst == [0, shared_dst]
+            @test plan.off == [0, 2]
+            @test plan.nnz == 3
+            @test plan.child.child.overlap
+            for tid in 1:2
+                Finch.coalesce_shard!(tid, plan, src, dst, (cuts[tid],))
+            end
+            @test Array(Tensor(dst)) == data
+            @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+        end
+    end
+
     formats_2d = [
         () -> Dense(Dense(Element(0))),
         () -> Dense(SparseList(Element(0))),
@@ -216,6 +243,120 @@ end
     end
 end
 
+
+@testitem "coalesce_hash_setup" begin
+    function hash_shards(entries)
+        P = length(entries)
+        mem = Finch.MultiChannelMemory(cpu(:setup, P), P)
+        channels(data) = Finch.MultiChannelBuffer(mem, data)
+        controls = [fill(Finch.SPARSE_HASH_CTRL_EMPTY,
+                         Finch.sparse_hash_table_capacity(length(es))) for es in entries]
+        tables = [fill((0, 0, 0), length(ctrl)) for ctrl in controls]
+        perms = Vector{Int}[]
+        ptrs = Vector{Int}[]
+        vals = Vector{Int}[]
+        for tid in 1:P
+            es = sort(entries[tid]; by=e -> (e[1], e[2]))
+            for (p, i, q) in es
+                Finch.sparse_hash_table_insert_noresize!(controls[tid], tables[tid], p, i, q)
+            end
+            push!(perms, [Finch.sparse_hash_table_lookup_slot(
+                controls[tid], tables[tid], p, i
+            ) for (p, i, _) in es])
+            parents = maximum(e -> e[1], es; init=0)
+            push!(ptrs, [1 + count(e -> e[1] < p, es) for p in 1:(parents + 1)])
+            push!(vals, zeros(Int, maximum(e -> e[3], es; init=0)))
+        end
+        return SparseHash{Int,false}(
+            Element(0, channels(vals)), 1000, 1, channels(ptrs), channels(controls),
+            channels(tables), channels([Int[] for _ in 1:P]), channels(perms),
+        )
+    end
+
+    @testset "shared boundaries, shifts, and child positions" begin
+        entries = [
+            [(1, 2, 4), (2, 5, 1)], Tuple{Int,Int,Int}[],
+            [(1, 5, 3)], [(1, 5, 2), (1, 7, 4)], [(1, 7, 1)],
+        ]
+        src = hash_shards(entries)
+        dst = SparseHash{Int,false}(Element(0), 1000, 8)
+        shift = [0, 0, 1, 1, 2]
+        plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        @test plan.shift == shift
+        @test eltype(plan.shared) == Int
+        @test plan.shared == [0, 0, 3, 2, 0]
+        @test plan.shared_dst == [0, 0, 1, 1, 0]
+        @test plan.off == [0, 2, 2, 2, 3]
+        @test plan.prev == [0, 2, 2, 2, 2]
+        @test plan.nnz == 4
+        @test plan.child_shift == [0, 4, 4, 7, 11]
+        @test plan.max_child_pos == 12
+        @test length(dst.ptr) == 5
+        @test length(dst.perm) == 4
+        @test isempty(dst.pool)
+        @test length(dst.tbl) == length(dst.tbl_ctrl)
+        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+        @test sum(plan.bucket_counts) == plan.nnz
+        @test src.tbl.data[1][src.perm.data[1][1]] == (1, 2, 4)
+
+        # The allocated tables must accept every owned entry without resizing.
+        for tid in 1:5, r in eachindex(src.perm.data[tid])
+            p, i, q = src.tbl.data[tid][src.perm.data[tid][r]]
+            q == plan.shared[tid] && continue
+            Finch.sparse_hash_table_insert_noresize!(
+                dst.tbl_ctrl, dst.tbl, p + shift[tid], i, q + plan.child_shift[tid], dst.subtables
+            )
+        end
+        for (p, i, q) in [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
+            @test Finch.sparse_hash_table_lookup(dst.tbl_ctrl, dst.tbl, p, i, 8) == q
+        end
+        for tid in (3, 4)
+            p, i, _ = src.tbl.data[tid][first(src.perm.data[tid])]
+            @test Finch.sparse_hash_table_lookup(
+                dst.tbl_ctrl, dst.tbl, p + shift[tid], i, 8
+            ) == plan.shared_dst[tid]
+        end
+
+        # Repeated setup clears live control bytes and the old free-position pool.
+        push!(dst.pool, 99)
+        Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+        @test isempty(dst.pool)
+    end
+
+    @testset "skewed buckets" begin
+        indices = filter(1:1000) do i
+            Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1
+        end[1:20]
+        src = hash_shards([[(1, i, q) for (q, i) in enumerate(indices)]])
+        dst = SparseHash(Element(0), 1000, 8)
+        plan = Finch.setup_coalesce!(src, 1, dst, 1, [0], false)
+        @test plan.bucket_counts == [20, 0, 0, 0, 0, 0, 0, 0]
+        @test length(dst.tbl) == 8 * 64
+        for (q, i) in enumerate(indices)
+            Finch.sparse_hash_table_insert_noresize!(dst.tbl_ctrl, dst.tbl, 1, i, q, 8)
+        end
+        @test all(enumerate(indices)) do (q, i)
+            Finch.sparse_hash_table_lookup(dst.tbl_ctrl, dst.tbl, 1, i, 8) == q
+        end
+    end
+
+    @testset "empty shards" begin
+        src = hash_shards([Tuple{Int,Int,Int}[] for _ in 1:3])
+        dst = SparseHash(Element(0), 1000, 4)
+        plan = Finch.setup_coalesce!(src, 3, dst, 3, zeros(Int, 3), true)
+        @test plan.nnz == 0
+        @test all(iszero, plan.shared)
+        @test all(iszero, plan.shared_dst)
+        @test all(iszero, plan.child_shift)
+        @test plan.max_child_pos == 0
+        @test dst.ptr == ones(Int, 4)
+        @test isempty(dst.perm)
+        @test isempty(dst.pool)
+        @test length(dst.tbl) == length(dst.tbl_ctrl) == 16
+        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+    end
+end
 
 @testitem "coalesce_hash_sampling" begin
     using Random

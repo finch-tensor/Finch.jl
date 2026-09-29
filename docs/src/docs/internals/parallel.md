@@ -116,8 +116,8 @@ The merge makes two passes over the levels:
 
 - `setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)` runs once. It sizes
   each destination level and returns a plan recording where each shard's
-  positions land (`dst_pos = pos + shift[p]`), whether its first entry is shared
-  with the previous shard, and whether shards' leaves can overlap below it.
+  parent positions land (`dst_pos = pos + shift[p]`), the local child position
+  shared with an earlier shard, and whether shards' leaves can overlap below it.
   Levels that compute child positions from their parent (`Dense`,
   `SparseByteMap`) scale the shift by their shape; levels that store children in
   their own slots (`SparseList`) shift by the entries earlier shards own. A merge
@@ -131,3 +131,41 @@ The merge makes two passes over the levels:
   written by the one shard owning the first entry at or after it.
   `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
   only around occupied positions, so the merge stays O(nnz).
+
+### Shared positions and ownership
+
+Sparse plans use integer positions for boundary ownership:
+
+- `shared[p] == 0` means shard `p` writes all its index metadata.
+- `shared[p] == q` means the metadata for local child position `q` belongs to
+  an earlier shard. Skip that index, but still merge its children.
+- `shared_dst[p]` gives the destination child position for that shared entry,
+  or `0` when there is no shared entry. Empty shards between owners and later
+  contributors do not break the relationship.
+
+The position is format-specific, not the entry's rank in traversal order:
+
+| Level | Meaning of `shared[p]` |
+|:------|:-----------------------|
+| `SparseList` | Position in `idx` (currently `1` at a shared boundary) |
+| `SparseByteMap` | Flattened child position stored in `srt` |
+| `SparseHash` | Child position `q` stored in the hash entry `(parent, index, q)` |
+
+For example, a byte-map shard whose first `srt` entry is `7` reports
+`shared[p] = 7` when that entry is shared. A hash whose first frozen `perm`
+entry points to `(2, 5, 3)` reports `shared[p] = 3`. Neither reports `1` merely
+because the shared entry comes first in traversal order. Counts and offsets
+subtract `shared[p] != 0`, not `shared[p]`.
+
+`Dense` and `Element` do not own sparse index metadata, so their plans do not
+need a shared-position field. Dense levels pass through to their child plan;
+elements copy non-fill values when their positions overlap.
+
+Hash setup reserves each shard's child-position span through its largest live
+`q`, including holes, and concatenates those spans using `child_shift[p]`.
+An ordinary child lands at `q + child_shift[p]`; the shared child instead lands
+at `shared_dst[p]`. This uses one offset and one boundary override per shard,
+without a map for every child. The reserved extent is `max_child_pos`; it can
+exceed the number of owned hash entries, `nnz`. Hash tables are allocated for
+the busiest destination bucket, with at most half occupancy per subtable.
+Recursive hash child setup and shard copying still need to consume this plan.

@@ -22,6 +22,31 @@ end
 coalesce_leaves(lvl) = prod(level_size(lvl))
 
 """
+    setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)
+
+Allocate destination storage and plan the merge of `P` ordered shards. `max_pos`
+is the destination parent-position extent, `shift[p]` translates shard `p`'s
+parent positions, and `overlap` indicates that dense leaves may overlap.
+
+Sparse plans report `shared[p]`, the local child position whose index metadata
+is already owned by an earlier shard, or `0` when all indices must be written.
+`shared_dst[p]` is that child's destination position, also `0` when unshared.
+These are positions, not Boolean flags or permutation ranks: a list uses an
+`idx` position, a byte map uses a position stored in `srt`, and a hash uses the
+`q` in its `(parent, index, q)` entry. Empty shards do not change ownership.
+
+Skip only the shared entry's index metadata. Its children still contribute to
+`shared_dst[p]`. Ordinary child positions use the child plan's offset; a shared
+position overrides that offset when necessary. Count shared entries with
+`shared[p] != 0`, never by subtracting the position itself.
+
+`off[p]` counts earlier shards' owned index entries, and `nnz` counts all owned
+entries. Dense and element plans have no sparse index ownership fields; dense
+plans delegate through `child`, and element plans use `overlap` when copying.
+"""
+function setup_coalesce! end
+
+"""
     coalesce_shards!(src, dst, P, max_pos, bands)
 
 Merge the `P` shards of `src` into `dst`. Shards must be ordered and disjoint:
@@ -38,8 +63,9 @@ conditionally copying, the dense storage outside its band.
 
 Merging makes two passes over the levels. `setup_coalesce!(lvl, max_pos, dst, P,
 shift, overlap)` sizes `dst` and returns a plan saying where each shard's
-positions land (`dst_pos = pos + shift[p]`), whether its first entry is shared
-with the previous shard, and whether shards' leaves can overlap below. Then, in
+positions land (`dst_pos = pos + shift[p]`), which local child position is shared
+(`shared[p]`, or `0`), its destination (`shared_dst[p]`), and whether shards'
+leaves can overlap below. Then, in
 parallel, `coalesce_shard!(tid, plan, lvl, dst, runs)` copies shard `tid`.
 `runs` iterates ranges of leaf positions (positions at the Element level) under
 which the shard stores values.

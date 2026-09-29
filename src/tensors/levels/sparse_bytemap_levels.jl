@@ -677,7 +677,8 @@ end
 function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overlap)
     srt = lvl.srt.data
     shape = lvl.shape
-    shared = fill(false, P)
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
     off = zeros(Int, P)
     prev = zeros(Int, P)
     nnz = 0
@@ -687,8 +688,11 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
         prev[p] = last_q
         isempty(srt[p]) && continue
         # A shard shares its first entry if the previous shard ended on it.
-        shared[p] = srt[p][1] + shift[p] * shape == last_q
-        nnz += length(srt[p]) - shared[p]
+        if srt[p][1] + shift[p] * shape == last_q
+            shared[p] = srt[p][1]
+            shared_dst[p] = last_q
+        end
+        nnz += length(srt[p]) - (shared[p] != 0)
         last_q = srt[p][end] + shift[p] * shape
     end
     coalesce_resize!(dst.ptr, max_pos + 1, 0)
@@ -697,9 +701,9 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     dst.ptr[1] = 1
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
-        lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape, any(shared)
+        lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape, any(!iszero, shared)
     )
-    return (; shift, shared, off, prev, nnz, child)
+    return (; shift, shared, shared_dst, off, prev, nnz, child)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. ptr keeps
@@ -712,8 +716,9 @@ function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
     q_shift = plan.shift[tid] * shape
     slot = plan.off[tid] + 1
     p_prev = fld(plan.prev[tid] - 1, shape) + 1
-    for r in (1 + plan.shared[tid]):length(src)
-        q = src[r] + q_shift
+    for local_q in src
+        local_q == plan.shared[tid] && continue
+        q = local_q + q_shift
         dst.srt[slot] = q
         dst.tbl[q] = true
         p = fld(q - 1, shape) + 1

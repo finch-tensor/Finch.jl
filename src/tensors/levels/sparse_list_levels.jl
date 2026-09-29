@@ -634,7 +634,8 @@ end
 function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
     ptr = lvl.ptr.data
     idx = lvl.idx.data
-    shared = fill(false, P)
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
     off = zeros(Int, P)
     prev = zeros(Int, P)
     nnz = 0
@@ -646,8 +647,11 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
         n = length(idx[p])
         n == 0 && continue
         # A shard shares its first entry if the previous shard ended on it.
-        shared[p] = searchsortedlast(ptr[p], 1) + shift[p] == last_pos && idx[p][1] == last_idx
-        nnz += n - shared[p]
+        if searchsortedlast(ptr[p], 1) + shift[p] == last_pos && idx[p][1] == last_idx
+            shared[p] = 1
+            shared_dst[p] = nnz
+        end
+        nnz += n - (shared[p] != 0)
         last_pos = searchsortedlast(ptr[p], n) + shift[p]
         last_idx = idx[p][n]
     end
@@ -655,8 +659,10 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
     resize!(dst.ptr, max_pos + 1)
     nnz == 0 && fill!(dst.ptr, 1)
     # Both shards' leaves under a shared entry overlap.
-    child = setup_coalesce!(lvl.lvl, nnz, dst.lvl, P, off .- shared, any(shared))
-    return (; shift, shared, off, prev, nnz, child)
+    child = setup_coalesce!(
+        lvl.lvl, nnz, dst.lvl, P, off .- (shared .!= 0), any(!iszero, shared)
+    )
+    return (; shift, shared, shared_dst, off, prev, nnz, child)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
@@ -669,17 +675,20 @@ function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     shift = plan.shift[tid]
     slot = plan.off[tid] + 1
     pos_prev = plan.prev[tid]
-    r = 1 + plan.shared[tid]
+    shared = plan.shared[tid]
+    r = 1
     pos_first = searchsortedlast(ptr, 1)
     pos_last = searchsortedlast(ptr, n)
     for pos in pos_first:pos_last
         stop = ptr[pos + 1] - 1
+        r == shared && (r += 1)
         r > stop && continue
         for x in (pos_prev + 1):(pos + shift)
             dst.ptr[x] = slot
         end
         pos_prev = pos + shift
         for s in r:stop
+            s == shared && continue
             dst.idx[slot] = idx[s]
             slot += 1
         end
