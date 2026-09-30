@@ -655,9 +655,9 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         tsize = sample_dims(lvl)
         dense = all_dense(lvl)
         band = if dense
-            :(Finch.get_bands($P, $shapes, MergeDense()))
+            :(Finch.get_bands($P, $shapes, Finch.MergeDense()))
         else
-            :(Finch.get_bands($(lvl.sampler), $P, $shapes, MergeRandom()))
+            :(Finch.get_bands($(lvl.sampler), $P, $shapes, Finch.MergeRandom()))
         end
 
         push_preamble!(ctx,
