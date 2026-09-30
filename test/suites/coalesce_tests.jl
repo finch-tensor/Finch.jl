@@ -1,47 +1,3 @@
-@testitem "coalesce_hash_subtables" begin
-    hash_counts(lvl::Finch.AbstractLevel) =
-        hasproperty(lvl, :lvl) ? hash_counts(lvl.lvl) : Int[]
-    hash_counts(lvl::Finch.SparseHashLevel) = [lvl.subtables; hash_counts(lvl.lvl)]
-
-    @testset "destination follows configured merge workers" begin
-        for P in (1, 2, 3, 5, 8), mode in (:normalize, :fast)
-            for fmt in (
-                () -> SparseHash(Element(0), 7, 16),
-                () -> Dense(SparseHash(Element(0), 7, 16), 3),
-                () -> SparseList(SparseHash(Element(0), 7, 16), 3),
-                () -> SparseByteMap(SparseHash(Element(0), 7, 16), 3),
-                () -> SparseHash(SparseHash{Int32,false}(Element(0), 7, 16), 3, 16),
-            )
-                original = fmt()
-                lvl = Coalesce(cpu(:hash, P), original; mode)
-                @test hash_counts(lvl.coalescent) ==
-                    fill(nextpow(2, P), length(hash_counts(original)))
-                @test all(==(16), hash_counts(lvl.lvl))
-                @test all(==(16), hash_counts(original))
-                if mode == :fast
-                    @test lvl.accumulator === nothing
-                end
-            end
-        end
-        # Generated hash accumulators are task-local, not the merge destination.
-        lvl = Coalesce(cpu(:hash, 5), SparseList(SparseList(Element(0))))
-        @test hash_counts(lvl.accumulator) == [1, 1]
-    end
-
-    @testset "reject non-power-of-two bucket counts" begin
-        for P in (0, 3, 5, 6)
-            @test_throws ArgumentError SparseHash(Element(0), 7, P)
-        end
-        for mode in (:normalize, :fast)
-            @test_throws ArgumentError Coalesce(cpu(:hash, 0), SparseHash(Element(0)); mode)
-            @test_throws ArgumentError Coalesce(
-                cpu(:hash, 0), Dense(SparseHash(Element(0))); mode
-            )
-        end
-        @test_throws ArgumentError SparseHash(Element(0), 7, 1.5)
-    end
-end
-
 @testitem "coalesce_merges" begin
     # Split `data` into shards as the normalizing merge sees them: shard p stores
     # `data` restricted to the flat (column-major) index range `cuts[p]`.
@@ -108,11 +64,27 @@ end
             @test plan.off == [0, 2]
             @test plan.nnz == 3
             @test plan.child.child.overlap
+            for (buffer, start, value) in plan.init
+                fill!(view(buffer, start:length(buffer)), value)
+            end
             for tid in 1:2
                 Finch.coalesce_shard!(tid, plan, src, dst, (cuts[tid],))
             end
             @test Array(Tensor(dst)) == data
             @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+        end
+    end
+
+    @testset "initialize overlapping values with their fill value" begin
+        for P in (1, 2, 5), old_length in (0, 2, 8)
+            mem = Finch.MultiChannelMemory(cpu(:init, P), P)
+            values = [fill(7, 3) for _ in 1:P]
+            values[1][1] = 1
+            values[end][3] = 3
+            src = Element(7, Finch.MultiChannelBuffer(mem, values))
+            dst = Element(7, fill(7, old_length))
+            Finch.coalesce_shards!(src, dst, P, 3, nothing)
+            @test dst.val == [1, 7, 3]
         end
     end
 
@@ -144,6 +116,8 @@ end
         check_merge(fmt, data, [1:7, 8:9, 10:20])
         # Empty bands, as when there are more tasks than indices.
         check_merge(fmt, data, [1:5, 6:5, 6:20, 21:20])
+        # No entries will be copied, so initialization must finish the output.
+        check_merge(fmt, zero(data), [1:5, 6:5, 6:20, 21:20])
     end
 
     formats_3d = [

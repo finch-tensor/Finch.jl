@@ -43,6 +43,9 @@ position overrides that offset when necessary. Count shared entries with
 `off[p]` counts earlier shards' owned index entries, and `nnz` counts all owned
 entries. Dense and element plans have no sparse index ownership fields; dense
 plans delegate through `child`, and element plans use `overlap` when copying.
+
+`init` lists `(buffer, start, value)` ranges, including child storage. Setup
+allocates serially; initialize these ranges before calling `coalesce_shard!`.
 """
 function setup_coalesce! end
 
@@ -66,12 +69,24 @@ shift, overlap)` sizes `dst` and returns a plan saying where each shard's
 positions land (`dst_pos = pos + shift[p]`), which local child position is shared
 (`shared[p]`, or `0`), its destination (`shared_dst[p]`), and whether shards'
 leaves can overlap below. Then, in
-parallel, `coalesce_shard!(tid, plan, lvl, dst, runs)` copies shard `tid`.
+parallel, the ranges in `plan.init` are initialized. After initialization finishes,
+`coalesce_shard!(tid, plan, lvl, dst, runs)` copies each shard in parallel.
 `runs` iterates ranges of leaf positions (positions at the Element level) under
 which the shard stores values.
 """
 function coalesce_shards!(src, dst, P, max_pos, bands)
     plan = setup_coalesce!(src, max_pos, dst, P, zeros(Int, P), isnothing(bands))
+    if any(init -> init[2] <= length(init[1]), plan.init)
+        Threads.@threads for tid in 1:P
+            for (buffer, start, value) in plan.init
+                n = length(buffer) - start + 1
+                lo = start + fld((tid - 1) * n, P)
+                hi = start + fld(tid * n, P) - 1
+                fill!(view(buffer, lo:hi), value)
+            end
+        end
+    end
+    # Initialization must finish before another shard writes shared children.
     Threads.@threads for tid in 1:P
         runs = isnothing(bands) ? (1:(max_pos * coalesce_leaves(src))) : bands[tid]
         coalesce_shard!(tid, plan, src, dst, (runs,))
