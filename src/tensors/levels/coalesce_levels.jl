@@ -614,8 +614,12 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
-get_bands(f, P) = [f(t) for t in 1:(P)]
-do_band_ranges(shapes, bands) = [Finch.band_range(b..., shapes) for b in bands]
+
+# Named functions so the generated code has no comprehension for the parser to trip on.
+get_bands(P, shapes, style::MergeDense) = [balance(t, P, shapes, style) for t in 1:(P)]
+get_bands(sampler, P, shapes, style::MergeRandom) =
+    [balance(sampler, t, P, shapes, style) for t in 1:(P)]
+do_band_ranges(shapes, bands) = [band_range(b..., shapes) for b in bands]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     lvl.declared || return lvl
@@ -651,9 +655,9 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         tsize = sample_dims(lvl)
         dense = all_dense(lvl)
         band = if dense
-            :(Finch.balance($tid, $P, $shapes, MergeDense()))
+            :(Finch.get_bands($P, $shapes, MergeDense()))
         else
-            :(Finch.balance($(lvl.sampler), $tid, $P, $shapes, MergeRandom()))
+            :(Finch.get_bands($(lvl.sampler), $P, $shapes, MergeRandom()))
         end
 
         push_preamble!(ctx,
@@ -665,7 +669,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
-                    $bands = Finch.get_bands($tid -> $band, $P)
+                    $bands = $band
                     $ranges = Finch.do_band_ranges($shapes, $bands)
                     # $bands = [$band for $tid in 1:($P)]
                     # $ranges = [Finch.band_range(b..., $shapes) for b in $bands]
