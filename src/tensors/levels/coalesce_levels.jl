@@ -400,7 +400,9 @@ function distribute_level(
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         distribute_level(ctx, lvl.coalescent, arch, diff, style),
         lvl.schedule,
-        lvl.accumulator,
+        # Each outer task needs its own accumulator, or nested tasks share channels.
+        lvl.mode == :fast ? lvl.accumulator :
+        distribute_level(ctx, lvl.accumulator, arch, diff, style),
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
