@@ -1,3 +1,62 @@
+@testitem "sparse_hash" begin
+    @testset "uniform parent shifts" begin
+        h = Finch.sparse_hash_hash
+        a = h(1, 0) - h(0, 0)
+        @test isodd(a)
+        for i in (1, 37, typemax(Int))
+            @test h(0, i) == hash(i)
+            for p in (UInt(0), UInt(17), typemax(UInt) - UInt(1)),
+                delta in (UInt(0), UInt(1), UInt(19), typemax(UInt))
+
+                @test h(p + delta, i) - h(p, i) == a * delta
+            end
+        end
+        @test h(Int32(17), Int32(37)) == h(17, 37)
+    end
+
+    @testset "collisions, wraparound, and resizing" for subtables in (1, 4)
+        cap = 64 * subtables
+        ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, cap)
+        tbl = Vector{NTuple{3,Int}}(undef, cap)
+        # Choose colliding keys at the last slot of the first subtable, so
+        # insertion must wrap without crossing into the next subtable.
+        p0 = findfirst(1:cap) do p
+            Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(p, 7), cap, subtables) ==
+                (1, 63, 63)
+        end
+        entries = [(p0 + k * cap, 7, k + 1) for k in 0:11]
+        for (p, i, q) in entries
+            Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, p, i, q, subtables)
+        end
+        @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
+        for newcap in (cap, 2cap, 4cap)
+            if newcap != cap
+                Finch.sparse_hash_table_resize!(ctrl, tbl, newcap, subtables)
+            end
+            for (p, i, q) in entries
+                @test Finch.sparse_hash_table_lookup(ctrl, tbl, p, i, subtables) == q
+            end
+            @test Finch.sparse_hash_table_lookup(ctrl, tbl, p0 + 12cap, 7, subtables) == 0
+        end
+        Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, p0, 7, 99, subtables)
+        @test Finch.sparse_hash_table_lookup(ctrl, tbl, p0, 7, subtables) == 99
+        @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(entries)
+    end
+
+    @testset "tensor assembly and updates" for single_writer in (true, false)
+        data = [mod(i + 3j, 5) == 0 ? i + j : 0 for i in 1:17, j in 1:9]
+        input = Tensor(Dense(Dense(Element(0))), data)
+        tensor = Tensor(Dense(SparseHash{Int,single_writer}(Element(0))), data)
+        @test Array(tensor) == data
+        @finch begin
+            for j in _, i in _
+                tensor[i, j] += input[i, j]
+            end
+        end
+        @test Array(tensor) == 2data
+    end
+end
+
 @testitem "constructors" setup = [CheckOutput] begin
     using Base.Meta
     using Finch: Structure

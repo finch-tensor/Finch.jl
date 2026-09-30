@@ -19,6 +19,9 @@ Implementation invariants:
 * Full slots store the parent position, coordinate, and child position together
   so equality checks do not chase through packed side arrays. `q == 0` is
   reserved as the missing sentinel.
+* Keys hash as `a * p + hash(i)` modulo `2^Sys.WORD_SIZE`, where `a` is a
+  random odd multiplier shared by all hash levels. Shifting parent positions
+  by `delta` therefore shifts every hash by `a * delta` modulo the same range.
 * The hash bucket uses low hash bits because each logical sub-table capacity is
   a power of two. Probes wrap within their sub-table. The control byte
   fingerprint uses high hash bits so bucket selection and fingerprint screening
@@ -88,6 +91,8 @@ const SPARSE_HASH_CTRL_EMPTY = UInt8(0x00)
 const SPARSE_HASH_CTRL_FULL = UInt8(0x80)
 const SPARSE_HASH_CTRL_HASH_MASK = UInt8(0x7f)
 const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
+# Sample once and keep it fixed, including across shards and table resizes.
+const SPARSE_HASH_POS_MULTIPLIER = rand(UInt) | one(UInt)
 
 @inline sparse_hash_table_capacity(n, subtables=1) =
     max(4 * subtables, n <= 1 ? 4 * subtables : nextpow(2, 2n))
@@ -99,7 +104,7 @@ const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
     return nothing
 end
 
-@inline sparse_hash_hash(p, i) = hash((p, i))
+@inline sparse_hash_hash(p, i) = SPARSE_HASH_POS_MULTIPLIER * (p % UInt) + hash(i)
 @inline sparse_hash_hash_slot(h::UInt, n) = Int(h & UInt(n - 1)) + 1
 @inline sparse_hash_hash_subtable(h::UInt, subtables) = Int(h & UInt(subtables - 1)) + 1
 @inline function sparse_hash_hash_slot_parts(h::UInt, n, subtables)
