@@ -3,7 +3,7 @@
         hasproperty(lvl, :lvl) ? hash_counts(lvl.lvl) : Int[]
     hash_counts(lvl::Finch.SparseHashLevel) = [lvl.subtables; hash_counts(lvl.lvl)]
 
-    @testset "destination follows configured merge workers" begin
+    @testset "all hashes follow configured merge workers" begin
         for P in (1, 2, 3, 5, 8), mode in (:normalize, :fast)
             for fmt in (
                 () -> SparseHash(Element(0), 7, 16),
@@ -16,15 +16,32 @@
                 lvl = Coalesce(cpu(:hash, P), original; mode)
                 @test hash_counts(lvl.coalescent) ==
                     fill(nextpow(2, P), length(hash_counts(original)))
-                @test all(==(16), hash_counts(lvl.lvl))
+                @test hash_counts(lvl.lvl) == hash_counts(lvl.coalescent)
                 @test all(==(16), hash_counts(original))
                 if mode == :fast
                     @test lvl.accumulator === nothing
+                else
+                    @test all(==(nextpow(2, P)), hash_counts(lvl.accumulator))
                 end
             end
         end
         lvl = Coalesce(cpu(:hash, 5), SparseList(SparseList(Element(0))))
-        @test hash_counts(lvl.accumulator) == [1, 1]
+        @test hash_counts(lvl.accumulator) == [8, 8]
+    end
+
+    @testset "similar levels start empty" begin
+        data = [mod(i + 3j, 5) == 0 ? i + j : 0 for i in 1:17, j in 1:9]
+        for B in (1, 16), mode in (:normalize, :fast)
+            original = Tensor(Dense(SparseHash(Element(0), 17, B)), data)
+            lvl = Coalesce(cpu(:hash, 5), original.lvl; mode)
+            @test Array(original) == data
+            src = lvl.lvl.lvl
+            @test src.subtables == 8
+            @test all(isempty, src.tbl.data)
+            @test all(isempty, src.tbl_ctrl.data)
+            @test all(isempty, src.perm.data)
+            @test all(isempty, src.lvl.val.data)
+        end
     end
 
     @testset "reject non-power-of-two bucket counts" begin

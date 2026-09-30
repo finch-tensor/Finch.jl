@@ -1,5 +1,5 @@
 @testitem "sparse_hash" begin
-    @testset "uniform parent shifts" begin
+    @testset "bucket rotation and slot hashing" begin
         h = Finch.sparse_hash_hash
         a = h(1, 0) - h(0, 0)
         @test isodd(a)
@@ -12,6 +12,12 @@
             end
         end
         @test h(Int32(17), Int32(37)) == h(17, 37)
+        # Buckets use the low bits of the linear hash; slots mix it first.
+        x = UInt(0b101)
+        @test Finch.sparse_hash_hash_subtable(x, 8) == 6
+        @test Finch.sparse_hash_hash_slot_parts(x, 512, 8) == (321, Int((hash(x) >>> 7) & 63), 63)
+        @test Finch.sparse_hash_hash_slot_parts(typemax(UInt), 8, 8) == (8, 0, 0)
+        @test Finch.sparse_hash_hash_ctrl(x) == 0x80 | (hash(x) % UInt8 & 0x7f)
     end
 
     @testset "collisions, wraparound, and resizing" for subtables in (1, 4)
@@ -20,11 +26,11 @@
         tbl = Vector{NTuple{3,Int}}(undef, cap)
         # Choose colliding keys at the last slot of the first subtable, so
         # insertion must wrap without crossing into the next subtable.
-        p0 = findfirst(1:cap) do p
-            Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(p, 7), cap, subtables) ==
-                (1, 63, 63)
+        parents = filter(1:20000) do p
+            hsh = Finch.sparse_hash_hash(p, 7)
+            Finch.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
         end
-        entries = [(p0 + k * cap, 7, k + 1) for k in 0:11]
+        entries = [(parents[q], 7, q) for q in 1:12]
         for (p, i, q) in entries
             Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, p, i, q, subtables)
         end
@@ -36,17 +42,17 @@
             for (p, i, q) in entries
                 @test Finch.sparse_hash_table_lookup(ctrl, tbl, p, i, subtables) == q
             end
-            @test Finch.sparse_hash_table_lookup(ctrl, tbl, p0 + 12cap, 7, subtables) == 0
+            @test Finch.sparse_hash_table_lookup(ctrl, tbl, parents[13], 7, subtables) == 0
         end
-        Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, p0, 7, 99, subtables)
-        @test Finch.sparse_hash_table_lookup(ctrl, tbl, p0, 7, subtables) == 99
+        Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, parents[1], 7, 99, subtables)
+        @test Finch.sparse_hash_table_lookup(ctrl, tbl, parents[1], 7, subtables) == 99
         @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(entries)
     end
 
-    @testset "tensor assembly and updates" for single_writer in (true, false)
+    @testset "tensor assembly and updates" for single_writer in (true, false), B in (1, 8)
         data = [mod(i + 3j, 5) == 0 ? i + j : 0 for i in 1:17, j in 1:9]
         input = Tensor(Dense(Dense(Element(0))), data)
-        tensor = Tensor(Dense(SparseHash{Int,single_writer}(Element(0))), data)
+        tensor = Tensor(Dense(SparseHash{Int,single_writer}(Element(0), 17, B)), data)
         @test Array(tensor) == data
         @finch begin
             for j in _, i in _
@@ -54,6 +60,75 @@
             end
         end
         @test Array(tensor) == 2data
+    end
+
+    @testset "skewed assembly and thawed growth" for single_writer in (true, false)
+        B = 8
+        indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), B) == 1, 1:1000)[1:40]
+        data = zeros(Int, 1000)
+        data[indices[1:10]] .= 1
+        tensor = Tensor(SparseHash{Int,single_writer}(Element(0), 1000, B), data)
+        @test Array(tensor) == data
+        input = Tensor(Dense(Element(0)), zeros(Int, 1000))
+        input.lvl.lvl.val[indices] .= 2
+        @finch for i in _
+            if input[i] != 0
+                tensor[i] += input[i]
+            end
+        end
+        @test Array(tensor) == data + Array(input)
+        @test length(tensor.lvl.tbl) == B * 128
+        @test length(tensor.lvl.perm) == 40
+        @test Finch.sparse_hash_table_lookup(tensor.lvl.tbl_ctrl, tensor.lvl.tbl, 1, 1001, B) == 0
+    end
+
+    @testset "pending writers share keys across bucket growth" begin
+        indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1, 1:1000)[1:40]
+        coords = Tensor(Dense(Element(0)), indices)
+        tensor = Tensor(SparseHash{Int,false}(Dense(Element(0), 2), 1000, 8))
+        @finch begin
+            tensor .= 0
+            for k in _
+                let i = coords[k]
+                    for j in 1:2
+                        tensor[j, i] += 1
+                        tensor[j, i] += 2
+                    end
+                end
+            end
+        end
+        expected = zeros(Int, 2, 1000)
+        expected[:, indices] .= 3
+        @test Array(tensor) == expected
+        @test length(tensor.lvl.perm) == 40
+        @test isempty(tensor.lvl.pool)
+    end
+
+    # Several new keys pending at once require multi-writer mode.
+    @testset "pending keys invalidate cached slots" for single_writer in (false,)
+        indices = filter(1:10000) do i
+            hsh = Finch.sparse_hash_hash(1, i)
+            Finch.sparse_hash_hash_slot_parts(hsh, 32, 8) == (1, 3, 3)
+        end[1:40]
+        left = Tensor(Dense(Element(0)), indices[1:2:end])
+        right = Tensor(Dense(Element(0)), indices[2:2:end])
+        tensor = Tensor(SparseHash{Int,single_writer}(Dense(Element(0), 2), 10000, 8))
+        @finch begin
+            tensor .= 0
+            for k in _
+                let i = left[k], ii = right[k]
+                    for j in 1:2
+                        tensor[j, i] += 1
+                        tensor[j, ii] += 2
+                    end
+                end
+            end
+        end
+        expected = zeros(Int, 2, 10000)
+        expected[:, indices[1:2:end]] .= 1
+        expected[:, indices[2:2:end]] .= 2
+        @test Array(tensor) == expected
+        @test length(tensor.lvl.perm) == 40
     end
 end
 

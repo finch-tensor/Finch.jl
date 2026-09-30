@@ -90,11 +90,24 @@ global_memory
 
 ## Coalescing task-local output
 
-Destination hash levels inside `Coalesce` use `nextpow(2, get_num_tasks(device))`
+Hash levels in the destination, source shards, and normalization accumulators
+inside `Coalesce` use `nextpow(2, get_num_tasks(device))`
 subtables, rounding the configured merge worker count up to a power of two.
 For example, `cpu(:k, 5)` uses eight subtables regardless of `Threads.nthreads()`.
 Explicit `SparseHash` bucket counts must still be positive powers of two.
-Source shards and normalization accumulators currently retain their own hash layouts.
+`coalesce_similar_level` constructs empty levels with the requested bucket
+count; it does not copy or rehash the supplied level's contents.
+
+For parent position `p` and index `i`, bucket routing uses
+`(a * UInt(p) + hash(i)) & UInt(B - 1)`, with a shared random odd `a` and
+`B` buckets. A uniform parent shift `delta` therefore rotates buckets by
+`a * delta` modulo `B`. Bucket routing reads the low bits of
+the hash word `x = a * UInt(p) + hash(i)`. Linear probing clusters on linear
+hashes of structured parents, so the control-byte fingerprint (low seven bits)
+and the starting slot within a bucket (the bits above those) come from
+`hash(x)`.
+Assembly sizes the table for its busiest bucket, including
+pending keys; routing alone does not guarantee balanced occupancy.
 
 When a `CoalesceLevel` freezes, it merges its `P` task shards with
 `coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and

@@ -60,13 +60,11 @@ function coalesce_similar_level(lvl::DenseLevel{Ti}, P) where {Ti}
 end
 
 function coalesce_similar_level(lvl::SparseListLevel{Ti}, P) where {Ti}
-    SparseListLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape, lvl.ptr, lvl.idx)
+    SparseListLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
 end
 
 function coalesce_similar_level(lvl::SparseByteMapLevel{Ti}, P) where {Ti}
-    SparseByteMapLevel{Ti}(
-        coalesce_similar_level(lvl.lvl, P), lvl.shape, lvl.ptr, lvl.tbl, lvl.srt
-    )
+    SparseByteMapLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
 end
 
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
@@ -76,22 +74,20 @@ function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,
         coal_lvl = coal_lvl.lvl
     end
     P = get_num_tasks(device)
-    coalescent = similar_level(
-        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
-    )
-    # Configure the fresh destination for the device's P merge workers.
-    coalescent = coalesce_similar_level(coalescent, P)
+    # All participating hashes use the same bucket layout.
+    coalescent = coalesce_similar_level(coal_lvl, P)
     if mode == :fast
         accum = nothing
     else
         accum = gen_accumulator(
             coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
         )
+        accum = coalesce_similar_level(accum, P)
     end
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
-        transfer(MultiChannelMemory(device, P), lvl),
+        transfer(MultiChannelMemory(device, P), coalesce_similar_level(lvl, P)),
         coalescent,
         schedule,
         transfer(MultiChannelMemory(device, P), accum), ;

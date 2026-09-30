@@ -14,18 +14,19 @@ Implementation invariants:
 
 * `tbl_ctrl` and `tbl` form a linear-probing hash table, logically split into
   `subtables` independent contiguous tables. A full slot has the high bit set
-  in `tbl_ctrl[h]`, stores seven high hash bits in the low bits, and has
+  in `tbl_ctrl[h]`, stores seven hash fingerprint bits in the low bits, and has
   `tbl[h] == (p, i, q)`. `0x00` is an empty slot and terminates a probe.
 * Full slots store the parent position, coordinate, and child position together
   so equality checks do not chase through packed side arrays. `q == 0` is
   reserved as the missing sentinel.
-* Keys hash as `a * p + hash(i)` modulo `2^Sys.WORD_SIZE`, where `a` is a
-  random odd multiplier shared by all hash levels. Shifting parent positions
-  by `delta` therefore shifts every hash by `a * delta` modulo the same range.
-* The hash bucket uses low hash bits because each logical sub-table capacity is
-  a power of two. Probes wrap within their sub-table. The control byte
-  fingerprint uses high hash bits so bucket selection and fingerprint screening
-  are independent.
+* Keys hash as `x = a * p + hash(i)` modulo `2^Sys.WORD_SIZE`, where `a` is a
+  random odd multiplier shared by all hash levels. The low `log2(subtables)`
+  bits of `x` pick the bucket, so shifting parent positions by `delta` rotates
+  every bucket by `a * delta` modulo `subtables`. `x` is linear in `p`, and
+  linear probing clusters badly on linear hashes of structured parents, so the
+  rest comes from `y = hash(x)`: its low seven bits are the control byte
+  fingerprint, and the bits above those pick the starting slot within the
+  bucket. Probes wrap within their subtable.
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a table slot `h`. Each parent range is sorted by `tbl[h][2]`.
 * In thawed/update mode, `perm` is only kept large enough to record child
@@ -33,13 +34,16 @@ Implementation invariants:
 * `pool` is a stack of vacant `q` values for multi-writer update mode. It is
   retained across freeze/thaw, cleared by declaration, and unused by
   single-writer update mode.
-* `tbl_count` counts full hash slots.
-* `SingleWriter == true` promises that a newly created `(p, i)` has at most one
-  writer before it is published to the table. In that case update mode caches
-  the insertion slot but delays publishing the missing key until the child
-  reports that it retained data.
-* `SingleWriter == false` may have several simultaneous writers for the same
-  missing key. Generated update code keeps a small linear pending stack of
+* Update-mode `tbl_count[b]` counts full slots and distinct pending keys in
+  bucket `b`. Assembly grows the table before any bucket becomes more than
+  half full, including its pending keys.
+* `SingleWriter == true` promises that at most one newly created key, with at
+  most one writer, is pending in the level at a time. Update mode caches the
+  insertion slot and delays publishing the missing key there until the child
+  reports that it retained data. Programs that hold several new keys open at
+  once (e.g. two accesses hoisted out of a loop) need `SingleWriter == false`.
+* `SingleWriter == false` may have several pending keys, each with several
+  simultaneous writers. Generated update code keeps a small linear pending stack of
   `(p, i, q)` records plus separate live and dirty state. Pending entries are not
   published to the hash table; the last live writer either publishes a retained
   `q` or returns it to `pool`.
@@ -90,7 +94,6 @@ const SparseHash = SparseHashLevel
 const SPARSE_HASH_CTRL_EMPTY = UInt8(0x00)
 const SPARSE_HASH_CTRL_FULL = UInt8(0x80)
 const SPARSE_HASH_CTRL_HASH_MASK = UInt8(0x7f)
-const SPARSE_HASH_CTRL_SHIFT = 8 * sizeof(UInt) - 7
 # Sample once and keep it fixed, including across shards and table resizes.
 const SPARSE_HASH_POS_MULTIPLIER = rand(UInt) | one(UInt)
 
@@ -105,18 +108,17 @@ const SPARSE_HASH_POS_MULTIPLIER = rand(UInt) | one(UInt)
 end
 
 @inline sparse_hash_hash(p, i) = SPARSE_HASH_POS_MULTIPLIER * (p % UInt) + hash(i)
-@inline sparse_hash_hash_slot(h::UInt, n) = Int(h & UInt(n - 1)) + 1
 @inline sparse_hash_hash_subtable(h::UInt, subtables) = Int(h & UInt(subtables - 1)) + 1
+# The bucket's first slot, the probe's starting offset within the bucket, and
+# the offset mask for a table of `n` slots. `n` and `subtables` are powers of two.
+# The offset skips the seven fingerprint bits of `hash(h)`.
 @inline function sparse_hash_hash_slot_parts(h::UInt, n, subtables)
-    subtable_len = n ÷ subtables
-    mask = subtable_len - 1
-    base = (sparse_hash_hash_subtable(h, subtables) - 1) * subtable_len + 1
-    off = Int((h >>> trailing_zeros(subtables)) & UInt(mask))
-    return base, off, mask
+    mask = (n >>> trailing_zeros(subtables)) - 1
+    base = Int(h & UInt(subtables - 1)) * (mask + 1) + 1
+    return base, Int((hash(h) >>> 7) & UInt(mask)), mask
 end
 @inline sparse_hash_hash_ctrl(h::UInt) =
-    SPARSE_HASH_CTRL_FULL |
-    UInt8((h >> SPARSE_HASH_CTRL_SHIFT) & UInt(SPARSE_HASH_CTRL_HASH_MASK))
+    SPARSE_HASH_CTRL_FULL | (hash(h) % UInt8 & SPARSE_HASH_CTRL_HASH_MASK)
 
 @inline sparse_hash_entry_pos(entry) = entry[1]
 @inline sparse_hash_entry_idx(entry) = entry[2]
@@ -141,6 +143,8 @@ end
 @inline function sparse_hash_table_resize!(tbl_ctrl, tbl, cap, subtables=1)
     old_ctrl = copy(tbl_ctrl)
     old_tbl = copy(tbl)
+    empty!(tbl_ctrl)
+    empty!(tbl)
     resize!(tbl_ctrl, cap)
     resize!(tbl, cap)
     fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
@@ -430,21 +434,14 @@ function similar_level(
     )
 end
 
-coalesce_similar_level(lvl, P) = lvl
+coalesce_similar_level(lvl, P) =
+    similar_level(lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...)
 function coalesce_similar_level(
     lvl::SparseHashLevel{Ti,SingleWriter}, P
 ) where {Ti,SingleWriter}
     P > 0 || throw(ArgumentError("Coalesce worker count must be positive"))
-    subtables = nextpow(2, P)
     SparseHashLevel{Ti,SingleWriter}(
-        coalesce_similar_level(lvl.lvl, P),
-        lvl.shape,
-        subtables,
-        lvl.ptr,
-        lvl.tbl_ctrl,
-        lvl.tbl,
-        lvl.pool,
-        lvl.perm,
+        coalesce_similar_level(lvl.lvl, P), lvl.shape, nextpow(2, P)
     )
 end
 
@@ -850,7 +847,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
             empty!($(lvl.pool))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
-            $(lvl.tbl_count) = 0
+            $(lvl.tbl_count) = zeros(Int, $(ctx(lvl.subtables)))
             $(lvl.stk_stop) = 0
             resize!($(lvl.perm), 0)
         end,
@@ -874,7 +871,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     v = freshen(ctx, :v)
     entry = freshen(ctx, :entry)
     qos_max = freshen(ctx, :qos_max)
-    tbl_count = lvl.tbl_count
+    tbl_count = freshen(ctx, :tbl_count)
     h = freshen(ctx, :h)
     r = freshen(ctx, :r)
     idx_tmp = freshen(ctx, :idx_tmp)
@@ -944,7 +941,6 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
 end
 
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_stop)
-    q = freshen(ctx, :q)
     v = freshen(ctx, :v)
     h = freshen(ctx, :h)
     tbl_count = lvl.tbl_count
@@ -952,18 +948,17 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         ctx,
         quote
             $(lvl.qos_stop) = 0
-            $q = 0
+            $tbl_count = zeros(Int, $(ctx(lvl.subtables)))
             for $h in eachindex($(lvl.tbl_ctrl))
                 if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
                     $v = Finch.sparse_hash_entry_val($(lvl.tbl)[$h])
-                    $q += 1
+                    $tbl_count[($h - 1) ÷ (length($(lvl.tbl)) ÷ $(ctx(lvl.subtables))) + 1] += 1
                     $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
                 end
             end
             for $v in $(lvl.pool)
                 $(lvl.qos_stop) = max($(lvl.qos_stop), $v)
             end
-            $tbl_count = $q
             $(lvl.stk_stop) = 0
             Finch.resize_if_smaller!($(lvl.perm), $(lvl.qos_stop))
         end,
@@ -1113,6 +1108,7 @@ function unfurl(
     tbl_entry = freshen(ctx, tag, :_tbl_entry)
     tbl_p = freshen(ctx, tag, :_tbl_p)
     tbl_i = freshen(ctx, tag, :_tbl_i)
+    tbl_bucket = freshen(ctx, tag, :_tbl_bucket)
     tbl_n = freshen(ctx, tag, :_tbl_n)
     tbl_found = freshen(ctx, tag, :_tbl_found)
     tbl_hash = freshen(ctx, tag, :_tbl_hash)
@@ -1120,10 +1116,19 @@ function unfurl(
     tbl_slot = freshen(ctx, tag, :_tbl_slot)
     stk_slot = freshen(ctx, tag, :_stk_slot)
     stk_entry = freshen(ctx, tag, :_stk_entry)
-    stk_p = freshen(ctx, tag, :_stk_p)
-    stk_i = freshen(ctx, tag, :_stk_i)
-    stk_hash = freshen(ctx, tag, :_stk_hash)
-    stk_ctrl = freshen(ctx, tag, :_stk_ctrl)
+    publish = quote
+        # Other pending keys may have resized the table or taken the cached
+        # slot while this key was pending.
+        if length($tbl) != $tbl_n || $tbl_ctrl[$tbl_slot] != Finch.SPARSE_HASH_CTRL_EMPTY
+            $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
+                $tbl_ctrl, $tbl, $tbl_p, $tbl_i, $tbl_hash,
+                $tbl_ctrl_byte, length($tbl), $(ctx(lvl.subtables)),
+            )
+        end
+        Finch.sparse_hash_table_insert_at_slot!(
+            $tbl_ctrl, $tbl, $tbl_slot, $tbl_p, $tbl_i, $qos, $tbl_ctrl_byte,
+        )
+    end
 
     Thunk(;
         body=(ctx) -> Lookup(;
@@ -1133,35 +1138,19 @@ function unfurl(
                     $tbl = $(lvl.tbl)
                     $tbl_p = $(ctx(pos))
                     $tbl_i = $(ctx(idx))
-                    if $(
-                        if lvl.single_writer
-                            :($qos_stop == length($(lvl.perm)))
-                        else
-                            :(isempty($(lvl.pool)) && $qos_stop == length($(lvl.perm)))
-                        end
+                    $tbl_hash = Finch.sparse_hash_hash($tbl_p, $tbl_i)
+                    $tbl_ctrl_byte = Finch.sparse_hash_hash_ctrl($tbl_hash)
+                    $tbl_bucket = Finch.sparse_hash_hash_subtable(
+                        $tbl_hash, $(ctx(lvl.subtables))
                     )
-                        $old = length($(lvl.perm)) + 1
-                        $p = $old
-                        $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
-                        Finch.resize_if_smaller!($(lvl.perm), $q_stop)
-                        $tbl_cap = Finch.sparse_hash_table_capacity(
-                            $q_stop, $(ctx(lvl.subtables))
-                        )
+                    # Grow before probing, so the cached slot stays valid if
+                    # this key turns out to be new.
+                    if 2 * $(ctx(lvl.subtables)) * ($(lvl.tbl_count)[$tbl_bucket] + 1) > length($tbl)
+                        $tbl_cap = max(length($tbl) << 1, 4 * $(ctx(lvl.subtables)))
                         Finch.sparse_hash_table_resize!(
                             $tbl_ctrl, $tbl, $tbl_cap, $(ctx(lvl.subtables))
                         )
-                        $(contain(
-                            ctx_2 -> assemble_level!(
-                                ctx_2,
-                                lvl.lvl,
-                                value(p, Tp),
-                                value(q_stop, Tp),
-                            ),
-                            ctx,
-                        ))
                     end
-                    $tbl_hash = Finch.sparse_hash_hash($tbl_p, $tbl_i)
-                    $tbl_ctrl_byte = Finch.sparse_hash_hash_ctrl($tbl_hash)
                     $tbl_n = length($tbl)
                     $stk_slot = 0
                     $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
@@ -1176,8 +1165,7 @@ function unfurl(
                     )
                     $qos = $(Tp(0))
                     $tbl_found = false
-                    if $tbl_slot != 0 &&
-                        (@inbounds $tbl_ctrl[$tbl_slot]) != Finch.SPARSE_HASH_CTRL_EMPTY
+                    if (@inbounds $tbl_ctrl[$tbl_slot]) != Finch.SPARSE_HASH_CTRL_EMPTY
                         @inbounds $tbl_entry = $tbl[$tbl_slot]
                         $qos = Finch.sparse_hash_entry_val($tbl_entry)
                         $tbl_found = true
@@ -1205,7 +1193,31 @@ function unfurl(
                         end
                     )
                     if $qos == 0
+                        # Reserve room for this distinct key, including while
+                        # its child is pending and has not published it yet.
+                        $(lvl.tbl_count)[$tbl_bucket] += 1
                         # If the qos is not in the table or pending stack, allocate it.
+                        if $(
+                            if lvl.single_writer
+                                :($qos_stop == length($(lvl.perm)))
+                            else
+                                :(isempty($(lvl.pool)) && $qos_stop == length($(lvl.perm)))
+                            end
+                        )
+                            $old = length($(lvl.perm)) + 1
+                            $p = $old
+                            $q_stop = max(length($(lvl.perm)) << 1, $qos_stop + 1)
+                            Finch.resize_if_smaller!($(lvl.perm), $q_stop)
+                            $(contain(
+                                ctx_2 -> assemble_level!(
+                                    ctx_2,
+                                    lvl.lvl,
+                                    value(p, Tp),
+                                    value(q_stop, Tp),
+                                ),
+                                ctx,
+                            ))
+                        end
                         $(
                             if lvl.single_writer
                                 quote
@@ -1245,17 +1257,13 @@ function unfurl(
                         if $dirty
                             if !$tbl_found
                                 Finch.sparse_hash_table_insert_at_slot!(
-                                    $tbl_ctrl,
-                                    $tbl,
-                                    $tbl_slot,
-                                    $tbl_p,
-                                    $tbl_i,
-                                    $qos,
+                                    $tbl_ctrl, $tbl, $tbl_slot, $tbl_p, $tbl_i, $qos,
                                     $tbl_ctrl_byte,
                                 )
-                                $(lvl.tbl_count) += 1
                             end
                             $(fbr.dirty) = true
+                        elseif !$tbl_found
+                            $(lvl.tbl_count)[$tbl_bucket] -= 1
                         end
                     end
                 else
@@ -1269,34 +1277,10 @@ function unfurl(
                         if $stk_slot != 0
                             $(lvl.stk_cnt)[$stk_slot] -= 1
                             if $(lvl.stk_cnt)[$stk_slot] == 0
-                                $stk_entry = $(lvl.stk)[$stk_slot]
-                                $qos = Finch.sparse_hash_entry_val($stk_entry)
                                 if $(lvl.stk_dirty)[$stk_slot]
-                                    $stk_p = Finch.sparse_hash_entry_pos($stk_entry)
-                                    $stk_i = Finch.sparse_hash_entry_idx($stk_entry)
-                                    $stk_hash = Finch.sparse_hash_hash($stk_p, $stk_i)
-                                    $stk_ctrl = Finch.sparse_hash_hash_ctrl($stk_hash)
-                                    $tbl_slot = Finch.sparse_hash_table_lookup_insert_slot(
-                                        $tbl_ctrl,
-                                        $tbl,
-                                        $stk_p,
-                                        $stk_i,
-                                        $stk_hash,
-                                        $stk_ctrl,
-                                        $tbl_n,
-                                        $(ctx(lvl.subtables)),
-                                    )
-                                    Finch.sparse_hash_table_insert_at_slot!(
-                                        $tbl_ctrl,
-                                        $tbl,
-                                        $tbl_slot,
-                                        $stk_p,
-                                        $stk_i,
-                                        $qos,
-                                        $stk_ctrl,
-                                    )
-                                    $(lvl.tbl_count) += 1
+                                    $publish
                                 else
+                                    $(lvl.tbl_count)[$tbl_bucket] -= 1
                                     push!($(lvl.pool), $qos)
                                 end
                                 $(lvl.stk_dirty)[$stk_slot] = false
