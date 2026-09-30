@@ -90,6 +90,12 @@ global_memory
 
 ## Coalescing task-local output
 
+Destination hash levels inside `Coalesce` use `nextpow(2, get_num_tasks(device))`
+subtables, rounding the configured merge worker count up to a power of two.
+For example, `cpu(:k, 5)` uses eight subtables regardless of `Threads.nthreads()`.
+Explicit `SparseHash` bucket counts must still be positive powers of two.
+Source shards and normalization accumulators currently retain their own hash layouts.
+
 When a `CoalesceLevel` freezes, it merges its `P` task shards with
 `coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and
 disjoint: everything shard `p` stores precedes, in outermost-first index order,

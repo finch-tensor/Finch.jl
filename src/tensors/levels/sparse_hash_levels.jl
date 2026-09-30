@@ -430,14 +430,14 @@ function similar_level(
     )
 end
 
-coalesce_similar_level(lvl) = lvl
+coalesce_similar_level(lvl, P) = lvl
 function coalesce_similar_level(
-    lvl::SparseHashLevel{Ti,SingleWriter}
+    lvl::SparseHashLevel{Ti,SingleWriter}, P
 ) where {Ti,SingleWriter}
-    subtables = nextpow(2, Threads.nthreads())
-    sparse_hash_check_subtables(subtables)
+    P > 0 || throw(ArgumentError("Coalesce worker count must be positive"))
+    subtables = nextpow(2, P)
     SparseHashLevel{Ti,SingleWriter}(
-        coalesce_similar_level(lvl.lvl),
+        coalesce_similar_level(lvl.lvl, P),
         lvl.shape,
         subtables,
         lvl.ptr,
