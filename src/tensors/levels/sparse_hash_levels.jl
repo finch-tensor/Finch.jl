@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblCtrl, Tbl, Pool, Perm]}(lvl, [dim], [subtables=1])
+    SparseHashLevel{[Ti=Int], [SingleWriter=true], [Tp=Int], [Ptr, TblCtrl, Tbl, Pool, Perm, TblCount, QosStop]}(lvl, [dim], [subtables=1])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -29,6 +29,12 @@ Implementation invariants:
   bucket. Probes wrap within their subtable.
 * In frozen/read mode, `ptr[p]:(ptr[p + 1] - 1)` indexes `perm`, and `perm[r]`
   is a table slot `h`. Each parent range is sorted by `tbl[h][2]`.
+* Frozen `tbl_count[b]` records the number of full slots in bucket `b`.
+  This is the same count array maintained during assembly; freeze preserves
+  it once every pending writer has finished.
+* `qos_stop[1]` caches the frozen child-position extent, including vacancies
+  in `pool`. Freeze already computes this bound for its child level; retaining
+  it lets setup concatenate child-position spans without scanning entries.
 * In thawed/update mode, `perm` is only kept large enough to record child
   position capacity. It is not a q-indexed presence or dirty map.
 * `pool` is a stack of vacant `q` values for multi-writer update mode. It is
@@ -72,7 +78,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <: AbstractLevel
+struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     subtables::Int
@@ -88,6 +94,8 @@ struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} <: Abstrac
     # Update-mode scratch stack of vacant q values for multi-writer assembly.
     pool::Pool
     perm::Perm
+    tbl_count::TblCount
+    qos_stop::QosStop
 end
 
 const SparseHash = SparseHashLevel
@@ -415,9 +423,31 @@ function SparseHashLevel{Ti,SingleWriter}(
     pool::Pool,
     perm::Perm,
 ) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+    # Raw frozen buffers may omit metadata. Construct it once here; ordinary
+    # updates and transfers carry the buffer through without rebuilding it.
     sparse_hash_check_subtables(subtables)
-    SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}(
-        lvl, shape, Int(subtables), ptr, tbl_ctrl, tbl, pool, perm
+    tbl_count = zeros(Int, subtables)
+    for h in eachindex(tbl_ctrl)
+        if tbl_ctrl[h] != SPARSE_HASH_CTRL_EMPTY
+            tbl_count[(h - 1) ÷ (length(tbl) ÷ subtables) + 1] += 1
+        end
+    end
+    SparseHashLevel{Ti,SingleWriter}(
+        lvl, shape, subtables, ptr, tbl_ctrl, tbl, pool, perm, tbl_count
+    )
+end
+
+function SparseHashLevel{Ti,SingleWriter}(
+    lvl::Lvl, shape, subtables, ptr::Ptr, tbl_ctrl::TblCtrl, tbl::Tbl,
+    pool::Pool, perm::Perm, tbl_count::TblCount,
+    qos_stop::QosStop=postype(lvl)[max(
+        maximum(h -> sparse_hash_entry_val(tbl[h]), perm; init=0),
+        maximum(pool; init=0),
+    )],
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
+    sparse_hash_check_subtables(subtables)
+    SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}(
+        lvl, shape, Int(subtables), ptr, tbl_ctrl, tbl, pool, perm, tbl_count, qos_stop
     )
 end
 
@@ -446,8 +476,8 @@ function coalesce_similar_level(
 end
 
 function postype(
-    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}}
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+    ::Type{SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}}
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     return postype(Lvl)
 end
 
@@ -463,21 +493,25 @@ function Base.resize!(
         lvl.tbl,
         lvl.pool,
         lvl.perm,
+        lvl.tbl_count,
+        lvl.qos_stop,
     )
 end
 
 function transfer(
     Tm,
     lvl::SparseHashLevel{
-        Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl
+        Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl
     },
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     lvl_2 = transfer(Tm, lvl.lvl)
     ptr_2 = transfer(Tm, lvl.ptr)
     tbl_ctrl_2 = transfer(Tm, lvl.tbl_ctrl)
     tbl_2 = transfer(Tm, lvl.tbl)
     pool_2 = transfer(Tm, lvl.pool)
     perm_2 = transfer(Tm, lvl.perm)
+    tbl_count_2 = transfer(Tm, lvl.tbl_count)
+    qos_stop_2 = transfer(Tm, lvl.qos_stop)
     return SparseHashLevel{Ti,SingleWriter}(
         lvl_2,
         lvl.shape,
@@ -487,6 +521,8 @@ function transfer(
         tbl_2,
         pool_2,
         perm_2,
+        tbl_count_2,
+        qos_stop_2,
     )
 end
 
@@ -525,6 +561,8 @@ function pattern!(
         lvl.tbl,
         lvl.pool,
         lvl.perm,
+        lvl.tbl_count,
+        lvl.qos_stop,
     )
 end
 
@@ -540,6 +578,8 @@ function set_fill_value!(
         lvl.tbl,
         lvl.pool,
         lvl.perm,
+        lvl.tbl_count,
+        lvl.qos_stop,
     )
 end
 
@@ -575,6 +615,10 @@ function Base.show(
         show(io, lvl.pool)
         print(io, ", ")
         show(io, lvl.perm)
+        print(io, ", ")
+        show(io, lvl.tbl_count)
+        print(io, ", ")
+        show(io, lvl.qos_stop)
     end
     print(io, ")")
 end
@@ -610,29 +654,29 @@ end
 
 @inline level_ndims(
     ::Type{
-        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     },
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl} =
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparseHashLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparseHashLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
 @inline level_eltype(
     ::Type{
-        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     },
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl} =
     level_eltype(Lvl)
 @inline level_fill_value(
     ::Type{
-        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     },
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl} =
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl} =
     level_fill_value(Lvl)
 function data_rep_level(
     ::Type{
-        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+        <:SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     },
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     SparseData(data_rep_level(Lvl))
 end
 
@@ -643,6 +687,8 @@ function isstructequal(a::T, b::T) where {T<:SparseHash}
         a.tbl == b.tbl &&
         a.pool == b.pool &&
         a.perm == b.perm &&
+        a.tbl_count == b.tbl_count &&
+        a.qos_stop == b.qos_stop &&
         isstructequal(a.lvl, b.lvl)
 end
 
@@ -679,6 +725,7 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     subtables
     qos_stop
     tbl_count
+    qos_stop_buffer
     stk
     stk_cnt
     stk_dirty
@@ -701,16 +748,18 @@ function virtualize(
     ctx,
     ex,
     ::Type{SparseHashLevel{
-        Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl
+        Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl
     }},
     tag=:lvl,
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,Lvl}
+) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Pool,Perm,TblCount,QosStop,Lvl}
     tag = freshen(ctx, tag)
     ptr = freshen(ctx, tag, :_ptr)
     tbl_ctrl = freshen(ctx, tag, :_tbl_ctrl)
     tbl = freshen(ctx, tag, :_tbl)
     pool = freshen(ctx, tag, :_pool)
     perm = freshen(ctx, tag, :_perm)
+    tbl_count = freshen(ctx, tag, :_tbl_count)
+    qos_stop_buffer = freshen(ctx, tag, :_qos_stop_buffer)
     stk = freshen(ctx, tag, :_stk)
     stk_cnt = freshen(ctx, tag, :_stk_cnt)
     stk_dirty = freshen(ctx, tag, :_stk_dirty)
@@ -724,6 +773,8 @@ function virtualize(
             $tbl = $tag.tbl
             $pool = $tag.pool
             $perm = $tag.perm
+            $tbl_count = $tag.tbl_count
+            $qos_stop_buffer = $tag.qos_stop
             Finch.sparse_hash_check_subtables($tag.subtables)
             $(
                 if SingleWriter
@@ -740,14 +791,13 @@ function virtualize(
         end,
     )
     qos_stop = freshen(ctx, tag, :_qos_stop)
-    tbl_count = freshen(ctx, tag, :_tbl_count)
     stk_stop = freshen(ctx, tag, :_stk_stop)
     shape = value(stop, Int)
     subtables = value(:($tag.subtables), Int)
     lvl_2 = virtualize(ctx, :($tag.lvl), Lvl, tag)
     VirtualSparseHashLevel(
         tag, lvl_2, Ti, SingleWriter, ptr, tbl_ctrl, tbl, pool, perm, shape,
-        subtables, qos_stop, tbl_count, stk, stk_cnt, stk_dirty, stk_stop,
+        subtables, qos_stop, tbl_count, qos_stop_buffer, stk, stk_cnt, stk_dirty, stk_stop,
     )
 end
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
@@ -761,6 +811,8 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyl
             $(lvl.tbl),
             $(lvl.pool),
             $(lvl.perm),
+            $(lvl.tbl_count),
+            $(lvl.qos_stop_buffer),
         )
     end
 end
@@ -781,7 +833,8 @@ function distribute_level(
         lvl.shape,
         lvl.subtables,
         freshen(ctx, lvl.tag, :qos_stop),
-        freshen(ctx, lvl.tag, :tbl_count),
+        distribute_buffer(ctx, lvl.tbl_count, arch, style),
+        distribute_buffer(ctx, lvl.qos_stop_buffer, arch, style),
         freshen(ctx, lvl.tag, :stk),
         freshen(ctx, lvl.tag, :stk_cnt),
         freshen(ctx, lvl.tag, :stk_dirty),
@@ -807,6 +860,7 @@ function redistribute(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, diff)
             lvl.subtables,
             lvl.qos_stop,
             lvl.tbl_count,
+            lvl.qos_stop_buffer,
             lvl.stk,
             lvl.stk_cnt,
             lvl.stk_dirty,
@@ -847,7 +901,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
             empty!($(lvl.pool))
             $qos = $(Tp(0))
             $(lvl.qos_stop) = 0
-            $(lvl.tbl_count) = zeros(Int, $(ctx(lvl.subtables)))
+            $(lvl.qos_stop_buffer)[1] = 0
+            fill!($(lvl.tbl_count), 0)
             $(lvl.stk_stop) = 0
             resize!($(lvl.perm), 0)
         end,
@@ -934,6 +989,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $qos_max = max($qos_max, $v)
             end
             $qos_stop = $qos_max
+            $(lvl.qos_stop_buffer)[1] = $qos_max
         end,
     )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
@@ -948,7 +1004,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         ctx,
         quote
             $(lvl.qos_stop) = 0
-            $tbl_count = zeros(Int, $(ctx(lvl.subtables)))
+            fill!($tbl_count, 0)
             for $h in eachindex($(lvl.tbl_ctrl))
                 if $(lvl.tbl_ctrl)[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
                     $v = Finch.sparse_hash_entry_val($(lvl.tbl)[$h])
@@ -1318,8 +1374,11 @@ end
 function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     tbl = lvl.tbl.data
     perm = lvl.perm.data
+    tbl_count = lvl.tbl_count.data
     subtables = dst.subtables
     sparse_hash_check_subtables(subtables)
+    lvl.subtables == subtables ||
+        throw(ArgumentError("Coalescing hashes must use the same bucket count"))
     shared = zeros(Int, P)
     shared_dst = zeros(Int, P)
     off = zeros(Int, P)
@@ -1327,6 +1386,8 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     child_shift = zeros(Int, P)
     max_child_pos = 0
     bucket_counts = zeros(Int, subtables)
+    bucket_shift = zeros(Int, P)
+    shared_bucket = zeros(Int, P)
     nnz = 0
     last_pos = 0
     last_idx = 0
@@ -1335,6 +1396,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         off[p] = nnz
         prev[p] = last_pos
         child_shift[p] = max_child_pos
+        bucket_shift[p] = Int((SPARSE_HASH_POS_MULTIPLIER * (shift[p] % UInt)) & UInt(subtables - 1))
         n = length(perm[p])
         n == 0 && continue
         first_entry = tbl[p][first(perm[p])]
@@ -1342,20 +1404,20 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
             sparse_hash_entry_idx(first_entry) == last_idx
             shared[p] = sparse_hash_entry_val(first_entry)
             shared_dst[p] = last_child_pos
+            shared_bucket[p] = sparse_hash_hash_subtable(
+                sparse_hash_hash(last_pos, last_idx), subtables
+            )
         end
         # Concatenate child-position spans, including holes. Internal order
         # does not affect allocation; only the shared entry needs an override.
-        max_q = maximum(h -> sparse_hash_entry_val(tbl[p][h]), perm[p])
-        max_child_pos += max_q
-        for h in perm[p]
-            entry = tbl[p][h]
-            q = sparse_hash_entry_val(entry)
-            q == shared[p] && continue
-            pos = sparse_hash_entry_pos(entry) + shift[p]
-            idx = sparse_hash_entry_idx(entry)
-            bucket = sparse_hash_hash_subtable(sparse_hash_hash(pos, idx), subtables)
-            bucket_counts[bucket] += 1
+        max_child_pos += lvl.qos_stop.data[p][1]
+        # Uniform parent shifts rotate whole buckets. Add their frozen counts
+        # directly, then remove the one boundary entry owned by an earlier shard.
+        for b in 1:subtables
+            bucket = ((b - 1 + bucket_shift[p]) & (subtables - 1)) + 1
+            bucket_counts[bucket] += tbl_count[p][b]
         end
+        shared[p] != 0 && (bucket_counts[shared_bucket[p]] -= 1)
         nnz += n - (shared[p] != 0)
         last_entry = tbl[p][last(perm[p])]
         last_pos = sparse_hash_entry_pos(last_entry) + shift[p]
@@ -1364,17 +1426,24 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         last_child_pos = last_q == shared[p] ? shared_dst[p] : last_q + child_shift[p]
     end
 
+    empty!(dst.ptr)
     resize!(dst.ptr, max_pos + 1)
-    nnz == 0 && fill!(dst.ptr, 1)
+    empty!(dst.perm)
     resize!(dst.perm, nnz)
     empty!(dst.pool)
     # Probing cannot leave its subtable, so size for the busiest bucket rather
     # than the average occupancy. Keep every subtable at most half full.
     capacity = subtables * sparse_hash_table_capacity(maximum(bucket_counts))
+    empty!(dst.tbl)
     resize!(dst.tbl, capacity)
+    empty!(dst.tbl_ctrl)
     resize!(dst.tbl_ctrl, capacity)
-    fill!(dst.tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
-    return (; shift, shared, shared_dst, off, prev, nnz, child_shift, max_child_pos, bucket_counts)
+    copyto!(dst.tbl_count, bucket_counts)
+    dst.qos_stop[1] = max_child_pos
+    init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY),)
+    nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
+    return (; shift, shared, shared_dst, off, prev, nnz, child_shift, max_child_pos,
+        bucket_counts, bucket_shift, shared_bucket, init)
 end
 
 function coalesce_level!(
@@ -1518,6 +1587,8 @@ function coalesce_level!(
     resize!(coalescent.tbl, output_cap)
     empty!(coalescent.pool)
     resize!(coalescent.perm, output_nnz)
+    copyto!(coalescent.tbl_count, bucket_unique_count)
+    coalescent.qos_stop[1] = output_nnz
 
     child_q_counts = zeros(Int, output_nnz)
     child_global_fbr_map = Vector{Int}(undef, total_entries)

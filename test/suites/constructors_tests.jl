@@ -1,4 +1,13 @@
 @testitem "sparse_hash" begin
+    function check_counts(lvl)
+        B = lvl.subtables
+        len = length(lvl.tbl_ctrl) ÷ B
+        @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+            view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
+        @test sum(lvl.tbl_count) == length(lvl.perm)
+        @test lvl.qos_stop == [max(maximum(h -> lvl.tbl[h][3], lvl.perm; init=0),
+                                  maximum(lvl.pool; init=0))]
+    end
     @testset "bucket rotation and slot hashing" begin
         h = Finch.sparse_hash_hash
         a = h(1, 0) - h(0, 0)
@@ -54,12 +63,16 @@
         input = Tensor(Dense(Dense(Element(0))), data)
         tensor = Tensor(Dense(SparseHash{Int,single_writer}(Element(0), 17, B)), data)
         @test Array(tensor) == data
+        check_counts(tensor.lvl.lvl)
+        counts = tensor.lvl.lvl.tbl_count
         @finch begin
             for j in _, i in _
                 tensor[i, j] += input[i, j]
             end
         end
         @test Array(tensor) == 2data
+        @test tensor.lvl.lvl.tbl_count === counts
+        check_counts(tensor.lvl.lvl)
     end
 
     @testset "skewed assembly and thawed growth" for single_writer in (true, false)
@@ -79,6 +92,7 @@
         @test Array(tensor) == data + Array(input)
         @test length(tensor.lvl.tbl) == B * 128
         @test length(tensor.lvl.perm) == 40
+        check_counts(tensor.lvl)
         @test Finch.sparse_hash_table_lookup(tensor.lvl.tbl_ctrl, tensor.lvl.tbl, 1, 1001, B) == 0
     end
 
@@ -102,6 +116,7 @@
         @test Array(tensor) == expected
         @test length(tensor.lvl.perm) == 40
         @test isempty(tensor.lvl.pool)
+        check_counts(tensor.lvl)
     end
 
     # Several new keys pending at once require multi-writer mode.
@@ -129,6 +144,7 @@
         expected[:, indices[2:2:end]] .= 2
         @test Array(tensor) == expected
         @test length(tensor.lvl.perm) == 40
+        check_counts(tensor.lvl)
     end
 end
 

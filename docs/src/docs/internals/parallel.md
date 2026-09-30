@@ -164,8 +164,10 @@ storage. Buffers written only at occupied positions retain their cleared
 regions; setup records only the newly added range for initialization.
 
 Setup's metadata work is O(P) per level, except for sparse-list boundary
-searches, which take O(P log M) for M parent positions. These bounds exclude
-buffer allocation/resizing. Setup does not scan entries or initialize buffers.
+searches, which take O(P log M) for M parent positions, and hash setup, which
+takes O(PB) for B buckets. With B equal to the worker count rounded up to a
+power of two, hash setup is O(P²). These bounds exclude buffer
+allocation/resizing. Setup does not scan entries or initialize buffers.
 
 ### Shared positions and ownership
 
@@ -196,9 +198,19 @@ subtract `shared[p] != 0`, not `shared[p]`.
 need a shared-position field. Dense levels pass through to their child plan;
 elements copy non-fill values when their positions overlap.
 
-The hash setup draft currently identifies shared local positions; child
-destinations (including `shared_dst`), bucket allocation, and copying remain to
-be implemented. The intended ownership is by output bucket: each output worker
-merges the corresponding bucket from every shard and writes only its own
-destination bucket. The generic coalesce interface does not prescribe a hash
-bucket-counting or insertion algorithm.
+Hash levels retain the existing assembly bucket-count array, `tbl_count`,
+through freeze. Their one-element `qos_stop` buffer caches the child-position
+extent already computed by freeze, including holes and pooled vacancies.
+Setup reads only the first and last frozen entries of each nonempty shard.
+It rotates that shard's counts by `a * shift[p] mod B`, then subtracts its
+shared boundary entry from the corresponding output bucket. The busiest
+output bucket determines the common subtable capacity, keeping every bucket
+at most half full. The plan's `bucket_shift` and `shared_bucket` record this
+routing for the parallel merge; `shared_bucket == 0` means no shared entry.
+
+Hash setup allocates the table and permutation, records the control-byte
+initialization in `init`, and plans child-position offsets and their shared
+exceptions. The parallel child copy, permutation construction, and bucket
+insertion are the next stage of the implementation. Each output worker will
+merge its owned buckets from every shard. The generic coalesce interface does
+not prescribe a hash bucket-counting or insertion algorithm.

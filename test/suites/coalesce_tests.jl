@@ -279,12 +279,17 @@ end
 
 
 @testitem "coalesce_hash_setup" begin
-    function hash_shards(entries)
+    function hash_shards(entries; B=nextpow(2, length(entries)))
         P = length(entries)
         mem = Finch.MultiChannelMemory(cpu(:setup, P), P)
         channels(data) = Finch.MultiChannelBuffer(mem, data)
+        counts = [zeros(Int, B) for _ in entries]
+        for (tid, es) in enumerate(entries), (p, i, _) in es
+            b = Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p, i), B)
+            counts[tid][b] += 1
+        end
         controls = [fill(Finch.SPARSE_HASH_CTRL_EMPTY,
-                         Finch.sparse_hash_table_capacity(length(es))) for es in entries]
+                         B * Finch.sparse_hash_table_capacity(maximum(c))) for c in counts]
         tables = [fill((0, 0, 0), length(ctrl)) for ctrl in controls]
         perms = Vector{Int}[]
         ptrs = Vector{Int}[]
@@ -292,19 +297,27 @@ end
         for tid in 1:P
             es = sort(entries[tid]; by=e -> (e[1], e[2]))
             for (p, i, q) in es
-                Finch.sparse_hash_table_insert_noresize!(controls[tid], tables[tid], p, i, q)
+                Finch.sparse_hash_table_insert_noresize!(controls[tid], tables[tid], p, i, q, B)
             end
             push!(perms, [Finch.sparse_hash_table_lookup_slot(
-                controls[tid], tables[tid], p, i
+                controls[tid], tables[tid], p, i, B
             ) for (p, i, _) in es])
             parents = maximum(e -> e[1], es; init=0)
             push!(ptrs, [1 + count(e -> e[1] < p, es) for p in 1:(parents + 1)])
             push!(vals, zeros(Int, maximum(e -> e[3], es; init=0)))
         end
         return SparseHash{Int,false}(
-            Element(0, channels(vals)), 1000, 1, channels(ptrs), channels(controls),
+            Element(0, channels(vals)), 1000, B, channels(ptrs), channels(controls),
             channels(tables), channels([Int[] for _ in 1:P]), channels(perms),
+            channels(counts),
+            channels([[length(v)] for v in vals]),
         )
+    end
+
+    function initialize!(plan)
+        for (buffer, start, value) in plan.init
+            fill!(view(buffer, start:length(buffer)), value)
+        end
     end
 
     @testset "shared boundaries, shifts, and child positions" begin
@@ -316,6 +329,7 @@ end
         dst = SparseHash{Int,false}(Element(0), 1000, 8)
         shift = [0, 0, 1, 1, 2]
         plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        initialize!(plan)
         @test plan.shift == shift
         @test eltype(plan.shared) == Int
         @test plan.shared == [0, 0, 3, 2, 0]
@@ -331,6 +345,9 @@ end
         @test length(dst.tbl) == length(dst.tbl_ctrl)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         @test sum(plan.bucket_counts) == plan.nnz
+        @test dst.tbl_count == plan.bucket_counts
+        @test dst.qos_stop == [plan.max_child_pos]
+        @test plan.bucket_shift == [Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in shift]
         @test src.tbl.data[1][src.perm.data[1][1]] == (1, 2, 4)
 
         # The allocated tables must accept every owned entry without resizing.
@@ -351,9 +368,11 @@ end
             ) == plan.shared_dst[tid]
         end
 
-        # Repeated setup clears live control bytes and the old free-position pool.
+        # Repeated setup schedules control-byte initialization and clears the pool.
         push!(dst.pool, 99)
-        Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        @test (dst.tbl_ctrl, 1, Finch.SPARSE_HASH_CTRL_EMPTY) in plan.init
+        initialize!(plan)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         @test isempty(dst.pool)
     end
@@ -362,9 +381,10 @@ end
         indices = filter(1:1000) do i
             Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1
         end[1:20]
-        src = hash_shards([[(1, i, q) for (q, i) in enumerate(indices)]])
+        src = hash_shards([[(1, i, q) for (q, i) in enumerate(indices)]]; B=8)
         dst = SparseHash(Element(0), 1000, 8)
         plan = Finch.setup_coalesce!(src, 1, dst, 1, [0], false)
+        initialize!(plan)
         @test plan.bucket_counts == [20, 0, 0, 0, 0, 0, 0, 0]
         @test length(dst.tbl) == 8 * 64
         for (q, i) in enumerate(indices)
@@ -379,6 +399,8 @@ end
         src = hash_shards([Tuple{Int,Int,Int}[] for _ in 1:3])
         dst = SparseHash(Element(0), 1000, 4)
         plan = Finch.setup_coalesce!(src, 3, dst, 3, zeros(Int, 3), true)
+        @test (dst.ptr, 1, 1) in plan.init
+        initialize!(plan)
         @test plan.nnz == 0
         @test all(iszero, plan.shared)
         @test all(iszero, plan.shared_dst)
@@ -389,6 +411,55 @@ end
         @test isempty(dst.pool)
         @test length(dst.tbl) == length(dst.tbl_ctrl) == 16
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+    end
+
+    @testset "rotated counts match entries" begin
+        for P in (1, 3, 5)
+            B = nextpow(2, P)
+            shift = [3t - 7 for t in 1:P]
+            entries = [[(8, i, 2q) for (q, i) in enumerate((3, 9, 17, 35))] for _ in 1:P]
+            src = hash_shards(entries; B)
+            dst = SparseHash(Element(0), 1000, B)
+            plan = Finch.setup_coalesce!(src, 3P + 1, dst, P, shift, false)
+            expected = zeros(Int, B)
+            for t in 1:P, (p, i, _) in entries[t]
+                expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p + shift[t], i), B)] += 1
+            end
+            @test plan.bucket_counts == expected
+            @test plan.child_shift == collect(0:8:(8(P - 1)))
+            @test plan.nnz == 4P
+        end
+    end
+
+    struct SetupReadGuard{T} <: AbstractVector{T}
+        data::Vector{T}
+        reads::Base.RefValue{Int}
+    end
+    Base.size(v::SetupReadGuard) = size(v.data)
+    function Base.getindex(v::SetupReadGuard, i::Int)
+        v.reads[] += 1
+        v.reads[] <= 2 || error("Hash setup scanned entries beyond the boundaries")
+        v.data[i]
+    end
+
+    @testset "setup only reads boundary entries" begin
+        entries = [[(t, i, 2i) for i in 1:1000] for t in 1:3]
+        src = hash_shards(entries)
+        tables = [SetupReadGuard(v, Ref(0)) for v in src.tbl.data]
+        perms = [SetupReadGuard(v, Ref(0)) for v in src.perm.data]
+        guarded = SparseHash{Int,false}(
+            src.lvl, src.shape, src.subtables, src.ptr, src.tbl_ctrl,
+            Finch.MultiChannelBuffer(src.tbl.device, tables), src.pool,
+            Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count, src.qos_stop,
+        )
+        dst = SparseHash(Element(0), 1000, 4)
+        plan = Finch.setup_coalesce!(guarded, 3, dst, 3, [0, 0, 0], false)
+        @test all(v -> v.reads[] == 2, tables)
+        @test all(v -> v.reads[] == 2, perms)
+        @test plan.nnz == 3000
+        @test plan.max_child_pos == 6000
+        @test sum(plan.bucket_counts) == 3000
+        @test_throws ArgumentError Finch.setup_coalesce!(src, 3, SparseHash(Element(0)), 3, [0, 0, 0], false)
     end
 end
 
@@ -416,6 +487,9 @@ end
         return SparseHash{Int,false}(
             child, 10, 1, channels(ptrs), channels(controls), channels(tables),
             channels(pools), channels(perms),
+            channels([[length(es)] for es in entries]),
+            channels([[max(maximum(e -> e[3], es; init=0), maximum(pools[t]; init=0))]
+                      for (t, es) in enumerate(entries)]),
         )
     end
     entries = [[(1, 5, 3), (2, 7, 1), (2, 9, 2)], [(1, 2, 2), (1, 8, 3), (2, 6, 1)]]
