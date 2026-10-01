@@ -690,12 +690,8 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
-                    $bands = Vector{NTuple{2,NTuple{$tsize,Int}}}(undef, $P)
-                    $ranges = Vector{UnitRange{Int}}(undef, $P)
-                    for $tid in 1:($P)
-                        $bands[$tid] = $band
-                        $ranges[$tid] = Finch.band_range($bands[$tid]..., $shapes)
-                    end
+                    $bands = $band
+                    $ranges = Finch.do_band_ranges($shapes, $bands)
                     Finch.@barrier Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
