@@ -342,18 +342,36 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
         ctx,
         quote
             $srt_shape_init
-            for $r in 1:($(lvl.qos_fill))
-                $q = $(lvl.srt)[$r]
-                $p = $parent_position
-                $(lvl.ptr)[$p] = $(Tp(0))
-                $(lvl.ptr)[$p + 1] = $(Tp(0))
-                $(lvl.tbl)[$q] = false
-                if $(supports_reassembly(lvl.lvl))
-                    $(contain(
-                        ctx_2 ->
-                            assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
-                        ctx,
-                    ))
+            # Dirty positions are sorted, so visiting them streams through memory;
+            # past about 1/64 of the positions, clearing them all is cheaper.
+            if $(lvl.qos_fill) > length($(lvl.tbl)) >>> 6
+                fill!($(lvl.ptr), $(Tp(0)))
+                fill!($(lvl.tbl), false)
+                $(
+                    if supports_reassembly(lvl.lvl)
+                        contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2, lvl.lvl, literal(Tp(1)),
+                                value(:(length($(lvl.tbl))), Tp),
+                            ),
+                            ctx,
+                        )
+                    end
+                )
+            else
+                for $r in 1:($(lvl.qos_fill))
+                    $q = $(lvl.srt)[$r]
+                    $p = $parent_position
+                    $(lvl.ptr)[$p] = $(Tp(0))
+                    $(lvl.ptr)[$p + 1] = $(Tp(0))
+                    $(lvl.tbl)[$q] = false
+                    if $(supports_reassembly(lvl.lvl))
+                        $(contain(
+                            ctx_2 ->
+                                assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
+                            ctx,
+                        ))
+                    end
                 end
             end
             $(lvl.qos_fill) = 0

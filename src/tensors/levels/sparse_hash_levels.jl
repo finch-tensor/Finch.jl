@@ -172,10 +172,11 @@ end
     @inbounds return tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY ? zero(eltype(tbl)) : tbl[h]
 end
 
-# Clear a frozen table without releasing its capacity. At very low occupancy,
-# the permutation is cheaper to visit than the whole control array.
+# Clear a frozen table without releasing its capacity. Visiting an entry costs a
+# hash and a random probe, while filling the control array costs well under a
+# nanosecond per slot, so only visit entries at very low occupancy.
 function sparse_hash_clear!(tbl_ctrl, tbl, key, perm, subtables)
-    if length(perm) <= length(tbl_ctrl) ÷ 1024
+    if length(perm) <= length(tbl_ctrl) ÷ 4096
         @inbounds for q in perm
             p, i, _ = key[q]
             base, off, mask = sparse_hash_hash_slot_parts(
@@ -727,7 +728,7 @@ function unfurl(
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
                         if $free_head == 0
-                            $qos = ($qos_stop += 1)
+                            $qos = $Tp($qos_stop += 1)
                         else
                             $qos = $free_head
                             $free_head = $key[$qos][1]
