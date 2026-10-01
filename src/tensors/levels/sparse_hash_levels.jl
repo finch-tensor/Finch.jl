@@ -42,6 +42,8 @@ Implementation invariants:
 * Rehash and freeze scan the child records directly, skipping free positions.
   Coalesce workers initialize holes in their own child ranges. Freeze trims free
   tails and preserves interior positions in `pool` for reuse after thaw.
+* Declaration retains table capacity. It clears control bytes through the frozen
+  permutation when occupancy is very low, or fills the control array otherwise.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -168,6 +170,28 @@ end
     isempty(tbl_ctrl) && return zero(eltype(tbl))
     h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, sparse_hash_hash(p, i), subtables)
     @inbounds return tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY ? zero(eltype(tbl)) : tbl[h]
+end
+
+# Clear a frozen table without releasing its capacity. At very low occupancy,
+# the permutation is cheaper to visit than the whole control array.
+function sparse_hash_clear!(tbl_ctrl, tbl, key, perm, subtables)
+    if length(perm) <= length(tbl_ctrl) ÷ 1024
+        @inbounds for q in perm
+            p, i, _ = key[q]
+            base, off, mask = sparse_hash_hash_slot_parts(
+                sparse_hash_hash(p, i), length(tbl_ctrl), subtables
+            )
+            # Slots do not move during clearing. Continue past emptied slots
+            # in the probe chain until this child's occupied slot is found.
+            while tbl_ctrl[base + off] == SPARSE_HASH_CTRL_EMPTY || tbl[base + off] != q
+                off = (off + 1) & mask
+            end
+            tbl_ctrl[base + off] = SPARSE_HASH_CTRL_EMPTY
+        end
+    else
+        fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
+    end
+    return nothing
 end
 
 # Child records hold both liveness and writer state, so every rebuild scans
@@ -502,10 +526,12 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
     push_preamble!(
         ctx,
         quote
-            empty!($(lvl.tbl_ctrl))
-            empty!($(lvl.tbl))
+            Finch.sparse_hash_clear!(
+                $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(lvl.perm), $(ctx(lvl.subtables))
+            )
             empty!($(lvl.key))
             empty!($(lvl.pool))
+            empty!($(lvl.perm))
             fill!($(lvl.tbl_count), 0)
             $(lvl.qos_stop) = 0
             $(lvl.pending) = 0

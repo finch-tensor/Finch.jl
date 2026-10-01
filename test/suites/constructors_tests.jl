@@ -84,6 +84,56 @@
         end
     end
 
+    @testset "sparse clearing crosses cleared slots and wraps" for Tp in (Int8, Int32, Int), B in (1, 8)
+        cap = 4096B
+        indices = collect(Iterators.take(Iterators.filter(Iterators.countfrom(1)) do i
+            Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(1, i), cap, B) ==
+                (1, 4095, 4095)
+        end, 4))
+        # Interior child holes and a sorted permutation that differs from
+        # insertion order. Clearing its first entry breaks the probe chain.
+        perm = Tp[1, 4, 3, 6]
+        key = fill((Tp(0), 0, Finch.SPARSE_HASH_KEY_FREE), 6)
+        for (q, i) in zip(perm, indices)
+            key[q] = (Tp(1), i, Finch.SPARSE_HASH_KEY_RETAINED)
+        end
+        ctrl, tbl = UInt8[], Tp[]
+        Finch.sparse_hash_resize!(ctrl, tbl, key, cap, B)
+        @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
+        ctrl_ptr, tbl_ptr = pointer(ctrl), pointer(tbl)
+        Finch.sparse_hash_clear!(ctrl, tbl, key, perm, B)
+        @test length(ctrl) == length(tbl) == cap
+        @test pointer(ctrl) == ctrl_ptr
+        @test pointer(tbl) == tbl_ptr
+        @test all(iszero, ctrl)
+        # Empty clearing also keeps the allocation, without visiting old keys.
+        Finch.sparse_hash_clear!(ctrl, tbl, empty(key), empty(perm), B)
+        @test all(iszero, ctrl)
+    end
+
+    @testset "declaration reuses capacity across dense, sparse, and empty outputs" for Tp in (Int32, Int), B in (1, 8)
+        tensor = Tensor(SparseHash(Element{0,Int,Tp}(), 8192, B))
+        input = Tensor(Dense(Element(0)), zeros(Int, 8192))
+        capacity = 0
+        for indices in (1:2:8192, 1:2:8192, [5, 13, 47, 91], [2, 4], Int[], Int[], 2:2:8192)
+            fill!(input.lvl.lvl.val, 0)
+            input.lvl.lvl.val[indices] .= 3
+            @finch begin
+                tensor .= 0
+                for i in _
+                    if input[i] != 0
+                        tensor[i] += input[i]
+                    end
+                end
+            end
+            @test Array(tensor) == Array(input)
+            @test length(tensor.lvl.tbl_ctrl) >= capacity
+            @test length(tensor.lvl.tbl) == length(tensor.lvl.tbl_ctrl)
+            capacity = length(tensor.lvl.tbl_ctrl)
+            check_counts(tensor.lvl)
+        end
+    end
+
     @testset "thawed growth preserves holes absent from the pool" begin
         # Coalesce can leave child holes that are not in the free pool.
         ctrl, tbl = zeros(UInt8, 8), zeros(Int, 8)

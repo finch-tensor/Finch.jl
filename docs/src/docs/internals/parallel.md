@@ -133,6 +133,15 @@ pool, so an empty hash also has an empty child. Each coalesce worker fills
 its output child range in position order, writing each record once as retained
 or free, including holes and discarded shared duplicates.
 
+Declaring a hash empty retains its table capacity, so reusing an accumulator
+does not repeat table growth. With at most one live entry per 1,024 slots, reset
+uses the frozen permutation to locate and clear just the occupied control bytes;
+otherwise, it clears the whole control array. Sparse clearing probes past slots
+already cleared, since clearing an entry must not hide later entries in its
+collision chain. Slot words need no initialization: an empty control byte makes
+their old contents inaccessible. Child records, free positions, and counts reset
+for the new accumulation.
+
 When a `CoalesceLevel` freezes, it merges its `P` task shards with
 `coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and
 disjoint: everything shard `p` stores precedes, in outermost-first index order,
