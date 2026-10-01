@@ -192,7 +192,8 @@ Element and byte-map setup record newly allocated ranges instead of filling
 them. Byte maps use the first and last entries of their sorted dirty list,
 `srt`, to find boundaries; they do not scan the bitmap during setup. Declaration
 already uses that dirty list to clear reused bitmap entries and parent bounds,
-so coalesce initialization only needs to fill newly allocated storage. An empty
+or clears them all once more than 1/64 of the positions are dirty, so coalesce
+initialization only needs to fill newly allocated storage. An empty
 sparse list records its whole pointer array for parallel initialization to `1`.
 
 Buffers whose contents are completely rewritten are emptied before resizing:
