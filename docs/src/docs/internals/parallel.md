@@ -201,16 +201,38 @@ elements copy non-fill values when their positions overlap.
 Hash levels retain the existing assembly bucket-count array, `tbl_count`,
 through freeze. Their one-element `qos_stop` buffer caches the child-position
 extent already computed by freeze, including holes and pooled vacancies.
-Setup reads only the first and last frozen entries of each nonempty shard.
-It rotates that shard's counts by `a * shift[p] mod B`, then subtracts its
-shared boundary entry from the corresponding output bucket. The busiest
-output bucket determines the common subtable capacity, keeping every bucket
-at most half full. The plan's `bucket_shift` and `shared_bucket` record this
-routing for the parallel merge; `shared_bucket == 0` means no shared entry.
+Setup reads at most the first and last frozen entries of each shard that is
+not below a hash. It rotates that shard's counts by `a * offset mod B`, then
+subtracts its shared boundary entry from its output bucket. The busiest output
+bucket determines the common subtable capacity, keeping every bucket at most
+half full.
 
-Hash setup allocates the table and permutation, records the control-byte
-initialization in `init`, and plans child-position offsets and their shared
-exceptions. The parallel child copy, permutation construction, and bucket
-insertion are the next stage of the implementation. Each output worker will
-merge its owned buckets from every shard. The generic coalesce interface does
-not prescribe a hash bucket-counting or insertion algorithm.
+Hash children keep their arbitrary positions: shard `p`'s child `q` lands at
+`q + child_shift[p]`, where `child_shift` concatenates the shards' `qos_stop`.
+The one exception is the shared entry, whose child lands at the earlier owner's
+`shared_dst[p]`. The hash passes that exception down as a `ShardShift`, which
+levels apply like an integer shift (`pos + shift[p]`, `shift[p] * shape`):
+
+- Dense and element levels need nothing more. Every run a hash passes down is
+  one entry's block, so no run straddles the exception.
+- A byte map or hash below a hash has one run of entries under the moved
+  parents, found through `ptr`. Bands cut in traversal order, so that run
+  belongs right after the owner's entries under the same parents.
+  Setup orders the index metadata (`srt`, or the hash's `perm`) as pieces,
+  runs of one shard's entries: each shard's entries up to that block, the runs
+  moved into it, then the rest. No child moves.
+- Lists are rejected below a hash: their children are addressed by entry, so
+  filling a gap would move children.
+
+A hash merge needs no second phase. Worker `tid` handles shard `tid`'s
+pointers and children, and also owns output buckets `tid:P:B`. For each owned
+bucket, it visits the rotated bucket of every frozen source shard, plus that
+shard's moved entries, and inserts without resizing. It finds an entry's
+destination rank from its local rank, a binary search by index within its
+parent's sorted `perm` range, and writes the table slot there. Each bucket has
+one writer, including when `B > P`. Since bucket work is tied to the worker,
+every worker must reach every level, even with an empty shard.
+
+Pointers need the parent of the entry before each piece; setup records it from
+the previous piece's last entry, so shards write pointers independently. Byte
+maps write their pointers the same way.

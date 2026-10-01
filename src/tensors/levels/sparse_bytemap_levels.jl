@@ -677,24 +677,52 @@ end
 function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overlap)
     srt = lvl.srt.data
     shape = lvl.shape
+    q_shift = shift .* shape
+    # Shards concatenate, except that a hash above may move a block of a shard's
+    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
+    # traversal order, so the shard's entries under it form one run of `srt`,
+    # which belongs right after the owner's entries under the same block. Only
+    # `srt` and `ptr` make room for it: children are addressed by position.
+    under(t, lo, len) =
+        searchsortedfirst(srt[t], (lo - 1) * shape + 1):searchsortedlast(srt[t], (lo + len - 1) * shape)
+    moved = [1:0 for _ in 1:P]
+    owner = zeros(Int, P)
+    split = [length(srt[t]) for t in 1:P]
+    for t in 1:P
+        s = shift[t]
+        s isa ShardShift && s.len > 0 || continue
+        moved[t] = under(t, s.src, s.len)
+        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
+        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
+    end
+    # Emit pieces, runs of one shard's local ranks, in destination order. Piece
+    # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
+    # `start`, skipping `lo` when it repeats the entry before it (`dup`); `prev`
+    # is the parent before the piece.
+    pieces = [NTuple{5,Int}[] for _ in 1:P]
     shared = zeros(Int, P)
-    shared_dst = zeros(Int, P)
-    off = zeros(Int, P)
-    prev = zeros(Int, P)
     nnz = 0
     last_q = 0
-    for p in 1:P
-        off[p] = nnz
-        prev[p] = last_q
-        isempty(srt[p]) && continue
-        # A shard shares its first entry if the previous shard ended on it.
-        if srt[p][1] + shift[p] * shape == last_q
-            shared[p] = srt[p][1]
-            shared_dst[p] = last_q
-        end
-        nnz += length(srt[p]) - (shared[p] != 0)
-        last_q = srt[p][end] + shift[p] * shape
+    function emit!(t, lo, hi)
+        lo > hi && return nothing
+        dup = srt[t][lo] + q_shift[t] == last_q
+        dup && (shared[t] = srt[t][lo])
+        push!(pieces[t], (lo, hi, nnz + 1, dup, fld(last_q - 1, shape) + 1))
+        nnz += hi - lo + 1 - dup
+        last_q = srt[t][hi] + q_shift[t]
+        return nothing
     end
+    for o in 1:P
+        m, b = moved[o], split[o]
+        emit!(o, 1, min(first(m) - 1, b))
+        emit!(o, last(m) + 1, b)
+        for t in (o + 1):P
+            owner[t] == o && emit!(t, first(moved[t]), last(moved[t]))
+        end
+        emit!(o, b + 1, first(m) - 1)
+        emit!(o, max(last(m), b) + 1, length(srt[o]))
+    end
+    shared_dst = [q == 0 ? 0 : q + q_shift[t] for (t, q) in enumerate(shared)]
     # Unoccupied bounds and bitmap entries retain their cleared values.
     ptr_start = min(length(dst.ptr), max_pos + 1) + 1
     tbl_start = min(length(dst.tbl), max_pos * shape) + 1
@@ -705,45 +733,43 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     dst.ptr[1] = 1
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
-        lvl.lvl, max_pos * shape, dst.lvl, P, shift .* shape, any(!iszero, shared)
+        lvl.lvl, max_pos * shape, dst.lvl, P, q_shift, any(!iszero, shared)
     )
     # ptr[1] is the sentinel, not an unoccupied parent bound.
     init = (
         (dst.ptr, max(2, ptr_start), 0),
         (dst.tbl, tbl_start, false), child.init...,
     )
-    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
+    return (; shift, q_shift, pieces, shared, shared_dst, nnz, child, init)
 end
 
-# Owned entries fill consecutive slots after earlier shards' entries. ptr keeps
-# freeze_level!'s layout, with bounds only around occupied positions, so the merge
-# stays O(nnz). The shard owning a position's first entry writes its bounds.
+# Each shard writes its pieces of srt. ptr keeps freeze_level!'s layout, with
+# bounds only around occupied positions, so the merge stays O(nnz). The shard
+# owning a parent's first entry writes its bounds.
 function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
     src = lvl.srt.data[tid]
-    isempty(src) && return nothing
     shape = lvl.shape
-    q_shift = plan.shift[tid] * shape
-    slot = plan.off[tid] + 1
-    p_prev = fld(plan.prev[tid] - 1, shape) + 1
+    q_shift = plan.q_shift[tid]
     for local_q in src
-        local_q == plan.shared[tid] && continue
-        q = local_q + q_shift
-        dst.srt[slot] = q
-        dst.tbl[q] = true
-        p = fld(q - 1, shape) + 1
-        if p != p_prev
-            dst.ptr[p_prev + 1] = slot
-            dst.ptr[p] = slot
-        end
-        p_prev = p
-        slot += 1
+        dst.tbl[local_q + q_shift] = true
     end
-    if slot - 1 == plan.nnz && slot > plan.off[tid] + 1
-        dst.ptr[p_prev + 1] = slot
+    for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        for r in (lo + dup):hi
+            rank = start + r - lo - dup
+            q = src[r] + q_shift
+            dst.srt[rank] = q
+            p = fld(q - 1, shape) + 1
+            if p != prev
+                dst.ptr[prev + 1] = rank
+                dst.ptr[p] = rank
+            end
+            rank == plan.nnz && (dst.ptr[p + 1] = rank + 1)
+            prev = p
+        end
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
-    # between both shards.
+    # between both shards. Every worker recurses, even with an empty shard.
     leaves = coalesce_leaves(lvl.lvl)
     child_runs = (((q - 1) * leaves + 1):(q * leaves) for q in src)
     coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)

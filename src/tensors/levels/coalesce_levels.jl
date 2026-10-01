@@ -43,6 +43,13 @@ function gen_accumulator(lvl::DenseLevel, fill_value, eltype::Type, dims...)
     Dense(gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end])
 end
 
+function gen_accumulator(lvl::SparseHashLevel{Ti,SW}, fill_value, eltype::Type, dims...) where {Ti,SW}
+    SparseHashLevel{Ti,SW}(
+        gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...),
+        dims[end], lvl.subtables,
+    )
+end
+
 function gen_accumulator(
     lvl::SparseListLevel{Ti}, fill_value, eltype::Type, dim, tail...
 ) where {Ti}
@@ -775,13 +782,14 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         end)
                     end
 
-                    if $unordered
+                    if typeof($(lvl_e).accumulator) === typeof($(lvl_e).lvl)
                         Finch.coalesce_shards!(
                             $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $ranges
                         )
                     else
-                        # SparseList output accumulates into hash tables, so copy
-                        # each band back into the output format before merging.
+                        # SparseList levels, including children of hashes,
+                        # accumulate into hashes. Restore the output format
+                        # whenever any level differs before merging the bands.
                         Threads.@threads for $tid in 1:($P)
 
                             $(contain(ctx) do ctx_2

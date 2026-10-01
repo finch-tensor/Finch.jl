@@ -1369,61 +1369,92 @@ function sample(tid, lvl::SparseHashLevel)
     end
 end
 
-# Prepare hash storage and child offsets. A shared child's destination overrides
-# its shard's offset; recursive child setup must preserve that exception.
+# Prepare hash storage and child offsets. Children keep their arbitrary
+# positions: shard `t`'s child `q` lands at `q + child_shift[t]`, except that its
+# shared entry's child lands at the owner's `shared_dst[t]`.
 function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     tbl = lvl.tbl.data
     perm = lvl.perm.data
-    tbl_count = lvl.tbl_count.data
-    subtables = dst.subtables
-    sparse_hash_check_subtables(subtables)
-    lvl.subtables == subtables ||
+    ptr = lvl.ptr.data
+    B = dst.subtables
+    sparse_hash_check_subtables(B)
+    lvl.subtables == B ||
         throw(ArgumentError("Coalescing hashes must use the same bucket count"))
+    entry(t, r) = tbl[t][perm[t][r]]
+    child_shift = cumsum([0; [lvl.qos_stop.data[t][1] for t in 1:(P - 1)]])
+    max_child_pos = P == 0 ? 0 : child_shift[P] + lvl.qos_stop.data[P][1]
+
+    # Uniform parent shifts rotate whole buckets, so add the frozen counts
+    # directly. Moved and shared entries are corrected below.
+    bucket(p, i) = sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)
+    bucket_shift = [Int((SPARSE_HASH_POS_MULTIPLIER * (shard_offset(s) % UInt)) & UInt(B - 1))
+                    for s in shift]
+    bucket_counts = zeros(Int, B)
+    for t in 1:P, b in 1:B
+        bucket_counts[((b - 1 + bucket_shift[t]) & (B - 1)) + 1] += lvl.tbl_count.data[t][b]
+    end
+
+    # Shards concatenate, except that a hash above may move a block of a shard's
+    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
+    # traversal order, so the shard's entries under it form one run of `perm`,
+    # which belongs right after the owner's entries under the same block. Only
+    # `perm` and `ptr` make room for it: children keep their positions.
+    first_rank(t, p) = p <= length(ptr[t]) ? ptr[t][p] : length(perm[t]) + 1
+    under(t, lo, len) = first_rank(t, lo):(first_rank(t, lo + len) - 1)
+    moved = [1:0 for _ in 1:P]
+    owner = zeros(Int, P)
+    split = [length(perm[t]) for t in 1:P]
+    for t in 1:P
+        s = shift[t]
+        s isa ShardShift && s.len > 0 || continue
+        moved[t] = under(t, s.src, s.len)
+        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
+        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
+        for r in moved[t]
+            p, i, _ = entry(t, r)
+            bucket_counts[bucket(p + s.offset, i)] -= 1
+            bucket_counts[bucket(p + s, i)] += 1
+        end
+    end
+
+    # Emit pieces, runs of one shard's local ranks, in destination order. Piece
+    # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
+    # `start`, skipping `lo` when it repeats the entry before it (`dup`); `prev`
+    # is the parent before the piece. Setup reads only the pieces' boundaries.
+    pieces = [NTuple{5,Int}[] for _ in 1:P]
     shared = zeros(Int, P)
     shared_dst = zeros(Int, P)
-    off = zeros(Int, P)
-    prev = zeros(Int, P)
-    child_shift = zeros(Int, P)
-    max_child_pos = 0
-    bucket_counts = zeros(Int, subtables)
-    bucket_shift = zeros(Int, P)
-    shared_bucket = zeros(Int, P)
     nnz = 0
-    last_pos = 0
-    last_idx = 0
-    last_child_pos = 0
-    for p in 1:P
-        off[p] = nnz
-        prev[p] = last_pos
-        child_shift[p] = max_child_pos
-        bucket_shift[p] = Int((SPARSE_HASH_POS_MULTIPLIER * (shift[p] % UInt)) & UInt(subtables - 1))
-        n = length(perm[p])
-        n == 0 && continue
-        first_entry = tbl[p][first(perm[p])]
-        if sparse_hash_entry_pos(first_entry) + shift[p] == last_pos &&
-            sparse_hash_entry_idx(first_entry) == last_idx
-            shared[p] = sparse_hash_entry_val(first_entry)
-            shared_dst[p] = last_child_pos
-            shared_bucket[p] = sparse_hash_hash_subtable(
-                sparse_hash_hash(last_pos, last_idx), subtables
-            )
+    last_key = nothing
+    last_child = 0
+    function emit!(t, lo, hi)
+        lo > hi && return nothing
+        dup = false
+        if last_key !== nothing
+            p, i, q = entry(t, lo)
+            if (p + shift[t], i) == last_key
+                dup = true
+                shared[t] = q
+                shared_dst[t] = last_child
+                bucket_counts[bucket(last_key...)] -= 1
+            end
         end
-        # Concatenate child-position spans, including holes. Internal order
-        # does not affect allocation; only the shared entry needs an override.
-        max_child_pos += lvl.qos_stop.data[p][1]
-        # Uniform parent shifts rotate whole buckets. Add their frozen counts
-        # directly, then remove the one boundary entry owned by an earlier shard.
-        for b in 1:subtables
-            bucket = ((b - 1 + bucket_shift[p]) & (subtables - 1)) + 1
-            bucket_counts[bucket] += tbl_count[p][b]
+        push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key)))
+        nnz += hi - lo + 1 - dup
+        p, i, q = entry(t, hi)
+        last_key = (p + shift[t], i)
+        dup && hi == lo || (last_child = q + child_shift[t])
+        return nothing
+    end
+    for o in 1:P
+        m, b = moved[o], split[o]
+        emit!(o, 1, min(first(m) - 1, b))
+        emit!(o, last(m) + 1, b)
+        for t in (o + 1):P
+            owner[t] == o && emit!(t, first(moved[t]), last(moved[t]))
         end
-        shared[p] != 0 && (bucket_counts[shared_bucket[p]] -= 1)
-        nnz += n - (shared[p] != 0)
-        last_entry = tbl[p][last(perm[p])]
-        last_pos = sparse_hash_entry_pos(last_entry) + shift[p]
-        last_idx = sparse_hash_entry_idx(last_entry)
-        last_q = sparse_hash_entry_val(last_entry)
-        last_child_pos = last_q == shared[p] ? shared_dst[p] : last_q + child_shift[p]
+        emit!(o, b + 1, first(m) - 1)
+        emit!(o, max(last(m), b) + 1, length(perm[o]))
     end
 
     empty!(dst.ptr)
@@ -1433,17 +1464,100 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     empty!(dst.pool)
     # Probing cannot leave its subtable, so size for the busiest bucket rather
     # than the average occupancy. Keep every subtable at most half full.
-    capacity = subtables * sparse_hash_table_capacity(maximum(bucket_counts))
+    capacity = B * sparse_hash_table_capacity(maximum(bucket_counts))
     empty!(dst.tbl)
     resize!(dst.tbl, capacity)
     empty!(dst.tbl_ctrl)
     resize!(dst.tbl_ctrl, capacity)
     copyto!(dst.tbl_count, bucket_counts)
     dst.qos_stop[1] = max_child_pos
-    init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY),)
+    child = setup_coalesce!(
+        lvl.lvl, max_child_pos, dst.lvl, P,
+        [ShardShift(child_shift[t], shared[t], shared_dst[t], shared[t] != 0) for t in 1:P],
+        any(!iszero, shared),
+    )
+    init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
-    return (; shift, shared, shared_dst, off, prev, nnz, child_shift, max_child_pos,
-        bucket_counts, bucket_shift, shared_bucket, init)
+    return (; P, shift, pieces, moved, shared, shared_dst, nnz, child_shift,
+        max_child_pos, bucket_counts, bucket_shift, child, init)
+end
+
+# Worker `tid` writes shard `tid`'s pointers and children, and inserts output
+# buckets `tid:P:B` from every shard, so each bucket has one writer. A uniform
+# parent shift rotates a source bucket onto one output bucket; only a shard's
+# moved entries are routed individually.
+function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
+    tbl = lvl.tbl.data[tid]
+    perm = lvl.perm.data[tid]
+    for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        for r in (lo + dup):hi
+            rank = start + r - lo - dup
+            x = sparse_hash_entry_pos(tbl[perm[r]]) + plan.shift[tid]
+            for y in (prev + 1):x
+                dst.ptr[y] = rank
+            end
+            if rank == plan.nnz
+                for y in (x + 1):length(dst.ptr)
+                    dst.ptr[y] = rank + 1
+                end
+            end
+            prev = x
+        end
+    end
+
+    P = plan.P
+    B = dst.subtables
+    function publish(t, r)
+        rank = 0
+        for (lo, hi, start, dup, _) in plan.pieces[t]
+            lo + dup <= r <= hi && (rank = start + r - lo - dup)
+        end
+        rank == 0 && return nothing
+        p, i, q = lvl.tbl.data[t][lvl.perm.data[t][r]]
+        pos = p + plan.shift[t]
+        hsh = sparse_hash_hash(pos, i)
+        ctrl = sparse_hash_hash_ctrl(hsh)
+        slot = sparse_hash_table_lookup_insert_slot(
+            dst.tbl_ctrl, dst.tbl, pos, i, hsh, ctrl, length(dst.tbl), B
+        )
+        sparse_hash_table_insert_at_slot!(
+            dst.tbl_ctrl, dst.tbl, slot, pos, i, q + plan.child_shift[t], ctrl
+        )
+        dst.perm[rank] = slot
+        return nothing
+    end
+    for b in tid:P:B, t in 1:P
+        src_ctrl = lvl.tbl_ctrl.data[t]
+        src_tbl = lvl.tbl.data[t]
+        src_perm = lvl.perm.data[t]
+        src_ptr = lvl.ptr.data[t]
+        s = plan.shift[t]
+        width = length(src_tbl) ÷ B
+        src_b = ((b - 1 - plan.bucket_shift[t]) & (B - 1)) + 1
+        for h in ((src_b - 1) * width + 1):(src_b * width)
+            src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
+            p, i, _ = src_tbl[h]
+            s isa ShardShift && s.src <= p < s.src + s.len && continue
+            # The entry's local rank: a search by index within its parent.
+            lo, hi = src_ptr[p], src_ptr[p + 1] - 1
+            while lo < hi
+                mid = (lo + hi) >>> 1
+                sparse_hash_entry_idx(src_tbl[src_perm[mid]]) < i ? (lo = mid + 1) : (hi = mid)
+            end
+            publish(t, lo)
+        end
+        for r in plan.moved[t]
+            p, i, _ = src_tbl[src_perm[r]]
+            sparse_hash_hash_subtable(sparse_hash_hash(p + s, i), B) == b && publish(t, r)
+        end
+    end
+
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards.
+    leaves = coalesce_leaves(lvl.lvl)
+    child_runs = (((sparse_hash_entry_val(tbl[h]) - 1) * leaves + 1):(sparse_hash_entry_val(tbl[h]) * leaves)
+                  for h in perm)
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
 end
 
 function coalesce_level!(

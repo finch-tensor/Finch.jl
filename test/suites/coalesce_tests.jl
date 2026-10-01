@@ -81,6 +81,14 @@ end
                     stack([l.lvl for l in lvls]), lvl.shape,
                     chans([l.ptr for l in lvls]), chans([l.idx for l in lvls]),
                 )
+            elseif lvl isa Finch.SparseHashLevel
+                SparseHash{Int,true}(
+                    stack([l.lvl for l in lvls]), lvl.shape, lvl.subtables,
+                    chans([l.ptr for l in lvls]), chans([l.tbl_ctrl for l in lvls]),
+                    chans([l.tbl for l in lvls]), chans([l.pool for l in lvls]),
+                    chans([l.perm for l in lvls]), chans([l.tbl_count for l in lvls]),
+                    chans([l.qos_stop for l in lvls]),
+                )
             else
                 SparseByteMap{Int}(
                     stack([l.lvl for l in lvls]), lvl.shape,
@@ -92,6 +100,24 @@ end
         return stack(shards)
     end
 
+    has_hash(lvl) = lvl isa Finch.SparseHashLevel ||
+        (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
+    function check_hash_storage(lvl)
+        if lvl isa Finch.SparseHashLevel
+            @test issorted(lvl.tbl[lvl.perm]; by=e -> (e[1], e[2]))
+            @test sum(lvl.tbl_count) == length(lvl.perm)
+            width = length(lvl.tbl) ÷ lvl.subtables
+            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:lvl.subtables]
+            for r in eachindex(lvl.perm)
+                p, i, q = lvl.tbl[lvl.perm[r]]
+                @test lvl.ptr[p] <= r < lvl.ptr[p + 1]
+                @test Finch.sparse_hash_table_lookup(lvl.tbl_ctrl, lvl.tbl, p, i, lvl.subtables) == q
+            end
+        end
+        hasproperty(lvl, :lvl) && check_hash_storage(lvl.lvl)
+    end
+
     # Merging must give exactly the storage of a tensor built directly, whether
     # or not the merge knows each shard's band.
     function check_merge(fmt, data, cuts)
@@ -100,7 +126,11 @@ end
             # Destinations arrive cleared, as assemble_level! leaves them.
             dst = Tensor(fmt(), zero(data)).lvl
             Finch.coalesce_shards!(src, dst, length(cuts), 1, bands)
-            @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+            if has_hash(dst)
+                check_hash_storage(dst)
+            else
+                @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+            end
             @test Array(Tensor(dst)) == data
         end
     end
@@ -121,7 +151,7 @@ end
             @test eltype(plan.shared) == Int
             @test plan.shared == [0, shared]
             @test plan.shared_dst == [0, shared_dst]
-            @test plan.off == [0, 2]
+            fmt() isa SparseListLevel && @test plan.off == [0, 2]
             @test plan.nnz == 3
             @test plan.child.child.overlap
             for (buffer, start, value) in plan.init
@@ -158,6 +188,12 @@ end
         () -> SparseByteMap(Dense(Element(0))),
         () -> SparseByteMap(SparseList(Element(0))),
         () -> SparseByteMap(SparseByteMap(Element(0))),
+        () -> Dense(SparseHash(Element(0), 0, 8)),
+        () -> SparseList(SparseHash(Element(0), 0, 8)),
+        () -> SparseByteMap(SparseHash(Element(0), 0, 8)),
+        () -> SparseHash(Dense(Element(0)), 0, 8),
+        () -> SparseHash(SparseByteMap(Element(0)), 0, 8),
+        () -> SparseHash(SparseHash(Element(0), 0, 8), 0, 8),
     ]
 
     # Columns hold flat indices 1:5, 6:10, 11:15, and 16:20; column 3 is empty.
@@ -180,12 +216,21 @@ end
         check_merge(fmt, zero(data), [1:5, 6:5, 6:20, 21:20])
     end
 
+    @testset "lists cannot merge below a hash" begin
+        fmt = () -> SparseHash(SparseList(Element(0)), 0, 8)
+        src = band_shards(fmt, data, [1:3, 4:12, 13:20])
+        dst = Tensor(fmt(), zero(data)).lvl
+        @test_throws ArgumentError Finch.coalesce_shards!(src, dst, 3, 1, nothing)
+    end
+
     formats_3d = [
         () -> Dense(Dense(Dense(Element(0)))),
         () -> SparseList(Dense(SparseList(Element(0)))),
         () -> SparseByteMap(SparseList(Dense(Element(0)))),
         () -> Dense(SparseByteMap(SparseList(Element(0)))),
         () -> SparseList(SparseByteMap(SparseByteMap(Element(0)))),
+        () -> SparseHash(Dense(SparseHash(Element(0), 0, 8)), 0, 8),
+        () -> SparseHash(SparseByteMap(SparseHash(Element(0), 0, 8)), 0, 8),
     ]
     data_3d = zeros(Int, 3, 2, 3)
     data_3d[[1, 3, 4, 8, 9, 13, 16, 18]] .= 1:8
@@ -199,6 +244,9 @@ end
 
 @testitem "coalesce_end_to_end" begin
     using Random
+
+    has_hash(lvl) = lvl isa Finch.SparseHashLevel ||
+        (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
 
     function outer!(C, A, BT, device)
         return (@finch begin
@@ -230,6 +278,12 @@ end
         () -> SparseByteMap(Dense(Element(0))),
         () -> SparseByteMap(SparseList(Element(0))),
         () -> SparseByteMap(SparseByteMap(Element(0))),
+        () -> Dense(SparseHash(Element(0))),
+        () -> SparseList(SparseHash(Element(0))),
+        () -> SparseByteMap(SparseHash(Element(0))),
+        () -> SparseHash(Dense(Element(0))),
+        () -> SparseHash(SparseByteMap(Element(0))),
+        () -> SparseHash(SparseHash(Element(0))),
     ]
 
     rng = MersenneTwister(1)
@@ -249,7 +303,9 @@ end
             C = outer!(C, Tensor(Dense(SparseList(Element(0))), a_i), BT, device)
             expected = a_i * transpose(bt)
             @test Array(C) == expected
-            @test Finch.isstructequal(C.lvl.coalescent, Tensor(fmt(), expected).lvl)
+            if !has_hash(C.lvl.coalescent)
+                @test Finch.isstructequal(C.lvl.coalescent, Tensor(fmt(), expected).lvl)
+            end
         end
 
         # In :fast mode, tasks write disjoint column blocks directly.
@@ -259,7 +315,7 @@ end
     end
 
     @testset "more tasks than work" begin
-        for fmt in formats[[1, 3, 5]]
+        for fmt in formats[[1, 3, 5, 10, 13, 15]]
             # Fewer indices than tasks, and a single nonzero, leave bands empty.
             for (a_i, bt_i) in (
                 (ones(Int, 2, 8), ones(Int, 2, 8)),
@@ -334,8 +390,6 @@ end
         @test eltype(plan.shared) == Int
         @test plan.shared == [0, 0, 3, 2, 0]
         @test plan.shared_dst == [0, 0, 1, 1, 0]
-        @test plan.off == [0, 2, 2, 2, 3]
-        @test plan.prev == [0, 2, 2, 2, 2]
         @test plan.nnz == 4
         @test plan.child_shift == [0, 4, 4, 7, 11]
         @test plan.max_child_pos == 12
@@ -350,14 +404,18 @@ end
         @test plan.bucket_shift == [Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in shift]
         @test src.tbl.data[1][src.perm.data[1][1]] == (1, 2, 4)
 
-        # The allocated tables must accept every owned entry without resizing.
-        for tid in 1:5, r in eachindex(src.perm.data[tid])
-            p, i, q = src.tbl.data[tid][src.perm.data[tid][r]]
-            q == plan.shared[tid] && continue
-            Finch.sparse_hash_table_insert_noresize!(
-                dst.tbl_ctrl, dst.tbl, p + shift[tid], i, q + plan.child_shift[tid], dst.subtables
-            )
+        # Traversal ranks are concatenated by shard; bucket owners publish the
+        # final table slots into those ranks without resizing or sorting.
+        src.lvl.val.data[1][4] = 12
+        src.lvl.val.data[3][3] = 25
+        src.lvl.val.data[4][4] = 27
+        src.lvl.val.data[5][1] = 37
+        Threads.@threads for tid in 1:5
+            Finch.coalesce_shard!(tid, plan, src, dst, ())
         end
+        @test dst.tbl[dst.perm] == [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
+        @test dst.ptr == [1, 2, 4, 5, 5]
+        @test dst.lvl.val[[4, 1, 11, 12]] == [12, 25, 27, 37]
         for (p, i, q) in [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
             @test Finch.sparse_hash_table_lookup(dst.tbl_ctrl, dst.tbl, p, i, 8) == q
         end
@@ -375,6 +433,28 @@ end
         initialize!(plan)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         @test isempty(dst.pool)
+    end
+
+    @testset "nested hash with an interior shared parent" begin
+        outer = hash_shards([[(1, 2, 3), (1, 5, 1)], [(1, 5, 2), (1, 7, 1)]]; B=8)
+        inner = hash_shards([[(3, 1, 2), (1, 2, 1)], [(2, 3, 2), (1, 4, 1)]]; B=8)
+        inner.lvl.val.data[1] .= [25, 12]
+        inner.lvl.val.data[2] .= [47, 35]
+        src = SparseHash{Int,false}(
+            inner, outer.shape, outer.subtables, outer.ptr, outer.tbl_ctrl,
+            outer.tbl, outer.pool, outer.perm, outer.tbl_count, outer.qos_stop,
+        )
+        dst = SparseHash(SparseHash(Element(0), 1000, 8), 1000, 8)
+        Finch.coalesce_shards!(src, dst, 2, 1, nothing)
+        result = Tensor(dst)
+        @test [result[1, 2], result[2, 5], result[3, 5], result[4, 7]] == [12, 25, 35, 47]
+        @test result[1, 5] == result[3, 2] == 0
+        @test issorted(dst.lvl.tbl[dst.lvl.perm]; by=e -> (e[1], e[2]))
+        for lvl in (dst, dst.lvl)
+            width = length(lvl.tbl) ÷ lvl.subtables
+            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8]
+        end
     end
 
     @testset "skewed buckets" begin
@@ -454,8 +534,8 @@ end
         )
         dst = SparseHash(Element(0), 1000, 4)
         plan = Finch.setup_coalesce!(guarded, 3, dst, 3, [0, 0, 0], false)
-        @test all(v -> v.reads[] == 2, tables)
-        @test all(v -> v.reads[] == 2, perms)
+        @test all(v -> v.reads[] <= 2, tables)
+        @test all(v -> v.reads[] <= 2, perms)
         @test plan.nnz == 3000
         @test plan.max_child_pos == 6000
         @test sum(plan.bucket_counts) == 3000

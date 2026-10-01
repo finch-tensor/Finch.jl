@@ -632,6 +632,10 @@ function sample(tid, lvl::SparseListLevel)
 end
 
 function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
+    # A hash's shared child may map into an earlier shard's range, and moving a
+    # list's entries there would move their children too.
+    eltype(shift) <: ShardShift &&
+        throw(ArgumentError("SparseList levels cannot be coalesced below a SparseHash"))
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     shared = zeros(Int, P)
@@ -674,7 +678,8 @@ function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     ptr = lvl.ptr.data[tid]
     idx = lvl.idx.data[tid]
     n = length(idx)
-    n == 0 && return nothing
+    # Every worker reaches every level: a hash below also inserts its buckets.
+    n == 0 && return coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, ())
     shift = plan.shift[tid]
     slot = plan.off[tid] + 1
     pos_prev = plan.prev[tid]
