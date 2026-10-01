@@ -563,14 +563,14 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 lvl_3 = distribute_level(
                     ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
                 )
-                lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
-                freeze_level!(ctx_3, lvl_4, literal(0))
+                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                freeze_level!(ctx_3, lvl_4, pos)
                 nothing
             end
         end,
     )
-    coalescent_2 = declare_level!(ctx, lvl.coalescent, literal(0), init)
-    freeze_level!(ctx, coalescent_2, literal(0))
+    coalescent_2 = declare_level!(ctx, lvl.coalescent, pos, init)
+    freeze_level!(ctx, coalescent_2, pos)
     lvl.declared = true
     lvl
 end
