@@ -728,7 +728,7 @@ function unfurl(
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
                         if $free_head == 0
-                            $qos = ($qos_stop += 1)
+                            $qos = $Tp($qos_stop += 1)
                         else
                             $qos = $free_head
                             $free_head = $key[$qos][1]
