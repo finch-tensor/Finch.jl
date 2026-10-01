@@ -17,9 +17,12 @@ Implementation invariants:
   child position `q`, with `key[q] == (p, i)`. Child positions are handed out as
   entries are created, so a child finds its entry directly.
 * `tbl_ctrl` and `tbl` form a linear-probing table, split into `subtables`
-  contiguous buckets. A full slot `h` has the high bit of `tbl_ctrl[h]` set, seven
-  hash fingerprint bits below it, and `tbl[h] == q`. `0x00` marks an empty slot,
-  which ends a probe. Probes wrap within their bucket.
+  contiguous buckets. A retained slot `h` has the high bit of `tbl_ctrl[h]` set,
+  seven hash fingerprint bits below it, and `tbl[h] == q`. `0x00` marks an empty
+  slot, which ends a probe. In multi-writer assembly, `0x01:0x7f` count pending
+  writers, with at most 127 per entry. Exceeding this limit throws an error.
+  Pending entries compare full keys without a fingerprint. Probes wrap within
+  their bucket.
 * Keys hash as `x = a * p + hash(i)`, where `a` is a random odd multiplier shared
   by all hash levels. The low `log2(subtables)` bits of `x` pick the bucket, so
   shifting parents by `delta` rotates buckets by `a * delta`. `x` is linear in
@@ -32,13 +35,15 @@ Implementation invariants:
   indexes `perm`, and `perm[r]` is a child position. Each parent's range is
   sorted by index.
 * While assembling, `length(key)` is the child capacity. A new key gets its child
-  position before its child is written, and is published to the table once the
-  child reports that it retained data. `SingleWriter == true` promises that at
-  most one new key, with one writer, is pending in the level at a time; if it is
-  not retained, its position is freed. `SingleWriter == false` keeps pending keys
-  in a small stack with their writer counts and dirty flags. The last writer
-  publishes the key or returns its position to `pool`, which persists across
-  freeze and thaw.
+  position before its child is written. `SingleWriter == true` defers insertion
+  until the child retains data, and promises that at most one new key, with one
+  writer, is pending in the level at a time. If the child retains no data, its
+  position is freed. `SingleWriter == false` inserts tentative entries
+  immediately. The first dirty writer replaces the count with the
+  fingerprint, permanently retaining the entry. Otherwise, the last writer
+  backward-shift deletes the entry and returns its position to `pool`, which
+  persists across freeze and thaw. Handles retain `q` and a cached slot; after
+  growth or deletion moves a slot, they find the entry again by its stable key.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -147,7 +152,8 @@ end
     @inbounds while true
         c = tbl_ctrl[base + off]
         c == SPARSE_HASH_CTRL_EMPTY && return base + off
-        c == ctrl && key[tbl[base + off]] == (p, i) && return base + off
+        (c == ctrl || c < SPARSE_HASH_CTRL_FULL) &&
+            key[tbl[base + off]] == (p, i) && return base + off
         off = (off + 1) & mask
     end
 end
@@ -227,33 +233,60 @@ function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
     return extent
 end
 
-# Pending keys for multi-writer assembly: `stk[s]` is a pending child position,
-# `stk_cnt[s]` its live writers (`0` marks a free entry), and `stk_dirty[s]`
-# whether any of them retained data.
-@inline function sparse_hash_stack_find(stk, stk_cnt, stk_stop, key, p, i)
-    @inbounds for s in 1:stk_stop
-        stk_cnt[s] > 0 && key[stk[s]] == (p, i) && return s
-    end
-    return 0
+# Join an existing tentative entry, without letting its count become a fingerprint.
+@inline function sparse_hash_share!(tbl_ctrl, h)
+    @inbounds c = tbl_ctrl[h]
+    c < SPARSE_HASH_CTRL_FULL - 0x01 ||
+        error("SparseHash supports at most 127 pending writers per entry")
+    @inbounds tbl_ctrl[h] = c + 0x01
+    return nothing
 end
 
-@inline function sparse_hash_stack_push!(stk, stk_cnt, stk_dirty, stk_stop, q)
-    s = something(findfirst(iszero, view(stk_cnt, 1:stk_stop)), stk_stop + 1)
-    if s > stk_stop
-        stk_stop = s
-        resize!(stk, s)
-        resize!(stk_cnt, s)
-        resize!(stk_dirty, s)
+# Repair a linear-probing bucket after deleting h. Only slots move: child
+# positions, including those held by other unfinished writers, remain stable.
+@inline function sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables)
+    base, _, mask = sparse_hash_hash_slot_parts(x, length(tbl_ctrl), subtables)
+    hole = h - base
+    scan = (hole + 1) & mask
+    @inbounds while tbl_ctrl[base + scan] != SPARSE_HASH_CTRL_EMPTY
+        q = tbl[base + scan]
+        _, home, _ = sparse_hash_hash_slot_parts(
+            sparse_hash_hash(key[q]...), length(tbl_ctrl), subtables
+        )
+        if ((hole - home) & mask) < ((scan - home) & mask)
+            tbl_ctrl[base + hole] = tbl_ctrl[base + scan]
+            tbl[base + hole] = q
+            hole = scan
+        end
+        # An entry at home does not end a cluster in ordinary linear probing.
+        scan = (scan + 1) & mask
     end
-    @inbounds stk[s], stk_cnt[s], stk_dirty[s] = q, 1, false
-    return s, stk_stop
+    @inbounds tbl_ctrl[base + hole] = SPARSE_HASH_CTRL_EMPTY
+    return nothing
 end
 
-@inline function sparse_hash_stack_trim(stk_cnt, stk_stop)
-    @inbounds while stk_stop > 0 && stk_cnt[stk_stop] == 0
-        stk_stop -= 1
+# Finish an access that acquired a tentative entry. Return true only when its
+# final unsuccessful writer erased it, so the caller can recycle q.
+@inline function sparse_hash_release!(
+    tbl_ctrl, tbl, key, h, q, x, subtables, dirty
+)
+    @inbounds begin
+        if h > length(tbl_ctrl) || tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY || tbl[h] != q
+            p, i = key[q]
+            h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, x, subtables)
+        end
+        c = tbl_ctrl[h]
+        c >= SPARSE_HASH_CTRL_FULL && return false
+        if dirty
+            tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
+        elseif c > 0x01
+            tbl_ctrl[h] = c - 0x01
+        else
+            sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables)
+            return true
+        end
     end
-    return stk_stop
+    return false
 end
 
 # The first rank in `lo:hi` whose index is at least `x`, galloping from `lo`.
@@ -391,12 +424,9 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     pool
     perm
     tbl_count
-    # Assembly state: the child-position extent, and the pending-key stack.
+    # Assembly state: child extent and outstanding tentative-access handles.
     qos_stop
-    stk
-    stk_cnt
-    stk_dirty
-    stk_stop
+    pending
 end
 
 function is_level_injective(ctx, lvl::VirtualSparseHashLevel)
@@ -416,7 +446,6 @@ function virtualize(
 ) where {Ti,SingleWriter}
     tag = freshen(ctx, tag)
     buffers = map(f -> freshen(ctx, tag, Symbol(:_, f)), SPARSE_HASH_BUFFERS)
-    stk, stk_cnt, stk_dirty = map(f -> freshen(ctx, tag, f), (:_stk, :_stk_cnt, :_stk_dirty))
     stop = freshen(ctx, tag, :_stop)
     push_preamble!(
         ctx,
@@ -424,22 +453,12 @@ function virtualize(
             $tag = $ex
             $((:($b = $tag.$f) for (b, f) in zip(buffers, SPARSE_HASH_BUFFERS))...)
             $stop = $tag.shape
-            $(
-                if !SingleWriter
-                    quote
-                        $stk = similar($tag.perm, 0)
-                        $stk_cnt = Int[]
-                        $stk_dirty = Bool[]
-                    end
-                end
-            )
         end,
     )
     lvl_2 = virtualize(ctx, :($tag.lvl), fieldtype(T, :lvl), tag)
     VirtualSparseHashLevel(
         tag, lvl_2, Ti, SingleWriter, value(stop, Int), value(:($tag.subtables), Int),
-        buffers..., freshen(ctx, tag, :_qos_stop), stk, stk_cnt, stk_dirty,
-        freshen(ctx, tag, :_stk_stop),
+        buffers..., freshen(ctx, tag, :_qos_stop), freshen(ctx, tag, :_pending),
     )
 end
 
@@ -458,8 +477,11 @@ function distribute_level(
     return diff[lvl.tag] = VirtualSparseHashLevel(
         lvl.tag, distribute_level(ctx, lvl.lvl, arch, diff, style), lvl.Ti,
         lvl.single_writer, lvl.shape, lvl.subtables,
-        (distribute_buffer(ctx, getfield(lvl, f), arch, style) for f in SPARSE_HASH_BUFFERS)...,
-        (freshen(ctx, lvl.tag, f) for f in (:qos_stop, :stk, :stk_cnt, :stk_dirty, :stk_stop))...,
+        (
+            distribute_buffer(ctx, getfield(lvl, f), arch, style) for
+            f in SPARSE_HASH_BUFFERS
+        )...,
+        (freshen(ctx, lvl.tag, f) for f in (:qos_stop, :pending))...,
     )
 end
 
@@ -501,7 +523,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
             empty!($(lvl.pool))
             fill!($(lvl.tbl_count), 0)
             $(lvl.qos_stop) = 0
-            $(lvl.stk_stop) = 0
+            $(lvl.pending) = 0
         end,
     )
     lvl.lvl = declare_level!(ctx, lvl.lvl, literal(postype(lvl)(0)), init)
@@ -516,8 +538,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
     push_preamble!(
         ctx,
         quote
-            $(lvl.stk_stop) == 0 ||
-                error("SparseHash pending writer stack is not empty during freeze")
+            $(lvl.pending) == 0 || error("SparseHash has unfinished writers during freeze")
             $qos_stop = Finch.sparse_hash_freeze!(
                 $(lvl.ptr), $(lvl.perm), $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key),
                 $(lvl.pool), $(ctx(pos_stop)),
@@ -534,7 +555,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         ctx,
         quote
             $(lvl.qos_stop) = length($(lvl.key))
-            $(lvl.stk_stop) = 0
+            $(lvl.pending) = 0
         end,
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
@@ -647,9 +668,10 @@ function unfurl(
     tag = lvl.tag
     Tp = postype(lvl)
     B = ctx(lvl.subtables)
-    (tbl_ctrl, tbl, key, tbl_count, qos_stop) =
-        (lvl.tbl_ctrl, lvl.tbl, lvl.key, lvl.tbl_count, lvl.qos_stop)
-    (stk, stk_cnt, stk_dirty, stk_stop) = (lvl.stk, lvl.stk_cnt, lvl.stk_dirty, lvl.stk_stop)
+    (tbl_ctrl, tbl, key, tbl_count, qos_stop) = (
+        lvl.tbl_ctrl, lvl.tbl, lvl.key, lvl.tbl_count, lvl.qos_stop
+    )
+    pending = lvl.pending
     p, i, x, b, h, s, found, qos, old, q_stop, dirty = map(
         v -> freshen(ctx, tag, v),
         (:_p, :_i, :_x, :_b, :_h, :_s, :_found, :_qos, :_old, :_q_stop, :_dirty),
@@ -668,24 +690,13 @@ function unfurl(
                     # key turns out to be new.
                     if 2 * $B * ($tbl_count[$b] + 1) > length($tbl_ctrl)
                         Finch.sparse_hash_resize!(
-                            $tbl_ctrl, $tbl, $key, max(2 * length($tbl_ctrl), 4 * $B), $B
+                            $tbl_ctrl, $tbl, $key,
+                            max(2 * length($tbl_ctrl), 4 * $B), $B
                         )
                     end
                     $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
                     $found = $tbl_ctrl[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
                     $qos = $found ? $tbl[$h] : $(Tp(0))
-                    $(
-                        if !single
-                            quote
-                                $s = $found ? 0 :
-                                    Finch.sparse_hash_stack_find($stk, $stk_cnt, $stk_stop, $key, $p, $i)
-                                if $s != 0
-                                    $qos = $stk[$s]
-                                    $stk_cnt[$s] += 1
-                                end
-                            end
-                        end
-                    )
                     if $qos == 0
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
@@ -693,7 +704,13 @@ function unfurl(
                             if single
                                 :($qos = $qos_stop += 1)
                             else
-                                :($qos = isempty($(lvl.pool)) ? ($qos_stop += 1) : pop!($(lvl.pool)))
+                                :(
+                                    $qos = if isempty($(lvl.pool))
+                                        ($qos_stop += 1)
+                                    else
+                                        pop!($(lvl.pool))
+                                    end
+                                )
                             end
                         )
                         if $qos > length($key)
@@ -702,24 +719,35 @@ function unfurl(
                             resize!($key, $q_stop)
                             $(contain(
                                 ctx_2 -> assemble_level!(
-                                    ctx_2, lvl.lvl, value(old, Tp), value(q_stop, Tp)
+                                    ctx_2, lvl.lvl, value(old, Tp),
+                                    value(q_stop, Tp)
                                 ),
                                 ctx,
                             ))
                         end
                         $key[$qos] = ($p, $i)
-                        $(
-                            if !single
-                                :(($s, $stk_stop) = Finch.sparse_hash_stack_push!(
-                                    $stk, $stk_cnt, $stk_dirty, $stk_stop, $qos
-                                ))
-                            end
-                        )
                     end
+                    $(
+                        if !single
+                            quote
+                                $s = !$found || $tbl_ctrl[$h] < Finch.SPARSE_HASH_CTRL_FULL
+                                if $s
+                                    if $found
+                                        Finch.sparse_hash_share!($tbl_ctrl, $h)
+                                    else
+                                        $tbl_ctrl[$h] = 0x01
+                                        $tbl[$h] = $qos
+                                    end
+                                    $pending += 1
+                                end
+                            end
+                        end
+                    )
                     $dirty = false
                 end,
                 body=(ctx) -> instantiate(
-                    ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty), mode
+                    ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty),
+                    mode
                 ),
                 epilogue=if single
                     quote
@@ -737,24 +765,15 @@ function unfurl(
                     end
                 else
                     quote
-                        if $dirty
-                            $s != 0 && ($stk_dirty[$s] = true)
-                            $(fbr.dirty) = true
-                        end
-                        if $s != 0
-                            $stk_cnt[$s] -= 1
-                            if $stk_cnt[$s] == 0
-                                if $stk_dirty[$s]
-                                    # Other keys may have moved the table meanwhile.
-                                    $h = Finch.sparse_hash_vacancy($tbl_ctrl, $x, $B)
-                                    $tbl_ctrl[$h] = Finch.sparse_hash_hash_ctrl($x)
-                                    $tbl[$h] = $qos
-                                else
-                                    $tbl_count[$b] -= 1
-                                    push!($(lvl.pool), $qos)
-                                end
-                                $stk_stop = Finch.sparse_hash_stack_trim($stk_cnt, $stk_stop)
+                        $dirty && ($(fbr.dirty) = true)
+                        if $s
+                            if Finch.sparse_hash_release!(
+                                $tbl_ctrl, $tbl, $key, $h, $qos, $x, $B, $dirty
+                            )
+                                $tbl_count[$b] -= 1
+                                push!($(lvl.pool), $qos)
                             end
+                            $pending -= 1
                         end
                     end
                 end,

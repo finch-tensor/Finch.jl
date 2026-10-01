@@ -155,6 +155,237 @@
     end
 end
 
+@testitem "sparse_hash_pending" begin
+    using Random
+
+    function table(Tp, B; capacity=4B)
+        (; ctrl=zeros(UInt8, capacity), tbl=zeros(Tp, capacity), key=Tuple{Tp,Int}[],
+            counts=zeros(Int, B), pool=Tp[], B)
+    end
+    function acquire!(t, k)
+        Tp = eltype(t.tbl)
+        x = Finch.sparse_hash_hash(k...)
+        b = Finch.sparse_hash_hash_subtable(x, t.B)
+        if 2t.B * (t.counts[b] + 1) > length(t.ctrl)
+            Finch.sparse_hash_resize!(t.ctrl, t.tbl, t.key, 2length(t.ctrl), t.B)
+        end
+        h = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k..., x, t.B)
+        pending = t.ctrl[h] < Finch.SPARSE_HASH_CTRL_FULL
+        if t.ctrl[h] == 0
+            if isempty(t.pool)
+                push!(t.key, k)
+                q = Tp(length(t.key))
+            else
+                q = pop!(t.pool)
+                t.key[q] = k
+            end
+            t.ctrl[h], t.tbl[h] = 0x01, q
+            t.counts[b] += 1
+        else
+            q = t.tbl[h]
+            if pending
+                Finch.sparse_hash_share!(t.ctrl, h)
+            end
+        end
+        return (; q, h, x, pending)
+    end
+    function release!(t, handle, dirty)
+        if handle.pending && Finch.sparse_hash_release!(
+            t.ctrl, t.tbl, t.key, handle.h, handle.q, handle.x, t.B, dirty
+        )
+            t.counts[Finch.sparse_hash_hash_subtable(handle.x, t.B)] -= 1
+            push!(t.pool, handle.q)
+        end
+    end
+    slot(t, k) = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k...,
+        Finch.sparse_hash_hash(k...), t.B)
+
+    @testset "127-writer limit, promotion, and growth" for Tp in (Int, Int32),
+        dirty in (false, true)
+        t = table(Tp, 4)
+        handles = [acquire!(t, (1, 1)) for _ in 1:127]
+        q = first(handles).q
+        @test t.ctrl[slot(t, (1, 1))] == 127
+        @test_throws "SparseHash supports at most 127 pending writers per entry" acquire!(
+            t, (1, 1)
+        )
+        @test t.ctrl[slot(t, (1, 1))] == 127
+        @test all(h.q == q for h in handles)
+        # The limit is per entry. Growth preserves both maximum counts.
+        other = [acquire!(t, (1, 2)) for _ in 1:127]
+        for i in 3:200
+            release!(t, acquire!(t, (1, i)), true)
+        end
+        @test t.ctrl[slot(t, (1, 1))] == 127
+        @test t.ctrl[slot(t, (1, 2))] == 127
+        @test_throws "SparseHash supports at most 127 pending writers per entry" acquire!(
+            t, (1, 1)
+        )
+        if dirty
+            release!(t, first(handles), true)
+            @test t.ctrl[slot(t, (1, 1))] >= Finch.SPARSE_HASH_CTRL_FULL
+            # Retained entries no longer need counts or a writer limit.
+            retained = [acquire!(t, (1, 1)) for _ in 1:128]
+            @test all(!h.pending && h.q == q for h in retained)
+            foreach(h -> release!(t, h, false), retained)
+            foreach(h -> release!(t, h, false), handles[2:end])
+            @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 1, t.B) == q
+        else
+            release!(t, first(handles), false)
+            @test t.ctrl[slot(t, (1, 1))] == 126
+            # A failed acquisition did not change the count; releasing a
+            # writer permits another acquisition up to the limit again.
+            replacement = acquire!(t, (1, 1))
+            @test t.ctrl[slot(t, (1, 1))] == 127
+            release!(t, replacement, false)
+            foreach(h -> release!(t, h, false), handles[2:end])
+            @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 1, t.B) == 0
+            @test q in t.pool
+        end
+        @test t.ctrl[slot(t, (1, 2))] == 127
+        foreach(h -> release!(t, h, false), other)
+        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 2, t.B) == 0
+        @test sum(t.counts) == (dirty ? 199 : 198)
+        h = acquire!(t, (2, 201))
+        @test h.q == first(other).q
+        @test t.ctrl[slot(t, (2, 201))] == 0x01
+        release!(t, h, true)
+    end
+
+    @testset "deletion crosses home slots and wraps within a bucket" for B in (1, 4),
+        home in (0, 63)
+        t = table(Int, B; capacity=64B)
+        function candidates(off)
+            filter(1:50000) do i
+                Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(1, i), 64B, B) ==
+                (1, off, 63)
+            end
+        end
+        a, c = candidates(home)[1:2]
+        b = first(candidates((home + 1) & 63))
+        ha = acquire!(t, (1, a))
+        hb = acquire!(t, (1, b)) # This home entry must not stop the repair scan.
+        hc = acquire!(t, (1, c))
+        shared = acquire!(t, (1, c))
+        release!(t, ha, false)
+        @test slot(t, (1, c)) != hc.h
+        @test t.ctrl[slot(t, (1, c))] == 2
+        release!(t, hc, false) # Validate and repair its cached slot.
+        release!(t, hb, true)
+        release!(t, shared, true)
+        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, a, B) == 0
+        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, b, B) == hb.q
+        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, c, B) == hc.q
+        @test sum(t.counts) == 2
+    end
+
+    @testset "random overlapping lifetimes against a reference" for Tp in (Int, Int32),
+        B in (1, 8)
+        t = table(Tp, B)
+        expected = Dict{Tuple{Int,Int},Tuple{Int,Bool}}()
+        active = []
+        rng = Xoshiro(17)
+        function check()
+            @test count(!iszero, t.ctrl) == length(expected) == sum(t.counts)
+            @test length(expected) + length(t.pool) == length(t.key)
+            @test allunique(t.pool)
+            for (k, (n, retained)) in expected
+                h = slot(t, k)
+                @test t.ctrl[h] != 0 && t.key[t.tbl[h]] == k
+                @test if retained
+                    t.ctrl[h] == Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(k...))
+                else
+                    t.ctrl[h] == n
+                end
+            end
+            width = length(t.ctrl) ÷ B
+            @test t.counts == [
+                count(!iszero, view(t.ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:B
+            ]
+        end
+        function finish(index, dirty)
+            k, handle = active[index]
+            deleteat!(active, index)
+            release!(t, handle, dirty)
+            n, retained = expected[k]
+            if n == 1 && !retained && !dirty
+                delete!(expected, k)
+            else
+                expected[k] = (n - 1, retained || dirty)
+            end
+        end
+        for j in 1:5000
+            if isempty(active) || (length(active) < 100 && rand(rng) < 0.55)
+                k = (rand(rng, 1:4), rand(rng, 1:64))
+                push!(active, (k, acquire!(t, k)))
+                n, retained = get(expected, k, (0, false))
+                expected[k] = (n + 1, retained)
+            else
+                finish(rand(rng, eachindex(active)), rand(rng) < 0.25)
+            end
+            j % 100 == 0 && check()
+        end
+        while !isempty(active)
+            finish(lastindex(active), false)
+        end
+        check()
+        @test all(c == 0 || c >= Finch.SPARSE_HASH_CTRL_FULL for c in t.ctrl)
+    end
+
+    @testset "generated writers discard, retain, and reuse children across freeze" begin
+        indices = reshape(repeat(1:40; inner=2), 2, :)
+        coords = Tensor(Dense(Dense(Element(0))), indices)
+        weights = Tensor(
+            Dense(Dense(Element(0))), [mod(j + k, 5) == 0 ? k : 0 for j in 1:2, k in 1:40]
+        )
+        tensor = Tensor(SparseHash{Int,false}(Dense(Element(0), 2), 80, 8))
+        @finch begin
+            tensor .= 0
+            for k in _
+                let i = coords[1, k], ii = coords[2, k]
+                    for j in 1:2
+                        if weights[j, k] != 0
+                            tensor[j, i] += weights[j, k]
+                        end
+                        if weights[j, k] == 0
+                            tensor[j, ii] += 0
+                        end
+                    end
+                end
+            end
+        end
+        expected = zeros(Int, 2, 80)
+        expected[:, 1:40] .= Array(weights)
+        @test Array(tensor) == expected
+        @test all(c == 0 || c >= Finch.SPARSE_HASH_CTRL_FULL for c in tensor.lvl.tbl_ctrl)
+        input = Tensor(Dense(Dense(Element(0))), ones(Int, 2, 80))
+        @finch for i in _, j in _
+            tensor[j, i] += input[j, i]
+        end
+        @test Array(tensor) == expected .+ 1
+        @test isempty(tensor.lvl.pool)
+        @test length(tensor.lvl.perm) == 80
+    end
+
+    @testset "overlapping writers in coalesce task shards" begin
+        device = cpu(:k, 3)
+        coords = Tensor(Dense(Dense(Element(0))), reshape(repeat(1:40; inner=2), 2, :))
+        tensor = Tensor(Coalesce(device, SparseHash{Int,false}(Dense(Element(0), 2), 40, 4)))
+        @finch begin
+            tensor .= 0
+            for k in parallel(_, device)
+                let i = coords[1, k], ii = coords[2, k]
+                    for j in 1:2
+                        tensor[j, i] += 1
+                        tensor[j, ii] += 2
+                    end
+                end
+            end
+        end
+        @test Array(tensor) == fill(3, 2, 40)
+    end
+end
+
 @testitem "constructors" setup = [CheckOutput] begin
     using Base.Meta
     using Finch: Structure
