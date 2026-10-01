@@ -6,7 +6,6 @@
             view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
         @test sum(lvl.tbl_count) == length(lvl.perm)
         @test length(lvl.key) == maximum(lvl.perm; init=0)
-        @test all(q -> q <= length(lvl.key), lvl.pool)
         # Every entry's key looks up its own child position.
         for q in lvl.perm
             p, i = lvl.key[q]
@@ -134,8 +133,8 @@
         end
     end
 
-    @testset "thawed growth preserves holes absent from the pool" begin
-        # Coalesce can leave child holes that are not in the free pool.
+    @testset "thawed growth recovers child holes" begin
+        # Coalesce can leave free records without linking them together.
         ctrl, tbl = zeros(UInt8, 8), zeros(Int, 8)
         key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), 6)
         values = zeros(Int, 6)
@@ -148,7 +147,7 @@
             values[q] = data[i] = 10i
         end
         tensor = Tensor(SparseHash{Int}(
-            Element(0, values), 64, 1, [1, 4], ctrl, tbl, key, Int[], [1, 3, 6], [3]
+            Element(0, values), 64, 1, [1, 4], ctrl, tbl, key, [1, 3, 6], [3]
         ))
         input = Tensor(Dense(Element(0)), ones(Int, 64))
         @finch for i in _
@@ -156,6 +155,7 @@
         end
         @test Array(tensor) == data .+ 1
         @test length(tensor.lvl.perm) == 64
+        @test length(tensor.lvl.key) == 64
         for (i, q) in ((1, 1), (4, 3), (6, 6))
             @test Finch.sparse_hash_lookup(ctrl, tbl, key, 1, i, 1) == q
         end
@@ -219,7 +219,7 @@
         expected[:, indices] .= 3
         @test Array(tensor) == expected
         @test length(tensor.lvl.perm) == 40
-        @test isempty(tensor.lvl.pool)
+        @test all(k -> k[3] == Finch.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
         check_counts(tensor.lvl)
     end
 
@@ -256,7 +256,7 @@ end
 
     function table(Tp, B; capacity=4B)
         (; ctrl=zeros(UInt8, capacity), tbl=zeros(Tp, capacity), key=Tuple{Tp,Int,UInt8}[],
-            counts=zeros(Int, B), pool=Tp[], B)
+            counts=zeros(Int, B), free_head=Ref(zero(Tp)), B)
     end
     function acquire!(t, k)
         Tp = eltype(t.tbl)
@@ -268,11 +268,12 @@ end
         h = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k..., x, t.B)
         pending = true
         if t.ctrl[h] == 0
-            if isempty(t.pool)
+            if t.free_head[] == 0
                 push!(t.key, (k..., 0x01))
                 q = Tp(length(t.key))
             else
-                q = pop!(t.pool)
+                q = t.free_head[]
+                t.free_head[] = t.key[q][1]
                 t.key[q] = (k..., 0x01)
             end
             t.ctrl[h], t.tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
@@ -288,15 +289,28 @@ end
     end
     function release!(t, handle, dirty)
         if handle.pending && Finch.sparse_hash_release!(
-            t.ctrl, t.tbl, t.key, handle.q, handle.x, t.B, dirty
+            t.ctrl, t.tbl, t.key, handle.q, handle.x, t.B, dirty, t.free_head[]
         )
             t.counts[Finch.sparse_hash_hash_subtable(handle.x, t.B)] -= 1
-            push!(t.pool, handle.q)
+            t.free_head[] = handle.q
         end
     end
     slot(t, k) = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k...,
         Finch.sparse_hash_hash(k...), t.B)
     state(t, k) = t.key[t.tbl[slot(t, k)]][3]
+
+    function free_positions(t)
+        positions = eltype(t.tbl)[]
+        q = t.free_head[]
+        while q != 0
+            @test 1 <= q <= length(t.key)
+            @test t.key[q][3] == Finch.SPARSE_HASH_KEY_FREE
+            q in positions && error("Cycle in free child positions")
+            push!(positions, q)
+            q = t.key[q][1]
+        end
+        return positions
+    end
 
     @testset "127-writer limit, promotion, and growth" for Tp in (Int, Int32),
         dirty in (false, true)
@@ -338,7 +352,7 @@ end
             release!(t, replacement, false)
             foreach(h -> release!(t, h, false), handles[2:end])
             @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 1, t.B) == 0
-            @test q in t.pool
+            @test q in free_positions(t)
         end
         @test state(t, (1, 2)) == 127
         foreach(h -> release!(t, h, false), other)
@@ -357,9 +371,10 @@ end
             release!(t, h, isodd(i))
         end
         ptr, perm = Int[], Int[]
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, t.pool, 1)
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, 1)
+        t.free_head[] = Finch.sparse_hash_free_head!(t.key, perm)
         @test extent == length(t.key) == 3
-        @test t.pool == [2]
+        @test free_positions(t) == [2]
         @test perm == [1, 3]
         h = acquire!(t, (1, 5))
         @test h.q == 2
@@ -368,9 +383,10 @@ end
         t = table(Int, 4)
         handles = [acquire!(t, (1, i)) for i in 1:4]
         foreach(h -> release!(t, h, false), handles)
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, t.pool, 1)
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, 1)
+        t.free_head[] = Finch.sparse_hash_free_head!(t.key, perm)
         @test extent == 0
-        @test isempty(t.key) && isempty(t.pool) && isempty(perm)
+        @test isempty(t.key) && t.free_head[] == 0 && isempty(perm)
         h = acquire!(t, (1, 5))
         @test h.q == 1
         release!(t, h, true)
@@ -411,8 +427,7 @@ end
         rng = Xoshiro(17)
         function check()
             @test count(!iszero, t.ctrl) == length(expected) == sum(t.counts)
-            @test length(expected) + length(t.pool) == length(t.key)
-            @test allunique(t.pool)
+            @test length(expected) + length(free_positions(t)) == length(t.key)
             for (k, (n, retained)) in expected
                 h = slot(t, k)
                 entry = t.key[t.tbl[h]]
@@ -485,7 +500,7 @@ end
             tensor[j, i] += input[j, i]
         end
         @test Array(tensor) == expected .+ 1
-        @test isempty(tensor.lvl.pool)
+        @test all(k -> k[3] == Finch.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
         @test length(tensor.lvl.perm) == 80
     end
 

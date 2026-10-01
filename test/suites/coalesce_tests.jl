@@ -224,6 +224,26 @@ end
         @test_throws ArgumentError Finch.coalesce_shards!(src, dst, 3, 1, nothing)
     end
 
+    @testset "thaw reuses merged child holes" for child in (
+        () -> Dense(Element(0)), () -> SparseByteMap(Element(0)),
+        () -> SparseHash(Element(0), 0, 8),
+    )
+        fmt = () -> SparseHash(child(), 0, 8)
+        src = band_shards(fmt, data, [1:3, 4:12, 13:20])
+        dst = Tensor(fmt(), zero(data)).lvl
+        Finch.coalesce_shards!(src, dst, 3, 1, nothing)
+        @test length(dst.key) > length(dst.perm)
+        extent = length(dst.key)
+        tensor = Tensor(dst)
+        input = Tensor(Dense(Dense(Element(0))), ones(Int, size(data)))
+        @finch for j in _, i in _
+            tensor[i, j] += input[i, j]
+        end
+        @test Array(tensor) == data .+ 1
+        @test length(tensor.lvl.key) == extent
+        check_hash_storage(tensor.lvl)
+    end
+
     formats_3d = [
         () -> Dense(Dense(Dense(Element(0)))),
         () -> SparseList(Dense(SparseList(Element(0)))),
@@ -356,8 +376,8 @@ end
                 ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, key, Int[], maximum(first, es; init=0))
-            (; ptr, tbl_ctrl=ctrl, tbl, key, pool=Int[], perm, tbl_count=counts)
+            Finch.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0))
+            (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=counts)
         end
         return SparseHash{Int}(
             Element(0, channels([zeros(Int, length(s.key)) for s in shards])), 1000, B,
@@ -391,7 +411,6 @@ end
         @test plan.max_child_pos == 12
         @test length(dst.ptr) == 5
         @test length(dst.perm) == 4
-        @test isempty(dst.pool)
         @test length(dst.tbl) == length(dst.tbl_ctrl)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         @test sum(plan.bucket_counts) == plan.nnz
@@ -422,13 +441,11 @@ end
             ) == plan.shared_dst[tid]
         end
 
-        # Repeated setup schedules control-byte initialization and clears the pool.
-        push!(dst.pool, 99)
+        # Repeated setup schedules control-byte initialization.
         plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
         @test (dst.tbl_ctrl, 1, Finch.SPARSE_HASH_CTRL_EMPTY) in plan.init
         initialize!(plan)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
-        @test isempty(dst.pool)
     end
 
     @testset "nested hash with an interior shared parent" begin
@@ -486,7 +503,6 @@ end
         @test plan.max_child_pos == 0
         @test dst.ptr == ones(Int, 4)
         @test isempty(dst.perm)
-        @test isempty(dst.pool)
         @test length(dst.tbl) == length(dst.tbl_ctrl) == 16
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
     end
@@ -527,7 +543,7 @@ end
         perms = [SetupReadGuard(v, Ref(0)) for v in src.perm.data]
         guarded = SparseHash{Int}(
             src.lvl, src.shape, src.subtables, src.ptr, src.tbl_ctrl, src.tbl,
-            Finch.MultiChannelBuffer(src.key.device, keys), src.pool,
+            Finch.MultiChannelBuffer(src.key.device, keys),
             Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
         )
         dst = SparseHash(Element(0), 1000, 4)
@@ -547,21 +563,21 @@ end
     device = cpu(:sample, 2)
     mem = Finch.MultiChannelMemory(device, 2)
     channels(data) = Finch.MultiChannelBuffer(mem, data)
-    # Frozen hash shards with one bucket, holding entries (p, i, q) and pooled
+    # Frozen hash shards with one bucket, holding entries (p, i, q) and unused
     # child positions.
-    function hash_shards(child, entries; parents=2, pools=[Int[], Int[]])
-        shards = map(entries, pools) do es, pool
+    function hash_shards(child, entries; parents=2, extents=[0, 0])
+        shards = map(entries, extents) do es, extent
             ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, 16)
             tbl = zeros(Int, 16)
-            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), max(maximum(e -> e[3], es; init=0), maximum(pool; init=0)))
+            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), max(maximum(e -> e[3], es; init=0), extent))
             for (p, i, q) in es
                 x = Finch.sparse_hash_hash(p, i)
                 h = Finch.sparse_hash_vacancy(ctrl, x, 1)
                 ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, key, pool, parents)
-            (; ptr, tbl_ctrl=ctrl, tbl, key, pool, perm, tbl_count=[length(es)])
+            Finch.sparse_hash_freeze!(ptr, perm, key, parents)
+            (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=[length(es)])
         end
         return SparseHash{Int}(
             child, 10, 1,
@@ -607,7 +623,7 @@ end
     @testset "unused child positions and empty shards" begin
         leaf = Element(0, channels([collect(1:4), collect(1:4)]))
         live = [(1, 5, 3), (2, 7, 1), (2, 9, 4)]
-        src = hash_shards(leaf, [live, Tuple{Int,Int,Int}[]]; pools=[[2], [1, 2, 3, 4]])
+        src = hash_shards(leaf, [live, Tuple{Int,Int,Int}[]]; extents=[4, 4])
         Random.seed!(1)
         samples = [Finch.sample(1, src) for _ in 1:100]
         @test Set(samples) == Set(((i,), p) for (p, i, _) in live)

@@ -119,7 +119,10 @@ entries, so probes compare keys only after a fingerprint match.
 The first writer whose child retains data marks the record retained; later
 writers cannot discard it. If all writers decline to retain data, the last one
 locates the table slot, removes it with backward-shift deletion, marks the
-record free, and recycles the child position. Writer counts are accessed through
+record free, and recycles the child position. A local `free_head` is shared by
+all accesses to that hash level within the task. Free records store the next
+child position in their parent field, with zero ending the chain, so recycling
+needs no separate pool buffer. Writer counts are accessed through
 stable child positions, so growth and deletion do not require repairing cached
 slots. These are overlapping generated access scopes within one task, not
 concurrent CPU writes to a shard. Freeze requires every such access to finish.
@@ -128,8 +131,10 @@ Growth rebuilds the table by scanning initialized child records in position
 order, skipping free records and regenerating fingerprints. It does not read or
 copy the old table, even when records have pending writers or holes. Freeze
 also collects live children directly from their records. It trims unused child
-positions beyond the last live entry and preserves interior holes in the free
-pool, so an empty hash also has an empty child. Each coalesce worker fills
+positions beyond the last live entry, so an empty hash also has an empty child.
+On thaw, a level with interior holes rebuilds its free chain by scanning child
+records, including holes left by coalesce. When `length(perm) == length(key)`,
+there are no holes and thaw skips the scan. Each coalesce worker fills
 its output child range in position order, writing each record once as retained
 or free, including holes and discarded shared duplicates.
 
@@ -219,7 +224,7 @@ The position is format-specific, not the entry's rank in traversal order:
 |:------|:-----------------------|
 | `SparseList` | Position in `idx` (currently `1` at a shared boundary) |
 | `SparseByteMap` | Flattened child position stored in `srt` |
-| `SparseHash` | Child position `q` of the entry keyed `key[q] == (parent, index)` |
+| `SparseHash` | Child position `q` with `key[q] == (parent, index, state)` |
 
 For example, a byte-map shard whose first `srt` entry is `7` reports
 `shared[p] = 7` when that entry is shared. A hash whose first frozen `perm`
@@ -231,9 +236,9 @@ subtract `shared[p] != 0`, not `shared[p]`.
 need a shared-position field. Dense levels pass through to their child plan;
 elements copy non-fill values when their positions overlap.
 
-A hash stores its keys by child position, `key[q] == (parent, index)`, and its
+A hash stores its keys by child position, `key[q] == (parent, index, state)`, and its
 table slots and `perm` hold child positions. A frozen `key` spans exactly the
-child positions, pooled vacancies included, so its length is the child extent.
+child positions, free vacancies included, so its length is the child extent.
 Hash levels retain the assembly bucket-count array, `tbl_count`, through freeze.
 Setup reads at most the first and last frozen entries of each shard that is
 not below a hash. It rotates that shard's counts by `a * offset mod B`, then
