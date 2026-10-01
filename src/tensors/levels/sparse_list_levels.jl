@@ -257,9 +257,9 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
+        freshen(ctx, lvl.tag, :_qos_fill),
+        freshen(ctx, lvl.tag, :_qos_stop),
+        freshen(ctx, lvl.tag, :_prev_pos),
     )
 end
 
