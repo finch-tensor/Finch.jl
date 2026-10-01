@@ -189,29 +189,40 @@ end
 # child positions by index. Returns the extent of child positions, freed ones
 # in `pool` included, and trims `key` to it.
 function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
-    empty!(perm)
-    for h in eachindex(tbl_ctrl)
-        tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY || push!(perm, tbl[h])
+    # Mark each live child position with itself, so keys are then read in order
+    # rather than at random from the table.
+    n = count(!=(SPARSE_HASH_CTRL_EMPTY), tbl_ctrl)
+    qs = zeros(eltype(tbl), length(key))
+    @inbounds for h in eachindex(tbl_ctrl)
+        tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY || (qs[tbl[h]] = tbl[h])
     end
-    # Count parent p's entries in ptr[p + 2], so the prefix sum leaves ptr[p + 1]
-    # at parent p's start. Placing an entry then advances it to parent p's stop.
+    ps = Vector{fieldtype(eltype(key), 1)}(undef, n)
+    is = Vector{fieldtype(eltype(key), 2)}(undef, n)
+    # Compact the live positions in place, and count parent p's entries in
+    # ptr[p + 2], so the prefix sum leaves ptr[p + 1] at parent p's start.
     resize!(ptr, pos_stop + 1)
     fill!(ptr, 0)
     ptr[1] = 1
-    for q in perm
-        p = first(key[q])
-        p < pos_stop && (ptr[p + 2] += 1)
+    k = 0
+    @inbounds for q in eachindex(qs)
+        qs[q] == 0 && continue
+        k += 1
+        qs[k] = q
+        ps[k], is[k] = key[q]
+        ps[k] < pos_stop && (ptr[ps[k] + 2] += 1)
     end
-    for p in 2:length(ptr)
+    resize!(qs, n)
+    @inbounds for p in 2:length(ptr)
         ptr[p] += ptr[p - 1]
     end
-    # Visiting entries in index order leaves each parent's range sorted.
-    for q in perm[sortperm(map(q -> last(key[q]), perm))]
-        p = first(key[q])
-        perm[ptr[p + 1]] = q
-        ptr[p + 1] += 1
+    # Placing entries in index order leaves each parent's run sorted, and
+    # advances ptr[p + 1] from parent p's start to its stop.
+    resize!(perm, length(qs))
+    @inbounds for k in sortperm(is)
+        perm[ptr[ps[k] + 1]] = qs[k]
+        ptr[ps[k] + 1] += 1
     end
-    extent = max(maximum(perm; init=0), maximum(pool; init=0))
+    extent = max(isempty(qs) ? 0 : last(qs), maximum(pool; init=0))
     resize!(key, extent)
     return extent
 end
