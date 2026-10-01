@@ -239,3 +239,21 @@ shard.
 Pointers need the parent of the entry before each piece; setup records it from
 the previous piece's last entry, so shards write pointers independently. Byte
 maps write their pointers the same way.
+
+## Closures in generated code
+
+`Threads.@threads` turns its loop body into a closure. A closure that captures a
+variable assigned more than once boxes it, and inference then sees `Any`
+wherever the closure reads it. Generated code keeps captures single-assignment:
+
+- Every parallel loop is wrapped in `Finch.@barrier`, which binds the loop's
+  free variables in a `let` just before it. The thread closure captures those
+  fresh bindings, so code outside may rebind a buffer, for example when
+  `distribute_buffer` writes it back, without boxing anything.
+- `@barrier` never binds a constant global, such as the `Finch` module. As a
+  local, `Finch` would hide every `Finch.f(...)` from inference and make each
+  call dynamic.
+- Distributed levels freshen their scalar assembly state (`qos_stop` and the
+  like), so each task assigns its own locals instead of a shared variable.
+- Other generated loops are plain loops over fixed-size buffers, not
+  comprehensions, so they create no closures.
