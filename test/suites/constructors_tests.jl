@@ -44,7 +44,7 @@
             hsh = Finch.sparse_hash_hash(p, 7)
             Finch.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
         end
-        key = [(parents[q], 7) for q in 1:12]
+        key = [(parents[q], 7, Finch.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
         find(p, i) = Finch.sparse_hash_find(ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), subtables)
         for (q, (p, i)) in enumerate(key)
             h = find(p, i)
@@ -54,7 +54,9 @@
         @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
         for newcap in (cap, 2cap, 4cap)
             if newcap != cap
-                Finch.sparse_hash_resize!(ctrl, tbl, key, newcap, subtables)
+                Finch.sparse_hash_resize!(
+                    ctrl, tbl, key, newcap, subtables, length(key)
+                )
             end
             for (q, (p, i)) in enumerate(key)
                 @test Finch.sparse_hash_lookup(ctrl, tbl, key, p, i, subtables) == q
@@ -64,6 +66,50 @@
         # A present key probes to its own slot rather than a vacancy.
         @test tbl[find(parents[1], 7)] == 1
         @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(key)
+    end
+
+    @testset "dense rehash ignores unused key capacity" for Tp in (Int, Int32), B in (1, 8)
+        key = Vector{Tuple{Tp,Int,UInt8}}(undef, 32)
+        key[1:12] .= [(Tp(mod(q, 3) + 1), 7q, Finch.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
+        ctrl, tbl = UInt8[], Tp[]
+        for cap in (64B, 128B)
+            Finch.sparse_hash_resize!(ctrl, tbl, key, cap, B, 12)
+            @test count(!iszero, ctrl) == 12
+            for q in 1:12
+                p, i = key[q]
+                @test Finch.sparse_hash_lookup(ctrl, tbl, key, p, i, B) == q
+                h = Finch.sparse_hash_find(ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), B)
+                @test ctrl[h] == Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(p, i))
+            end
+        end
+    end
+
+    @testset "thawed growth preserves holes absent from the pool" begin
+        # Coalesce can leave child holes that are not in the free pool.
+        ctrl, tbl = zeros(UInt8, 8), zeros(Int, 8)
+        key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), 6)
+        values = zeros(Int, 6)
+        data = zeros(Int, 64)
+        for (i, q) in ((1, 1), (4, 3), (6, 6))
+            key[q] = (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
+            x = Finch.sparse_hash_hash(1, i)
+            h = Finch.sparse_hash_vacancy(ctrl, x, 1)
+            ctrl[h], tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
+            values[q] = data[i] = 10i
+        end
+        tensor = Tensor(SparseHash{Int}(
+            Element(0, values), 64, 1, [1, 4], ctrl, tbl, key, Int[], [1, 3, 6], [3]
+        ))
+        input = Tensor(Dense(Element(0)), ones(Int, 64))
+        @finch for i in _
+            tensor[i] += input[i]
+        end
+        @test Array(tensor) == data .+ 1
+        @test length(tensor.lvl.perm) == 64
+        for (i, q) in ((1, 1), (4, 3), (6, 6))
+            @test Finch.sparse_hash_lookup(ctrl, tbl, key, 1, i, 1) == q
+        end
+        check_counts(tensor.lvl)
     end
 
     @testset "tensor assembly and updates" for Ti in (Int, Int32), B in (1, 8)
@@ -159,7 +205,7 @@ end
     using Random
 
     function table(Tp, B; capacity=4B)
-        (; ctrl=zeros(UInt8, capacity), tbl=zeros(Tp, capacity), key=Tuple{Tp,Int}[],
+        (; ctrl=zeros(UInt8, capacity), tbl=zeros(Tp, capacity), key=Tuple{Tp,Int,UInt8}[],
             counts=zeros(Int, B), pool=Tp[], B)
     end
     function acquire!(t, k)
@@ -170,28 +216,29 @@ end
             Finch.sparse_hash_resize!(t.ctrl, t.tbl, t.key, 2length(t.ctrl), t.B)
         end
         h = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k..., x, t.B)
-        pending = t.ctrl[h] < Finch.SPARSE_HASH_CTRL_FULL
+        pending = true
         if t.ctrl[h] == 0
             if isempty(t.pool)
-                push!(t.key, k)
+                push!(t.key, (k..., 0x01))
                 q = Tp(length(t.key))
             else
                 q = pop!(t.pool)
-                t.key[q] = k
+                t.key[q] = (k..., 0x01)
             end
-            t.ctrl[h], t.tbl[h] = 0x01, q
+            t.ctrl[h], t.tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
             t.counts[b] += 1
         else
             q = t.tbl[h]
+            pending = t.key[q][3] != Finch.SPARSE_HASH_KEY_RETAINED
             if pending
-                Finch.sparse_hash_share!(t.ctrl, h)
+                Finch.sparse_hash_share!(t.key, q)
             end
         end
         return (; q, h, x, pending)
     end
     function release!(t, handle, dirty)
         if handle.pending && Finch.sparse_hash_release!(
-            t.ctrl, t.tbl, t.key, handle.h, handle.q, handle.x, t.B, dirty
+            t.ctrl, t.tbl, t.key, handle.q, handle.x, t.B, dirty
         )
             t.counts[Finch.sparse_hash_hash_subtable(handle.x, t.B)] -= 1
             push!(t.pool, handle.q)
@@ -199,31 +246,32 @@ end
     end
     slot(t, k) = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k...,
         Finch.sparse_hash_hash(k...), t.B)
+    state(t, k) = t.key[t.tbl[slot(t, k)]][3]
 
     @testset "127-writer limit, promotion, and growth" for Tp in (Int, Int32),
         dirty in (false, true)
         t = table(Tp, 4)
         handles = [acquire!(t, (1, 1)) for _ in 1:127]
         q = first(handles).q
-        @test t.ctrl[slot(t, (1, 1))] == 127
+        @test state(t, (1, 1)) == 127
         @test_throws "SparseHash supports at most 127 pending writers per entry" acquire!(
             t, (1, 1)
         )
-        @test t.ctrl[slot(t, (1, 1))] == 127
+        @test state(t, (1, 1)) == 127
         @test all(h.q == q for h in handles)
         # The limit is per entry. Growth preserves both maximum counts.
         other = [acquire!(t, (1, 2)) for _ in 1:127]
         for i in 3:200
             release!(t, acquire!(t, (1, i)), true)
         end
-        @test t.ctrl[slot(t, (1, 1))] == 127
-        @test t.ctrl[slot(t, (1, 2))] == 127
+        @test state(t, (1, 1)) == 127
+        @test state(t, (1, 2)) == 127
         @test_throws "SparseHash supports at most 127 pending writers per entry" acquire!(
             t, (1, 1)
         )
         if dirty
             release!(t, first(handles), true)
-            @test t.ctrl[slot(t, (1, 1))] >= Finch.SPARSE_HASH_CTRL_FULL
+            @test state(t, (1, 1)) >= Finch.SPARSE_HASH_CTRL_FULL
             # Retained entries no longer need counts or a writer limit.
             retained = [acquire!(t, (1, 1)) for _ in 1:128]
             @test all(!h.pending && h.q == q for h in retained)
@@ -232,23 +280,23 @@ end
             @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 1, t.B) == q
         else
             release!(t, first(handles), false)
-            @test t.ctrl[slot(t, (1, 1))] == 126
+            @test state(t, (1, 1)) == 126
             # A failed acquisition did not change the count; releasing a
             # writer permits another acquisition up to the limit again.
             replacement = acquire!(t, (1, 1))
-            @test t.ctrl[slot(t, (1, 1))] == 127
+            @test state(t, (1, 1)) == 127
             release!(t, replacement, false)
             foreach(h -> release!(t, h, false), handles[2:end])
             @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 1, t.B) == 0
             @test q in t.pool
         end
-        @test t.ctrl[slot(t, (1, 2))] == 127
+        @test state(t, (1, 2)) == 127
         foreach(h -> release!(t, h, false), other)
         @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 2, t.B) == 0
         @test sum(t.counts) == (dirty ? 199 : 198)
         h = acquire!(t, (2, 201))
         @test h.q == first(other).q
-        @test t.ctrl[slot(t, (2, 201))] == 0x01
+        @test state(t, (2, 201)) == 0x01
         release!(t, h, true)
     end
 
@@ -259,7 +307,7 @@ end
             release!(t, h, isodd(i))
         end
         ptr, perm = Int[], Int[]
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.ctrl, t.tbl, t.key, t.pool, 1)
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, t.pool, 1)
         @test extent == length(t.key) == 3
         @test t.pool == [2]
         @test perm == [1, 3]
@@ -270,7 +318,7 @@ end
         t = table(Int, 4)
         handles = [acquire!(t, (1, i)) for i in 1:4]
         foreach(h -> release!(t, h, false), handles)
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.ctrl, t.tbl, t.key, t.pool, 1)
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, t.pool, 1)
         @test extent == 0
         @test isempty(t.key) && isempty(t.pool) && isempty(perm)
         h = acquire!(t, (1, 5))
@@ -295,8 +343,8 @@ end
         shared = acquire!(t, (1, c))
         release!(t, ha, false)
         @test slot(t, (1, c)) != hc.h
-        @test t.ctrl[slot(t, (1, c))] == 2
-        release!(t, hc, false) # Validate and repair its cached slot.
+        @test state(t, (1, c)) == 2
+        release!(t, hc, false) # The writer count stays at the same child position.
         release!(t, hb, true)
         release!(t, shared, true)
         @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, a, B) == 0
@@ -317,12 +365,10 @@ end
             @test allunique(t.pool)
             for (k, (n, retained)) in expected
                 h = slot(t, k)
-                @test t.ctrl[h] != 0 && t.key[t.tbl[h]] == k
-                @test if retained
-                    t.ctrl[h] == Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(k...))
-                else
-                    t.ctrl[h] == n
-                end
+                entry = t.key[t.tbl[h]]
+                @test t.ctrl[h] != 0 && (entry[1], entry[2]) == k
+                @test t.ctrl[h] == Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(k...))
+                @test entry[3] == (retained ? Finch.SPARSE_HASH_KEY_RETAINED : n)
             end
             width = length(t.ctrl) ÷ B
             @test t.counts == [

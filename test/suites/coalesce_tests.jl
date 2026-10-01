@@ -103,6 +103,9 @@ end
         if lvl isa Finch.SparseHashLevel
             @test issorted(lvl.key[lvl.perm])
             @test sum(lvl.tbl_count) == length(lvl.perm)
+            live = Set(lvl.perm)
+            @test all(q -> lvl.key[q][3] == (q in live ?
+                Finch.SPARSE_HASH_KEY_RETAINED : Finch.SPARSE_HASH_KEY_FREE), eachindex(lvl.key))
             width = length(lvl.tbl) ÷ lvl.subtables
             @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
                 view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:lvl.subtables]
@@ -346,14 +349,14 @@ end
             ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY,
                         B * Finch.sparse_hash_table_capacity(maximum(counts)))
             tbl = zeros(Int, length(ctrl))
-            key = fill((0, 0), maximum(e -> e[3], es; init=0))
+            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), maximum(e -> e[3], es; init=0))
             for (p, i, q) in es
                 x = Finch.sparse_hash_hash(p, i)
                 h = Finch.sparse_hash_vacancy(ctrl, x, B)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i)
+                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, ctrl, tbl, key, Int[], maximum(first, es; init=0))
+            Finch.sparse_hash_freeze!(ptr, perm, key, Int[], maximum(first, es; init=0))
             (; ptr, tbl_ctrl=ctrl, tbl, key, pool=Int[], perm, tbl_count=counts)
         end
         return SparseHash{Int}(
@@ -361,7 +364,7 @@ end
             (channels([getfield(s, f) for s in shards]) for f in Finch.SPARSE_HASH_BUFFERS)...,
         )
     end
-    entries_of(lvl) = [(lvl.key[q]..., q) for q in lvl.perm]
+    entries_of(lvl) = [(lvl.key[q][1], lvl.key[q][2], q) for q in lvl.perm]
 
     function initialize!(plan)
         for (buffer, start, value) in plan.init
@@ -395,7 +398,7 @@ end
         @test dst.tbl_count == plan.bucket_counts
         @test length(dst.key) == plan.max_child_pos
         @test plan.bucket_shift == [Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in shift]
-        @test src.key.data[1][src.perm.data[1][1]] == (1, 2)
+        @test src.key.data[1][src.perm.data[1][1]] == (1, 2, Finch.SPARSE_HASH_KEY_RETAINED)
 
         # Traversal ranks are concatenated by shard; bucket owners publish the
         # final table slots into those ranks without resizing or sorting.
@@ -463,7 +466,7 @@ end
         for (q, i) in enumerate(indices)
             x = Finch.sparse_hash_hash(1, i)
             h = Finch.sparse_hash_vacancy(dst.tbl_ctrl, x, 8)
-            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Finch.sparse_hash_hash_ctrl(x), q, (1, i)
+            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Finch.sparse_hash_hash_ctrl(x), q, (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
         end
         @test all(enumerate(indices)) do (q, i)
             Finch.sparse_hash_lookup(dst.tbl_ctrl, dst.tbl, dst.key, 1, i, 8) == q
@@ -550,14 +553,14 @@ end
         shards = map(entries, pools) do es, pool
             ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, 16)
             tbl = zeros(Int, 16)
-            key = fill((0, 0), max(maximum(e -> e[3], es; init=0), maximum(pool; init=0)))
+            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), max(maximum(e -> e[3], es; init=0), maximum(pool; init=0)))
             for (p, i, q) in es
                 x = Finch.sparse_hash_hash(p, i)
                 h = Finch.sparse_hash_vacancy(ctrl, x, 1)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i)
+                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, ctrl, tbl, key, pool, parents)
+            Finch.sparse_hash_freeze!(ptr, perm, key, pool, parents)
             (; ptr, tbl_ctrl=ctrl, tbl, key, pool, perm, tbl_count=[length(es)])
         end
         return SparseHash{Int}(

@@ -110,22 +110,28 @@ Assembly sizes the table for its busiest bucket, including
 pending keys; routing alone does not guarantee balanced occupancy.
 
 Every hash inserts tentative entries directly into the table using the same
-writer protocol. A control byte of `0x00` is empty, and `0x01:0x7f` counts
-outstanding writers. Each tentative entry supports at most 127 pending writers;
-attempting to add a 128th throws an error without changing its count. A retained
-entry uses `0x80:0xff` for its fingerprint, as above, and no longer needs writer counting.
-Tentative entries compare full keys because their control bytes hold counts
-instead of fingerprints.
+writer protocol. Each child record stores `(parent, index, state)`: state `0x00`
+means free, `0x01:0x7f` counts outstanding writers, and `0x80` means retained.
+Attempting to add a 128th pending writer throws an error without changing the
+count. Every occupied table slot keeps its fingerprint, including tentative
+entries, so probes compare keys only after a fingerprint match.
 
-The first writer whose child retains data promotes the entry to its fingerprint;
-later writers cannot discard it. If all writers decline to retain data, the last
-one removes the entry with backward-shift deletion and recycles its child
-position. Growth and deletion can move slots, so each unfinished access validates
-its cached slot against its child position and repeats the lookup if necessary.
-These are overlapping generated access scopes within one task, not concurrent
-CPU writes to a shard. Freezing requires every such access to have finished.
-Freeze trims unused child positions beyond the last live entry and keeps only
-interior holes in the free pool, so an empty hash also has an empty child.
+The first writer whose child retains data marks the record retained; later
+writers cannot discard it. If all writers decline to retain data, the last one
+locates the table slot, removes it with backward-shift deletion, marks the
+record free, and recycles the child position. Writer counts are accessed through
+stable child positions, so growth and deletion do not require repairing cached
+slots. These are overlapping generated access scopes within one task, not
+concurrent CPU writes to a shard. Freeze requires every such access to finish.
+
+Growth rebuilds the table by scanning initialized child records in position
+order, skipping free records and regenerating fingerprints. It does not read or
+copy the old table, even when records have pending writers or holes. Freeze
+also collects live children directly from their records. It trims unused child
+positions beyond the last live entry and preserves interior holes in the free
+pool, so an empty hash also has an empty child. Each coalesce worker fills
+its output child range in position order, writing each record once as retained
+or free, including holes and discarded shared duplicates.
 
 When a `CoalesceLevel` freezes, it merges its `P` task shards with
 `coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and

@@ -14,15 +14,13 @@ can share a tentative entry within one task.
 Implementation invariants:
 
 * An entry is keyed by `(p, i)`, a parent position and an index, and owns a
-  child position `q`, with `key[q] == (p, i)`. Child positions are handed out as
-  entries are created, so a child finds its entry directly.
+  stable child position `q`. Its record is `key[q] == (p, i, state)`: `0x00`
+  means free, `0x01:0x7f` count pending writers, and `0x80` means retained.
+  Exceeding 127 pending writers per entry throws an error.
 * `tbl_ctrl` and `tbl` form a linear-probing table, split into `subtables`
-  contiguous buckets. A retained slot `h` has the high bit of `tbl_ctrl[h]` set,
-  seven hash fingerprint bits below it, and `tbl[h] == q`. `0x00` marks an empty
-  slot, which ends a probe. During assembly, `0x01:0x7f` count pending
-  writers, with at most 127 per entry. Exceeding this limit throws an error.
-  Pending entries compare full keys without a fingerprint. Probes wrap within
-  their bucket.
+  contiguous buckets. Every occupied slot, tentative or retained, has the high
+  bit of `tbl_ctrl[h]` set, seven hash fingerprint bits below it, and `tbl[h] == q`.
+  `0x00` marks an empty slot, which ends a probe. Probes wrap within their bucket.
 * Keys hash as `x = a * p + hash(i)`, where `a` is a random odd multiplier shared
   by all hash levels. The low `log2(subtables)` bits of `x` pick the bucket, so
   shifting parents by `delta` rotates buckets by `a * delta`. `x` is linear in
@@ -34,13 +32,16 @@ Implementation invariants:
 * Frozen, `length(key)` is the extent of child positions, `ptr[p]:(ptr[p + 1] - 1)`
   indexes `perm`, and `perm[r]` is a child position. Each parent's range is
   sorted by index.
-* While assembling, `length(key)` is the child capacity. A new key gets its child
-  position and is inserted tentatively before its child is written.
-  The first dirty writer replaces the count with the
-  fingerprint, permanently retaining the entry. Otherwise, the last writer
-  backward-shift deletes the entry and returns its position to `pool`, which
-  persists across freeze and thaw. Handles retain `q` and a cached slot; after
-  growth or deletion moves a slot, they find the entry again by its stable key.
+* While assembling, `length(key)` is the child capacity. Only positions through
+  the allocated child extent are initialized. A new key gets its child position
+  and is inserted tentatively before its child is written. The first dirty
+  writer marks the child record retained; later writers cannot discard it.
+  Otherwise, the last writer backward-shift deletes the table entry, marks the
+  record free, and returns its position to `pool`. Counts stay at stable child
+  positions across growth and deletion; only final deletion needs a slot lookup.
+* Rehash and freeze scan the child records directly, skipping free positions.
+  Coalesce workers initialize holes in their own child ranges. Freeze trims free
+  tails and preserves interior positions in `pool` for reuse after thaw.
 
 ```jldoctest
 julia> tensor_tree(Tensor(Dense(SparseHash(Element(0.0))), [10 0 20; 30 0 0; 0 0 40]))
@@ -89,7 +90,7 @@ function SparseHashLevel{Ti}(lvl, shape=zero(Ti), subtables=1) where {Ti}
     sparse_hash_check_subtables(subtables)
     Tp = postype(lvl)
     SparseHashLevel{Ti}(
-        lvl, shape, subtables, Tp[1], UInt8[], Tp[], Tuple{Tp,Ti}[], Tp[], Tp[],
+        lvl, shape, subtables, Tp[1], UInt8[], Tp[], Tuple{Tp,Ti,UInt8}[], Tp[], Tp[],
         zeros(Int, subtables),
     )
 end
@@ -112,6 +113,8 @@ end
 
 const SPARSE_HASH_CTRL_EMPTY = 0x00
 const SPARSE_HASH_CTRL_FULL = 0x80
+const SPARSE_HASH_KEY_FREE = 0x00
+const SPARSE_HASH_KEY_RETAINED = 0x80
 # Sample once and keep it fixed, including across shards and table resizes.
 const SPARSE_HASH_POS_MULTIPLIER = rand(UInt) | one(UInt)
 
@@ -143,8 +146,10 @@ end
     @inbounds while true
         c = tbl_ctrl[base + off]
         c == SPARSE_HASH_CTRL_EMPTY && return base + off
-        (c == ctrl || c < SPARSE_HASH_CTRL_FULL) &&
-            key[tbl[base + off]] == (p, i) && return base + off
+        if c == ctrl
+            k = key[tbl[base + off]]
+            k[1] == p && k[2] == i && return base + off
+        end
         off = (off + 1) & mask
     end
 end
@@ -165,50 +170,46 @@ end
     @inbounds return tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY ? zero(eltype(tbl)) : tbl[h]
 end
 
-# Rehash every entry into `cap` slots. Fingerprints depend only on the key.
-function sparse_hash_resize!(tbl_ctrl, tbl, key, cap, subtables)
-    old_ctrl, old_tbl = copy(tbl_ctrl), copy(tbl)
+# Child records hold both liveness and writer state, so every rebuild scans
+# them sequentially. The unused capacity after `qos_stop` is never read.
+function sparse_hash_resize!(tbl_ctrl, tbl, key, cap, subtables, qos_stop=length(key))
     empty!(tbl_ctrl)
     resize!(tbl_ctrl, cap)
     fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
     empty!(tbl)
     resize!(tbl, cap)
-    @inbounds for h in eachindex(old_ctrl)
-        old_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
-        q = old_tbl[h]
-        h_2 = sparse_hash_vacancy(tbl_ctrl, sparse_hash_hash(key[q]...), subtables)
-        tbl_ctrl[h_2] = old_ctrl[h]
-        tbl[h_2] = q
+    @inbounds for q in 1:qos_stop
+        p, i, state = key[q]
+        state == SPARSE_HASH_KEY_FREE && continue
+        x = sparse_hash_hash(p, i)
+        h = sparse_hash_vacancy(tbl_ctrl, x, subtables)
+        tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
+        tbl[h] = q
     end
 end
 
 # Order the entries for reading: `perm[ptr[p]:(ptr[p + 1] - 1)]` lists parent `p`'s
 # child positions by index. Returns the live child extent and trims `key` and
 # pooled positions beyond it, so an empty hash also has an empty child.
-function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
-    # Mark each live child position with itself, so keys are then read in order
-    # rather than at random from the table.
-    n = count(!=(SPARSE_HASH_CTRL_EMPTY), tbl_ctrl)
-    qs = zeros(eltype(tbl), length(key))
-    @inbounds for h in eachindex(tbl_ctrl)
-        tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY || (qs[tbl[h]] = tbl[h])
-    end
+function sparse_hash_freeze!(ptr, perm, key, pool, pos_stop, qos_stop=length(key))
+    n = count(q -> key[q][3] != SPARSE_HASH_KEY_FREE, 1:qos_stop)
+    qs = Vector{eltype(perm)}(undef, n)
     ps = Vector{fieldtype(eltype(key), 1)}(undef, n)
     is = Vector{fieldtype(eltype(key), 2)}(undef, n)
-    # Compact the live positions in place, and count parent p's entries in
+    # Collect live child positions, and count parent p's entries in
     # ptr[p + 2], so the prefix sum leaves ptr[p + 1] at parent p's start.
     resize!(ptr, pos_stop + 1)
     fill!(ptr, 0)
     ptr[1] = 1
     k = 0
-    @inbounds for q in eachindex(qs)
-        qs[q] == 0 && continue
+    @inbounds for q in 1:qos_stop
+        p, i, state = key[q]
+        state == SPARSE_HASH_KEY_FREE && continue
         k += 1
         qs[k] = q
-        ps[k], is[k] = key[q]
+        ps[k], is[k] = p, i
         ps[k] < pos_stop && (ptr[ps[k] + 2] += 1)
     end
-    resize!(qs, n)
     @inbounds for p in 2:length(ptr)
         ptr[p] += ptr[p - 1]
     end
@@ -225,12 +226,12 @@ function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
     return extent
 end
 
-# Join an existing tentative entry, without letting its count become a fingerprint.
-@inline function sparse_hash_share!(tbl_ctrl, h)
-    @inbounds c = tbl_ctrl[h]
-    c < SPARSE_HASH_CTRL_FULL - 0x01 ||
+# Join a tentative entry by its stable child position.
+@inline function sparse_hash_share!(key, q)
+    @inbounds p, i, state = key[q]
+    state < SPARSE_HASH_KEY_RETAINED - 0x01 ||
         error("SparseHash supports at most 127 pending writers per entry")
-    @inbounds tbl_ctrl[h] = c + 0x01
+    @inbounds key[q] = (p, i, state + 0x01)
     return nothing
 end
 
@@ -242,8 +243,9 @@ end
     scan = (hole + 1) & mask
     @inbounds while tbl_ctrl[base + scan] != SPARSE_HASH_CTRL_EMPTY
         q = tbl[base + scan]
+        p, i, _ = key[q]
         _, home, _ = sparse_hash_hash_slot_parts(
-            sparse_hash_hash(key[q]...), length(tbl_ctrl), subtables
+            sparse_hash_hash(p, i), length(tbl_ctrl), subtables
         )
         if ((hole - home) & mask) < ((scan - home) & mask)
             tbl_ctrl[base + hole] = tbl_ctrl[base + scan]
@@ -257,24 +259,20 @@ end
     return nothing
 end
 
-# Finish an access that acquired a tentative entry. Return true only when its
-# final unsuccessful writer erased it, so the caller can recycle q.
-@inline function sparse_hash_release!(
-    tbl_ctrl, tbl, key, h, q, x, subtables, dirty
-)
+# Finish a tentative access through its stable child position. Only deleting
+# the last unretained writer needs to locate a table slot.
+@inline function sparse_hash_release!(tbl_ctrl, tbl, key, q, x, subtables, dirty)
     @inbounds begin
-        if h > length(tbl_ctrl) || tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY || tbl[h] != q
-            p, i = key[q]
-            h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, x, subtables)
-        end
-        c = tbl_ctrl[h]
-        c >= SPARSE_HASH_CTRL_FULL && return false
+        p, i, state = key[q]
+        state == SPARSE_HASH_KEY_RETAINED && return false
         if dirty
-            tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
-        elseif c > 0x01
-            tbl_ctrl[h] = c - 0x01
+            key[q] = (p, i, SPARSE_HASH_KEY_RETAINED)
+        elseif state > 0x01
+            key[q] = (p, i, state - 0x01)
         else
+            h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, x, subtables)
             sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables)
+            key[q] = (p, i, SPARSE_HASH_KEY_FREE)
             return true
         end
     end
@@ -285,7 +283,7 @@ end
 Base.@propagate_inbounds function sparse_hash_scansearch(key, perm, x, lo, hi)
     d = one(lo)
     p = lo
-    while p < hi && last(key[perm[p]]) < x
+    while p < hi && key[perm[p]][2] < x
         d <<= 0x01
         p += d
     end
@@ -293,7 +291,7 @@ Base.@propagate_inbounds function sparse_hash_scansearch(key, perm, x, lo, hi)
     hi = min(p, hi) + one(lo)
     while lo < hi - one(lo)
         m = lo + ((hi - lo) >>> 0x01)
-        last(key[perm[m]]) < x ? (lo = m) : (hi = m)
+        key[perm[m]][2] < x ? (lo = m) : (hi = m)
     end
     return hi
 end
@@ -372,7 +370,7 @@ function labelled_children(fbr::SubFiber{<:SparseHashLevel})
     map(lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)) do r
         q = lvl.perm[r]
         LabelledTree(
-            cartesian_label([range_label() for _ in 1:(ndims(fbr) - 1)]..., last(lvl.key[q])),
+            cartesian_label([range_label() for _ in 1:(ndims(fbr) - 1)]..., lvl.key[q][2]),
             SubFiber(lvl.lvl, q),
         )
     end
@@ -527,8 +525,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
         quote
             $(lvl.pending) == 0 || error("SparseHash has unfinished writers during freeze")
             $qos_stop = Finch.sparse_hash_freeze!(
-                $(lvl.ptr), $(lvl.perm), $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key),
-                $(lvl.pool), $(ctx(pos_stop)),
+                $(lvl.ptr), $(lvl.perm), $(lvl.key), $(lvl.pool),
+                $(ctx(pos_stop)), $(lvl.qos_stop),
             )
         end,
     )
@@ -565,7 +563,7 @@ function unfurl(
     my_i = freshen(ctx, tag, :_i)
     my_i1 = freshen(ctx, tag, :_i1)
     my_q = freshen(ctx, tag, :_q)
-    idx(r) = :(last($(lvl.key)[$(lvl.perm)[$r]]))
+    idx(r) = :($(lvl.key)[$(lvl.perm)[$r]][2])
 
     Thunk(;
         preamble=quote
@@ -593,7 +591,7 @@ function unfurl(
                     end,
                     preamble=quote
                         $my_q = $(lvl.perm)[$my_r]
-                        $my_i = last($(lvl.key)[$my_q])
+                        $my_i = $(lvl.key)[$my_q][2]
                     end,
                     stop=(ctx, ext) -> value(my_i),
                     chunk=Spike(;
@@ -677,11 +675,11 @@ function unfurl(
                     if 2 * $B * ($tbl_count[$b] + 1) > length($tbl_ctrl)
                         Finch.sparse_hash_resize!(
                             $tbl_ctrl, $tbl, $key,
-                            max(2 * length($tbl_ctrl), 4 * $B), $B
+                            max(2 * length($tbl_ctrl), 4 * $B), $B, $qos_stop
                         )
                     end
                     $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
-                    $s = $tbl_ctrl[$h] < Finch.SPARSE_HASH_CTRL_FULL
+                    $s = true
                     if $tbl_ctrl[$h] == Finch.SPARSE_HASH_CTRL_EMPTY
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
@@ -702,12 +700,13 @@ function unfurl(
                                 ctx,
                             ))
                         end
-                        $key[$qos] = ($p, $i)
-                        $tbl_ctrl[$h] = 0x01
+                        $key[$qos] = ($p, $i, 0x01)
+                        $tbl_ctrl[$h] = Finch.sparse_hash_hash_ctrl($x)
                         $tbl[$h] = $qos
                     else
                         $qos = $tbl[$h]
-                        $s && Finch.sparse_hash_share!($tbl_ctrl, $h)
+                        $s = $key[$qos][3] != Finch.SPARSE_HASH_KEY_RETAINED
+                        $s && Finch.sparse_hash_share!($key, $qos)
                     end
                     $s && ($pending += 1)
                     $dirty = false
@@ -720,7 +719,7 @@ function unfurl(
                     $dirty && ($(fbr.dirty) = true)
                     if $s
                         if Finch.sparse_hash_release!(
-                            $tbl_ctrl, $tbl, $key, $h, $qos, $x, $B, $dirty
+                            $tbl_ctrl, $tbl, $key, $qos, $x, $B, $dirty
                         )
                             $tbl_count[$b] -= 1
                             push!($(lvl.pool), $qos)
@@ -741,10 +740,8 @@ function sample(tid, lvl::SparseHashLevel)
         throw(ArgumentError("Cannot sample an empty SparseHash shard"))
     while true
         tup, q = sample(tid, lvl.lvl)
-        p, i = key[q]
-        q == sparse_hash_lookup(
-            lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables
-        ) && return (tup..., i), p
+        p, i, state = key[q]
+        state == SPARSE_HASH_KEY_RETAINED && return (tup..., i), p
     end
 end
 
@@ -759,7 +756,11 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     lvl.subtables == B ||
         throw(ArgumentError("Coalescing hashes must use the same bucket count"))
     # Shard t's local rank r, as (parent, index, child position).
-    entry(t, r) = (q = perm[t][r]; (key[t][q]..., q))
+    function entry(t, r)
+        q = perm[t][r]
+        p, i, _ = key[t][q]
+        return p, i, q
+    end
     child_shift = cumsum([0; [length(key[t]) for t in 1:(P - 1)]])
     max_child_pos = sum(length, key; init=0)
 
@@ -864,13 +865,22 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     perm = lvl.perm.data[tid]
     shift = plan.shift[tid]
     child_shift = plan.child_shift[tid]
+    # Each worker copies its child records once, in position order. Holes and
+    # shared duplicates stay free; the traversal permutation is filled below.
+    @inbounds for q in eachindex(key)
+        p, i, state = key[q]
+        dst.key[q + child_shift] = if state == SPARSE_HASH_KEY_FREE || q == plan.shared[tid]
+            (0, 0, SPARSE_HASH_KEY_FREE)
+        else
+            (p + shift, i, SPARSE_HASH_KEY_RETAINED)
+        end
+    end
     for (lo, hi, start, dup, prev) in plan.pieces[tid]
         for r in (lo + dup):hi
             rank = start + r - lo - dup
             q = perm[r]
             p, i = key[q]
             x = p + shift
-            dst.key[q + child_shift] = (x, i)
             dst.perm[rank] = q + child_shift
             for y in (prev + 1):x
                 dst.ptr[y] = rank
