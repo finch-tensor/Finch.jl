@@ -8,8 +8,6 @@ using Random
 const SPARSE_HASH_FORMATS = [
     "Dense(SparseHash)" => () -> Dense(SparseHash(Element(0.0))),
     "SparseHash(SparseHash)" => () -> SparseHash(SparseHash(Element(0.0))),
-    "SparseHash{false}(SparseHash{false})" =>
-        () -> SparseHash{Int,false}(SparseHash{Int,false}(Element(0.0))),
 ]
 
 # Outer-product matmul: most updates hit existing keys.

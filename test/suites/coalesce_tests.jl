@@ -10,7 +10,7 @@
                 () -> Dense(SparseHash(Element(0), 7, 16), 3),
                 () -> SparseList(SparseHash(Element(0), 7, 16), 3),
                 () -> SparseByteMap(SparseHash(Element(0), 7, 16), 3),
-                () -> SparseHash(SparseHash{Int32,false}(Element(0), 7, 16), 3, 16),
+                () -> SparseHash(SparseHash{Int32}(Element(0), 7, 16), 3, 16),
             )
                 original = fmt()
                 lvl = Coalesce(cpu(:hash, P), original; mode)
@@ -82,7 +82,7 @@ end
                     chans([l.ptr for l in lvls]), chans([l.idx for l in lvls]),
                 )
             elseif lvl isa Finch.SparseHashLevel
-                SparseHash{Int,true}(
+                SparseHash{Int}(
                     stack([l.lvl for l in lvls]), lvl.shape, lvl.subtables,
                     (chans([getfield(l, f) for l in lvls]) for f in Finch.SPARSE_HASH_BUFFERS)...,
                 )
@@ -356,7 +356,7 @@ end
             Finch.sparse_hash_freeze!(ptr, perm, ctrl, tbl, key, Int[], maximum(first, es; init=0))
             (; ptr, tbl_ctrl=ctrl, tbl, key, pool=Int[], perm, tbl_count=counts)
         end
-        return SparseHash{Int,false}(
+        return SparseHash{Int}(
             Element(0, channels([zeros(Int, length(s.key)) for s in shards])), 1000, B,
             (channels([getfield(s, f) for s in shards]) for f in Finch.SPARSE_HASH_BUFFERS)...,
         )
@@ -375,7 +375,7 @@ end
             [(1, 5, 3)], [(1, 5, 2), (1, 7, 4)], [(1, 7, 1)],
         ]
         src = hash_shards(entries)
-        dst = SparseHash{Int,false}(Element(0), 1000, 8)
+        dst = SparseHash{Int}(Element(0), 1000, 8)
         shift = [0, 0, 1, 1, 2]
         plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
         initialize!(plan)
@@ -433,7 +433,7 @@ end
         inner = hash_shards([[(3, 1, 2), (1, 2, 1)], [(2, 3, 2), (1, 4, 1)]]; B=8)
         inner.lvl.val.data[1] .= [25, 12]
         inner.lvl.val.data[2] .= [47, 35]
-        src = SparseHash{Int,false}(
+        src = SparseHash{Int}(
             inner, outer.shape, outer.subtables,
             (getfield(outer, f) for f in Finch.SPARSE_HASH_BUFFERS)...,
         )
@@ -522,7 +522,7 @@ end
         src = hash_shards(entries)
         keys = [SetupReadGuard(v, Ref(0)) for v in src.key.data]
         perms = [SetupReadGuard(v, Ref(0)) for v in src.perm.data]
-        guarded = SparseHash{Int,false}(
+        guarded = SparseHash{Int}(
             src.lvl, src.shape, src.subtables, src.ptr, src.tbl_ctrl, src.tbl,
             Finch.MultiChannelBuffer(src.key.device, keys), src.pool,
             Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
@@ -560,7 +560,7 @@ end
             Finch.sparse_hash_freeze!(ptr, perm, ctrl, tbl, key, pool, parents)
             (; ptr, tbl_ctrl=ctrl, tbl, key, pool, perm, tbl_count=[length(es)])
         end
-        return SparseHash{Int,false}(
+        return SparseHash{Int}(
             child, 10, 1,
             (channels([getfield(s, f) for s in shards]) for f in Finch.SPARSE_HASH_BUFFERS)...,
         )

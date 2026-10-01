@@ -5,7 +5,8 @@
         @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
             view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
         @test sum(lvl.tbl_count) == length(lvl.perm)
-        @test length(lvl.key) == max(maximum(lvl.perm; init=0), maximum(lvl.pool; init=0))
+        @test length(lvl.key) == maximum(lvl.perm; init=0)
+        @test all(q -> q <= length(lvl.key), lvl.pool)
         # Every entry's key looks up its own child position.
         for q in lvl.perm
             p, i = lvl.key[q]
@@ -65,10 +66,10 @@
         @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(key)
     end
 
-    @testset "tensor assembly and updates" for single_writer in (true, false), B in (1, 8)
+    @testset "tensor assembly and updates" for Ti in (Int, Int32), B in (1, 8)
         data = [mod(i + 3j, 5) == 0 ? i + j : 0 for i in 1:17, j in 1:9]
         input = Tensor(Dense(Dense(Element(0))), data)
-        tensor = Tensor(Dense(SparseHash{Int,single_writer}(Element(0), 17, B)), data)
+        tensor = Tensor(Dense(SparseHash{Ti}(Element(0), 17, B)), data)
         @test Array(tensor) == data
         check_counts(tensor.lvl.lvl)
         counts = tensor.lvl.lvl.tbl_count
@@ -82,12 +83,12 @@
         check_counts(tensor.lvl.lvl)
     end
 
-    @testset "skewed assembly and thawed growth" for single_writer in (true, false)
+    @testset "skewed assembly and thawed growth" for Ti in (Int, Int32)
         B = 8
         indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), B) == 1, 1:1000)[1:40]
         data = zeros(Int, 1000)
         data[indices[1:10]] .= 1
-        tensor = Tensor(SparseHash{Int,single_writer}(Element(0), 1000, B), data)
+        tensor = Tensor(SparseHash{Ti}(Element(0), 1000, B), data)
         @test Array(tensor) == data
         input = Tensor(Dense(Element(0)), zeros(Int, 1000))
         input.lvl.lvl.val[indices] .= 2
@@ -106,7 +107,7 @@
     @testset "pending writers share keys across bucket growth" begin
         indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1, 1:1000)[1:40]
         coords = Tensor(Dense(Element(0)), indices)
-        tensor = Tensor(SparseHash{Int,false}(Dense(Element(0), 2), 1000, 8))
+        tensor = Tensor(SparseHash{Int}(Dense(Element(0), 2), 1000, 8))
         @finch begin
             tensor .= 0
             for k in _
@@ -126,15 +127,14 @@
         check_counts(tensor.lvl)
     end
 
-    # Several new keys pending at once require multi-writer mode.
-    @testset "pending keys invalidate cached slots" for single_writer in (false,)
+    @testset "pending keys invalidate cached slots" begin
         indices = filter(1:10000) do i
             hsh = Finch.sparse_hash_hash(1, i)
             Finch.sparse_hash_hash_slot_parts(hsh, 32, 8) == (1, 3, 3)
         end[1:40]
         left = Tensor(Dense(Element(0)), indices[1:2:end])
         right = Tensor(Dense(Element(0)), indices[2:2:end])
-        tensor = Tensor(SparseHash{Int,single_writer}(Dense(Element(0), 2), 10000, 8))
+        tensor = Tensor(SparseHash{Int}(Dense(Element(0), 2), 10000, 8))
         @finch begin
             tensor .= 0
             for k in _
@@ -252,6 +252,32 @@ end
         release!(t, h, true)
     end
 
+    @testset "freeze trims free tails and preserves reusable holes" begin
+        t = table(Int, 4)
+        handles = [acquire!(t, (1, i)) for i in 1:4]
+        for (i, h) in enumerate(handles)
+            release!(t, h, isodd(i))
+        end
+        ptr, perm = Int[], Int[]
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.ctrl, t.tbl, t.key, t.pool, 1)
+        @test extent == length(t.key) == 3
+        @test t.pool == [2]
+        @test perm == [1, 3]
+        h = acquire!(t, (1, 5))
+        @test h.q == 2
+        release!(t, h, true)
+
+        t = table(Int, 4)
+        handles = [acquire!(t, (1, i)) for i in 1:4]
+        foreach(h -> release!(t, h, false), handles)
+        extent = Finch.sparse_hash_freeze!(ptr, perm, t.ctrl, t.tbl, t.key, t.pool, 1)
+        @test extent == 0
+        @test isempty(t.key) && isempty(t.pool) && isempty(perm)
+        h = acquire!(t, (1, 5))
+        @test h.q == 1
+        release!(t, h, true)
+    end
+
     @testset "deletion crosses home slots and wraps within a bucket" for B in (1, 4),
         home in (0, 63)
         t = table(Int, B; capacity=64B)
@@ -338,7 +364,7 @@ end
         weights = Tensor(
             Dense(Dense(Element(0))), [mod(j + k, 5) == 0 ? k : 0 for j in 1:2, k in 1:40]
         )
-        tensor = Tensor(SparseHash{Int,false}(Dense(Element(0), 2), 80, 8))
+        tensor = Tensor(SparseHash{Int}(Dense(Element(0), 2), 80, 8))
         @finch begin
             tensor .= 0
             for k in _
@@ -370,7 +396,7 @@ end
     @testset "overlapping writers in coalesce task shards" begin
         device = cpu(:k, 3)
         coords = Tensor(Dense(Dense(Element(0))), reshape(repeat(1:40; inner=2), 2, :))
-        tensor = Tensor(Coalesce(device, SparseHash{Int,false}(Dense(Element(0), 2), 40, 4)))
+        tensor = Tensor(Coalesce(device, SparseHash{Int}(Dense(Element(0), 2), 40, 4)))
         @finch begin
             tensor .= 0
             for k in parallel(_, device)

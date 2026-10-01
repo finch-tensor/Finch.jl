@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int], [SingleWriter=true]}(lvl, [dim], [subtables=1])
+    SparseHashLevel{[Ti=Int]}(lvl, [dim], [subtables=1])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -8,8 +8,8 @@ stored. Optionally, `dim` is the size of the last dimension, and `subtables`, a
 power of two, splits the table into buckets that parallel merges fill
 independently.
 
-`Ti` is the type of the last fiber index. `SingleWriter == false` allows several
-writers to create the same entry at once.
+`Ti` is the type of the last fiber index. Up to 127 overlapping logical writers
+can share a tentative entry within one task.
 
 Implementation invariants:
 
@@ -19,7 +19,7 @@ Implementation invariants:
 * `tbl_ctrl` and `tbl` form a linear-probing table, split into `subtables`
   contiguous buckets. A retained slot `h` has the high bit of `tbl_ctrl[h]` set,
   seven hash fingerprint bits below it, and `tbl[h] == q`. `0x00` marks an empty
-  slot, which ends a probe. In multi-writer assembly, `0x01:0x7f` count pending
+  slot, which ends a probe. During assembly, `0x01:0x7f` count pending
   writers, with at most 127 per entry. Exceeding this limit throws an error.
   Pending entries compare full keys without a fingerprint. Probes wrap within
   their bucket.
@@ -35,11 +35,8 @@ Implementation invariants:
   indexes `perm`, and `perm[r]` is a child position. Each parent's range is
   sorted by index.
 * While assembling, `length(key)` is the child capacity. A new key gets its child
-  position before its child is written. `SingleWriter == true` defers insertion
-  until the child retains data, and promises that at most one new key, with one
-  writer, is pending in the level at a time. If the child retains no data, its
-  position is freed. `SingleWriter == false` inserts tentative entries
-  immediately. The first dirty writer replaces the count with the
+  position and is inserted tentatively before its child is written.
+  The first dirty writer replaces the count with the
   fingerprint, permanently retaining the entry. Otherwise, the last writer
   backward-shift deletes the entry and returns its position to `pool`, which
   persists across freeze and thaw. Handles retain `q` and a cached slot; after
@@ -69,8 +66,7 @@ julia> tensor_tree(Tensor(SparseHash(SparseHash(Element(0.0))), [10 0 20; 30 0 0
 
 ```
 """
-struct SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl} <:
-       AbstractLevel
+struct SparseHashLevel{Ti,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl} <: AbstractLevel
     lvl::Lvl
     shape::Ti
     subtables::Int
@@ -89,32 +85,27 @@ const SPARSE_HASH_BUFFERS = (:ptr, :tbl_ctrl, :tbl, :key, :pool, :perm, :tbl_cou
 
 SparseHashLevel(lvl, args...) = SparseHashLevel{Int}(lvl, args...)
 SparseHashLevel(lvl, shape::Ti, args...) where {Ti} = SparseHashLevel{Ti}(lvl, shape, args...)
-SparseHashLevel{Ti}(lvl, args...) where {Ti} = SparseHashLevel{Ti,true}(lvl, args...)
-function SparseHashLevel{Ti,SingleWriter}(
-    lvl, shape=zero(Ti), subtables=1
-) where {Ti,SingleWriter}
+function SparseHashLevel{Ti}(lvl, shape=zero(Ti), subtables=1) where {Ti}
     sparse_hash_check_subtables(subtables)
     Tp = postype(lvl)
-    SparseHashLevel{Ti,SingleWriter}(
+    SparseHashLevel{Ti}(
         lvl, shape, subtables, Tp[1], UInt8[], Tp[], Tuple{Tp,Ti}[], Tp[], Tp[],
         zeros(Int, subtables),
     )
 end
-function SparseHashLevel{Ti,SingleWriter}(
+function SparseHashLevel{Ti}(
     lvl::Lvl, shape, subtables, ptr::Ptr, tbl_ctrl::TblCtrl, tbl::Tbl, key::Key,
     pool::Pool, perm::Perm, tbl_count::TblCount,
-) where {Ti,SingleWriter,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl}
+) where {Ti,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl}
     sparse_hash_check_subtables(subtables)
-    SparseHashLevel{Ti,SingleWriter,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl}(
+    SparseHashLevel{Ti,Ptr,TblCtrl,Tbl,Key,Pool,Perm,TblCount,Lvl}(
         lvl, Ti(shape), Int(subtables), ptr, tbl_ctrl, tbl, key, pool, perm, tbl_count
     )
 end
 
 # `lvl` with a new child and shape, keeping its table.
-function sparse_hash_with(
-    lvl::SparseHashLevel{Ti,SingleWriter}, child, shape=lvl.shape
-) where {Ti,SingleWriter}
-    SparseHashLevel{Ti,SingleWriter}(
+function sparse_hash_with(lvl::SparseHashLevel{Ti}, child, shape=lvl.shape) where {Ti}
+    SparseHashLevel{Ti}(
         child, shape, lvl.subtables, (getfield(lvl, f) for f in SPARSE_HASH_BUFFERS)...
     )
 end
@@ -192,8 +183,8 @@ function sparse_hash_resize!(tbl_ctrl, tbl, key, cap, subtables)
 end
 
 # Order the entries for reading: `perm[ptr[p]:(ptr[p + 1] - 1)]` lists parent `p`'s
-# child positions by index. Returns the extent of child positions, freed ones
-# in `pool` included, and trims `key` to it.
+# child positions by index. Returns the live child extent and trims `key` and
+# pooled positions beyond it, so an empty hash also has an empty child.
 function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
     # Mark each live child position with itself, so keys are then read in order
     # rather than at random from the table.
@@ -228,7 +219,8 @@ function sparse_hash_freeze!(ptr, perm, tbl_ctrl, tbl, key, pool, pos_stop)
         perm[ptr[ps[k] + 1]] = qs[k]
         ptr[ps[k] + 1] += 1
     end
-    extent = max(isempty(qs) ? 0 : last(qs), maximum(pool; init=0))
+    extent = isempty(qs) ? 0 : last(qs)
+    filter!(q -> q <= extent, pool)
     resize!(key, extent)
     return extent
 end
@@ -308,20 +300,18 @@ end
 
 Base.summary(lvl::SparseHashLevel) = "SparseHash($(summary(lvl.lvl)))"
 function similar_level(
-    lvl::SparseHashLevel{Ti,SingleWriter}, fill_value, eltype::Type, dim, tail...
-) where {Ti,SingleWriter}
-    SparseHashLevel{Ti,SingleWriter}(
+    lvl::SparseHashLevel{Ti}, fill_value, eltype::Type, dim, tail...
+) where {Ti}
+    SparseHashLevel{Ti}(
         similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables
     )
 end
 
 coalesce_similar_level(lvl, P) =
     similar_level(lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...)
-function coalesce_similar_level(
-    lvl::SparseHashLevel{Ti,SingleWriter}, P
-) where {Ti,SingleWriter}
+function coalesce_similar_level(lvl::SparseHashLevel{Ti}, P) where {Ti}
     P > 0 || throw(ArgumentError("Coalesce worker count must be positive"))
-    SparseHashLevel{Ti,SingleWriter}(
+    SparseHashLevel{Ti}(
         coalesce_similar_level(lvl.lvl, P), lvl.shape, nextpow(2, P)
     )
 end
@@ -332,8 +322,8 @@ Base.resize!(lvl::SparseHashLevel, dims...) =
 pattern!(lvl::SparseHashLevel) = sparse_hash_with(lvl, pattern!(lvl.lvl))
 set_fill_value!(lvl::SparseHashLevel, init) =
     sparse_hash_with(lvl, set_fill_value!(lvl.lvl, init))
-function transfer(Tm, lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
-    SparseHashLevel{Ti,SingleWriter}(
+function transfer(Tm, lvl::SparseHashLevel{Ti}) where {Ti}
+    SparseHashLevel{Ti}(
         transfer(Tm, lvl.lvl), lvl.shape, lvl.subtables,
         (transfer(Tm, getfield(lvl, f)) for f in SPARSE_HASH_BUFFERS)...,
     )
@@ -350,11 +340,11 @@ function countstored_level(lvl::SparseHashLevel, pos)
     )
 end
 
-function Base.show(io::IO, lvl::SparseHashLevel{Ti,SingleWriter}) where {Ti,SingleWriter}
+function Base.show(io::IO, lvl::SparseHashLevel{Ti}) where {Ti}
     if get(io, :compact, false)
         print(io, "SparseHash(")
     else
-        print(io, SingleWriter ? "SparseHash{$Ti}(" : "SparseHash{$Ti, false}(")
+        print(io, "SparseHash{$Ti}(")
     end
     show(io, lvl.lvl)
     print(io, ", ")
@@ -413,7 +403,6 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     tag
     lvl
     Ti
-    single_writer
     shape
     subtables
     # Buffers, in the order of SPARSE_HASH_BUFFERS.
@@ -441,9 +430,7 @@ function is_level_concurrent(ctx, lvl::VirtualSparseHashLevel)
     return ([data; [false]], false)
 end
 
-function virtualize(
-    ctx, ex, T::Type{<:SparseHashLevel{Ti,SingleWriter}}, tag=:lvl
-) where {Ti,SingleWriter}
+function virtualize(ctx, ex, T::Type{<:SparseHashLevel{Ti}}, tag=:lvl) where {Ti}
     tag = freshen(ctx, tag)
     buffers = map(f -> freshen(ctx, tag, Symbol(:_, f)), SPARSE_HASH_BUFFERS)
     stop = freshen(ctx, tag, :_stop)
@@ -457,14 +444,14 @@ function virtualize(
     )
     lvl_2 = virtualize(ctx, :($tag.lvl), fieldtype(T, :lvl), tag)
     VirtualSparseHashLevel(
-        tag, lvl_2, Ti, SingleWriter, value(stop, Int), value(:($tag.subtables), Int),
+        tag, lvl_2, Ti, value(stop, Int), value(:($tag.subtables), Int),
         buffers..., freshen(ctx, tag, :_qos_stop), freshen(ctx, tag, :_pending),
     )
 end
 
 function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyle)
     quote
-        $SparseHashLevel{$(lvl.Ti),$(lvl.single_writer)}(
+        $SparseHashLevel{$(lvl.Ti)}(
             $(ctx(lvl.lvl)), $(ctx(lvl.shape)), $(ctx(lvl.subtables)),
             $((getfield(lvl, f) for f in SPARSE_HASH_BUFFERS)...),
         )
@@ -476,7 +463,7 @@ function distribute_level(
 )
     return diff[lvl.tag] = VirtualSparseHashLevel(
         lvl.tag, distribute_level(ctx, lvl.lvl, arch, diff, style), lvl.Ti,
-        lvl.single_writer, lvl.shape, lvl.subtables,
+        lvl.shape, lvl.subtables,
         (
             distribute_buffer(ctx, getfield(lvl, f), arch, style) for
             f in SPARSE_HASH_BUFFERS
@@ -672,11 +659,10 @@ function unfurl(
         lvl.tbl_ctrl, lvl.tbl, lvl.key, lvl.tbl_count, lvl.qos_stop
     )
     pending = lvl.pending
-    p, i, x, b, h, s, found, qos, old, q_stop, dirty = map(
+    p, i, x, b, h, s, qos, old, q_stop, dirty = map(
         v -> freshen(ctx, tag, v),
-        (:_p, :_i, :_x, :_b, :_h, :_s, :_found, :_qos, :_old, :_q_stop, :_dirty),
+        (:_p, :_i, :_x, :_b, :_h, :_s, :_qos, :_old, :_q_stop, :_dirty),
     )
-    single = lvl.single_writer
 
     Thunk(;
         body=(ctx) -> Lookup(;
@@ -695,24 +681,15 @@ function unfurl(
                         )
                     end
                     $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
-                    $found = $tbl_ctrl[$h] != Finch.SPARSE_HASH_CTRL_EMPTY
-                    $qos = $found ? $tbl[$h] : $(Tp(0))
-                    if $qos == 0
+                    $s = $tbl_ctrl[$h] < Finch.SPARSE_HASH_CTRL_FULL
+                    if $tbl_ctrl[$h] == Finch.SPARSE_HASH_CTRL_EMPTY
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
-                        $(
-                            if single
-                                :($qos = $qos_stop += 1)
-                            else
-                                :(
-                                    $qos = if isempty($(lvl.pool))
-                                        ($qos_stop += 1)
-                                    else
-                                        pop!($(lvl.pool))
-                                    end
-                                )
-                            end
-                        )
+                        $qos = if isempty($(lvl.pool))
+                            ($qos_stop += 1)
+                        else
+                            pop!($(lvl.pool))
+                        end
                         if $qos > length($key)
                             $old = length($key) + 1
                             $q_stop = max(2 * length($key), $qos)
@@ -726,55 +703,29 @@ function unfurl(
                             ))
                         end
                         $key[$qos] = ($p, $i)
+                        $tbl_ctrl[$h] = 0x01
+                        $tbl[$h] = $qos
+                    else
+                        $qos = $tbl[$h]
+                        $s && Finch.sparse_hash_share!($tbl_ctrl, $h)
                     end
-                    $(
-                        if !single
-                            quote
-                                $s = !$found || $tbl_ctrl[$h] < Finch.SPARSE_HASH_CTRL_FULL
-                                if $s
-                                    if $found
-                                        Finch.sparse_hash_share!($tbl_ctrl, $h)
-                                    else
-                                        $tbl_ctrl[$h] = 0x01
-                                        $tbl[$h] = $qos
-                                    end
-                                    $pending += 1
-                                end
-                            end
-                        end
-                    )
+                    $s && ($pending += 1)
                     $dirty = false
                 end,
                 body=(ctx) -> instantiate(
                     ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty),
                     mode
                 ),
-                epilogue=if single
-                    quote
-                        if $dirty
-                            if !$found
-                                $tbl_ctrl[$h] = Finch.sparse_hash_hash_ctrl($x)
-                                $tbl[$h] = $qos
-                            end
-                            $(fbr.dirty) = true
-                        elseif !$found
-                            # The newest position, so the next new key reuses it.
+                epilogue=quote
+                    $dirty && ($(fbr.dirty) = true)
+                    if $s
+                        if Finch.sparse_hash_release!(
+                            $tbl_ctrl, $tbl, $key, $h, $qos, $x, $B, $dirty
+                        )
                             $tbl_count[$b] -= 1
-                            $qos_stop -= 1
+                            push!($(lvl.pool), $qos)
                         end
-                    end
-                else
-                    quote
-                        $dirty && ($(fbr.dirty) = true)
-                        if $s
-                            if Finch.sparse_hash_release!(
-                                $tbl_ctrl, $tbl, $key, $h, $qos, $x, $B, $dirty
-                            )
-                                $tbl_count[$b] -= 1
-                                push!($(lvl.pool), $qos)
-                            end
-                            $pending -= 1
-                        end
+                        $pending -= 1
                     end
                 end,
             ),

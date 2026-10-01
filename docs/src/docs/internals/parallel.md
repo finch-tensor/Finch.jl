@@ -109,11 +109,11 @@ and the starting slot within a bucket (the bits above those) come from
 Assembly sizes the table for its busiest bucket, including
 pending keys; routing alone does not guarantee balanced occupancy.
 
-With `SingleWriter=false`, a hash inserts tentative entries directly into the
-table. A control byte of `0x00` is empty, and `0x01:0x7f` counts outstanding
-writers. Each tentative entry supports at most 127 pending writers; attempting
-to add a 128th throws an error without changing its count. A retained entry uses
-`0x80:0xff` for its fingerprint, as above, and no longer needs writer counting.
+Every hash inserts tentative entries directly into the table using the same
+writer protocol. A control byte of `0x00` is empty, and `0x01:0x7f` counts
+outstanding writers. Each tentative entry supports at most 127 pending writers;
+attempting to add a 128th throws an error without changing its count. A retained
+entry uses `0x80:0xff` for its fingerprint, as above, and no longer needs writer counting.
 Tentative entries compare full keys because their control bytes hold counts
 instead of fingerprints.
 
@@ -124,6 +124,8 @@ position. Growth and deletion can move slots, so each unfinished access validate
 its cached slot against its child position and repeats the lookup if necessary.
 These are overlapping generated access scopes within one task, not concurrent
 CPU writes to a shard. Freezing requires every such access to have finished.
+Freeze trims unused child positions beyond the last live entry and keeps only
+interior holes in the free pool, so an empty hash also has an empty child.
 
 When a `CoalesceLevel` freezes, it merges its `P` task shards with
 `coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and

@@ -43,8 +43,8 @@ function gen_accumulator(lvl::DenseLevel, fill_value, eltype::Type, dims...)
     Dense(gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end])
 end
 
-function gen_accumulator(lvl::SparseHashLevel{Ti,SW}, fill_value, eltype::Type, dims...) where {Ti,SW}
-    SparseHashLevel{Ti,SW}(
+function gen_accumulator(lvl::SparseHashLevel{Ti}, fill_value, eltype::Type, dims...) where {Ti}
+    SparseHashLevel{Ti}(
         gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...),
         dims[end], lvl.subtables,
     )
@@ -53,7 +53,7 @@ end
 function gen_accumulator(
     lvl::SparseListLevel{Ti}, fill_value, eltype::Type, dim, tail...
 ) where {Ti}
-    SparseHashLevel{Ti,true}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
+    SparseHashLevel{Ti}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
 end
 
 function gen_accumulator(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims...)
