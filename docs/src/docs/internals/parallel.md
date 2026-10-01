@@ -158,8 +158,8 @@ so coalesce initialization only needs to fill newly allocated storage. An empty
 sparse list records its whole pointer array for parallel initialization to `1`.
 
 Buffers whose contents are completely rewritten are emptied before resizing:
-sparse-list indices and pointers, the byte-map dirty list, and hash pointers
-and permutations. This avoids preserving old contents if growth reallocates
+sparse-list indices and pointers, the byte-map dirty list, and hash pointers,
+keys, and permutations. This avoids preserving old contents if growth reallocates
 storage. Buffers written only at occupied positions retain their cleared
 regions; setup records only the newly added range for initialization.
 
@@ -186,11 +186,11 @@ The position is format-specific, not the entry's rank in traversal order:
 |:------|:-----------------------|
 | `SparseList` | Position in `idx` (currently `1` at a shared boundary) |
 | `SparseByteMap` | Flattened child position stored in `srt` |
-| `SparseHash` | Child position `q` stored in the hash entry `(parent, index, q)` |
+| `SparseHash` | Child position `q` of the entry keyed `key[q] == (parent, index)` |
 
 For example, a byte-map shard whose first `srt` entry is `7` reports
 `shared[p] = 7` when that entry is shared. A hash whose first frozen `perm`
-entry points to `(2, 5, 3)` reports `shared[p] = 3`. Neither reports `1` merely
+entry is child position `3`, keyed `(2, 5)`, reports `shared[p] = 3`. Neither reports `1` merely
 because the shared entry comes first in traversal order. Counts and offsets
 subtract `shared[p] != 0`, not `shared[p]`.
 
@@ -198,9 +198,10 @@ subtract `shared[p] != 0`, not `shared[p]`.
 need a shared-position field. Dense levels pass through to their child plan;
 elements copy non-fill values when their positions overlap.
 
-Hash levels retain the existing assembly bucket-count array, `tbl_count`,
-through freeze. Their one-element `qos_stop` buffer caches the child-position
-extent already computed by freeze, including holes and pooled vacancies.
+A hash stores its keys by child position, `key[q] == (parent, index)`, and its
+table slots and `perm` hold child positions. A frozen `key` spans exactly the
+child positions, pooled vacancies included, so its length is the child extent.
+Hash levels retain the assembly bucket-count array, `tbl_count`, through freeze.
 Setup reads at most the first and last frozen entries of each shard that is
 not below a hash. It rotates that shard's counts by `a * offset mod B`, then
 subtracts its shared boundary entry from its output bucket. The busiest output
@@ -208,7 +209,7 @@ bucket determines the common subtable capacity, keeping every bucket at most
 half full.
 
 Hash children keep their arbitrary positions: shard `p`'s child `q` lands at
-`q + child_shift[p]`, where `child_shift` concatenates the shards' `qos_stop`.
+`q + child_shift[p]`, where `child_shift` concatenates the lengths of the shards' `key`.
 The one exception is the shared entry, whose child lands at the earlier owner's
 `shared_dst[p]`. The hash passes that exception down as a `ShardShift`, which
 levels apply like an integer shift (`pos + shift[p]`, `shift[p] * shape`):
@@ -224,14 +225,16 @@ levels apply like an integer shift (`pos + shift[p]`, `shift[p] * shape`):
 - Lists are rejected below a hash: their children are addressed by entry, so
   filling a gap would move children.
 
-A hash merge needs no second phase. Worker `tid` handles shard `tid`'s
-pointers and children, and also owns output buckets `tid:P:B`. For each owned
-bucket, it visits the rotated bucket of every frozen source shard, plus that
-shard's moved entries, and inserts without resizing. It finds an entry's
-destination rank from its local rank, a binary search by index within its
-parent's sorted `perm` range, and writes the table slot there. Each bucket has
-one writer, including when `B > P`. Since bucket work is tied to the worker,
-every worker must reach every level, even with an empty shard.
+A hash merge needs no second phase. Worker `tid` copies shard `tid`'s keys,
+`perm`, pointers, and children: `perm` holds child positions, so a shard places
+its entries in traversal order without knowing their table slots. Worker `tid`
+also owns output buckets `tid:P:B`. For each owned bucket, it visits the rotated
+bucket of every frozen source shard, plus that shard's moved entries, and places
+each entry's child position in the first empty slot of its probe. Keys are
+distinct once shared entries are dropped, so placement never compares keys or
+resizes. Each bucket has one writer, including when `B > P`. Since bucket work
+is tied to the worker, every worker must reach every level, even with an empty
+shard.
 
 Pointers need the parent of the entry before each piece; setup records it from
 the previous piece's last entry, so shards write pointers independently. Byte

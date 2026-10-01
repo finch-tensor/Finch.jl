@@ -5,8 +5,12 @@
         @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
             view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
         @test sum(lvl.tbl_count) == length(lvl.perm)
-        @test lvl.qos_stop == [max(maximum(h -> lvl.tbl[h][3], lvl.perm; init=0),
-                                  maximum(lvl.pool; init=0))]
+        @test length(lvl.key) == max(maximum(lvl.perm; init=0), maximum(lvl.pool; init=0))
+        # Every entry's key looks up its own child position.
+        for q in lvl.perm
+            p, i = lvl.key[q]
+            @test Finch.sparse_hash_lookup(lvl.tbl_ctrl, lvl.tbl, lvl.key, p, i, B) == q
+        end
     end
     @testset "bucket rotation and slot hashing" begin
         h = Finch.sparse_hash_hash
@@ -32,30 +36,33 @@
     @testset "collisions, wraparound, and resizing" for subtables in (1, 4)
         cap = 64 * subtables
         ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, cap)
-        tbl = Vector{NTuple{3,Int}}(undef, cap)
+        tbl = zeros(Int, cap)
         # Choose colliding keys at the last slot of the first subtable, so
         # insertion must wrap without crossing into the next subtable.
         parents = filter(1:20000) do p
             hsh = Finch.sparse_hash_hash(p, 7)
             Finch.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
         end
-        entries = [(parents[q], 7, q) for q in 1:12]
-        for (p, i, q) in entries
-            Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, p, i, q, subtables)
+        key = [(parents[q], 7) for q in 1:12]
+        find(p, i) = Finch.sparse_hash_find(ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), subtables)
+        for (q, (p, i)) in enumerate(key)
+            h = find(p, i)
+            ctrl[h] = Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(p, i))
+            tbl[h] = q
         end
         @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
         for newcap in (cap, 2cap, 4cap)
             if newcap != cap
-                Finch.sparse_hash_table_resize!(ctrl, tbl, newcap, subtables)
+                Finch.sparse_hash_resize!(ctrl, tbl, key, newcap, subtables)
             end
-            for (p, i, q) in entries
-                @test Finch.sparse_hash_table_lookup(ctrl, tbl, p, i, subtables) == q
+            for (q, (p, i)) in enumerate(key)
+                @test Finch.sparse_hash_lookup(ctrl, tbl, key, p, i, subtables) == q
             end
-            @test Finch.sparse_hash_table_lookup(ctrl, tbl, parents[13], 7, subtables) == 0
+            @test Finch.sparse_hash_lookup(ctrl, tbl, key, parents[13], 7, subtables) == 0
         end
-        Finch.sparse_hash_table_insert_noresize!(ctrl, tbl, parents[1], 7, 99, subtables)
-        @test Finch.sparse_hash_table_lookup(ctrl, tbl, parents[1], 7, subtables) == 99
-        @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(entries)
+        # A present key probes to its own slot rather than a vacancy.
+        @test tbl[find(parents[1], 7)] == 1
+        @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(key)
     end
 
     @testset "tensor assembly and updates" for single_writer in (true, false), B in (1, 8)
@@ -93,7 +100,7 @@
         @test length(tensor.lvl.tbl) == B * 128
         @test length(tensor.lvl.perm) == 40
         check_counts(tensor.lvl)
-        @test Finch.sparse_hash_table_lookup(tensor.lvl.tbl_ctrl, tensor.lvl.tbl, 1, 1001, B) == 0
+        @test Finch.sparse_hash_lookup(tensor.lvl.tbl_ctrl, tensor.lvl.tbl, tensor.lvl.key, 1, 1001, B) == 0
     end
 
     @testset "pending writers share keys across bucket growth" begin

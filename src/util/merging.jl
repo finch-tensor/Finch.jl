@@ -120,14 +120,6 @@ function coalesce_shards!(src, dst, P, max_pos, bands)
     return dst
 end
 
-# Resize `v` to `n`, clearing any new storage as assemble_level! would.
-function coalesce_resize!(v, n, fill_value)
-    old = length(v)
-    resize!(v, n)
-    n > old && fill!(view(v, (old + 1):n), fill_value)
-    return v
-end
-
 @inbounds function binary_search(target::Int, arr)
     lo = 1
     hi = length(arr)
