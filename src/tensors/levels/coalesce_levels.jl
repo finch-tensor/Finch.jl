@@ -43,16 +43,35 @@ function gen_accumulator(lvl::DenseLevel, fill_value, eltype::Type, dims...)
     Dense(gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end])
 end
 
+function gen_accumulator(lvl::SparseHashLevel{Ti}, fill_value, eltype::Type, dims...) where {Ti}
+    SparseHashLevel{Ti}(
+        gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...),
+        dims[end], lvl.subtables,
+    )
+end
+
 function gen_accumulator(
     lvl::SparseListLevel{Ti}, fill_value, eltype::Type, dim, tail...
 ) where {Ti}
-    SparseHashLevel{Ti,true}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
+    SparseHashLevel{Ti}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
 end
 
 function gen_accumulator(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims...)
     SparseByteMap(
         gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end]
     )
+end
+
+function coalesce_similar_level(lvl::DenseLevel{Ti}, P) where {Ti}
+    DenseLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
+end
+
+function coalesce_similar_level(lvl::SparseListLevel{Ti}, P) where {Ti}
+    SparseListLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
+end
+
+function coalesce_similar_level(lvl::SparseByteMapLevel{Ti}, P) where {Ti}
+    SparseByteMapLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
 end
 
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
@@ -62,20 +81,20 @@ function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,
         coal_lvl = coal_lvl.lvl
     end
     P = get_num_tasks(device)
-    coalescent = similar_level(
-        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
-    )
+    # All participating hashes use the same bucket layout.
+    coalescent = coalesce_similar_level(coal_lvl, P)
     if mode == :fast
         accum = nothing
     else
         accum = gen_accumulator(
             coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
         )
+        accum = coalesce_similar_level(accum, P)
     end
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
-        transfer(MultiChannelMemory(device, P), lvl),
+        transfer(MultiChannelMemory(device, P), coalesce_similar_level(lvl, P)),
         coalescent,
         schedule,
         transfer(MultiChannelMemory(device, P), accum), ;
@@ -671,11 +690,13 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
-                    $bands = $band
-                    $ranges = Finch.do_band_ranges($shapes, $bands)
-                    # $bands = [$band for $tid in 1:($P)]
-                    # $ranges = [Finch.band_range(b..., $shapes) for b in $bands]
-                    Threads.@threads for $tid in 1:($P)
+                    $bands = Vector{NTuple{2,NTuple{$tsize,Int}}}(undef, $P)
+                    $ranges = Vector{UnitRange{Int}}(undef, $P)
+                    for $tid in 1:($P)
+                        $bands[$tid] = $band
+                        $ranges[$tid] = Finch.band_range($bands[$tid]..., $shapes)
+                    end
+                    Finch.@barrier Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
 
@@ -773,14 +794,15 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         end)
                     end
 
-                    if $unordered
+                    if typeof($(lvl_e).accumulator) === typeof($(lvl_e).lvl)
                         Finch.coalesce_shards!(
                             $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $ranges
                         )
                     else
-                        # SparseList output accumulates into hash tables, so copy
-                        # each band back into the output format before merging.
-                        Threads.@threads for $tid in 1:($P)
+                        # SparseList levels, including children of hashes,
+                        # accumulate into hashes. Restore the output format
+                        # whenever any level differs before merging the bands.
+                        Finch.@barrier Threads.@threads for $tid in 1:($P)
 
                             $(contain(ctx) do ctx_2
                                 diff = Dict()

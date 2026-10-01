@@ -92,8 +92,10 @@ end
 """
     @barrier args... ex
 
-Wrap `ex` in a let block that captures all free variables in `ex` that are bound in the arguments. This is useful for
-ensuring that the variables in `ex` are not mutated by the arguments.
+Evaluate `ex` in a closure whose free variables are bound in a `let` just before
+it. Generated code wraps every construct that creates a closure, such as
+`Threads.@threads` or a comprehension, so the closure captures only those
+single-assignment bindings: rebinding a variable elsewhere never boxes it.
 """
 macro barrier(args_ex...)
     (args, ex) = args_ex[1:(end - 1)], args_ex[end]
@@ -130,6 +132,9 @@ function wrap_closure(module_, ex)
     end
     append!(bound_vars, [v for v in args])
     find_var_uses!(captured_vars, bound_vars, body)
+    # Rebinding a constant global, such as a module or function, as a local
+    # would hide its value from inference and make every call through it dynamic.
+    filter!(v -> !(isdefined(module_, v) && isconst(module_, v)), captured_vars)
     quote
         let $(map(var -> :($var = $var), captured_vars)...)
             $ex
@@ -208,6 +213,9 @@ function find_var_uses!(capture_vars, bound_vars, ex)
                 find_var_uses!(capture_vars, finally_bindings, ex.args[4])
             end
         elseif ex.head == :call
+            find_var_uses!(capture_vars, bound_vars, ex.args[2:end])
+        elseif ex.head == :macrocall
+            # The macro name is not a variable.
             find_var_uses!(capture_vars, bound_vars, ex.args[2:end])
         elseif ex.head == :local
             foreach(ex.args) do e

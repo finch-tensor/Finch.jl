@@ -284,7 +284,7 @@ function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift, overlap)
     child = setup_coalesce!(
         lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape, overlap
     )
-    return (; child)
+    return (; child, init=child.init)
 end
 
 # Dense leaves positions below it where they were.
