@@ -269,7 +269,7 @@ end
 function setup_coalesce!(
     lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap
 ) where {Vf}
-    coalesce_resize!(dst.val, max_pos, Vf)
+    overlap ? coalesce_resize!(dst.val, max_pos, Vf) : resize!(dst.val, max_pos)
     return (; shift, overlap)
 end
 
