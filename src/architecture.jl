@@ -707,12 +707,11 @@ function virtual_parallel_region(
         end
     end
     return quote
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end
@@ -755,12 +754,11 @@ function virtual_parallel_region(
     end
 
     return quote
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end
@@ -812,12 +810,11 @@ function virtual_parallel_region(
             put!($tid_ch, $tid_tmp)
         end
 
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $chk_id in 1:($num_chks)
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $chk_id in 1:($num_chks)
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end

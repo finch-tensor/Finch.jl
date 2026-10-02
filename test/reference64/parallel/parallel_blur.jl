@@ -26,49 +26,46 @@ begin
     tmp_lvl_2_val_2 = (Finch).transfer((CPULocalMemory)(Finch.CPU{:test}(n)), tmp_lvl_2_val)
     input_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:test}(n)), input_lvl_3_val)
     output_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:test}(n)), output_lvl_3_val)
-    Threads.@threads :dynamic for tid = 1:n
-            Finch.@barrier begin
-                    @inbounds @fastmath(begin
-                                tmp_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), tmp_lvl_2_val_2)
-                                input_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), input_lvl_3_val_2)
-                                output_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), output_lvl_3_val_2)
-                                phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
-                                phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
-                                if phase_stop_2 >= phase_start_2
-                                    for y_8 = phase_start_2:phase_stop_2
-                                        input_lvl_q_2 = (1 - 1) * input_lvl_stop + y_8
-                                        input_lvl_q = (1 - 1) * input_lvl_stop + y_8
-                                        input_lvl_q_3 = (1 - 1) * input_lvl_stop + y_8
-                                        output_lvl_q = (1 - 1) * input_lvl_stop + y_8
-                                        Finch.resize_if_smaller!(tmp_lvl_2_val_3, input_lvl_2_stop)
-                                        Finch.fill_range!(tmp_lvl_2_val_3, 0, 1, input_lvl_2_stop)
-                                        for x_9 = 1:input_lvl_2_stop
-                                            tmp_lvl_q = (1 - 1) * input_lvl_2_stop + x_9
-                                            input_lvl_2_q = (input_lvl_q_2 - 1) * input_lvl_2_stop + (-1 + x_9)
-                                            input_lvl_2_q_2 = (input_lvl_q - 1) * input_lvl_2_stop + x_9
-                                            input_lvl_2_q_3 = (input_lvl_q_3 - 1) * input_lvl_2_stop + (1 + x_9)
-                                            input_lvl_3_val_4 = input_lvl_3_val_3[input_lvl_2_q]
-                                            input_lvl_3_val_5 = input_lvl_3_val_3[input_lvl_2_q_2]
-                                            input_lvl_3_val_6 = input_lvl_3_val_3[input_lvl_2_q_3]
-                                            tmp_lvl_2_val_3[tmp_lvl_q] = input_lvl_3_val_5 + input_lvl_3_val_4 + input_lvl_3_val_6 + tmp_lvl_2_val_3[tmp_lvl_q]
-                                        end
-                                        resize!(tmp_lvl_2_val_3, input_lvl_2_stop)
-                                        for x_10 = 1:input_lvl_2_stop
-                                            output_lvl_2_q = (output_lvl_q - 1) * input_lvl_2_stop + x_10
-                                            tmp_lvl_q_2 = (1 - 1) * input_lvl_2_stop + x_10
-                                            tmp_lvl_2_val_4 = tmp_lvl_2_val_3[tmp_lvl_q_2]
-                                            output_lvl_3_val_3[output_lvl_2_q] = tmp_lvl_2_val_4
-                                        end
+    Finch.@barrier Threads.@threads(:dynamic, for tid = 1:n
+                @inbounds @fastmath(begin
+                            tmp_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), tmp_lvl_2_val_2)
+                            input_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), input_lvl_3_val_2)
+                            output_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), output_lvl_3_val_2)
+                            phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
+                            phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
+                            if phase_stop_2 >= phase_start_2
+                                for y_8 = phase_start_2:phase_stop_2
+                                    input_lvl_q_2 = (1 - 1) * input_lvl_stop + y_8
+                                    input_lvl_q = (1 - 1) * input_lvl_stop + y_8
+                                    input_lvl_q_3 = (1 - 1) * input_lvl_stop + y_8
+                                    output_lvl_q = (1 - 1) * input_lvl_stop + y_8
+                                    Finch.resize_if_smaller!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                    Finch.fill_range!(tmp_lvl_2_val_3, 0, 1, input_lvl_2_stop)
+                                    for x_9 = 1:input_lvl_2_stop
+                                        tmp_lvl_q = (1 - 1) * input_lvl_2_stop + x_9
+                                        input_lvl_2_q = (input_lvl_q_2 - 1) * input_lvl_2_stop + (-1 + x_9)
+                                        input_lvl_2_q_2 = (input_lvl_q - 1) * input_lvl_2_stop + x_9
+                                        input_lvl_2_q_3 = (input_lvl_q_3 - 1) * input_lvl_2_stop + (1 + x_9)
+                                        input_lvl_3_val_4 = input_lvl_3_val_3[input_lvl_2_q]
+                                        input_lvl_3_val_5 = input_lvl_3_val_3[input_lvl_2_q_2]
+                                        input_lvl_3_val_6 = input_lvl_3_val_3[input_lvl_2_q_3]
+                                        tmp_lvl_2_val_3[tmp_lvl_q] = input_lvl_3_val_5 + input_lvl_3_val_4 + input_lvl_3_val_6 + tmp_lvl_2_val_3[tmp_lvl_q]
+                                    end
+                                    resize!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                    for x_10 = 1:input_lvl_2_stop
+                                        output_lvl_2_q = (output_lvl_q - 1) * input_lvl_2_stop + x_10
+                                        tmp_lvl_q_2 = (1 - 1) * input_lvl_2_stop + x_10
+                                        tmp_lvl_2_val_4 = tmp_lvl_2_val_3[tmp_lvl_q_2]
+                                        output_lvl_3_val_3[output_lvl_2_q] = tmp_lvl_2_val_4
                                     end
                                 end
-                                phase_start_3 = max(1, 1 + fld(input_lvl_stop * tid, n))
-                                if input_lvl_stop >= phase_start_3
-                                    input_lvl_stop + 1
-                                end
-                            end)
-                    nothing
-                end
-        end
+                            end
+                            phase_start_3 = max(1, 1 + fld(input_lvl_stop * tid, n))
+                            if input_lvl_stop >= phase_start_3
+                                input_lvl_stop + 1
+                            end
+                        end)
+            end)
     resize!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
     (output = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(output_lvl_3_val_2), input_lvl_2_stop), input_lvl_stop)),)
 end

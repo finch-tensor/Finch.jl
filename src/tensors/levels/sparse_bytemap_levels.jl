@@ -259,18 +259,22 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, diff, style
 )
+    srt = distribute_buffer(ctx, lvl.srt, arch, style)
+    # length(MultiChannelBuffer) is 0, so re-derive the dirty count from the
+    # distributed srt; declare_level! needs it to clear last run's entries.
+    qos_fill = freshen(ctx, lvl.tag, :_qos_fill)
+    qos_stop = freshen(ctx, lvl.tag, :_qos_stop)
+    push_preamble!(ctx, :($qos_stop = $qos_fill = length($srt)))
     diff[lvl.tag] = VirtualSparseByteMapLevel(
         lvl.tag,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
-        distribute_buffer(ctx, lvl.srt, arch, style),
+        srt,
         lvl.shape,
-        distribute_buffer(ctx, lvl.qos_fill, arch, style),
-        # lvl.qos_fill,
-        # lvl.qos_stop,
-        distribute_buffer(ctx, lvl.qos_stop, arch, style),
+        qos_fill,
+        qos_stop,
     )
 end
 
@@ -308,7 +312,7 @@ end
 virtual_level_eltype(lvl::VirtualSparseByteMapLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseByteMapLevel) = virtual_level_fill_value(lvl.lvl)
 @inline sample_dims(lvl::VirtualSparseByteMapLevel) = 1 + sample_dims(lvl.lvl)
-@inline all_dense(lvl::VirtualSparseByteMapLevel) = true & all_dense(lvl.lvl)
+@inline all_dense(lvl::VirtualSparseByteMapLevel) = false & all_dense(lvl.lvl)
 
 postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 
@@ -342,18 +346,36 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
         ctx,
         quote
             $srt_shape_init
-            for $r in 1:($(lvl.qos_fill))
-                $q = $(lvl.srt)[$r]
-                $p = $parent_position
-                $(lvl.ptr)[$p] = $(Tp(0))
-                $(lvl.ptr)[$p + 1] = $(Tp(0))
-                $(lvl.tbl)[$q] = false
-                if $(supports_reassembly(lvl.lvl))
-                    $(contain(
-                        ctx_2 ->
-                            assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
-                        ctx,
-                    ))
+            # Dirty positions are sorted, so visiting them streams through memory;
+            # past about 1/16 of the positions, clearing them all is cheaper.
+            if $(lvl.qos_fill) > length($(lvl.tbl)) >>> 4
+                fill!($(lvl.ptr), $(Tp(0)))
+                fill!($(lvl.tbl), false)
+                $(
+                    if supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel)
+                        contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2, lvl.lvl, literal(Tp(1)),
+                                value(:(length($(lvl.tbl))), Tp),
+                            ),
+                            ctx,
+                        )
+                    end
+                )
+            else
+                for $r in 1:($(lvl.qos_fill))
+                    $q = $(lvl.srt)[$r]
+                    $p = $parent_position
+                    $(lvl.ptr)[$p] = $(Tp(0))
+                    $(lvl.ptr)[$p + 1] = $(Tp(0))
+                    $(lvl.tbl)[$q] = false
+                    if $(supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel))
+                        $(contain(
+                            ctx_2 ->
+                                assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
+                            ctx,
+                        ))
+                    end
                 end
             end
             $(lvl.qos_fill) = 0
@@ -395,17 +417,28 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     q_stop = freshen(ctx, lvl.tag, :q_stop)
     q = freshen(ctx, lvl.tag, :q)
     old = freshen(ctx, lvl.tag, :old)
+    ptr_len = freshen(ctx, lvl.tag, :ptr_len)
+    tbl_len = freshen(ctx, lvl.tag, :tbl_len)
 
     quote
         $q_start = ($(ctx(pos_start)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(Tp(1))
         $q_stop = $(ctx(pos_stop)) * $(ctx(lvl.shape))
+        # Existing storage is already clean (declare_level! clears dirty entries),
+        # so only initialize what this call grows.
+        $ptr_len = length($(lvl.ptr))
         Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
-        $old = $q_start
+        Finch.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
+        $tbl_len = length($(lvl.tbl))
+        $old = max($q_start, $tbl_len + 1)
         Finch.resize_if_smaller!($(lvl.tbl), $q_stop)
         Finch.fill_range!($(lvl.tbl), false, $old, $q_stop)
         $(contain(
-            ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(old, Tp), value(q_stop, Tp)), ctx
+            # Children that can't be reassembled are stale after a run, so redo them all.
+            ctx_2 -> assemble_level!(
+                ctx_2, lvl.lvl,
+                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp), value(q_stop, Tp),
+            ),
+            ctx,
         ))
     end
 end
@@ -425,8 +458,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
-            resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
+            Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
+            Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
             $srt_shape_init
@@ -642,6 +675,13 @@ function unfurl(
                 preamble=quote
                     $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
                     $dirty = false
+                    $(if lvl.lvl isa VirtualElementLevel
+                        # An Element's value is only meaningful where tbl is set, so
+                        # reset it on first touch instead of when declaring.
+                        :(if !$(lvl.tbl)[$my_q]
+                            $(lvl.lvl.val)[$my_q] = $(lvl.lvl.Vf)
+                        end)
+                    end)
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
@@ -668,203 +708,114 @@ function unfurl(
 end
 
 function sample(tid, lvl::SparseByteMapLevel)
+    if lvl.lvl isa ElementLevel
+        # Draw a stored entry; the element level would pick a random dense position.
+        q = rand(lvl.srt.data[tid])
+        return (mod1(q, lvl.shape),), fld(q - 1, lvl.shape) + 1
+    end
     tup, idx = sample(tid, lvl.lvl)
     idx_2 = mod1(idx, lvl.shape)
     pos_2 = fld(idx - 1, lvl.shape) + 1
     return (tup..., idx_2), pos_2
 end
 
-@inbounds function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    nnz = sum(length, lvl.srt.data)
-    if nnz < 1
-        return false
-    end
-
-    resize!(lvl_ptr, max_pos + 1)
-    resize!(lvl_tbl, max_pos * lvl.shape)
-    resize!(lvl_srt, nnz)
-
-    lvl_ptr[1] = 1
-
-    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, meta, P, style)
-end
-
-@inbounds function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    nnz = sum(length, lvl.srt.data)
-    if nnz < 1
-        return false
-    end
-
-    for p in 1:P - 1
-        srt_p = lvl.srt.data[p]
-        srt_next = lvl.srt.data[p + 1]
-        if !isempty(srt_p) && !isempty(srt_next) && srt_p[end] == srt_next[1]
-            nnz -= 1
-            srt_p[end] = -1
-        end
-    end
-
-
-    resize!(lvl_ptr, max_pos + 1)
-    resize!(lvl_tbl, max_pos * lvl.shape)
-    resize!(lvl_srt, nnz)
-
-    lvl_ptr[1] = 1
-    if max_pos == 1
-        lvl_ptr[end] = nnz + 1
-    end
-
-    setup_coalesce!(lvl.lvl, length(lvl_tbl), coalescent.lvl, meta, P, style; pos_map=pos_map, was_dense=true)
-end
-
-function coalesce_fast!(tid, meta, P, lvl::SparseByteMapLevel, coalescent, was_dense)
-    ptr = lvl.ptr.data
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overlap)
     srt = lvl.srt.data
-    tbl = lvl.tbl.data
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
+    shape = lvl.shape
+    q_shift = shift .* shape
+    # Shards concatenate, except that a hash above may move a block of a shard's
+    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
+    # traversal order, so the shard's entries under it form one run of `srt`,
+    # which belongs right after the owner's entries under the same block. Only
+    # `srt` and `ptr` make room for it: children are addressed by position.
+    under(t, lo, len) =
+        searchsortedfirst(srt[t], (lo - 1) * shape + 1):searchsortedlast(srt[t], (lo + len - 1) * shape)
+    moved = [1:0 for _ in 1:P]
+    owner = zeros(Int, P)
+    split = [length(srt[t]) for t in 1:P]
+    for t in 1:P
+        s = shift[t]
+        s isa ShardShift && s.len > 0 || continue
+        moved[t] = under(t, s.src, s.len)
+        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
+        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
+    end
+    # Emit pieces, runs of one shard's local ranks, in destination order. Piece
+    # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
+    # `start`, skipping `lo` when it repeats the entry before it (`dup`); `prev`
+    # is the parent before the piece.
+    pieces = [NTuple{5,Int}[] for _ in 1:P]
+    shared = zeros(Int, P)
+    nnz = 0
+    last_q = 0
+    function emit!(t, lo, hi)
+        lo > hi && return nothing
+        dup = srt[t][lo] + q_shift[t] == last_q
+        dup && (shared[t] = srt[t][lo])
+        push!(pieces[t], (lo, hi, nnz + 1, dup, fld(last_q - 1, shape) + 1))
+        nnz += hi - lo + 1 - dup
+        last_q = srt[t][hi] + q_shift[t]
+        return nothing
+    end
+    for o in 1:P
+        m, b = moved[o], split[o]
+        emit!(o, 1, min(first(m) - 1, b))
+        emit!(o, last(m) + 1, b)
+        for t in (o + 1):P
+            owner[t] == o && emit!(t, first(moved[t]), last(moved[t]))
+        end
+        emit!(o, b + 1, first(m) - 1)
+        emit!(o, max(last(m), b) + 1, length(srt[o]))
+    end
+    shared_dst = [q == 0 ? 0 : q + q_shift[t] for (t, q) in enumerate(shared)]
+    # Unoccupied bounds and bitmap entries retain their cleared values.
+    ptr_start = min(length(dst.ptr), max_pos + 1) + 1
+    tbl_start = min(length(dst.tbl), max_pos * shape) + 1
+    resize!(dst.ptr, max_pos + 1)
+    resize!(dst.tbl, max_pos * shape)
+    empty!(dst.srt)
+    resize!(dst.srt, nnz)
+    dst.ptr[1] = 1
+    # Both shards' leaves under a shared entry overlap.
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * shape, dst.lvl, P, q_shift, any(!iszero, shared)
+    )
+    # ptr[1] is the sentinel, not an unoccupied parent bound.
+    init = (
+        (dst.ptr, max(2, ptr_start), 0),
+        (dst.tbl, tbl_start, false), child.init...,
+    )
+    return (; shift, q_shift, pieces, shared, shared_dst, nnz, child, init)
 end
 
-function coalesce_dense!(tid, meta, P, lvl::SparseByteMapLevel, coalescent)
-    ptr = lvl.ptr.data
-    srt = lvl.srt.data
-    tbl = lvl.tbl.data
-    lvl_ptr = coalescent.ptr
-    lvl_tbl = coalescent.tbl
-    lvl_srt = coalescent.srt
-
-    fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, lvl.shape, lvl_ptr, lvl_srt, lvl_tbl)
-    coalesce_dense!(tid, meta, P, lvl.lvl, coalescent.lvl)
-end
-
-@inbounds function fastmerge_spbytemap!(tid, meta, ptr, srt, tbl, P, shape, lvl_ptr, lvl_srt, lvl_tbl)
-    nnz_cutoffs = Vector{Int}(undef, P + 1)
-    nnz_cutoffs[1] = 1
-    for p in 2:P+1
-        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(srt[p - 1])
-        if !isempty(srt[p - 1]) && srt[p - 1][end] < 0
-            nnz_cutoffs[p] -= 1
-        end
+# Each shard writes its pieces of srt. ptr keeps freeze_level!'s layout, with
+# bounds only around occupied positions, so the merge stays O(nnz). The shard
+# owning a parent's first entry writes its bounds.
+function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
+    src = lvl.srt.data[tid]
+    shape = lvl.shape
+    q_shift = plan.q_shift[tid]
+    for local_q in src
+        dst.tbl[local_q + q_shift] = true
     end
-    nnz = nnz_cutoffs[end] - 1
-    max_pos = length(lvl_ptr) - 1
-
-    base, rem = divrem(nnz, P)
-    offset = (tid - 1) * base + min(tid - 1, rem)
-    chunksize = base + (tid <= rem ? 1 : 0)
-
-    if chunksize > 0
-        work_lb = 1 + offset
-        work_ub = work_lb + chunksize - 1
-
-        proc_id_lower = binary_search(work_lb, nnz_cutoffs)
-        nz_id_lower = work_lb - nnz_cutoffs[proc_id_lower] + 1
-        proc_id_upper = binary_search(work_ub, nnz_cutoffs)
-        nz_id_upper = work_ub - nnz_cutoffs[proc_id_upper] + 1
-
-        lfbr_lower = binary_search(nz_id_lower, ptr[proc_id_lower])
-        lfbr_upper = binary_search(nz_id_upper, ptr[proc_id_upper])
-
-        pos_lb = meta[tid][proc_id_lower + 1] + lfbr_lower - 1
-        pos_ub = min(meta[tid][proc_id_upper + 1] + lfbr_upper - 1, max_pos)
-
-
-        if nz_id_upper < ptr[proc_id_upper][lfbr_upper + 1] - 1
-            shares_border = true
-        elseif lfbr_upper < length(ptr[proc_id_upper]) - 1
-            shares_border = false
-        elseif proc_id_upper < P
-            shares_border = meta[tid][proc_id_upper + 2] == pos_ub
-        else
-            shares_border = false
-        end
-
-        proc = proc_id_lower
-        srt_read = nz_id_lower
-        srt_write = work_lb
-        srt_ceil = srt_write + chunksize
-        while srt_write < srt_ceil
-            raw_start = meta[tid][proc + 1] - (meta[tid][P + 1 + proc] == 1 ? 1 : 0)
-            pos_shift = (raw_start - 1) * shape
-            ele = srt[proc][srt_read] + pos_shift
-            if ele > 0
-                lvl_tbl[ele] = true
-                lvl_srt[srt_write] = ele
-                srt_write += 1
+    for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        for r in (lo + dup):hi
+            rank = start + r - lo - dup
+            q = src[r] + q_shift
+            dst.srt[rank] = q
+            p = fld(q - 1, shape) + 1
+            if p != prev
+                dst.ptr[prev + 1] = rank
+                dst.ptr[p] = rank
             end
-            srt_read += 1
-
-            if srt_read > length(srt[proc])
-                srt_read = 1
-                proc += 1
-            end
-        end
-
-        if max_pos != 1
-            proc = proc_id_lower
-            pos_read = lfbr_lower
-
-            pos_write = 2
-            for p in 1:proc - 1
-                pos_write += length(ptr[p]) - 1
-                meta[tid][P + 1 + p] == 1 && (pos_write -= 1)
-            end
-            pos_write += lfbr_lower - 1
-
-            ceil = 3
-            for p in 1:proc_id_upper - 1
-                ceil += length(ptr[p]) - 1
-                meta[tid][P + 1 + p] == 1 && (ceil -= 1)
-            end
-            ceil += lfbr_upper - 1
-            shares_border && (ceil -= 1)
-
-            prefix = ptr[proc][pos_read] + nnz_cutoffs[proc] - 1
-            while pos_write < ceil
-                delta = ptr[proc][pos_read + 1] - ptr[proc][pos_read]
-                mul = delta > 0
-                prefix += delta * mul
-                lvl_ptr[pos_write] = prefix
-                pos_write += 1
-                pos_read += 1
-
-                if pos_read > length(ptr[proc]) - 1
-                    pos_read = 1
-                    old_proc = proc
-                    proc += 1
-                    if proc > P
-                        break
-                    end
-                    if meta[tid][P + 1 + old_proc] == 1
-                        pos_write -= 1
-                    end
-                end
-            end
+            rank == plan.nnz && (dst.ptr[p + 1] = rank + 1)
+            prev = p
         end
     end
 
-    last_pos = 0
-    for p in 1:P
-        ancestor_shared = meta[tid][P + 1 + p] == 1
-        last_pos += length(ptr[p]) - 1
-        meta[tid][p + 1] = last_pos
-        if ancestor_shared
-            meta[tid][P + 1 + p] = 1
-            last_pos -= 1
-        else
-            meta[tid][P + 1 + p] = 0
-        end
-    end
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards. Every worker recurses, even with an empty shard.
+    leaves = coalesce_leaves(lvl.lvl)
+    child_runs = (((q - 1) * leaves + 1):(q * leaves) for q in src)
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
 end

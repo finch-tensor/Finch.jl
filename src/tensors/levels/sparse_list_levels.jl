@@ -257,9 +257,9 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
+        freshen(ctx, lvl.tag, :_qos_fill),
+        freshen(ctx, lvl.tag, :_qos_stop),
+        freshen(ctx, lvl.tag, :_prev_pos),
     )
 end
 
@@ -631,216 +631,84 @@ function sample(tid, lvl::SparseListLevel)
     return (tup..., idx_2), lfbr
 end
 
-function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    lvl_ptr = coalescent.ptr
-    lvl_idx = coalescent.idx
-    nnz = sum(length, lvl.idx.data)
-    if nnz < 1
-        return false
-    end
-
-    resize!(lvl_idx, nnz)
-    resize!(lvl_ptr, max_pos + 1) ##maybe need fill 0
-
-    lvl_ptr[1] = 1
-    lvl_ptr[end] = nnz + 1
-
-    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, meta, P, style)
-end
-
-function setup_coalesce!(lvl::SparseListLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
-    lvl_ptr = coalescent.ptr
-    lvl_idx = coalescent.idx
-    nnz = sum(length, lvl.idx.data)
-    if nnz < 1
-        return false
-    end
-
-    @assert !isnothing(pos_map)
-
-    if !was_dense
-        for p in 1:P - 1
-            if (pos_map[p + 1] == pos_map[p + 2] - (length(lvl.ptr.data[p + 1]) - 1) + 1) && lvl.idx.data[p][end] == lvl.idx.data[p + 1][1]
-                nnz -= 1
-                lvl.idx.data[p][end] = -1
-            end
-            pos_map[p + 1] = length(lvl.idx.data[p])
-        end
-    else
-        for p in 1:P - 1
-            last_nz_pos_p = binary_search(length(lvl.idx.data[p]), lvl.ptr.data[p])
-            first_nz_pos_p1 = binary_search(1, lvl.ptr.data[p + 1])
-            if (pos_map[p + 1] - (length(lvl.ptr.data[p]) - 1) + last_nz_pos_p ==
-                pos_map[p + 2] - (length(lvl.ptr.data[p + 1]) - 1) + first_nz_pos_p1 + 1) &&
-               lvl.idx.data[p][end] == lvl.idx.data[p + 1][1]
-                nnz -= 1
-                lvl.idx.data[p][end] = -1
-            end
-            pos_map[p + 1] = length(lvl.idx.data[p])
-        end
-    end
-    
-    resize!(lvl_idx, nnz)
-    resize!(lvl_ptr, max_pos + 1) ##maybe need fill 0
-
-    lvl_ptr[1] = 1
-    lvl_ptr[end] = nnz + 1
-
-    setup_coalesce!(lvl.lvl, nnz, coalescent.lvl, meta, P, style; pos_map)
-end
-
-function coalesce_fast!(tid, meta, P, lvl::SparseListLevel, coalescent, was_dense)
+function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
+    # A hash's shared child may map into an earlier shard's range, and moving a
+    # list's entries there would move their children too.
+    eltype(shift) <: ShardShift &&
+        throw(ArgumentError("SparseList levels cannot be coalesced below a SparseHash"))
     ptr = lvl.ptr.data
     idx = lvl.idx.data
-    lvl_ptr = coalescent.ptr
-    lvl_idx = coalescent.idx
-
-    fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, meta, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, false)
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
+    off = zeros(Int, P)
+    prev = zeros(Int, P)
+    nnz = 0
+    last_pos = 0
+    last_idx = 0
+    for p in 1:P
+        off[p] = nnz
+        prev[p] = last_pos
+        n = length(idx[p])
+        n == 0 && continue
+        # A shard shares its first entry if the previous shard ended on it.
+        if searchsortedlast(ptr[p], 1) + shift[p] == last_pos && idx[p][1] == last_idx
+            shared[p] = 1
+            shared_dst[p] = nnz
+        end
+        nnz += n - (shared[p] != 0)
+        last_pos = searchsortedlast(ptr[p], n) + shift[p]
+        last_idx = idx[p][n]
+    end
+    # Both buffers are rewritten completely; discard old contents before growth.
+    empty!(dst.idx)
+    resize!(dst.idx, nnz)
+    empty!(dst.ptr)
+    resize!(dst.ptr, max_pos + 1)
+    # Both shards' leaves under a shared entry overlap.
+    child = setup_coalesce!(
+        lvl.lvl, nnz, dst.lvl, P, off .- (shared .!= 0), any(!iszero, shared)
+    )
+    init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
+    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
 end
 
-@inbounds function fastmerge_splist!(tid, ptr, idx, P, lvl_ptr, lvl_idx, pos_offsets, was_dense)
-    nnz_cutoffs = Vector{Int}(undef, P + 1)
-    nnz_cutoffs[1] = 1
-    for p in 2:P+1
-        nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(idx[p - 1])
-        if idx[p - 1][end] < 0
-            nnz_cutoffs[p] -= 1
+# Owned entries fill consecutive slots after earlier shards' entries. Each ptr
+# entry is written by the shard owning the first entry at or after it.
+function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
+    ptr = lvl.ptr.data[tid]
+    idx = lvl.idx.data[tid]
+    n = length(idx)
+    # Every worker reaches every level: a hash below also inserts its buckets.
+    n == 0 && return coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, ())
+    shift = plan.shift[tid]
+    slot = plan.off[tid] + 1
+    pos_prev = plan.prev[tid]
+    shared = plan.shared[tid]
+    r = 1
+    pos_first = searchsortedlast(ptr, 1)
+    pos_last = searchsortedlast(ptr, n)
+    for pos in pos_first:pos_last
+        stop = ptr[pos + 1] - 1
+        r == shared && (r += 1)
+        r > stop && continue
+        for x in (pos_prev + 1):(pos + shift)
+            dst.ptr[x] = slot
+        end
+        pos_prev = pos + shift
+        for s in r:stop
+            s == shared && continue
+            dst.idx[slot] = idx[s]
+            slot += 1
+        end
+        r = stop + 1
+    end
+    if slot - 1 == plan.nnz && slot > plan.off[tid] + 1
+        for x in (pos_prev + 1):length(dst.ptr)
+            dst.ptr[x] = slot
         end
     end
-    nnz = nnz_cutoffs[end] - 1
-    max_pos = length(lvl_ptr) - 1
 
-    base, rem = divrem(nnz, P)
-    offset = (tid - 1) * base + min(tid - 1, rem)
-    chunksize = base + (tid <= rem ? 1 : 0)
-    work_lb = 1 + offset
-
-    proc_id_lower = binary_search(work_lb, nnz_cutoffs)
-    nz_id_lower = work_lb - nnz_cutoffs[proc_id_lower] + 1
-
-    if was_dense
-        proc = proc_id_lower
-        idx_read = nz_id_lower
-        idx_write = nnz_cutoffs[proc] + nz_id_lower - 1
-        ceil = idx_write + chunksize
-        while idx_write < ceil
-            lvl_idx[idx_write] = idx[proc][idx_read]
-            idx_read += 1
-            idx_write += 1
-
-            if idx_read > length(idx[proc])
-                idx_read = 1
-                proc += 1
-            end
-        end
-
-        pos_base, pos_rem = divrem(max_pos - 1, P)
-        pos_offset = (tid - 1) * pos_base + min(tid - 1, pos_rem)
-        pos_chunksize = pos_base + (tid <= pos_rem ? 1 : 0)
-        pos_lb = 2 + pos_offset
-        pos_ub = pos_lb + pos_chunksize - 1
-
-        for pos in pos_lb:pos_ub
-            total = 1
-            for p in 1:P
-                total += ptr[p][pos] - 1
-            end
-            lvl_ptr[pos] = total
-        end
-    else
-        work_ub = work_lb + chunksize - 1
-        proc_id_upper = binary_search(work_ub, nnz_cutoffs)
-        nz_id_upper = work_ub - nnz_cutoffs[proc_id_upper] + 1
-        lfbr_lower = binary_search(nz_id_lower, ptr[proc_id_lower])
-        lfbr_upper = binary_search(nz_id_upper, ptr[proc_id_upper])
-
-        pos_lb = pos_offsets[tid][proc_id_lower + 1] + lfbr_lower - 1
-        pos_ub = min(pos_offsets[tid][proc_id_upper + 1] + lfbr_upper - 1, max_pos - 1)
-
-        if nz_id_upper < ptr[proc_id_upper][lfbr_upper + 1] - 1
-            shares_border = true
-        elseif lfbr_upper < length(ptr[proc_id_upper]) - 1
-            shares_border = false
-        elseif proc_id_upper < P
-            shares_border = pos_offsets[tid][proc_id_upper + 2] == pos_ub
-        else
-            shares_border = false
-        end
-
-        ##copy idx
-        proc = proc_id_lower
-        idx_read = nz_id_lower
-        idx_write = nnz_cutoffs[proc] + nz_id_lower - 1
-        ceil = idx_write + chunksize
-        while idx_write < ceil
-            val = idx[proc][idx_read]
-            if val > 0
-                lvl_idx[idx_write] = val
-                idx_write += 1
-            end
-            idx_read += 1
-
-            if idx_read > length(idx[proc])
-                idx_read = 1
-                proc += 1
-            end
-        end
-
-        ##copy pos
-        ##max_pos == 1 means lvl_ptr is just [1, nnz+1], already set by setup_coalesce!
-        if max_pos != 1
-            proc = proc_id_lower
-            pos_read = lfbr_lower
-
-            pos_write = 2
-            for p in 1:proc - 1
-                pos_write += length(ptr[p]) - 1
-                (idx[p][end] < 0 || pos_offsets[tid][P + 1 + p] == 1) && (pos_write -= 1)
-            end
-            pos_write += lfbr_lower - 1
-
-            ceil = 3
-            for p in 1:proc_id_upper - 1
-                ceil += length(ptr[p]) - 1
-                (idx[p][end] < 0 || pos_offsets[tid][P + 1 + p] == 1) && (ceil -= 1)
-            end
-            ceil += lfbr_upper - 1
-            shares_border && (ceil -= 1)
-
-            prefix = ptr[proc][pos_read] + nnz_cutoffs[proc] - 1
-            while pos_write < ceil
-                delta = ptr[proc][pos_read + 1] - ptr[proc][pos_read ]
-                if pos_read == length(ptr[proc]) - 1 && idx[proc][end] < 0
-                    delta -= 1
-                end
-                prefix += delta
-                lvl_ptr[pos_write] = prefix
-                pos_write += 1
-                pos_read += 1
-
-                if pos_read > length(ptr[proc]) - 1
-                    pos_read = 1
-                    old_proc = proc
-                    proc += 1
-                    if proc > P
-                        break
-                    end
-                    if idx[old_proc][end] < 0 || pos_offsets[tid][P + 1 + old_proc] == 1
-                        pos_write -= 1
-                    end
-                end
-            end
-        end
-
-        for p in 1:P
-            pos_offsets[tid][p + 1] = nnz_cutoffs[p]
-            if idx[p][end] < 0
-                pos_offsets[tid][p + 1] += 1
-                pos_offsets[tid][P + 1 + p] = 1
-            else
-                pos_offsets[tid][P + 1 + p] = 0
-            end
-        end
-    end
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards.
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, (1:(n * coalesce_leaves(lvl.lvl)),))
 end

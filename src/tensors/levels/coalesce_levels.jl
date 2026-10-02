@@ -43,16 +43,35 @@ function gen_accumulator(lvl::DenseLevel, fill_value, eltype::Type, dims...)
     Dense(gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end])
 end
 
+function gen_accumulator(lvl::SparseHashLevel{Ti}, fill_value, eltype::Type, dims...) where {Ti}
+    SparseHashLevel{Ti}(
+        gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...),
+        dims[end], lvl.subtables,
+    )
+end
+
 function gen_accumulator(
     lvl::SparseListLevel{Ti}, fill_value, eltype::Type, dim, tail...
 ) where {Ti}
-    SparseHashLevel{Ti,true}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
+    SparseHashLevel{Ti}(gen_accumulator(lvl.lvl, fill_value, eltype, tail...), dim)
 end
 
 function gen_accumulator(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims...)
     SparseByteMap(
         gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...), dims[end]
     )
+end
+
+function coalesce_similar_level(lvl::DenseLevel{Ti}, P) where {Ti}
+    DenseLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
+end
+
+function coalesce_similar_level(lvl::SparseListLevel{Ti}, P) where {Ti}
+    SparseListLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
+end
+
+function coalesce_similar_level(lvl::SparseByteMapLevel{Ti}, P) where {Ti}
+    SparseByteMapLevel{Ti}(coalesce_similar_level(lvl.lvl, P), lvl.shape)
 end
 
 function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,Lvl}
@@ -62,20 +81,20 @@ function CoalesceLevel(device::Device, lvl::Lvl; mode=:normalize) where {Device,
         coal_lvl = coal_lvl.lvl
     end
     P = get_num_tasks(device)
-    coalescent = similar_level(
-        coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
-    )
+    # All participating hashes use the same bucket layout.
+    coalescent = coalesce_similar_level(coal_lvl, P)
     if mode == :fast
         accum = nothing
     else
         accum = gen_accumulator(
             coal_lvl, level_fill_value(Lvl), level_eltype(Lvl), level_size(coal_lvl)...
         )
+        accum = coalesce_similar_level(accum, P)
     end
     schedule = FinchStaticSchedule{:dynamic}()
     CoalesceLevel{Device}(
         device,
-        transfer(MultiChannelMemory(device, P), lvl),
+        transfer(MultiChannelMemory(device, P), coalesce_similar_level(lvl, P)),
         coalescent,
         schedule,
         transfer(MultiChannelMemory(device, P), accum), ;
@@ -400,7 +419,9 @@ function distribute_level(
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         distribute_level(ctx, lvl.coalescent, arch, diff, style),
         lvl.schedule,
-        lvl.accumulator,
+        # Each outer task needs its own accumulator, or nested tasks share channels.
+        lvl.mode == :fast ? lvl.accumulator :
+        distribute_level(ctx, lvl.accumulator, arch, diff, style),
         lvl.Tv,
         lvl.Device,
         lvl.Lvl,
@@ -542,14 +563,14 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 lvl_3 = distribute_level(
                     ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
                 )
-                lvl_4 = declare_level!(ctx_3, lvl_3, literal(0), init)
-                freeze_level!(ctx_3, lvl_4, literal(0))
+                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
+                freeze_level!(ctx_3, lvl_4, pos)
                 nothing
             end
         end,
     )
-    coalescent_2 = declare_level!(ctx, lvl.coalescent, literal(0), init)
-    freeze_level!(ctx, coalescent_2, literal(0))
+    coalescent_2 = declare_level!(ctx, lvl.coalescent, pos, init)
+    freeze_level!(ctx, coalescent_2, pos)
     lvl.declared = true
     lvl
 end
@@ -614,9 +635,12 @@ function assemble_level!(ctx, lvl::VirtualCoalesceLevel, pos_start, pos_stop)
 end
 
 supports_reassembly(::VirtualCoalesceLevel) = false
-init_gfm(P) = [[1] for _ in 1:P]
-init_fast_meta(P) = [vcat(ones(Int, P + 1), zeros(Int, P)) for _ in 1:P]
-init_posmap(P) = [1 for _ in 1:(P + 1)]
+
+# Named functions so the generated code has no comprehension for the parser to trip on.
+get_bands(P, shapes, style::MergeDense) = [balance(t, P, shapes, style) for t in 1:(P)]
+get_bands(sampler, P, shapes, style::MergeRandom) =
+    [balance(sampler, t, P, shapes, style) for t in 1:(P)]
+do_band_ranges(shapes, bands) = [band_range(b..., shapes) for b in bands]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     lvl.declared || return lvl
@@ -630,35 +654,32 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     max_pos = factor
     mode = lvl.mode
 
-    meta = freshen(ctx, :meta)
     tid = freshen(ctx, :tid)
-    dec = freshen(ctx, :declared)
     if mode == :fast
+        # Tasks wrote their shards directly, without accumulating.
         push_preamble!(
             ctx,
             quote
-                $meta = Finch.init_fast_meta($P)
-                $dec = Finch.setup_coalesce!(
-                    $(lvl_e), $max_pos, $(lvl_c), nothing, $P, MergeFast()
-                )
-                if $dec
-                    Threads.@threads for $tid in 1:($P)
-                        Finch.coalesce_fast!($tid, $meta, $P, $(lvl_e), $(lvl_c), false)
-                    end
-                end
+                Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, nothing)
             end,
         )
     else
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
+        bands = freshen(ctx, :bands)
+        ranges = freshen(ctx, :ranges)
         mask = freshen(ctx, :mask)
         nnz = freshen(ctx, :nnz)
         sid = freshen(ctx, :sid)
         unordered = freshen(ctx, :unordered)
-        pos_map = freshen(ctx, :pos_map)
         shapes = freshen(ctx, :shapes)
         tsize = sample_dims(lvl)
         dense = all_dense(lvl)
+        band = if dense
+            :(Finch.get_bands($P, $shapes, Finch.MergeDense()))
+        else
+            :(Finch.get_bands($(lvl.sampler), $P, $shapes, Finch.MergeRandom()))
+        end
 
         push_preamble!(ctx,
             quote
@@ -668,14 +689,11 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                     if !$dense
                         $(lvl.sampler) = Finch.build_sampler($(lvl_e), $P, $nnz, $tsize)
                     end
-                    Threads.@threads for $tid in 1:($P)
-                        if !$dense
-                            $lb, $ub = Finch.balance(
-                                $(lvl.sampler), $tid, $P, $shapes, MergeRandom()
-                            )
-                        else
-                            $lb, $ub = Finch.balance($tid, $P, $shapes, MergeDense()) ##all dense pass, can make optimization
-                        end
+                    # Task tid sums every shard's entries in its band into its accumulator.
+                    $bands = $band
+                    $ranges = Finch.do_band_ranges($shapes, $bands)
+                    Finch.@barrier Threads.@threads for $tid in 1:($P)
+                        $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
 
                         $(contain(ctx) do ctx_2
@@ -689,7 +707,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                             accum_2 = distribute_level(
                                 ctx_2, lvl.accumulator, channel_task, diff, DeviceShared()
                             )
-                            accum_2 = declare_level!(ctx_2, accum_2, literal(0), literal(0))
+                            accum_2 = declare_level!(ctx_2, accum_2, pos, literal(0))
                             push_preamble!(
                                 ctx_2,
                                 assemble_level!(ctx_2, accum_2, literal(1), literal(1)),
@@ -706,7 +724,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
                             push_preamble!(ctx_2,
                                 quote
-                                    for $sid in 1:($P)
+                                    Finch.isempty_band($lb, $ub) || for $sid in 1:($P)
                                         $(contain(ctx_2) do ctx_3
                                             channel_dev_2 = VirtualMultiChannelMemory(
                                                 lvl.device, get_num_tasks(lvl.device)
@@ -772,8 +790,16 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                         end)
                     end
 
-                    if !unordered
-                        Threads.@threads for $tid in 1:($P)
+                    if typeof($(lvl_e).accumulator) === typeof($(lvl_e).lvl)
+                        Finch.coalesce_shards!(
+                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $ranges
+                        )
+                    else
+                        # SparseList levels, including children of hashes,
+                        # accumulate into hashes. Restore the output format
+                        # whenever any level differs before merging the bands.
+                        Finch.@barrier Threads.@threads for $tid in 1:($P)
+
                             $(contain(ctx) do ctx_2
                                 diff = Dict()
                                 channel_dev = VirtualMultiChannelMemory(
@@ -829,55 +855,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                                 nothing
                             end)
                         end
-                        $pos_map = Finch.init_posmap($P)
-                        $meta = Finch.init_fast_meta($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e),
-                            $max_pos,
-                            $(lvl_c),
-                            $meta,
-                            $P,
-                            MergeNormalization();
-                            pos_map=($pos_map),
-                            was_dense=false,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_fast!(
-                                $tid, $meta, $P, $(lvl_e).lvl, $(lvl_c), false
-                            )
-                        end
-                    elseif $dense
-                        $meta = Finch.init_fast_meta($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e).accumulator,
-                            $max_pos,
-                            $(lvl_c),
-                            $meta,
-                            $P,
-                            MergeNormalization();
-                            pos_map=nothing,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_dense!(
-                                $tid, $meta, $P, $(lvl_e).accumulator, $(lvl_c)
-                            )
-                        end
-                    else
-                        $meta = Finch.init_fast_meta($P)
-                        Finch.setup_coalesce!(
-                            $(lvl_e).accumulator,
-                            $max_pos,
-                            $(lvl_c),
-                            $meta,
-                            $P,
-                            MergeNormalization();
-                            pos_map=nothing,
-                        )
-                        Threads.@threads for $tid in 1:($P)
-                            Finch.coalesce_fast!(
-                                $tid, $meta, $P, $(lvl_e), $(lvl_c), false
-                            )
-                        end
+                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $ranges)
                     end
                 end
             end,
@@ -931,23 +909,6 @@ function instantiate(ctx, fbr::VirtualHollowSubFiber{VirtualCoalesceLevel}, mode
     )
 end
 
-function setup_coalesce!(
-    lvl::CoalesceLevel,
-    max_pos,
-    coalescent,
-    meta,
-    P,
-    style::MergeNormalization;
-    pos_map=nothing,
-    was_dense=false,
-)
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, meta, P, style; pos_map, was_dense)
-end
-
-function setup_coalesce!(lvl::CoalesceLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    return setup_coalesce!(lvl.lvl, max_pos, coalescent, meta, P, style)
-end
-
 function coalesce_level!(
     lvl::CoalesceLevel, global_fbr_map, factor, max_dim, P, coalescent, mode
 )
@@ -956,10 +917,6 @@ function coalesce_level!(
     end
 
     coalesce_level!(lvl.lvl, global_fbr_map, factor, max_dim, P, coalescent, mode)
-end
-
-function coalesce_fast!(tid, meta, P, lvl::CoalesceLevel, coalescent, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent, was_dense)
 end
 
 ###Load balancer stuff
@@ -996,37 +953,13 @@ end
     if tid == P
         ub = Tuple(shapes)
     else
-        ub = Tuple(decrement_idxs(collect(lb_at(tid + 1)), shapes))
+        next = lb_at(tid + 1)
+        # Repeated sample points leave a band empty.
+        all(isone, next) && return empty_band(shapes)
+        ub = Tuple(decrement_idxs(collect(next), shapes))
     end
 
-    return (lb, ub)
-end
-
-@inbounds function balance(lvl, tid, P, nnz, style::Union{MergeNormalization})
-    shapes = collect(Finch.level_size(lvl))
-    max_dim = length(shapes)
-
-    base = div(nnz, P)
-    remainder = nnz % P
-    lower_work = (tid - 1) * base + min(tid - 1, remainder)
-    upper_work = tid * base + min(tid, remainder)
-
-    if tid == 1
-        lb_idxs = ntuple(_ -> 1, max_dim)
-    else
-        lb_idxs = find_normalizer_split(lvl, lower_work, P, copy(shapes), max_dim)
-    end
-    lb = Tuple(lb_idxs)
-
-    if tid == P
-        ub_idxs = shapes
-    else
-        next_lb_idxs = find_normalizer_split(lvl, upper_work, P, copy(shapes), max_dim)
-        ub_idxs = decrement_idxs(next_lb_idxs, shapes)
-    end
-    ub = Tuple(ub_idxs)
-
-    return (lb, ub)
+    return isempty_band(lb, ub) ? empty_band(shapes) : (lb, ub)
 end
 
 @inbounds function idxs_at_flat(flat, shapes)
@@ -1044,6 +977,7 @@ end
     base, rem = divrem(total, P)
     lower = (tid - 1) * base + min(tid - 1, rem) + 1
     upper = tid * base + min(tid, rem)
+    lower > upper && return empty_band(shapes)
 
     lb = Tuple(idxs_at_flat(lower, shapes))
     ub = Tuple(idxs_at_flat(upper, shapes))
@@ -1051,38 +985,23 @@ end
     return (lb, ub)
 end
 
-@inbounds function find_normalizer_split(lvl, target_work, P, idxs, max_dim)
-    dim = 0
-    while dim < max_dim
-        lo = 1
-        hi = idxs[max_dim - dim]
-        truth = -1
-        while lo <= hi
-            candidate = div(lo + hi, 2)
-            idxs[max_dim - dim] = candidate
-            stored = 0
-            for p in 1:P
-                stored += Finch.countstored_level(lvl, 1, idxs, 0, p, true)
-            end
-            if stored >= target_work
-                truth = candidate
-                hi = candidate - 1
-            else
-                lo = candidate + 1
-            end
-        end
-        idxs[max_dim - dim] = truth
-        dim += 1
+# Stored entries per shard. A byte map over an element stores a dense `val`, so
+# count its `srt` instead.
+function shard_counts(lvl::AbstractLevel)
+    while !(lvl isa ElementLevel)
+        lvl isa SparseByteMapLevel && lvl.lvl isa ElementLevel && return length.(lvl.srt.data)
+        lvl = lvl.lvl
     end
-    return idxs
+    return length.(lvl.val.data)
 end
 
 function get_total_nnz(lvl::AbstractLevel, unordered)
+    counts = shard_counts(lvl)
     while !(lvl isa ElementLevel)
         lvl = lvl.lvl
         unordered = unordered & !isa(lvl, SparseListLevel)
     end
-    return sum(length, lvl.val.data), unordered
+    return sum(counts), unordered
 end
 
 function sample(tid, lvl::CoalesceLevel)
@@ -1091,13 +1010,10 @@ function sample(tid, lvl::CoalesceLevel)
 end
 
 function build_sampler(lvl::AbstractLevel, P, nnz, tsize)
-    elvl = lvl
-    while !(elvl isa ElementLevel)
-        elvl = elvl.lvl
-    end
+    counts = shard_counts(lvl)
     sampler = Vector{NTuple{tsize,Int}}(undef, 0)
     for p in 1:P
-        active = round(Int, 1000 * P * length(elvl.val.data[p]) / nnz)
+        active = round(Int, 200 * P * counts[p] / nnz)
         for _ in 1:active
             push!(sampler, sample(p, lvl))
         end
