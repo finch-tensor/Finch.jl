@@ -707,7 +707,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                             accum_2 = distribute_level(
                                 ctx_2, lvl.accumulator, channel_task, diff, DeviceShared()
                             )
-                            accum_2 = declare_level!(ctx_2, accum_2, literal(0), literal(0))
+                            accum_2 = declare_level!(ctx_2, accum_2, pos, literal(0))
                             push_preamble!(
                                 ctx_2,
                                 assemble_level!(ctx_2, accum_2, literal(1), literal(1)),

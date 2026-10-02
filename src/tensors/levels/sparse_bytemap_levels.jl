@@ -259,18 +259,22 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, diff, style
 )
+    srt = distribute_buffer(ctx, lvl.srt, arch, style)
+    # length(MultiChannelBuffer) is 0, so re-derive the dirty count from the
+    # distributed srt; declare_level! needs it to clear last run's entries.
+    qos_fill = freshen(ctx, lvl.tag, :_qos_fill)
+    qos_stop = freshen(ctx, lvl.tag, :_qos_stop)
+    push_preamble!(ctx, :($qos_stop = $qos_fill = length($srt)))
     diff[lvl.tag] = VirtualSparseByteMapLevel(
         lvl.tag,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
-        distribute_buffer(ctx, lvl.srt, arch, style),
+        srt,
         lvl.shape,
-        distribute_buffer(ctx, lvl.qos_fill, arch, style),
-        # lvl.qos_fill,
-        # lvl.qos_stop,
-        distribute_buffer(ctx, lvl.qos_stop, arch, style),
+        qos_fill,
+        qos_stop,
     )
 end
 
@@ -413,17 +417,28 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     q_stop = freshen(ctx, lvl.tag, :q_stop)
     q = freshen(ctx, lvl.tag, :q)
     old = freshen(ctx, lvl.tag, :old)
+    ptr_len = freshen(ctx, lvl.tag, :ptr_len)
+    tbl_len = freshen(ctx, lvl.tag, :tbl_len)
 
     quote
         $q_start = ($(ctx(pos_start)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(Tp(1))
         $q_stop = $(ctx(pos_stop)) * $(ctx(lvl.shape))
+        # Existing storage is already clean (declare_level! clears dirty entries),
+        # so only initialize what this call grows.
+        $ptr_len = length($(lvl.ptr))
         Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
-        $old = $q_start
+        Finch.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
+        $tbl_len = length($(lvl.tbl))
+        $old = max($q_start, $tbl_len + 1)
         Finch.resize_if_smaller!($(lvl.tbl), $q_stop)
         Finch.fill_range!($(lvl.tbl), false, $old, $q_stop)
         $(contain(
-            ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(old, Tp), value(q_stop, Tp)), ctx
+            # Children that can't be reassembled are stale after a run, so redo them all.
+            ctx_2 -> assemble_level!(
+                ctx_2, lvl.lvl,
+                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp), value(q_stop, Tp),
+            ),
+            ctx,
         ))
     end
 end
@@ -443,8 +458,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
-            resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
+            Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
+            Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
             $srt_shape_init

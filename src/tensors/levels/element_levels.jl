@@ -156,7 +156,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.val), $(ctx(pos)))
+            Finch.resize_if_larger!($(lvl.val), $(ctx(pos)))
         end,
     )
     return lvl

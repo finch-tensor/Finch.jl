@@ -11,6 +11,13 @@ function resize_if_smaller!(arr, i)
     end
 end
 
+# Trim only: growing with resize! exposes uninitialized memory.
+function resize_if_larger!(arr, i)
+    if length(arr) > i
+        resize!(arr, i)
+    end
+end
+
 """
     scansearch(v, x, lo, hi)
 
