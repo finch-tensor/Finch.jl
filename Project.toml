@@ -40,7 +40,7 @@ TensorMarketExt = "TensorMarket"
 
 [compat]
 AbstractTrees = "0.3.4, 0.4"
-AcceleratedKernels = "0.4.3"
+AcceleratedKernels = "0.4.3, 0.5"
 AutoHashEquals = "2.2"
 Compat = "3.29, 4"
 DataStructures = "0.18, 0.19"
