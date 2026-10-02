@@ -985,12 +985,23 @@ end
     return (lb, ub)
 end
 
+# Stored entries per shard. A byte map over an element stores a dense `val`, so
+# count its `srt` instead.
+function shard_counts(lvl::AbstractLevel)
+    while !(lvl isa ElementLevel)
+        lvl isa SparseByteMapLevel && lvl.lvl isa ElementLevel && return length.(lvl.srt.data)
+        lvl = lvl.lvl
+    end
+    return length.(lvl.val.data)
+end
+
 function get_total_nnz(lvl::AbstractLevel, unordered)
+    counts = shard_counts(lvl)
     while !(lvl isa ElementLevel)
         lvl = lvl.lvl
         unordered = unordered & !isa(lvl, SparseListLevel)
     end
-    return sum(length, lvl.val.data), unordered
+    return sum(counts), unordered
 end
 
 function sample(tid, lvl::CoalesceLevel)
@@ -999,13 +1010,10 @@ function sample(tid, lvl::CoalesceLevel)
 end
 
 function build_sampler(lvl::AbstractLevel, P, nnz, tsize)
-    elvl = lvl
-    while !(elvl isa ElementLevel)
-        elvl = elvl.lvl
-    end
+    counts = shard_counts(lvl)
     sampler = Vector{NTuple{tsize,Int}}(undef, 0)
     for p in 1:P
-        active = round(Int, 1000 * P * length(elvl.val.data[p]) / nnz)
+        active = round(Int, 200 * P * counts[p] / nnz)
         for _ in 1:active
             push!(sampler, sample(p, lvl))
         end

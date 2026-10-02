@@ -312,7 +312,7 @@ end
 virtual_level_eltype(lvl::VirtualSparseByteMapLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseByteMapLevel) = virtual_level_fill_value(lvl.lvl)
 @inline sample_dims(lvl::VirtualSparseByteMapLevel) = 1 + sample_dims(lvl.lvl)
-@inline all_dense(lvl::VirtualSparseByteMapLevel) = true & all_dense(lvl.lvl)
+@inline all_dense(lvl::VirtualSparseByteMapLevel) = false & all_dense(lvl.lvl)
 
 postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 
@@ -347,12 +347,12 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
         quote
             $srt_shape_init
             # Dirty positions are sorted, so visiting them streams through memory;
-            # past about 1/64 of the positions, clearing them all is cheaper.
-            if $(lvl.qos_fill) > length($(lvl.tbl)) >>> 6
+            # past about 1/16 of the positions, clearing them all is cheaper.
+            if $(lvl.qos_fill) > length($(lvl.tbl)) >>> 4
                 fill!($(lvl.ptr), $(Tp(0)))
                 fill!($(lvl.tbl), false)
                 $(
-                    if supports_reassembly(lvl.lvl)
+                    if supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel)
                         contain(
                             ctx_2 -> assemble_level!(
                                 ctx_2, lvl.lvl, literal(Tp(1)),
@@ -369,7 +369,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
                     $(lvl.ptr)[$p] = $(Tp(0))
                     $(lvl.ptr)[$p + 1] = $(Tp(0))
                     $(lvl.tbl)[$q] = false
-                    if $(supports_reassembly(lvl.lvl))
+                    if $(supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel))
                         $(contain(
                             ctx_2 ->
                                 assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
@@ -675,6 +675,13 @@ function unfurl(
                 preamble=quote
                     $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
                     $dirty = false
+                    $(if lvl.lvl isa VirtualElementLevel
+                        # An Element's value is only meaningful where tbl is set, so
+                        # reset it on first touch instead of when declaring.
+                        :(if !$(lvl.tbl)[$my_q]
+                            $(lvl.lvl.val)[$my_q] = $(lvl.lvl.Vf)
+                        end)
+                    end)
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
@@ -701,6 +708,11 @@ function unfurl(
 end
 
 function sample(tid, lvl::SparseByteMapLevel)
+    if lvl.lvl isa ElementLevel
+        # Draw a stored entry; the element level would pick a random dense position.
+        q = rand(lvl.srt.data[tid])
+        return (mod1(q, lvl.shape),), fld(q - 1, lvl.shape) + 1
+    end
     tup, idx = sample(tid, lvl.lvl)
     idx_2 = mod1(idx, lvl.shape)
     pos_2 = fld(idx - 1, lvl.shape) + 1

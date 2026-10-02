@@ -638,7 +638,7 @@ end
         nnz, _ = Finch.get_total_nnz(lvl, true)
         Random.seed!(1)
         samples = Finch.build_sampler(lvl, 2, nnz, 2)
-        @test length(samples) == 2000
+        @test length(samples) == 400
         @test issorted(samples; by=reverse)
         @test Set(samples) == Set((i, p) for shard in entries for (p, i, _) in shard)
     end

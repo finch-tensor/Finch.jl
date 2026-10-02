@@ -1,7 +1,5 @@
 function fill_range!(arr, v, i, j)
-    @simd for k in i:j
-        arr[k] = v
-    end
+    i <= j && fill!(view(arr, i:j), v)
     arr
 end
 
