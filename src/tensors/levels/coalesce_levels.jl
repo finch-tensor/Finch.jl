@@ -535,6 +535,8 @@ virtual_level_fill_value(lvl::VirtualCoalesceLevel) = virtual_level_fill_value(l
 
 function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
     @assert !is_on_device(ctx, lvl.device)
+    dcl_pos = all_dense(lvl.lvl) ? pos : literal(0)
+
     push_preamble!(
         ctx,
         contain(ctx) do ctx_2
@@ -563,14 +565,14 @@ function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
                 lvl_3 = distribute_level(
                     ctx_3, lvl.lvl, channel_task, diff, DeviceShared()
                 )
-                lvl_4 = declare_level!(ctx_3, lvl_3, pos, init)
-                freeze_level!(ctx_3, lvl_4, pos)
+                lvl_4 = declare_level!(ctx_3, lvl_3, dcl_pos, init)
+                freeze_level!(ctx_3, lvl_4, dcl_pos)
                 nothing
             end
         end,
     )
-    coalescent_2 = declare_level!(ctx, lvl.coalescent, pos, init)
-    freeze_level!(ctx, coalescent_2, pos)
+    coalescent_2 = declare_level!(ctx, lvl.coalescent, dcl_pos, init)
+    freeze_level!(ctx, coalescent_2, dcl_pos)
     lvl.declared = true
     lvl
 end
