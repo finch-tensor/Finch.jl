@@ -1015,7 +1015,7 @@ function build_sampler(lvl::AbstractLevel, P, nnz, tsize)
     counts = shard_counts(lvl)
     sampler = Vector{NTuple{tsize,Int}}(undef, 0)
     for p in 1:P
-        active = round(Int, 200 * P * counts[p] / nnz)
+        active = round(Int, 12.5 * P^2 * counts[p] / nnz)
         for _ in 1:active
             push!(sampler, sample(p, lvl))
         end
