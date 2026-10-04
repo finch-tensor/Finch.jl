@@ -443,6 +443,8 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     end
 end
 
+supports_reassembly(lvl::VirtualSparseByteMapLevel) = true
+
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos_stop)
     r = freshen(ctx, lvl.tag, :_r)
     p = freshen(ctx, lvl.tag, :_p)

@@ -535,7 +535,7 @@ virtual_level_fill_value(lvl::VirtualCoalesceLevel) = virtual_level_fill_value(l
 
 function declare_level!(ctx, lvl::VirtualCoalesceLevel, pos, init)
     @assert !is_on_device(ctx, lvl.device)
-    dcl_pos = all_dense(lvl.lvl) ? pos : literal(0)
+    dcl_pos = supports_reassembly(lvl.lvl) ? pos : literal(0)
 
     push_preamble!(
         ctx,
