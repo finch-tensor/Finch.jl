@@ -273,9 +273,13 @@ levels apply like an integer shift (`pos + shift[p]`, `shift[p] * shape`):
 A hash merge needs no second phase. Worker `tid` copies shard `tid`'s keys,
 `perm`, pointers, and children: `perm` holds child positions, so a shard places
 its entries in traversal order without knowing their table slots. Worker `tid`
-also owns output buckets `tid:P:B`. For each owned bucket, it visits the rotated
-bucket of every frozen source shard, plus that shard's moved entries, and places
-each entry's child position in the first empty slot of its probe. Keys are
+also owns output buckets `tid:P:B`. For each owned bucket, it visits the bucket
+of every frozen source shard that the shard's offset rotates onto it. A shard
+with a moved block shifts that block uniformly too, so the worker also visits the
+bucket the block's shift rotates onto it, taking only the block's entries there
+and skipping them in the first visit. Each source bucket is scanned once per
+shift, and each entry's child position goes in the first empty slot of its
+probe. Keys are
 distinct once shared entries are dropped, so placement never compares keys or
 resizes. Each bucket has one writer, including when `B > P`. Since bucket work
 is tied to the worker, every worker must reach every level, even with an empty

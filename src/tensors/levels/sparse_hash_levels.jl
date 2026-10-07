@@ -871,10 +871,12 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     moved = [1:0 for _ in 1:P]
     owner = zeros(Int, P)
     split = [length(perm[t]) for t in 1:P]
+    move_shift = zeros(Int, P)
     for t in 1:P
         s = shift[t]
         s isa ShardShift && s.len > 0 || continue
         moved[t] = under(t, s.src, s.len)
+        move_shift[t] = rotation(s.dst - s.src)
         o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
         split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
         # Checkpoints count the moved block's local buckets; rotate them from the
@@ -883,7 +885,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         counts = counts_from(first(moved[t])) .- counts_from(last(moved[t]) + 1)
         for b in 1:B
             bucket_counts[rotate(b, bucket_shift[t])] -= counts[b]
-            bucket_counts[rotate(b, rotation(s.dst - s.src))] += counts[b]
+            bucket_counts[rotate(b, move_shift[t])] += counts[b]
         end
     end
 
@@ -944,14 +946,15 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     )
     init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
-    return (; P, shift, pieces, moved, shared, shared_dst, nnz, child_shift,
-        max_child_pos, bucket_counts, bucket_shift, child, init)
+    return (; P, shift, pieces, shared, shared_dst, nnz, child_shift,
+        max_child_pos, bucket_counts, bucket_shift, move_shift, child, init)
 end
 
 # Worker `tid` copies shard `tid`'s keys, traversal order, and children, and
 # fills output buckets `tid:P:B` from every shard, so each bucket has one writer.
-# A uniform parent shift rotates a source bucket onto one output bucket; only a
-# shard's moved entries are routed individually.
+# A uniform parent shift rotates a source bucket onto one output bucket, and a
+# shard's moved block shifts uniformly too, so each output bucket gathers from
+# one rotated source bucket per shift.
 function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     key = lvl.key.data[tid]
     perm = lvl.perm.data[tid]
@@ -997,24 +1000,26 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
         dst.tbl[h] = q + plan.child_shift[t]
         return nothing
     end
-    for b in tid:(plan.P):B, t in 1:(plan.P)
+    # Place shard `t`'s entries from the source bucket that rotation `k` carries
+    # onto output bucket `b`, taking only the moved block's entries or only the rest.
+    function gather!(b, t, k, moved)
         src_ctrl = lvl.tbl_ctrl.data[t]
         src_tbl = lvl.tbl.data[t]
         s = plan.shift[t]
         width = length(src_ctrl) ÷ B
-        src_b = ((b - 1 - plan.bucket_shift[t]) & (B - 1)) + 1
+        src_b = ((b - 1 - k) & (B - 1)) + 1
         for h in ((src_b - 1) * width + 1):(src_b * width)
             src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
             q = src_tbl[h]
             p = first(lvl.key.data[t][q])
-            s isa ShardShift && s.src <= p < s.src + s.len && continue
-            place!(t, q)
+            (s isa ShardShift && s.src <= p < s.src + s.len) == moved && place!(t, q)
         end
-        for r in plan.moved[t]
-            q = lvl.perm.data[t][r]
-            p, i = lvl.key.data[t][q]
-            sparse_hash_hash_subtable(sparse_hash_hash(p + s, i), B) == b && place!(t, q)
-        end
+        return nothing
+    end
+    for b in tid:(plan.P):B, t in 1:(plan.P)
+        gather!(b, t, plan.bucket_shift[t], false)
+        s = plan.shift[t]
+        s isa ShardShift && s.len > 0 && gather!(b, t, plan.move_shift[t], true)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
