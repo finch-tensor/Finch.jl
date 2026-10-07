@@ -206,7 +206,8 @@ Setup's metadata work is O(P) per level, except for sparse-list boundary
 searches, which take O(P log M) for M parent positions, and hash setup, which
 takes O(PB) for B buckets. With B equal to the worker count rounded up to a
 power of two, hash setup is O(P²). These bounds exclude buffer
-allocation/resizing. Setup does not scan entries or initialize buffers.
+allocation/resizing. Setup does not initialize buffers, and reads only O(B)
+entries per shard.
 
 ### Shared positions and ownership
 
@@ -244,9 +245,11 @@ Hash levels keep their assembly bucket counts, `tbl_count`, through freeze,
 which extends them with checkpoints every `B` ranks of `perm`: block `j` counts
 each bucket's entries from rank `(j - 1) * B + 1` on, so block 1 is the totals
 and any rank range counts in O(B). A merge's output holds only the totals.
-Setup reads at most the first and last frozen entries of each shard that is
-not below a hash. It rotates that shard's counts by `a * offset mod B`, then
-subtracts its shared boundary entry from its output bucket. The busiest output
+Setup rotates each shard's totals by `a * offset mod B`, then subtracts its
+shared boundary entry from its output bucket. Below a hash, a shard's moved block
+counts as the difference of two checkpoint lookups, rotated from the shard's
+offset to the block's. Setup reads the first and last frozen entries of each
+shard, plus fewer than `2B` entries of each moved block. The busiest output
 bucket determines the common subtable capacity, keeping every bucket at most
 half full.
 

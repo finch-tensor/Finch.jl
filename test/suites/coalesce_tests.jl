@@ -379,6 +379,7 @@ end
             end
             ptr, perm = Int[], Int[]
             Finch.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0))
+            Finch.sparse_hash_count_buckets!(counts, perm, key, B)
             (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=counts)
         end
         return SparseHash{Int}(
@@ -465,6 +466,37 @@ end
         @test [result[1, 2], result[2, 5], result[3, 5], result[4, 7]] == [12, 25, 35, 47]
         @test result[1, 5] == result[3, 2] == 0
         @test issorted(dst.lvl.key[dst.lvl.perm])
+        for lvl in (dst, dst.lvl)
+            width = length(lvl.tbl) ÷ lvl.subtables
+            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8]
+        end
+    end
+
+    @testset "moved blocks count buckets from checkpoints" begin
+        # Shard 2's first outer entry, (1, 5), is shard 1's last. Its inner block,
+        # under shard 2's child 3, spans several checkpoints and sits between
+        # other parents' entries.
+        outer = hash_shards([[(1, 2, 2), (1, 5, 1)], [(1, 5, 3), (1, 7, 1), (1, 9, 2)]]; B=8)
+        inner_keys = [
+            [[(1, i) for i in 1:3]; [(2, i) for i in 1:5]],
+            [[(1, i) for i in 1:4]; [(3, i) for i in 4:30]; [(2, i) for i in 2:3]],
+        ]
+        inner = hash_shards([[(p, i, q) for (q, (p, i)) in enumerate(reverse(ks))]
+                             for ks in inner_keys]; B=8)
+        foreach(v -> fill!(v, 1), inner.lvl.val.data)
+        src = SparseHash{Int}(
+            inner, outer.shape, outer.subtables,
+            (getfield(outer, f) for f in Finch.SPARSE_HASH_BUFFERS)...,
+        )
+        dst = SparseHash(SparseHash(Element(0), 1000, 8), 1000, 8)
+        Finch.coalesce_shards!(src, dst, 2, 1, nothing)
+        expected = zeros(Int, 1000, 1000)
+        expected[1:30, 5] .= 1
+        expected[1:5, 2] .= 1
+        expected[1:4, 7] .= 1
+        expected[2:3, 9] .= 1
+        @test Array(Tensor(dst)) == expected
         for lvl in (dst, dst.lvl)
             width = length(lvl.tbl) ÷ lvl.subtables
             @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),

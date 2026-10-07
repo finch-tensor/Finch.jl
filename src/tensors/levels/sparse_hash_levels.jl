@@ -274,6 +274,18 @@ function sparse_hash_count_buckets!(tbl_count, perm, key, B)
     return tbl_count
 end
 
+# Frozen bucket counts of ranks `r` onward: the checkpoint at or after `r`, plus
+# the fewer than `B` entries before it.
+function sparse_hash_counts_from(tbl_count, perm, key, B, r)
+    j = cld(r - 1, B) + 1
+    counts = tbl_count[((j - 1) * B + 1):(j * B)]
+    @inbounds for s in r:min((j - 1) * B, length(perm))
+        p, i = key[perm[s]]
+        counts[sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)] += 1
+    end
+    return counts
+end
+
 # The head is local to a write phase. Recover free positions on thaw, including
 # holes left by coalesce; a dense set of child positions needs no scan.
 function sparse_hash_free_head!(key, perm)
@@ -837,14 +849,16 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     child_shift = cumsum([0; [length(key[t]) for t in 1:(P - 1)]])
     max_child_pos = sum(length, key; init=0)
 
-    # Uniform parent shifts rotate whole buckets, so add the frozen counts
-    # directly. Moved and shared entries are corrected below.
+    # Shifting parents by `delta` rotates buckets by `a * delta`, so add each
+    # shard's frozen totals rotated by its offset. Moved and shared entries are
+    # corrected below.
     bucket(p, i) = sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)
-    bucket_shift = [Int((SPARSE_HASH_POS_MULTIPLIER * (shard_offset(s) % UInt)) & UInt(B - 1))
-                    for s in shift]
+    rotation(delta) = Int((SPARSE_HASH_POS_MULTIPLIER * (delta % UInt)) & UInt(B - 1))
+    rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
+    bucket_shift = [rotation(shard_offset(s)) for s in shift]
     bucket_counts = zeros(Int, B)
     for t in 1:P, b in 1:B
-        bucket_counts[((b - 1 + bucket_shift[t]) & (B - 1)) + 1] += lvl.tbl_count.data[t][b]
+        bucket_counts[rotate(b, bucket_shift[t])] += lvl.tbl_count.data[t][b]
     end
 
     # Shards concatenate, except that a hash above may move a block of a shard's
@@ -863,10 +877,13 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         moved[t] = under(t, s.src, s.len)
         o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
         split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
-        for r in moved[t]
-            p, i, _ = entry(t, r)
-            bucket_counts[bucket(p + s.offset, i)] -= 1
-            bucket_counts[bucket(p + s, i)] += 1
+        # Checkpoints count the moved block's local buckets; rotate them from the
+        # shard's offset to the block's.
+        counts_from(r) = sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
+        counts = counts_from(first(moved[t])) .- counts_from(last(moved[t]) + 1)
+        for b in 1:B
+            bucket_counts[rotate(b, bucket_shift[t])] -= counts[b]
+            bucket_counts[rotate(b, rotation(s.dst - s.src))] += counts[b]
         end
     end
 
