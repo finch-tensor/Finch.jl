@@ -129,13 +129,11 @@ function transfer(dev::CPUThread, arr::MultiChannelBuffer)
     return arr.data[dev.tid]
 end
 
+# Always the task's own channel, so distributed buffers stay concretely typed.
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
-    if task.device == arr.device
-        temp = arr.data[task.t]
-        return temp
-    else
-        return arr
-    end
+    task.device == arr.device ||
+        throw(ArgumentError("Cannot transfer a buffer to another device's channel"))
+    return arr.data[task.t]
 end
 
 function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)

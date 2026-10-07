@@ -207,7 +207,7 @@ function assemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     assemble_level!(ctx, lvl.lvl, qos_start, qos_stop)
 end
 
-supports_reassembly(::VirtualDenseLevel) = true
+supports_reassembly(lvl::VirtualDenseLevel) = supports_reassembly(lvl.lvl)
 function reassemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     qos_start = call(+, call(*, call(-, pos_start, lvl.Ti(1)), lvl.shape), 1)
     qos_stop = call(*, pos_stop, lvl.shape)
@@ -280,20 +280,13 @@ function sample(tid, lvl::DenseLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    setup_coalesce!(lvl.lvl, max_pos * lvl.shape, coalescent.lvl, meta, P, style)
-end
-
-function setup_coalesce!(lvl::DenseLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
-    setup_coalesce!(
-        lvl.lvl, max_pos * lvl.shape, coalescent.lvl, meta, P, style; pos_map=pos_map, was_dense=true
+function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift, overlap)
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape, overlap
     )
+    return (; child, init=child.init)
 end
 
-function coalesce_fast!(tid, meta, P, lvl::DenseLevel, coalescent::DenseLevel, was_dense)
-    coalesce_fast!(tid, meta, P, lvl.lvl, coalescent.lvl, true)
-end
-
-function coalesce_dense!(tid, meta, P, lvl::DenseLevel, coalescent::DenseLevel)
-    coalesce_dense!(tid, meta, P, lvl.lvl, coalescent.lvl)
-end
+# Dense leaves positions below it where they were.
+coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs) =
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, runs)

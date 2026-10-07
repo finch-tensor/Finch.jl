@@ -156,7 +156,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.val), $(ctx(pos)))
+            Finch.resize_if_larger!($(lvl.val), $(ctx(pos)))
         end,
     )
     return lvl
@@ -266,108 +266,28 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, meta, P, style::MergeFast)
-    resize!(coalescent.val, max_pos)
-    return true
+function setup_coalesce!(lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap) where {Vf}
+    init_start = min(length(dst.val), max_pos) + 1
+    resize!(dst.val, max_pos)
+    init = ((dst.val, init_start, Vf),)
+    return (; shift, overlap, init)
 end
 
-function setup_coalesce!(lvl::ElementLevel, max_pos, coalescent, meta, P, style::MergeNormalization; pos_map=nothing, was_dense=false)
-    resize!(coalescent.val, max_pos)
-    return true
-end
-
-function coalesce_fast!(tid, meta, P, lvl::ElementLevel{Vf}, coalescent, was_dense) where {Vf}
-    val = lvl.val.data
-    lvl_val = coalescent.val
-
-    fastmerge_element!(tid, meta, val, P, lvl_val, was_dense, Vf)
-end
-
-function coalesce_dense!(tid, meta, P, lvl::ElementLevel, coalescent)
-    val = lvl.val.data
-    lvl_val = coalescent.val
-
-    fastmerge_element_dense!(tid, val, P, lvl_val)
-end
-
-@inbounds function fastmerge_element_dense!(tid, val, P, lvl_val)
-    total = length(lvl_val)
-    base, rem = divrem(total, P)
-    lower = (tid - 1) * base + min(tid - 1, rem) + 1
-    upper = tid * base + min(tid, rem)
-
-    for k in lower:upper
-        lvl_val[k] = val[tid][k]
-    end
-end
-
-@inbounds function fastmerge_element!(tid, meta, val, P, lvl_val, was_dense, Vf)
-    if was_dense
-        total = length(lvl_val)
-        max_pos = meta[tid][P + 1]
-        shape = max_pos > 0 ? total ÷ max_pos : total
-
-        base, rem = divrem(max_pos, P)
-        offset = (tid - 1) * base + min(tid - 1, rem)
-        chunksize = base + (tid <= rem ? 1 : 0)
-        pos_lb = 1 + offset
-        pos_ub = pos_lb + chunksize - 1
-
-        if chunksize > 0
-            proc = binary_search_meta(pos_lb, meta[tid], 1, P)
-            shared_with_prev = proc > 1 && meta[tid][P + proc] == 1
-            base = proc > 1 ? meta[tid][proc] : 0
-            local_pos = pos_lb - base + (shared_with_prev ? 1 : 0)
-            for pos in pos_lb:pos_ub
-                while proc < P && pos > meta[tid][proc + 1]
-                    proc += 1
-                    local_pos = meta[tid][P + proc] == 1 ? 2 : 1
-                end
-                channel = proc
-                dst_base = (pos - 1) * shape
-                src_base = (local_pos - 1) * shape
-                for k in 1:shape
-                    lvl_val[dst_base + k] = val[channel][src_base + k]
-                end
-
-                if channel < P && pos == meta[tid][channel + 1] &&
-                    meta[tid][P + 1 + channel] == 1
-                    for k in 1:shape
-                        if lvl_val[dst_base + k] == Vf
-                            pv = val[channel + 1][k]
-                            pv != Vf && (lvl_val[dst_base + k] = pv)
-                        end
-                    end
-                end
-
-                local_pos += 1
+function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
+    src = lvl.val.data[tid]
+    shift = plan.shift[tid]
+    for run in runs
+        if plan.overlap
+            # Shards store fill values outside their band, so where runs
+            # overlap, copy only stored values.
+            for i in run
+                src[i] != Vf && (dst.val[i + shift] = src[i])
             end
-        end
-    else
-        nnz_cutoffs = Vector{Int}(undef, P + 1)
-        nnz_cutoffs[1] = 1
-        for p in 2:P+1
-            nnz_cutoffs[p] = nnz_cutoffs[p - 1] + length(val[p - 1])
-        end
-        nnz = nnz_cutoffs[end] - 1
-
-        base, rem = divrem(nnz, P)
-        offset = (tid - 1) * base + min(tid - 1, rem)
-        chunksize = base + (tid <= rem ? 1 : 0)
-        work_lb = 1 + offset
-        work_ub = work_lb + chunksize - 1
-
-        proc_id_lower = binary_search(work_lb, nnz_cutoffs)
-        nz_offset = work_lb - nnz_cutoffs[proc_id_lower] + 1
-        proc = proc_id_lower
-        write_idx = work_lb
-        while write_idx <= work_ub
-            lvl_val[write_idx] = val[proc][nz_offset]
-            write_idx += 1
-            nz_offset += 1
-            if nz_offset > length(val[proc])
-                proc += 1
-                nz_offset = 1
+        elseif length(run) > 16
+            copyto!(dst.val, first(run) + shift, src, first(run), length(run))
+        else
+            for i in run
+                dst.val[i + shift] = src[i]
             end
         end
     end
