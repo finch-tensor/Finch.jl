@@ -2,9 +2,20 @@
     function check_counts(lvl)
         B = lvl.subtables
         len = length(lvl.tbl_ctrl) ÷ B
-        @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+        @test lvl.tbl_count[1:B] == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
             view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
-        @test sum(lvl.tbl_count) == length(lvl.perm)
+        @test sum(lvl.tbl_count[1:B]) == length(lvl.perm)
+        # Block j counts each bucket's entries of rank at least (j - 1) * B + 1.
+        m = cld(length(lvl.perm), B) + 1
+        @test length(lvl.tbl_count) == m * B
+        for j in 1:m
+            expected = zeros(Int, B)
+            for q in lvl.perm[((j - 1) * B + 1):end]
+                p, i = lvl.key[q]
+                expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p, i), B)] += 1
+            end
+            @test lvl.tbl_count[((j - 1) * B + 1):(j * B)] == expected
+        end
         @test length(lvl.key) == maximum(lvl.perm; init=0)
         # Every entry's key looks up its own child position.
         for q in lvl.perm
@@ -524,12 +535,11 @@ end
 end
 
 @testitem "sparse_bytemap_redeclare" begin
-    @testset "unused element storage is retained" begin
+    @testset "declaring clears element storage" begin
         tensor = Tensor(SparseByteMap(SparseByteMap(Element(0))), [1 0 2; 0 3 0; 4 0 0])
-        values = copy(tensor.lvl.lvl.lvl.val)
         @finch tensor .= 0
         @test iszero(Array(tensor))
-        @test tensor.lvl.lvl.lvl.val == values
+        @test iszero(tensor.lvl.lvl.lvl.val)
     end
 
     # Reusing a byte map must not expose entries from earlier writes.

@@ -240,7 +240,10 @@ elements copy non-fill values when their positions overlap.
 A hash stores its keys by child position, `key[q] == (parent, index, state)`, and its
 table slots and `perm` hold child positions. A frozen `key` spans exactly the
 child positions, free vacancies included, so its length is the child extent.
-Hash levels retain the assembly bucket-count array, `tbl_count`, through freeze.
+Hash levels keep their assembly bucket counts, `tbl_count`, through freeze,
+which extends them with checkpoints every `B` ranks of `perm`: block `j` counts
+each bucket's entries from rank `(j - 1) * B + 1` on, so block 1 is the totals
+and any rank range counts in O(B). A merge's output holds only the totals.
 Setup reads at most the first and last frozen entries of each shard that is
 not below a hash. It rotates that shard's counts by `a * offset mod B`, then
 subtracts its shared boundary entry from its output bucket. The busiest output

@@ -29,6 +29,12 @@ Implementation invariants:
   bits above them pick the starting slot.
 * `tbl_count[b]` counts the entries in bucket `b`, plus keys still pending during
   assembly, which grows the table before any bucket is more than half full.
+  Frozen, `tbl_count` holds checkpoints every `subtables` ranks of `perm`:
+  block `j`, `tbl_count[(j - 1) * subtables .+ b]`, counts the entries in each
+  bucket `b` of rank at least `(j - 1) * subtables + 1`. Block 1 is the bucket
+  totals, and the last block is past the last rank. Counts from any rank are a
+  checkpoint plus fewer than `subtables` entries. A merge's output holds only
+  the totals.
 * Frozen, `length(key)` is the extent of child positions, `ptr[p]:(ptr[p + 1] - 1)`
   indexes `perm`, and `perm[r]` is a child position. Each parent's range is
   sorted by index.
@@ -248,6 +254,24 @@ function sparse_hash_freeze!(ptr, perm, key, pos_stop, qos_stop=length(key))
     extent = isempty(qs) ? 0 : last(qs)
     resize!(key, extent)
     return extent
+end
+
+# Checkpoint frozen bucket counts every `B` ranks (see the level's invariants).
+# Walking `perm` backward, each block starts from the one after it.
+function sparse_hash_count_buckets!(tbl_count, perm, key, B)
+    n = length(perm)
+    m = cld(n, B) + 1
+    resize!(tbl_count, m * B)
+    fill!(view(tbl_count, ((m - 1) * B + 1):(m * B)), 0)
+    @inbounds for j in (m - 1):-1:1
+        block = (j - 1) * B
+        copyto!(tbl_count, block + 1, tbl_count, block + B + 1, B)
+        for r in (block + 1):min(block + B, n)
+            p, i = key[perm[r]]
+            tbl_count[block + sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)] += 1
+        end
+    end
+    return tbl_count
 end
 
 # The head is local to a write phase. Recover free positions on thaw, including
@@ -571,13 +595,17 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $(lvl.ptr), $(lvl.perm), $(lvl.key),
                 $(ctx(pos_stop)), $(lvl.qos_stop),
             )
+            Finch.sparse_hash_count_buckets!(
+                $(lvl.tbl_count), $(lvl.perm), $(lvl.key), $(ctx(lvl.subtables))
+            )
         end,
     )
     lvl.lvl = freeze_level!(ctx, lvl.lvl, value(qos_stop))
     return lvl
 end
 
-# Frozen, `key` spans exactly the child positions, and `tbl_count` is exact.
+# Frozen, `key` spans exactly the child positions, and `tbl_count`'s first block
+# is exact; assembly uses only that block.
 function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_stop)
     push_preamble!(
         ctx,
@@ -889,6 +917,8 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         empty!(buf)
         resize!(buf, n)
     end
+    # The merge's output holds only the bucket totals.
+    resize!(dst.tbl_count, B)
     copyto!(dst.tbl_count, bucket_counts)
     child = setup_coalesce!(
         lvl.lvl, max_child_pos, dst.lvl, P,

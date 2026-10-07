@@ -102,12 +102,14 @@ end
     function check_hash_storage(lvl)
         if lvl isa Finch.SparseHashLevel
             @test issorted(lvl.key[lvl.perm])
-            @test sum(lvl.tbl_count) == length(lvl.perm)
+            # The first block holds the bucket totals.
+            totals = lvl.tbl_count[1:(lvl.subtables)]
+            @test sum(totals) == length(lvl.perm)
             live = Set(lvl.perm)
             @test all(q -> lvl.key[q][3] == (q in live ?
                 Finch.SPARSE_HASH_KEY_RETAINED : Finch.SPARSE_HASH_KEY_FREE), eachindex(lvl.key))
             width = length(lvl.tbl) ÷ lvl.subtables
-            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+            @test totals == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
                 view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:lvl.subtables]
             for r in eachindex(lvl.perm)
                 q = lvl.perm[r]

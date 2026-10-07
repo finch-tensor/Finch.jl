@@ -352,7 +352,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
                 fill!($(lvl.ptr), $(Tp(0)))
                 fill!($(lvl.tbl), false)
                 $(
-                    if supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel)
+                    if supports_reassembly(lvl.lvl)
                         contain(
                             ctx_2 -> assemble_level!(
                                 ctx_2, lvl.lvl, literal(Tp(1)),
@@ -369,7 +369,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
                     $(lvl.ptr)[$p] = $(Tp(0))
                     $(lvl.ptr)[$p + 1] = $(Tp(0))
                     $(lvl.tbl)[$q] = false
-                    if $(supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel))
+                    if $(supports_reassembly(lvl.lvl))
                         $(contain(
                             ctx_2 ->
                                 assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
@@ -678,13 +678,6 @@ function unfurl(
                 preamble=quote
                     $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
                     $dirty = false
-                    $(if lvl.lvl isa VirtualElementLevel
-                        # An Element's value is only meaningful where tbl is set, so
-                        # reset it on first touch instead of when declaring.
-                        :(if !$(lvl.tbl)[$my_q]
-                            $(lvl.lvl.val)[$my_q] = $(lvl.lvl.Vf)
-                        end)
-                    end)
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
