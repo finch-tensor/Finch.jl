@@ -523,6 +523,58 @@ end
     end
 end
 
+@testitem "sparse_bytemap_redeclare" begin
+    @testset "unused element storage is retained" begin
+        tensor = Tensor(SparseByteMap(SparseByteMap(Element(0))), [1 0 2; 0 3 0; 4 0 0])
+        values = copy(tensor.lvl.lvl.lvl.val)
+        @finch tensor .= 0
+        @test iszero(Array(tensor))
+        @test tensor.lvl.lvl.lvl.val == values
+    end
+
+    # Reusing a byte map must not expose entries from earlier writes.
+    @testset "$(summary(fmt())), $n columns" for fmt in (
+        () -> SparseByteMap(SparseByteMap(Element(0))),
+        () -> SparseByteMap(Dense(Element(0))),
+        () -> SparseByteMap(SparseList(Element(0))),
+    ), n in (3, 64)
+        # Exercise both bulk clearing and clearing just the dirty positions.
+        first = hcat([1 0 2; 0 3 0; 4 0 0], zeros(Int, 3, n - 3))
+        second = hcat([0 5 0; 6 0 0; 0 0 7], zeros(Int, 3, n - 3))
+        tensor = Tensor(fmt(), zeros(Int, 3, n))
+        for x in (first, second, second, zero(first), first)
+            input = Tensor(SparseList(SparseList(Element(0))), x)
+            @finch begin
+                tensor .= 0
+                for j in _, i in _
+                    tensor[i, j] += input[i, j]
+                end
+            end
+            @test Array(tensor) == x
+        end
+    end
+
+    @testset "$(summary(fmt()))" for fmt in (
+        () -> Dense(SparseByteMap(SparseByteMap(Element(0)))),
+        () -> SparseByteMap(Dense(SparseByteMap(Element(0)))),
+        () -> SparseByteMap(Dense(SparseList(Element(0)))),
+        () -> SparseByteMap(SparseByteMap(SparseList(Element(0)))),
+    )
+        tensor = Tensor(fmt(), zeros(Int, 2, 2, 2))
+        # The second write reuses parents of the first, under different indices.
+        for x in (cat([1 0; 0 0], [0 2; 0 0]; dims=3), cat([0 0; 3 0], [0 0; 0 4]; dims=3))
+            input = Tensor(SparseList(SparseList(SparseList(Element(0)))), x)
+            @finch begin
+                tensor .= 0
+                for k in _, j in _, i in _
+                    tensor[i, j, k] += input[i, j, k]
+                end
+            end
+            @test Array(tensor) == x
+        end
+    end
+end
+
 @testitem "constructors" setup = [CheckOutput] begin
     using Base.Meta
     using Finch: Structure

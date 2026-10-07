@@ -643,3 +643,26 @@ end
         @test Set(samples) == Set((i, p) for shard in entries for (p, i, _) in shard)
     end
 end
+
+@testitem "coalesce_reuse" begin
+    # Reusing an output must discard old entries; unused backing values may remain.
+    @testset "$(summary(fmt())) on $P workers" for fmt in (
+        () -> Dense(SparseByteMap(Element(0))),
+        () -> SparseByteMap(SparseByteMap(Element(0))),
+    ), P in (1, 2, 3)
+        device = cpu(:k, P)
+        output = Tensor(Coalesce(device, fmt()))
+        first = [1 0 2; 0 3 0; 4 0 0]
+        second = [0 5 0; 6 0 0; 0 0 7]
+        for x in (first, second, second, zero(first), first)
+            input = Tensor(Dense(SparseList(Element(0))), x)
+            @finch begin
+                output .= 0
+                for j in parallel(_, device), i in _
+                    output[i, j] += input[i, j]
+                end
+            end
+            @test Array(output) == x
+        end
+    end
+end

@@ -385,8 +385,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
             $(lvl.ptr)[1] = 1
         end,
     )
+    # Nested byte maps must reset their own dirty entries and counts as well.
+    lvl.lvl = declare_level!(ctx, lvl.lvl, call(*, pos, lvl.shape), init)
     if !supports_reassembly(lvl.lvl)
-        lvl.lvl = declare_level!(ctx, lvl.lvl, call(*, pos, lvl.shape), init)
         push_preamble!(
             ctx,
             contain(
