@@ -245,7 +245,7 @@ function coalesce_level!(
     max_dim,
     P,
     coalescent,
-    weak
+    weak,
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
     lvl_val = coalescent.val
@@ -276,18 +276,20 @@ end
 function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
     src = lvl.val.data[tid]
     shift = plan.shift[tid]
-    for run in runs
+    # A long source run can cross several translations. Copy only within an
+    # affine piece, so the bulk-copy path remains correct after dense scaling.
+    for source_run in runs, (run, offset) in shifted_runs(source_run, shift)
         if plan.overlap
             # Shards store fill values outside their band, so where runs
             # overlap, copy only stored values.
             for i in run
-                src[i] != Vf && (dst.val[i + shift] = src[i])
+                src[i] != Vf && (dst.val[i + offset] = src[i])
             end
         elseif length(run) > 16
-            copyto!(dst.val, first(run) + shift, src, first(run), length(run))
+            copyto!(dst.val, first(run) + offset, src, first(run), length(run))
         else
             for i in run
-                dst.val[i + shift] = src[i]
+                dst.val[i + offset] = src[i]
             end
         end
     end

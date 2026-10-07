@@ -2,9 +2,26 @@
     function check_counts(lvl)
         B = lvl.subtables
         len = length(lvl.tbl_ctrl) ÷ B
-        @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
-            view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
-        @test sum(lvl.tbl_count) == length(lvl.perm)
+        @test lvl.tbl_count[1:B] == [
+            count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B
+        ]
+        @test sum(lvl.tbl_count[1:B]) == length(lvl.perm)
+        @test length(lvl.tbl_count) <= length(lvl.perm) + 2B
+        for lo in (1, cld(length(lvl.perm), 2) + 1), hi in (lo, length(lvl.perm) + 1)
+            actual = zeros(Int, B)
+            Finch.sparse_hash_count_range!(
+                actual, lvl.tbl_count, lvl.perm, lvl.key, B, lo, hi, -3
+            )
+            expected = zeros(Int, B)
+            for r in lo:(hi - 1)
+                p, i = lvl.key[lvl.perm[r]]
+                expected[Finch.sparse_hash_hash_subtable(
+                    Finch.sparse_hash_hash(p - 3, i), B
+                )] += 1
+            end
+            @test actual == expected
+        end
         @test length(lvl.key) == maximum(lvl.perm; init=0)
         # Every entry's key looks up its own child position.
         for q in lvl.perm

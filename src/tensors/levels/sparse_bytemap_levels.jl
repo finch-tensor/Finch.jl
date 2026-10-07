@@ -369,7 +369,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
                     $(lvl.ptr)[$p] = $(Tp(0))
                     $(lvl.ptr)[$p + 1] = $(Tp(0))
                     $(lvl.tbl)[$q] = false
-                    if $(supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel))
+                    if $(
+                        supports_reassembly(lvl.lvl) && !(lvl.lvl isa VirtualElementLevel)
+                    )
                         $(contain(
                             ctx_2 ->
                                 assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
@@ -437,7 +439,8 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
             # Children that can't be reassembled are stale after a run, so redo them all.
             ctx_2 -> assemble_level!(
                 ctx_2, lvl.lvl,
-                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp), value(q_stop, Tp),
+                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp),
+                value(q_stop, Tp),
             ),
             ctx,
         ))
@@ -678,13 +681,17 @@ function unfurl(
                 preamble=quote
                     $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
                     $dirty = false
-                    $(if lvl.lvl isa VirtualElementLevel
-                        # An Element's value is only meaningful where tbl is set, so
-                        # reset it on first touch instead of when declaring.
-                        :(if !$(lvl.tbl)[$my_q]
-                            $(lvl.lvl.val)[$my_q] = $(lvl.lvl.Vf)
-                        end)
-                    end)
+                    $(
+                        if lvl.lvl isa VirtualElementLevel
+                            # An Element's value is only meaningful where tbl is set, so
+                            # reset it on first touch instead of when declaring.
+                            :(
+                                if !$(lvl.tbl)[$my_q]
+                                    $(lvl.lvl.val)[$my_q] = $(lvl.lvl.Vf)
+                                end
+                            )
+                        end
+                    )
                 end,
                 body=(ctx) -> instantiate(
                     ctx,
@@ -726,23 +733,7 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     srt = lvl.srt.data
     shape = lvl.shape
     q_shift = shift .* shape
-    # Shards concatenate, except that a hash above may move a block of a shard's
-    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
-    # traversal order, so the shard's entries under it form one run of `srt`,
-    # which belongs right after the owner's entries under the same block. Only
-    # `srt` and `ptr` make room for it: children are addressed by position.
-    under(t, lo, len) =
-        searchsortedfirst(srt[t], (lo - 1) * shape + 1):searchsortedlast(srt[t], (lo + len - 1) * shape)
-    moved = [1:0 for _ in 1:P]
-    owner = zeros(Int, P)
-    split = [length(srt[t]) for t in 1:P]
-    for t in 1:P
-        s = shift[t]
-        s isa ShardShift && s.len > 0 || continue
-        moved[t] = under(t, s.src, s.len)
-        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
-        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
-    end
+    ranges = [shard_ranges(shift[t], length(lvl.ptr.data[t]) - 1) for t in 1:P]
     # Emit pieces, runs of one shard's local ranks, in destination order. Piece
     # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
     # `start`, skipping `lo` when it repeats the entry before it (`dup`); `prev`
@@ -760,15 +751,9 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
         last_q = srt[t][hi] + q_shift[t]
         return nothing
     end
-    for o in 1:P
-        m, b = moved[o], split[o]
-        emit!(o, 1, min(first(m) - 1, b))
-        emit!(o, last(m) + 1, b)
-        for t in (o + 1):P
-            owner[t] == o && emit!(t, first(moved[t]), last(moved[t]))
-        end
-        emit!(o, b + 1, first(m) - 1)
-        emit!(o, max(last(m), b) + 1, length(srt[o]))
+    for (t, lo, hi, _) in coalesce_parent_ranges(ranges)
+        emit!(t, searchsortedfirst(srt[t], (lo - 1) * shape + 1),
+            searchsortedlast(srt[t], (hi - 1) * shape))
     end
     shared_dst = [q == 0 ? 0 : q + q_shift[t] for (t, q) in enumerate(shared)]
     # Unoccupied bounds and bitmap entries retain their cleared values.

@@ -8,8 +8,9 @@ isempty_band(lb, ub) = isless(reverse(ub), reverse(lb))
 # A band with no indices, whatever the shape: its lower bound is past the last
 # index. Tasks with empty bands skip accumulation, since tuplemask assumes
 # `lb <= ub`.
-empty_band(shapes) =
+function empty_band(shapes)
     ((map(one, Base.front(Tuple(shapes)))..., shapes[end] + 1), Tuple(shapes))
+end
 
 # The column-major flat indices between two index tuples.
 function band_range(lb, ub, shapes)
@@ -22,28 +23,90 @@ end
 coalesce_leaves(lvl) = prod(level_size(lvl))
 
 """
-    ShardShift(offset, src, dst, len)
+    ShardShift(splits, offsets)
 
-A shard's parent-position map below a hash: add `offset`, except the `len`
-positions starting at `src` move to `dst`. A hash's shared entry keeps an
-arbitrary child position, so its children map to the earlier owner's position
-instead of following the shard's offset. Levels apply it like an integer shift
-(`pos + shift[p]`, and `shift[p] * shape` for the positions below a parent).
+A piecewise translation of a shard's positions. Positions satisfying
+`splits[k] <= pos < splits[k + 1]` receive `offsets[k]`; `splits` has one more
+entry than `offsets`, starts at 1, and ends one past the source extent.
+Empty ranges are allowed, as in a level's `ptr` array. Multiplication by a
+dense shape scales both the ranges and their offsets.
 """
 struct ShardShift
-    offset::Int
-    src::Int
-    dst::Int
-    len::Int
+    splits::Vector{Int}
+    offsets::Vector{Int}
+    function ShardShift(splits, offsets)
+        length(splits) == length(offsets) + 1 && first(splits) == 1 &&
+            issorted(splits) || throw(ArgumentError("invalid ShardShift ranges"))
+        new(splits, offsets)
+    end
 end
 
-Base.:+(pos::Integer, s::ShardShift) =
-    s.src <= pos < s.src + s.len ? pos - s.src + s.dst : pos + s.offset
+@inline Base.:+(pos::Integer, s::ShardShift) =
+    pos + s.offsets[searchsortedlast(s.splits, pos)]
 Base.:*(s::ShardShift, n::Integer) =
-    ShardShift(s.offset * n, (s.src - 1) * n + 1, (s.dst - 1) * n + 1, s.len * n)
+    ShardShift((s.splits .- 1) .* n .+ 1, s.offsets .* n)
 
-shard_offset(s::Integer) = s
-shard_offset(s::ShardShift) = s.offset
+# Source-parent ranges, with an exclusive upper bound. Clip to the frozen
+# parent's extent: a child's ptr may omit its parent's unused trailing slots.
+shard_ranges(s::Integer, n) = n == 0 ? NTuple{3,Int}[] : [(1, n + 1, Int(s))]
+function shard_ranges(s::ShardShift, n)
+    [
+        (s.splits[k], min(s.splits[k + 1], n + 1), s.offsets[k])
+        for k in eachindex(s.offsets) if s.splits[k] < min(s.splits[k + 1], n + 1)
+    ]
+end
+
+# Build a map from nonempty, disjoint source ranges, merging equal neighbors.
+function shard_shift(ranges)
+    splits, offsets = Int[1], Int[]
+    for (lo, hi, delta) in sort!(ranges; by=first)
+        lo == hi && continue
+        @assert lo == last(splits)
+        if !isempty(offsets) && last(offsets) == delta
+            splits[end] = hi
+        else
+            push!(offsets, delta)
+            push!(splits, hi)
+        end
+    end
+    ShardShift(splits, offsets)
+end
+
+function shard_shift(n, offset, shared, shared_dst)
+    shared == 0 && return ShardShift([1, n + 1], [offset])
+    shard_shift([(1, shared, offset), (shared, shared + 1, shared_dst - shared),
+        (shared + 1, n + 1, offset)])
+end
+
+shifted_runs(run, shift::Integer) = ((run, shift),)
+function shifted_runs(run, shift::ShardShift)
+    (
+        (max(first(run), shift.splits[k]):min(last(run), shift.splits[k + 1] - 1),
+            shift.offsets[k]) for k in eachindex(shift.offsets)
+        if max(first(run), shift.splits[k]) < min(last(run) + 1, shift.splits[k + 1])
+    )
+end
+
+# Split translated parent ranges at their destination endpoints. Within an
+# overlapping interval, ordered bands contribute in shard order. This handles
+# both an exported block and insertions in its owner's range without looking
+# through any entries. R source ranges require O(R^2) work and output space.
+function coalesce_parent_ranges(ranges)
+    bounds = Int[]
+    for rs in ranges, (lo, hi, delta) in rs
+        push!(bounds, lo + delta, hi + delta)
+    end
+    sort!(unique!(bounds))
+    pieces = NTuple{4,Int}[]
+    for k in 1:(length(bounds) - 1)
+        a, b = bounds[k], bounds[k + 1]
+        for (t, rs) in enumerate(ranges), (lo, hi, delta) in rs
+            lo + delta <= a && b <= hi + delta || continue
+            push!(pieces, (t, a - delta, b - delta, delta))
+        end
+    end
+    pieces
+end
 
 """
     setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)
@@ -61,13 +124,14 @@ These are positions, not Boolean flags or permutation ranks: a list uses an
 `q` in its `(parent, index, q)` entry. Empty shards do not change ownership.
 
 Skip only the shared entry's index metadata. Its children still contribute to
-`shared_dst[p]`. Ordinary child positions use the child plan's offset; a hash
-passes its shared position to its child as a `ShardShift`. Count shared entries
-with `shared[p] != 0`, never by subtracting the position itself.
+`shared_dst[p]`. Hashes pass their shared position to their children as a
+`ShardShift`; lists translate parent ranges into child-rank ranges. Count shared
+entries with `shared[p] != 0`, never by subtracting the position itself.
 
-`nnz` counts all owned entries, and list plans also report `off[p]`, the owned
-index entries of earlier shards. Dense and element plans have no sparse index ownership fields; dense
-plans delegate through `child`, and element plans use `overlap` when copying.
+`nnz` counts all owned entries, and list plans report `off[p]`, the destination
+rank before the shard's first emitted piece. Dense and element plans have no
+sparse index ownership fields; dense plans delegate through `child`, and element
+plans use `overlap` when copying.
 
 `init` lists `(buffer, start, value)` ranges, including child storage. Setup
 allocates serially; initialize these ranges before calling `coalesce_shard!`.
@@ -99,6 +163,8 @@ parallel, the ranges in `plan.init` are initialized. After initialization finish
 `runs` iterates ranges of leaf positions (positions at the Element level) under
 which the shard stores values. Every worker must reach every level, even with an
 empty shard: worker `tid` also inserts a hash's output buckets `tid:P:B`.
+After the copy barrier, `finish_coalesce!` prefix-sums the hash block histograms
+built during those writes; it does not revisit the tensor entries.
 """
 function coalesce_shards!(src, dst, P, max_pos, bands)
     plan = setup_coalesce!(src, max_pos, dst, P, zeros(Int, P), isnothing(bands))
@@ -117,7 +183,14 @@ function coalesce_shards!(src, dst, P, max_pos, bands)
         runs = isnothing(bands) ? (1:(max_pos * coalesce_leaves(src))) : bands[tid]
         coalesce_shard!(tid, plan, src, dst, (runs,))
     end
+    finish_coalesce!(dst)
     return dst
+end
+
+# Rebuild derived frozen metadata after all parallel writers have finished.
+function finish_coalesce!(lvl)
+    hasproperty(lvl, :lvl) && finish_coalesce!(lvl.lvl)
+    nothing
 end
 
 @inbounds function binary_search(target::Int, arr)

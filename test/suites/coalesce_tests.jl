@@ -59,16 +59,101 @@
 end
 
 @testitem "coalesce_merges" begin
+    using Random
+
+    # Rebuild a frozen source with arbitrary hash child positions and holes,
+    # preserving its logical values and every format's physical invariants.
+    function shuffle_positions(lvl, parents, extent, rng)
+        if lvl isa Finch.ElementLevel
+            values = zeros(eltype(lvl.val), extent)
+            for p in eachindex(parents)
+                parents[p] == 0 || (values[parents[p]] = lvl.val[p])
+            end
+            return Element(0, values)
+        elseif lvl isa Finch.DenseLevel || lvl isa Finch.SparseByteMapLevel
+            shape = lvl.shape
+            child_map = [p == 0 ? 0 : (p - 1) * shape + i for p in parents for i in 1:shape]
+            child = shuffle_positions(lvl.lvl, child_map, extent * shape, rng)
+            lvl isa Finch.DenseLevel && return Dense(child, shape)
+            srt = sort!([child_map[q] for q in lvl.srt if child_map[q] != 0])
+            tbl = zeros(Bool, extent * shape)
+            tbl[srt] .= true
+            ptr = zeros(Int, extent + 1)
+            ptr[1] = 1
+            prev = 0
+            for (r, q) in enumerate(srt)
+                p = fld(q - 1, shape) + 1
+                if p != prev
+                    ptr[prev + 1] = ptr[p] = r
+                    prev = p
+                end
+            end
+            prev == 0 || (ptr[prev + 1] = length(srt) + 1)
+            return SparseByteMap{Int}(child, shape, ptr, tbl, srt)
+        elseif lvl isa Finch.SparseListLevel
+            entries = sort!([
+                (parents[p], lvl.idx[q], q)
+                for p in 1:(length(lvl.ptr) - 1) if parents[p] != 0
+                for q in lvl.ptr[p]:(lvl.ptr[p + 1] - 1)
+            ])
+            ptr = zeros(Int, extent + 1)
+            ptr[1] = 1
+            child_map = zeros(Int, length(lvl.idx))
+            for (r, (p, _, q)) in enumerate(entries)
+                ptr[p + 1] += 1
+                child_map[q] = r
+            end
+            cumsum!(ptr, ptr)
+            child = shuffle_positions(lvl.lvl, child_map, length(entries), rng)
+            return SparseList{Int}(child, lvl.shape, ptr, [i for (_, i, _) in entries])
+        else
+            B = lvl.subtables
+            old = [q for q in lvl.perm if parents[first(lvl.key[q])] != 0]
+            slots = randperm(rng, 2length(old))[1:length(old)]
+            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), 2length(old))
+            child_map = zeros(Int, length(lvl.key))
+            counts = zeros(Int, B)
+            for (q, dst) in zip(old, slots)
+                p, i = lvl.key[q]
+                key[dst] = (parents[p], i, Finch.SPARSE_HASH_KEY_RETAINED)
+                child_map[q] = dst
+                counts[Finch.sparse_hash_hash_subtable(
+                    Finch.sparse_hash_hash(parents[p], i), B
+                )] += 1
+            end
+            ctrl = fill(
+                Finch.SPARSE_HASH_CTRL_EMPTY,
+                B * Finch.sparse_hash_table_capacity(maximum(counts)),
+            )
+            tbl = zeros(Int, length(ctrl))
+            for q in slots
+                p, i = key[q]
+                x = Finch.sparse_hash_hash(p, i)
+                h = Finch.sparse_hash_vacancy(ctrl, x, B)
+                ctrl[h], tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
+            end
+            ptr, perm = Int[], Int[]
+            Finch.sparse_hash_freeze!(ptr, perm, key, extent; tbl_count=counts, subtables=B)
+            child = shuffle_positions(lvl.lvl, child_map, length(key), rng)
+            return SparseHash{Int}(child, lvl.shape, B, ptr, ctrl, tbl, key, perm, counts)
+        end
+    end
+
     # Split `data` into shards as the normalizing merge sees them: shard p stores
     # `data` restricted to the flat (column-major) index range `cuts[p]`.
-    function band_shards(fmt, data, cuts)
+    function band_shards(fmt, data, cuts; permute_hashes=false)
         P = length(cuts)
         mem = Finch.MultiChannelMemory(cpu(:t, P), P)
         chans(xs) = Finch.MultiChannelBuffer(mem, xs)
         shards = map(cuts) do cut
             masked = zero(data)
             masked[cut] = data[cut]
-            Tensor(fmt(), masked).lvl
+            lvl = Tensor(fmt(), masked).lvl
+            if permute_hashes
+                lvl = shuffle_positions(lvl, [1], 1, rng)
+                @test Array(Tensor(lvl)) == masked
+            end
+            lvl
         end
         function stack(lvls)
             lvl = first(lvls)
@@ -84,7 +169,10 @@ end
             elseif lvl isa Finch.SparseHashLevel
                 SparseHash{Int}(
                     stack([l.lvl for l in lvls]), lvl.shape, lvl.subtables,
-                    (chans([getfield(l, f) for l in lvls]) for f in Finch.SPARSE_HASH_BUFFERS)...,
+                    (
+                        chans([getfield(l, f) for l in lvls]) for
+                        f in Finch.SPARSE_HASH_BUFFERS
+                    )...,
                 )
             else
                 SparseByteMap{Int}(
@@ -97,23 +185,50 @@ end
         return stack(shards)
     end
 
-    has_hash(lvl) = lvl isa Finch.SparseHashLevel ||
+    has_hash(lvl) =
+        lvl isa Finch.SparseHashLevel ||
         (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
     function check_hash_storage(lvl)
         if lvl isa Finch.SparseHashLevel
             @test issorted(lvl.key[lvl.perm])
-            @test sum(lvl.tbl_count) == length(lvl.perm)
+            @test sum(lvl.tbl_count[1:(lvl.subtables)]) == length(lvl.perm)
             live = Set(lvl.perm)
-            @test all(q -> lvl.key[q][3] == (q in live ?
-                Finch.SPARSE_HASH_KEY_RETAINED : Finch.SPARSE_HASH_KEY_FREE), eachindex(lvl.key))
+            @test all(
+                q ->
+                    lvl.key[q][3] == (
+                        if q in live
+                            Finch.SPARSE_HASH_KEY_RETAINED
+                        else
+                            Finch.SPARSE_HASH_KEY_FREE
+                        end
+                    ), eachindex(lvl.key))
             width = length(lvl.tbl) ÷ lvl.subtables
-            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
-                view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:lvl.subtables]
+            @test lvl.tbl_count[1:(lvl.subtables)] == [
+                count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                    view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for
+                b in 1:(lvl.subtables)
+            ]
             for r in eachindex(lvl.perm)
                 q = lvl.perm[r]
                 p, i = lvl.key[q]
                 @test lvl.ptr[p] <= r < lvl.ptr[p + 1]
-                @test Finch.sparse_hash_lookup(lvl.tbl_ctrl, lvl.tbl, lvl.key, p, i, lvl.subtables) == q
+                @test Finch.sparse_hash_lookup(
+                    lvl.tbl_ctrl, lvl.tbl, lvl.key, p, i, lvl.subtables
+                ) == q
+            end
+            if lvl.subtables > 1
+                counts = zeros(Int, lvl.subtables)
+                for (r, q) in enumerate(lvl.perm)
+                    p, i = lvl.key[q]
+                    counts[Finch.sparse_hash_hash_subtable(
+                        Finch.sparse_hash_hash(p, i), lvl.subtables
+                    )] += 1
+                    if r % lvl.subtables == 0 || r == length(lvl.perm)
+                        j = cld(r, lvl.subtables)
+                        @test lvl.tbl_count[(j * lvl.subtables + 1):((j + 1) * lvl.subtables)] ==
+                            counts
+                    end
+                end
             end
         end
         hasproperty(lvl, :lvl) && check_hash_storage(lvl.lvl)
@@ -121,8 +236,8 @@ end
 
     # Merging must give exactly the storage of a tensor built directly, whether
     # or not the merge knows each shard's band.
-    function check_merge(fmt, data, cuts)
-        src = band_shards(fmt, data, cuts)
+    function check_merge(fmt, data, cuts; permute_hashes=false)
+        src = band_shards(fmt, data, cuts; permute_hashes)
         for bands in (cuts, nothing)
             # Destinations arrive cleared, as assemble_level! leaves them.
             dst = Tensor(fmt(), zero(data)).lvl
@@ -193,6 +308,7 @@ end
         () -> SparseList(SparseHash(Element(0), 0, 8)),
         () -> SparseByteMap(SparseHash(Element(0), 0, 8)),
         () -> SparseHash(Dense(Element(0)), 0, 8),
+        () -> SparseHash(SparseList(Element(0)), 0, 8),
         () -> SparseHash(SparseByteMap(Element(0)), 0, 8),
         () -> SparseHash(SparseHash(Element(0), 0, 8), 0, 8),
     ]
@@ -217,11 +333,12 @@ end
         check_merge(fmt, zero(data), [1:5, 6:5, 6:20, 21:20])
     end
 
-    @testset "lists cannot merge below a hash" begin
+    @testset "lists merge below a hash" begin
         fmt = () -> SparseHash(SparseList(Element(0)), 0, 8)
         src = band_shards(fmt, data, [1:3, 4:12, 13:20])
         dst = Tensor(fmt(), zero(data)).lvl
-        @test_throws ArgumentError Finch.coalesce_shards!(src, dst, 3, 1, nothing)
+        Finch.coalesce_shards!(src, dst, 3, 1, nothing)
+        @test Array(Tensor(dst)) == data
     end
 
     @testset "thaw reuses merged child holes" for child in (
@@ -251,6 +368,8 @@ end
         () -> Dense(SparseByteMap(SparseList(Element(0)))),
         () -> SparseList(SparseByteMap(SparseByteMap(Element(0)))),
         () -> SparseHash(Dense(SparseHash(Element(0), 0, 8)), 0, 8),
+        () -> SparseHash(SparseList(SparseHash(Element(0), 0, 8)), 0, 8),
+        () -> SparseHash(SparseList(SparseList(Element(0))), 0, 8),
         () -> SparseHash(SparseByteMap(SparseHash(Element(0), 0, 8)), 0, 8),
     ]
     data_3d = zeros(Int, 3, 2, 3)
@@ -261,12 +380,32 @@ end
         # The middle bands hold only parts of slices.
         check_merge(fmt, data_3d, [1:7, 8:8, 9:10, 11:18])
     end
+
+    rng = MersenneTwister(91283)
+    @testset "shuffled hash positions through nested formats" begin
+        formats = [
+            () -> SparseHash(SparseList(SparseList(Element(0))), 0, 8),
+            () -> SparseHash(SparseList(SparseHash(Element(0), 0, 8)), 0, 8),
+            () -> SparseHash(SparseByteMap(SparseList(Element(0))), 0, 8),
+            () -> SparseHash(Dense(SparseList(Element(0))), 0, 8),
+            () -> SparseHash(SparseList(Dense(Element(0))), 0, 8),
+            () -> SparseHash(SparseList(SparseByteMap(Element(0))), 0, 8),
+            () -> SparseHash(SparseHash(SparseList(Element(0)), 0, 8), 0, 8),
+        ]
+        for fmt in formats, trial in 1:20
+            data = rand(rng, 0:5, 4, 3, 5)
+            bounds = [0; sort!(rand(rng, 0:length(data), 4)); length(data)]
+            cuts = [(bounds[t] + 1):bounds[t + 1] for t in 1:5]
+            check_merge(fmt, data, cuts; permute_hashes=true)
+        end
+    end
 end
 
 @testitem "coalesce_end_to_end" begin
     using Random
 
-    has_hash(lvl) = lvl isa Finch.SparseHashLevel ||
+    has_hash(lvl) =
+        lvl isa Finch.SparseHashLevel ||
         (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
 
     function outer!(C, A, BT, device)
@@ -303,6 +442,7 @@ end
         () -> SparseList(SparseHash(Element(0))),
         () -> SparseByteMap(SparseHash(Element(0))),
         () -> SparseHash(Dense(Element(0))),
+        () -> SparseHash(SparseList(Element(0))),
         () -> SparseHash(SparseByteMap(Element(0))),
         () -> SparseHash(SparseHash(Element(0))),
     ]
@@ -354,7 +494,6 @@ end
     end
 end
 
-
 @testitem "coalesce_hash_setup" begin
     # Frozen hash shards holding entries (p, i, q), one list per shard.
     function hash_shards(entries; B=nextpow(2, length(entries)))
@@ -367,21 +506,27 @@ end
                 counts[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p, i), B)] += 1
             end
             ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY,
-                        B * Finch.sparse_hash_table_capacity(maximum(counts)))
+                B * Finch.sparse_hash_table_capacity(maximum(counts)))
             tbl = zeros(Int, length(ctrl))
             key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), maximum(e -> e[3], es; init=0))
             for (p, i, q) in es
                 x = Finch.sparse_hash_hash(p, i)
                 h = Finch.sparse_hash_vacancy(ctrl, x, B)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
+                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x),
+                q,
+                (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0))
+            Finch.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0);
+                tbl_count=counts, subtables=B)
             (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=counts)
         end
         return SparseHash{Int}(
             Element(0, channels([zeros(Int, length(s.key)) for s in shards])), 1000, B,
-            (channels([getfield(s, f) for s in shards]) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (
+                channels([getfield(s, f) for s in shards]) for
+                f in Finch.SPARSE_HASH_BUFFERS
+            )...,
         )
     end
     entries_of(lvl) = [(lvl.key[q][1], lvl.key[q][2], q) for q in lvl.perm]
@@ -414,9 +559,9 @@ end
         @test length(dst.tbl) == length(dst.tbl_ctrl)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         @test sum(plan.bucket_counts) == plan.nnz
-        @test dst.tbl_count == plan.bucket_counts
+        @test dst.tbl_count[1:8] == plan.bucket_counts
         @test length(dst.key) == plan.max_child_pos
-        @test plan.bucket_shift == [Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in shift]
+        @test all(t -> all(r -> r[3] == shift[t], plan.ranges[t]), 1:5)
         @test src.key.data[1][src.perm.data[1][1]] == (1, 2, Finch.SPARSE_HASH_KEY_RETAINED)
 
         # Traversal ranks are concatenated by shard; bucket owners publish the
@@ -465,9 +610,34 @@ end
         @test issorted(dst.lvl.key[dst.lvl.perm])
         for lvl in (dst, dst.lvl)
             width = length(lvl.tbl) ÷ lvl.subtables
-            @test lvl.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
-                view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8]
+            @test lvl.tbl_count[1:8] == [
+                count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                    view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8
+            ]
         end
+    end
+
+    @testset "list exports one boundary and receives at another" begin
+        outer = hash_shards([
+            [(1, 1, 1)], [(1, 3, 1), (1, 2, 2), (1, 1, 3)], [(1, 3, 1)],
+        ]; B=4)
+        channels(data) = Finch.MultiChannelBuffer(outer.key.device, data)
+        child = SparseList{Int}(
+            Element(0, channels([[10], [30, 50, 20], [40]])), 2,
+            channels([[1, 2], [1, 2, 3, 4], [1, 2]]),
+            channels([[1], [1, 1, 2], [2]]),
+        )
+        src = SparseHash{Int}(child, 3, 4,
+            (getfield(outer, f) for f in Finch.SPARSE_HASH_BUFFERS)...)
+        dst = SparseHash(SparseList(Element(0), 2), 3, 4)
+        plan = Finch.setup_coalesce!(src, 1, dst, 3, [0, 0, 0], true)
+        @test [r + plan.child.child.shift[2] for r in 1:3] == [3, 5, 2]
+        initialize!(plan)
+        Threads.@threads for tid in 1:3
+            Finch.coalesce_shard!(tid, plan, src, dst, ())
+        end
+        Finch.finish_coalesce!(dst)
+        @test Array(Tensor(dst)) == [10 50 30; 20 0 40]
     end
 
     @testset "skewed buckets" begin
@@ -483,7 +653,9 @@ end
         for (q, i) in enumerate(indices)
             x = Finch.sparse_hash_hash(1, i)
             h = Finch.sparse_hash_vacancy(dst.tbl_ctrl, x, 8)
-            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Finch.sparse_hash_hash_ctrl(x), q, (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
+            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Finch.sparse_hash_hash_ctrl(x),
+            q,
+            (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
         end
         @test all(enumerate(indices)) do (q, i)
             Finch.sparse_hash_lookup(dst.tbl_ctrl, dst.tbl, dst.key, 1, i, 8) == q
@@ -517,7 +689,9 @@ end
             plan = Finch.setup_coalesce!(src, 3P + 1, dst, P, shift, false)
             expected = zeros(Int, B)
             for t in 1:P, (p, i, _) in entries[t]
-                expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p + shift[t], i), B)] += 1
+                expected[Finch.sparse_hash_hash_subtable(
+                    Finch.sparse_hash_hash(p + shift[t], i), B
+                )] += 1
             end
             @test plan.bucket_counts == expected
             @test plan.child_shift == collect(0:8:(8(P - 1)))
@@ -528,11 +702,14 @@ end
     struct SetupReadGuard{T} <: AbstractVector{T}
         data::Vector{T}
         reads::Base.RefValue{Int}
+        limit::Int
     end
+    SetupReadGuard(data, reads) = SetupReadGuard(data, reads, 2)
     Base.size(v::SetupReadGuard) = size(v.data)
     function Base.getindex(v::SetupReadGuard, i::Int)
         v.reads[] += 1
-        v.reads[] <= 2 || error("Hash setup scanned entries beyond the boundaries")
+        v.reads[] <= v.limit ||
+            error("Hash setup scanned entries beyond its range-query budget")
         v.data[i]
     end
 
@@ -553,8 +730,83 @@ end
         @test plan.nnz == 3000
         @test plan.max_child_pos == 6000
         @test sum(plan.bucket_counts) == 3000
-        @test_throws ArgumentError Finch.setup_coalesce!(src, 3, SparseHash(Element(0)), 3, [0, 0, 0], false)
+        @test_throws ArgumentError Finch.setup_coalesce!(
+            src, 3, SparseHash(Element(0)), 3, [0, 0, 0], false
+        )
     end
+
+    @testset "checkpoint histograms include partial blocks and rotated fringes" begin
+        for B in (1, 2, 8), n in (0, 1, 7, 19)
+            src = hash_shards([[(1 + q % 3, 3q, 2q) for q in 1:n]]; B)
+            key, perm, counts = src.key.data[1], src.perm.data[1], src.tbl_count.data[1]
+            @test length(counts) <= n + 2B
+            for lo in 1:(n + 1), hi in lo:(n + 1), delta in (-7, 0, 5)
+                actual, expected = zeros(Int, B), zeros(Int, B)
+                Finch.sparse_hash_count_range!(actual, counts, perm, key, B, lo, hi, delta)
+                for r in lo:(hi - 1)
+                    p, i = key[perm[r]]
+                    expected[Finch.sparse_hash_hash_subtable(
+                        Finch.sparse_hash_hash(p + delta, i), B
+                    )] += 1
+                end
+                @test actual == expected
+            end
+        end
+    end
+
+    @testset "piecewise setup reads do not grow with the number of keys" begin
+        reads = Int[]
+        P, B = 3, 4
+        for n in (17, 10017)
+            entries = [[(p, i, (p - 1) * n + i) for p in 1:6 for i in 1:n] for _ in 1:P]
+            src = hash_shards(entries; B)
+            # Reverse three parent intervals within each shard's disjoint frame.
+            shifts = [
+                Finch.ShardShift([1, 3, 5, 7], [6(t - 1) + 4, 6(t - 1), 6(t - 1) - 4]) for
+                t in 1:P
+            ]
+            keys = [SetupReadGuard(v, Ref(0), 6B + 12) for v in src.key.data]
+            perms = [SetupReadGuard(v, Ref(0), 6B + 12) for v in src.perm.data]
+            guarded = SparseHash{Int}(
+                src.lvl, src.shape, B, src.ptr, src.tbl_ctrl, src.tbl,
+                Finch.MultiChannelBuffer(src.key.device, keys),
+                Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
+            )
+            dst = SparseHash(Element(0), 1000, B)
+            plan = Finch.setup_coalesce!(guarded, 6P, dst, P, shifts, false)
+            expected = zeros(Int, B)
+            for t in 1:P, (p, i, _) in entries[t]
+                expected[Finch.sparse_hash_hash_subtable(
+                    Finch.sparse_hash_hash(p + shifts[t], i), B
+                )] += 1
+            end
+            @test plan.bucket_counts == expected
+            @test plan.nnz == 6P * n
+            push!(reads, sum(v.reads[] for v in keys))
+        end
+        @test reads[1] == reads[2]
+    end
+end
+
+@testitem "coalesce_piecewise_shifts" begin
+    s = Finch.ShardShift([1, 3, 5, 8], [10, -2, 20])
+    @test [p + s for p in 1:7] == [11, 12, 1, 2, 25, 26, 27]
+    for p in 1:7, i in 1:3
+        @test (3(p - 1) + i) + s * 3 == 3(p + s - 1) + i
+    end
+    @test 1 + Finch.ShardShift([1, 1, 3], [100, 4]) == 5
+    @test_throws ArgumentError Finch.ShardShift([1, 3], [1, 2])
+    @test_throws ArgumentError Finch.ShardShift([1, 4, 3], [1, 2])
+
+    # The bulk-copy path must split a long run at every translation boundary.
+    mem = Finch.MultiChannelMemory(cpu(:ranges, 1), 1)
+    src = Element(0, Finch.MultiChannelBuffer(mem, [collect(1:48)]))
+    dst = Element(0)
+    plan = Finch.setup_coalesce!(
+        src, 48, dst, 1, [Finch.ShardShift([1, 25, 49], [24, -24])], false
+    )
+    Finch.coalesce_shard!(1, plan, src, dst, (1:48,))
+    @test dst.val == [collect(25:48); collect(1:24)]
 end
 
 @testitem "coalesce_hash_sampling" begin
@@ -569,11 +821,16 @@ end
         shards = map(entries, extents) do es, extent
             ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, 16)
             tbl = zeros(Int, 16)
-            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), max(maximum(e -> e[3], es; init=0), extent))
+            key = fill(
+                (0, 0, Finch.SPARSE_HASH_KEY_FREE),
+                max(maximum(e -> e[3], es; init=0), extent),
+            )
             for (p, i, q) in es
                 x = Finch.sparse_hash_hash(p, i)
                 h = Finch.sparse_hash_vacancy(ctrl, x, 1)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x), q, (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
+                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x),
+                q,
+                (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
             Finch.sparse_hash_freeze!(ptr, perm, key, parents)
@@ -581,7 +838,10 @@ end
         end
         return SparseHash{Int}(
             child, 10, 1,
-            (channels([getfield(s, f) for s in shards]) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (
+                channels([getfield(s, f) for s in shards]) for
+                f in Finch.SPARSE_HASH_BUFFERS
+            )...,
         )
     end
     entries = [[(1, 5, 3), (2, 7, 1), (2, 9, 2)], [(1, 2, 2), (1, 8, 3), (2, 6, 1)]]
@@ -634,7 +894,9 @@ end
         leaf = Element(0, channels([collect(1:3) for _ in 1:2]))
         src = Dense(hash_shards(leaf, entries), 2)
         dst = Dense(SparseHash(Element(0), 10), 2)
-        lvl = Coalesce(device, src, dst, Finch.FinchStaticSchedule{:dynamic}(), nothing; mode=:fast)
+        lvl = Coalesce(
+            device, src, dst, Finch.FinchStaticSchedule{:dynamic}(), nothing; mode=:fast
+        )
         nnz, _ = Finch.get_total_nnz(lvl, true)
         Random.seed!(1)
         samples = Finch.build_sampler(lvl, 2, nnz, 2)
@@ -647,9 +909,9 @@ end
 @testitem "coalesce_reuse" begin
     # Reusing an output must discard old entries; unused backing values may remain.
     @testset "$(summary(fmt())) on $P workers" for fmt in (
-        () -> Dense(SparseByteMap(Element(0))),
-        () -> SparseByteMap(SparseByteMap(Element(0))),
-    ), P in (1, 2, 3)
+            () -> Dense(SparseByteMap(Element(0))),
+            () -> SparseByteMap(SparseByteMap(Element(0))),
+        ), P in (1, 2, 3)
         device = cpu(:k, P)
         output = Tensor(Coalesce(device, fmt()))
         first = [1 0 2; 0 3 0; 4 0 0]

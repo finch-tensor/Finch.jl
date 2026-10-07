@@ -78,7 +78,7 @@ function countstored_level(lvl::SparseListLevel, pos, idxs, dim, proc, exact)
     q_start = my_ptr[pos]
     q_stop = my_ptr[pos + 1] - 1
     idx = exact ? idxs[length(idxs) - dim] : lvl.shape
-    
+
     ##First, find if there are indices underneath the target index.
     r = binary_search_ub(idx, my_idx, q_start, q_stop)
 
@@ -632,32 +632,32 @@ function sample(tid, lvl::SparseListLevel)
 end
 
 function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
-    # A hash's shared child may map into an earlier shard's range, and moving a
-    # list's entries there would move their children too.
-    eltype(shift) <: ShardShift &&
-        throw(ArgumentError("SparseList levels cannot be coalesced below a SparseHash"))
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     shared = zeros(Int, P)
     shared_dst = zeros(Int, P)
     off = zeros(Int, P)
-    prev = zeros(Int, P)
+    pieces = [NTuple{5,Int}[] for _ in 1:P]
+    child_ranges = [NTuple{3,Int}[] for _ in 1:P]
+    ranges = [shard_ranges(shift[t], length(ptr[t]) - 1) for t in 1:P]
     nnz = 0
     last_pos = 0
     last_idx = 0
-    for p in 1:P
-        off[p] = nnz
-        prev[p] = last_pos
-        n = length(idx[p])
-        n == 0 && continue
-        # A shard shares its first entry if the previous shard ended on it.
-        if searchsortedlast(ptr[p], 1) + shift[p] == last_pos && idx[p][1] == last_idx
-            shared[p] = 1
-            shared_dst[p] = nnz
+    for (t, a, b, delta) in coalesce_parent_ranges(ranges)
+        lo, hi = ptr[t][a], ptr[t][b] - 1
+        lo > hi && continue
+        isempty(pieces[t]) && (off[t] = nnz)
+        pos = searchsortedlast(ptr[t], lo) + delta
+        dup = pos == last_pos && idx[t][lo] == last_idx
+        if dup
+            shared[t] = lo
+            shared_dst[t] = nnz
         end
-        nnz += n - (shared[p] != 0)
-        last_pos = searchsortedlast(ptr[p], n) + shift[p]
-        last_idx = idx[p][n]
+        push!(pieces[t], (lo, hi, nnz + 1, dup, last_pos))
+        push!(child_ranges[t], (lo, hi + 1, nnz + 1 - lo - dup))
+        nnz += hi - lo + 1 - dup
+        last_pos = searchsortedlast(ptr[t], hi) + delta
+        last_idx = idx[t][hi]
     end
     # Both buffers are rewritten completely; discard old contents before growth.
     empty!(dst.idx)
@@ -666,10 +666,10 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
     resize!(dst.ptr, max_pos + 1)
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
-        lvl.lvl, nnz, dst.lvl, P, off .- (shared .!= 0), any(!iszero, shared)
+        lvl.lvl, nnz, dst.lvl, P, shard_shift.(child_ranges), any(!iszero, shared)
     )
     init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
-    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
+    return (; shift, shared, shared_dst, off, pieces, nnz, child, init)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
@@ -681,30 +681,29 @@ function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     # Every worker reaches every level: a hash below also inserts its buckets.
     n == 0 && return coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, ())
     shift = plan.shift[tid]
-    slot = plan.off[tid] + 1
-    pos_prev = plan.prev[tid]
-    shared = plan.shared[tid]
-    r = 1
-    pos_first = searchsortedlast(ptr, 1)
-    pos_last = searchsortedlast(ptr, n)
-    for pos in pos_first:pos_last
-        stop = ptr[pos + 1] - 1
-        r == shared && (r += 1)
-        r > stop && continue
-        for x in (pos_prev + 1):(pos + shift)
-            dst.ptr[x] = slot
+    for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        slot, pos_prev = start, prev
+        r = lo + dup
+        r > hi && continue
+        pos_first = searchsortedlast(ptr, r)
+        pos_last = searchsortedlast(ptr, hi)
+        for pos in pos_first:pos_last
+            stop = min(hi, ptr[pos + 1] - 1)
+            r > stop && continue
+            for x in (pos_prev + 1):(pos + shift)
+                dst.ptr[x] = slot
+            end
+            pos_prev = pos + shift
+            for s in r:stop
+                dst.idx[slot] = idx[s]
+                slot += 1
+            end
+            r = stop + 1
         end
-        pos_prev = pos + shift
-        for s in r:stop
-            s == shared && continue
-            dst.idx[slot] = idx[s]
-            slot += 1
-        end
-        r = stop + 1
-    end
-    if slot - 1 == plan.nnz && slot > plan.off[tid] + 1
-        for x in (pos_prev + 1):length(dst.ptr)
-            dst.ptr[x] = slot
+        if slot - 1 == plan.nnz && slot > start
+            for x in (pos_prev + 1):length(dst.ptr)
+                dst.ptr[x] = slot
+            end
         end
     end
 
