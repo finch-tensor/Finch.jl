@@ -280,9 +280,10 @@ function sample(tid, lvl::DenseLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, shift, overlap)
+function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, splits, offsets, overlap)
     child = setup_coalesce!(
-        lvl.lvl, max_pos * lvl.shape, dst.lvl, P, shift .* lvl.shape, overlap
+        lvl.lvl, max_pos * lvl.shape, dst.lvl, P,
+        scale_positions(splits, lvl.shape), scale_positions(offsets, lvl.shape), overlap,
     )
     return (; child, init=child.init)
 end

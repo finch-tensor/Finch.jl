@@ -631,11 +631,12 @@ function sample(tid, lvl::SparseListLevel)
     return (tup..., idx_2), lfbr
 end
 
-function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
+function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, splits, offsets, overlap)
     # A hash's shared child may map into an earlier shard's range, and moving a
     # list's entries there would move their children too.
-    eltype(shift) <: ShardShift &&
+    any(o -> length(o) > 1, offsets) &&
         throw(ArgumentError("SparseList levels cannot be coalesced below a SparseHash"))
+    shift = [o[1] - s[1] for (s, o) in zip(splits, offsets)]
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     shared = zeros(Int, P)
@@ -666,7 +667,8 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, shift, overlap)
     resize!(dst.ptr, max_pos + 1)
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
-        lvl.lvl, nnz, dst.lvl, P, off .- (shared .!= 0), any(!iszero, shared)
+        lvl.lvl, nnz, dst.lvl, P, [[1, length(idx[p]) + 1] for p in 1:P],
+        [[off[p] + 1 - (shared[p] != 0)] for p in 1:P], any(!iszero, shared),
     )
     init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
     return (; shift, shared, shared_dst, off, prev, nnz, child, init)

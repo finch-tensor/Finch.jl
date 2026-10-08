@@ -715,12 +715,15 @@ function sample(tid, lvl::SparseByteMapLevel)
     return (tup..., idx_2), pos_2
 end
 
-function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overlap)
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, splits, offsets, overlap)
     srt = lvl.srt.data
     shape = lvl.shape
-    q_shift = shift .* shape
+    move = map(shard_move, splits, offsets)
+    q_splits = scale_positions(splits, shape)
+    q_offsets = scale_positions(offsets, shape)
+    q_move = map(shard_move, q_splits, q_offsets)
     # Shards concatenate, except that a hash above may move a block of a shard's
-    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
+    # parents into an earlier owner's range (see `shard_move`). Bands cut in
     # traversal order, so the shard's entries under it form one run of `srt`,
     # which belongs right after the owner's entries under the same block. Only
     # `srt` and `ptr` make room for it: children are addressed by position.
@@ -730,11 +733,11 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     owner = zeros(Int, P)
     split = [length(srt[t]) for t in 1:P]
     for t in 1:P
-        s = shift[t]
-        s isa ShardShift && s.len > 0 || continue
+        s = move[t]
+        s.len > 0 || continue
         moved[t] = under(t, s.src, s.len)
-        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
-        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
+        o = owner[t] = findlast(u -> move[u].offset < s.dst, 1:(t - 1))
+        split[o] = last(under(o, s.dst - move[o].offset, s.len))
     end
     # Emit pieces, runs of one shard's local ranks, in destination order. Piece
     # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
@@ -746,11 +749,11 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     last_q = 0
     function emit!(t, lo, hi)
         lo > hi && return nothing
-        dup = srt[t][lo] + q_shift[t] == last_q
+        dup = shard_pos(q_move[t], srt[t][lo]) == last_q
         dup && (shared[t] = srt[t][lo])
         push!(pieces[t], (lo, hi, nnz + 1, dup, fld(last_q - 1, shape) + 1))
         nnz += hi - lo + 1 - dup
-        last_q = srt[t][hi] + q_shift[t]
+        last_q = shard_pos(q_move[t], srt[t][hi])
         return nothing
     end
     for o in 1:P
@@ -763,7 +766,7 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
         emit!(o, b + 1, first(m) - 1)
         emit!(o, max(last(m), b) + 1, length(srt[o]))
     end
-    shared_dst = [q == 0 ? 0 : q + q_shift[t] for (t, q) in enumerate(shared)]
+    shared_dst = [q == 0 ? 0 : shard_pos(q_move[t], q) for (t, q) in enumerate(shared)]
     # Unoccupied bounds and bitmap entries retain their cleared values.
     ptr_start = min(length(dst.ptr), max_pos + 1) + 1
     tbl_start = min(length(dst.tbl), max_pos * shape) + 1
@@ -774,14 +777,14 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, shift, overla
     dst.ptr[1] = 1
     # Both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
-        lvl.lvl, max_pos * shape, dst.lvl, P, q_shift, any(!iszero, shared)
+        lvl.lvl, max_pos * shape, dst.lvl, P, q_splits, q_offsets, any(!iszero, shared)
     )
     # ptr[1] is the sentinel, not an unoccupied parent bound.
     init = (
         (dst.ptr, max(2, ptr_start), 0),
         (dst.tbl, tbl_start, false), child.init...,
     )
-    return (; shift, q_shift, pieces, shared, shared_dst, nnz, child, init)
+    return (; q_move, pieces, shared, shared_dst, nnz, child, init)
 end
 
 # Each shard writes its pieces of srt. ptr keeps freeze_level!'s layout, with
@@ -790,14 +793,15 @@ end
 function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
     src = lvl.srt.data[tid]
     shape = lvl.shape
-    q_shift = plan.q_shift[tid]
-    for local_q in src
-        dst.tbl[local_q + q_shift] = true
-    end
+    q_move = plan.q_move[tid]
+    # Each piece lies in one of the shard's ranges, so it moves as a block. A
+    # shared entry's bit is set by its owner.
     for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        shift = shard_pos(q_move, src[lo]) - src[lo]
         for r in (lo + dup):hi
             rank = start + r - lo - dup
-            q = src[r] + q_shift
+            q = src[r] + shift
+            dst.tbl[q] = true
             dst.srt[rank] = q
             p = fld(q - 1, shape) + 1
             if p != prev

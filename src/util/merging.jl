@@ -21,37 +21,31 @@ end
 # The number of leaf positions under each position of `lvl`'s parent.
 coalesce_leaves(lvl) = prod(level_size(lvl))
 
-"""
-    ShardShift(offset, src, dst, len)
-
-A shard's parent-position map below a hash: add `offset`, except the `len`
-positions starting at `src` move to `dst`. A hash's shared entry keeps an
-arbitrary child position, so its children map to the earlier owner's position
-instead of following the shard's offset. Levels apply it like an integer shift
-(`pos + shift[p]`, and `shift[p] * shape` for the positions below a parent).
-"""
-struct ShardShift
-    offset::Int
-    src::Int
-    dst::Int
-    len::Int
+# Levels below a hash handle one moved range per shard: positions
+# `src:(src + len - 1)` move to `dst`, and the rest add `offset`. A hash's shared
+# entry keeps an arbitrary child position, so its children map to the earlier
+# owner's position instead of following the shard's offset.
+function shard_move(splits, offsets)
+    offset = offsets[1] - splits[1]
+    length(offsets) == 1 && return (; offset, src=1, dst=1, len=0)
+    @assert length(offsets) == 3 && offsets[3] - splits[3] == offset
+    return (; offset, src=splits[2], dst=offsets[2], len=splits[3] - splits[2])
 end
 
-Base.:+(pos::Integer, s::ShardShift) =
-    s.src <= pos < s.src + s.len ? pos - s.src + s.dst : pos + s.offset
-Base.:*(s::ShardShift, n::Integer) =
-    ShardShift(s.offset * n, (s.src - 1) * n + 1, (s.dst - 1) * n + 1, s.len * n)
+# Where a shard's position `pos` lands, given its `shard_move`.
+shard_pos(m, pos) = m.src <= pos < m.src + m.len ? pos - m.src + m.dst : pos + m.offset
 
-shard_offset(s::Integer) = s
-shard_offset(s::ShardShift) = s.offset
+# The same ranges, for the `n` positions below each position.
+scale_positions(xs, n) = [(x .- 1) .* n .+ 1 for x in xs]
 
 """
-    setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)
+    setup_coalesce!(lvl, max_pos, dst, P, splits, offsets, overlap)
 
 Allocate destination storage and plan the merge of `P` ordered shards. `max_pos`
-is the destination parent-position extent, `shift[p]` translates shard `p`'s
-parent positions (an integer, or a `ShardShift` below a hash), and `overlap`
-indicates that dense leaves may overlap.
+is the destination parent-position extent. Shard `p`'s local parent positions
+`splits[p][r]:(splits[p][r + 1] - 1)` land in the merged output starting at
+`offsets[p][r]`; a hash permutes child positions, so a shard below one can need
+several ranges. `overlap` indicates that dense leaves may overlap.
 
 Sparse plans report `shared[p]`, the local child position whose index metadata
 is already owned by an earlier shard, or `0` when all indices must be written.
@@ -62,7 +56,7 @@ These are positions, not Boolean flags or permutation ranks: a list uses an
 
 Skip only the shared entry's index metadata. Its children still contribute to
 `shared_dst[p]`. Ordinary child positions use the child plan's offset; a hash
-passes its shared position to its child as a `ShardShift`. Count shared entries
+passes its shared position to its child as a range of its own. Count shared entries
 with `shared[p] != 0`, never by subtracting the position itself.
 
 `nnz` counts all owned entries, and list plans also report `off[p]`, the owned
@@ -90,8 +84,8 @@ values merge by copying only non-fill values into a destination of fill.
 conditionally copying, the dense storage outside its band.
 
 Merging first plans storage. `setup_coalesce!(lvl, max_pos, dst, P,
-shift, overlap)` sizes `dst` and returns a plan saying where each shard's
-positions land (`dst_pos = pos + shift[p]`), which local child position is shared
+splits, offsets, overlap)` sizes `dst` and returns a plan saying where each shard's
+positions land, which local child position is shared
 (`shared[p]`, or `0`), its destination (`shared_dst[p]`), and whether shards'
 leaves can overlap below. Then, in
 parallel, the ranges in `plan.init` are initialized. After initialization finishes,
@@ -101,7 +95,10 @@ which the shard stores values. Every worker must reach every level, even with an
 empty shard: worker `tid` also inserts a hash's output buckets `tid:P:B`.
 """
 function coalesce_shards!(src, dst, P, max_pos, bands)
-    plan = setup_coalesce!(src, max_pos, dst, P, zeros(Int, P), isnothing(bands))
+    plan = setup_coalesce!(
+        src, max_pos, dst, P, [[1, max_pos + 1] for _ in 1:P], [[1] for _ in 1:P],
+        isnothing(bands),
+    )
     if any(init -> init[2] <= length(init[1]), plan.init)
         Threads.@threads for tid in 1:P
             for (buffer, start, value) in plan.init

@@ -150,7 +150,7 @@ end
         )
             src = band_shards(fmt, data, cuts)
             dst = Tensor(fmt(), zero(data)).lvl
-            plan = Finch.setup_coalesce!(src, 1, dst, 2, [0, 0], true)
+            plan = Finch.setup_coalesce!(src, 1, dst, 2, [[1, 2], [1, 2]], [[1], [1]], true)
             @test eltype(plan.shared) == Int
             @test plan.shared == [0, shared]
             @test plan.shared_dst == [0, shared_dst]
@@ -358,6 +358,8 @@ end
 
 
 @testitem "coalesce_hash_setup" begin
+    # Splits and offsets that shift each shard's parents `1:n` uniformly.
+    uniform(shift, n) = ([[1, n + 1] for _ in shift], [[1 + s] for s in shift])
     # Frozen hash shards holding entries (p, i, q), one list per shard.
     function hash_shards(entries; B=nextpow(2, length(entries)))
         P = length(entries)
@@ -403,9 +405,9 @@ end
         src = hash_shards(entries)
         dst = SparseHash{Int}(Element(0), 1000, 8)
         shift = [0, 0, 1, 1, 2]
-        plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        plan = Finch.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
         initialize!(plan)
-        @test plan.shift == shift
+        @test [m.offset for m in plan.move] == shift
         @test eltype(plan.shared) == Int
         @test plan.shared == [0, 0, 3, 2, 0]
         @test plan.shared_dst == [0, 0, 1, 1, 0]
@@ -445,7 +447,7 @@ end
         end
 
         # Repeated setup schedules control-byte initialization.
-        plan = Finch.setup_coalesce!(src, 4, dst, 5, shift, true)
+        plan = Finch.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
         @test (dst.tbl_ctrl, 1, Finch.SPARSE_HASH_CTRL_EMPTY) in plan.init
         initialize!(plan)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
@@ -510,7 +512,7 @@ end
         end[1:20]
         src = hash_shards([[(1, i, q) for (q, i) in enumerate(indices)]]; B=8)
         dst = SparseHash(Element(0), 1000, 8)
-        plan = Finch.setup_coalesce!(src, 1, dst, 1, [0], false)
+        plan = Finch.setup_coalesce!(src, 1, dst, 1, uniform([0], 1)..., false)
         initialize!(plan)
         @test plan.bucket_counts == [20, 0, 0, 0, 0, 0, 0, 0]
         @test length(dst.tbl) == 8 * 64
@@ -527,7 +529,7 @@ end
     @testset "empty shards" begin
         src = hash_shards([Tuple{Int,Int,Int}[] for _ in 1:3])
         dst = SparseHash(Element(0), 1000, 4)
-        plan = Finch.setup_coalesce!(src, 3, dst, 3, zeros(Int, 3), true)
+        plan = Finch.setup_coalesce!(src, 3, dst, 3, uniform(zeros(Int, 3), 3)..., true)
         @test (dst.ptr, 1, 1) in plan.init
         initialize!(plan)
         @test plan.nnz == 0
@@ -548,7 +550,8 @@ end
             entries = [[(8, i, 2q) for (q, i) in enumerate((3, 9, 17, 35))] for _ in 1:P]
             src = hash_shards(entries; B)
             dst = SparseHash(Element(0), 1000, B)
-            plan = Finch.setup_coalesce!(src, 3P + 1, dst, P, shift, false)
+            # Every shard's entries sit under local parent 8.
+            plan = Finch.setup_coalesce!(src, 3P + 1, dst, P, uniform(shift, 8)..., false)
             expected = zeros(Int, B)
             for t in 1:P, (p, i, _) in entries[t]
                 expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p + shift[t], i), B)] += 1
@@ -581,13 +584,15 @@ end
             Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
         )
         dst = SparseHash(Element(0), 1000, 4)
-        plan = Finch.setup_coalesce!(guarded, 3, dst, 3, [0, 0, 0], false)
+        plan = Finch.setup_coalesce!(guarded, 3, dst, 3, uniform(zeros(Int, 3), 3)..., false)
         @test all(v -> v.reads[] <= 2, keys)
         @test all(v -> v.reads[] <= 2, perms)
         @test plan.nnz == 3000
         @test plan.max_child_pos == 6000
         @test sum(plan.bucket_counts) == 3000
-        @test_throws ArgumentError Finch.setup_coalesce!(src, 3, SparseHash(Element(0)), 3, [0, 0, 0], false)
+        @test_throws ArgumentError Finch.setup_coalesce!(
+            src, 3, SparseHash(Element(0)), 3, uniform(zeros(Int, 3), 3)..., false
+        )
     end
 end
 

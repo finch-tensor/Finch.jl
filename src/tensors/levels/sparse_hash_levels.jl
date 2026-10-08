@@ -833,7 +833,13 @@ end
 # Prepare hash storage and child offsets. Children keep their positions: shard
 # `t`'s child `q` lands at `q + child_shift[t]`, except that its shared entry's
 # child lands at the owner's `shared_dst[t]`.
-function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
+# Splits and offsets for shard child positions `1:n`, which add `offset` except
+# the shared child `q` (if nonzero), which moves to `q_dst`.
+hash_child_ranges(offset, q, q_dst, n) = q == 0 ?
+    ([1, n + 1], [1 + offset]) :
+    ([1, q, q + 1, n + 1], [1 + offset, q_dst, q + 1 + offset])
+
+function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets, overlap)
     key = lvl.key.data
     perm = lvl.perm.data
     ptr = lvl.ptr.data
@@ -855,14 +861,15 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     bucket(p, i) = sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)
     rotation(delta) = Int((SPARSE_HASH_POS_MULTIPLIER * (delta % UInt)) & UInt(B - 1))
     rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
-    bucket_shift = [rotation(shard_offset(s)) for s in shift]
+    move = map(shard_move, splits, offsets)
+    bucket_shift = [rotation(s.offset) for s in move]
     bucket_counts = zeros(Int, B)
     for t in 1:P, b in 1:B
         bucket_counts[rotate(b, bucket_shift[t])] += lvl.tbl_count.data[t][b]
     end
 
     # Shards concatenate, except that a hash above may move a block of a shard's
-    # parents into an earlier owner's range (see `ShardShift`). Bands cut in
+    # parents into an earlier owner's range (see `shard_move`). Bands cut in
     # traversal order, so the shard's entries under it form one run of `perm`,
     # which belongs right after the owner's entries under the same block. Only
     # `perm` and `ptr` make room for it: children keep their positions.
@@ -873,12 +880,12 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     split = [length(perm[t]) for t in 1:P]
     move_shift = zeros(Int, P)
     for t in 1:P
-        s = shift[t]
-        s isa ShardShift && s.len > 0 || continue
+        s = move[t]
+        s.len > 0 || continue
         moved[t] = under(t, s.src, s.len)
         move_shift[t] = rotation(s.dst - s.src)
-        o = owner[t] = findlast(u -> shard_offset(shift[u]) < s.dst, 1:(t - 1))
-        split[o] = last(under(o, s.dst - shard_offset(shift[o]), s.len))
+        o = owner[t] = findlast(u -> move[u].offset < s.dst, 1:(t - 1))
+        split[o] = last(under(o, s.dst - move[o].offset, s.len))
         # Checkpoints count the moved block's local buckets; rotate them from the
         # shard's offset to the block's.
         counts_from(r) = sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
@@ -904,7 +911,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         dup = false
         if last_key !== nothing
             p, i, q = entry(t, lo)
-            if (p + shift[t], i) == last_key
+            if (shard_pos(move[t], p), i) == last_key
                 dup = true
                 shared[t] = q
                 shared_dst[t] = last_child
@@ -914,7 +921,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
         push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key)))
         nnz += hi - lo + 1 - dup
         p, i, q = entry(t, hi)
-        last_key = (p + shift[t], i)
+        last_key = (shard_pos(move[t], p), i)
         dup && hi == lo || (last_child = q + child_shift[t])
         return nothing
     end
@@ -939,14 +946,15 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, shift, overlap)
     # The merge's output holds only the bucket totals.
     resize!(dst.tbl_count, B)
     copyto!(dst.tbl_count, bucket_counts)
+    child_ranges = [hash_child_ranges(child_shift[t], shared[t], shared_dst[t], length(key[t]))
+                    for t in 1:P]
     child = setup_coalesce!(
-        lvl.lvl, max_child_pos, dst.lvl, P,
-        [ShardShift(child_shift[t], shared[t], shared_dst[t], shared[t] != 0) for t in 1:P],
+        lvl.lvl, max_child_pos, dst.lvl, P, first.(child_ranges), last.(child_ranges),
         any(!iszero, shared),
     )
     init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
-    return (; P, shift, pieces, shared, shared_dst, nnz, child_shift,
+    return (; P, move, pieces, shared, shared_dst, nnz, child_shift,
         max_child_pos, bucket_counts, bucket_shift, move_shift, child, init)
 end
 
@@ -958,24 +966,25 @@ end
 function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     key = lvl.key.data[tid]
     perm = lvl.perm.data[tid]
-    shift = plan.shift[tid]
+    m = plan.move[tid]
     child_shift = plan.child_shift[tid]
-    # Each worker copies its child records once, in position order. Holes and
-    # shared duplicates stay free; the traversal permutation is filled below.
+    # Holes and shared duplicates stay free. Retained child records are copied
+    # below, with the traversal permutation.
     @inbounds for q in eachindex(key)
-        p, i, state = key[q]
-        dst.key[q + child_shift] = if state == SPARSE_HASH_KEY_FREE || q == plan.shared[tid]
-            (0, 0, SPARSE_HASH_KEY_FREE)
-        else
-            (p + shift, i, SPARSE_HASH_KEY_RETAINED)
+        if key[q][3] == SPARSE_HASH_KEY_FREE || q == plan.shared[tid]
+            dst.key[q + child_shift] = (0, 0, SPARSE_HASH_KEY_FREE)
         end
     end
+    # Each piece lies in one of the shard's ranges, so its parents move together.
     for (lo, hi, start, dup, prev) in plan.pieces[tid]
+        p_lo = first(key[perm[lo]])
+        shift = shard_pos(m, p_lo) - p_lo
         for r in (lo + dup):hi
             rank = start + r - lo - dup
             q = perm[r]
             p, i = key[q]
             x = p + shift
+            dst.key[q + child_shift] = (x, i, SPARSE_HASH_KEY_RETAINED)
             dst.perm[rank] = q + child_shift
             for y in (prev + 1):x
                 dst.ptr[y] = rank
@@ -991,35 +1000,35 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
 
     B = dst.subtables
     # Keys are distinct after dropping shared entries, so place without comparing.
-    function place!(t, q)
+    function place!(t, q, p, i)
         q == plan.shared[t] && return nothing
-        p, i = lvl.key.data[t][q]
-        x = sparse_hash_hash(p + plan.shift[t], i)
+        x = sparse_hash_hash(p, i)
         h = sparse_hash_vacancy(dst.tbl_ctrl, x, B)
         dst.tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
         dst.tbl[h] = q + plan.child_shift[t]
         return nothing
     end
     # Place shard `t`'s entries from the source bucket that rotation `k` carries
-    # onto output bucket `b`, taking only the moved block's entries or only the rest.
+    # onto output bucket `b`, taking only the moved block's entries or only the
+    # rest. Either way, their parents share one shift.
     function gather!(b, t, k, moved)
         src_ctrl = lvl.tbl_ctrl.data[t]
         src_tbl = lvl.tbl.data[t]
-        s = plan.shift[t]
+        s = plan.move[t]
+        shift = moved ? s.dst - s.src : s.offset
         width = length(src_ctrl) ÷ B
         src_b = ((b - 1 - k) & (B - 1)) + 1
         for h in ((src_b - 1) * width + 1):(src_b * width)
             src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
             q = src_tbl[h]
-            p = first(lvl.key.data[t][q])
-            (s isa ShardShift && s.src <= p < s.src + s.len) == moved && place!(t, q)
+            p, i = lvl.key.data[t][q]
+            (s.src <= p < s.src + s.len) == moved && place!(t, q, p + shift, i)
         end
         return nothing
     end
     for b in tid:(plan.P):B, t in 1:(plan.P)
         gather!(b, t, plan.bucket_shift[t], false)
-        s = plan.shift[t]
-        s isa ShardShift && s.len > 0 && gather!(b, t, plan.move_shift[t], true)
+        plan.move[t].len > 0 && gather!(b, t, plan.move_shift[t], true)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split

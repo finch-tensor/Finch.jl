@@ -266,17 +266,22 @@ function sample(tid, lvl::ElementLevel)
     return (), rand(1:length(lvl.val.data[tid]))
 end
 
-function setup_coalesce!(lvl::ElementLevel{Vf}, max_pos, dst, P, shift, overlap) where {Vf}
+function setup_coalesce!(
+    lvl::ElementLevel{Vf}, max_pos, dst, P, splits, offsets, overlap
+) where {Vf}
     init_start = min(length(dst.val), max_pos) + 1
     resize!(dst.val, max_pos)
     init = ((dst.val, init_start, Vf),)
-    return (; shift, overlap, init)
+    move = map(shard_move, splits, offsets)
+    return (; move, overlap, init)
 end
 
 function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
     src = lvl.val.data[tid]
-    shift = plan.shift[tid]
+    m = plan.move[tid]
     for run in runs
+        # No run straddles a moved range, so each run moves as a block.
+        shift = shard_pos(m, first(run)) - first(run)
         if plan.overlap
             # Shards store fill values outside their band, so where runs
             # overlap, copy only stored values.

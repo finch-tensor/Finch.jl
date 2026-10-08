@@ -256,8 +256,11 @@ half full.
 Hash children keep their arbitrary positions: shard `p`'s child `q` lands at
 `q + child_shift[p]`, where `child_shift` concatenates the lengths of the shards' `key`.
 The one exception is the shared entry, whose child lands at the earlier owner's
-`shared_dst[p]`. The hash passes that exception down as a `ShardShift`, which
-levels apply like an integer shift (`pos + shift[p]`, `shift[p] * shape`):
+`shared_dst[p]`. The hash passes that exception down through its child's
+`splits` and `offsets`: like a `ptr`, `splits[p]` cuts shard `p`'s child
+positions into ranges, here the positions before the shared child, the shared
+child, and the rest, and `offsets[p]` gives where each range starts in the
+merged output:
 
 - Dense and element levels need nothing more. Every run a hash passes down is
   one entry's block, so no run straddles the exception.
