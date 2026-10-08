@@ -272,16 +272,17 @@ function setup_coalesce!(
     init_start = min(length(dst.val), max_pos) + 1
     resize!(dst.val, max_pos)
     init = ((dst.val, init_start, Vf),)
-    move = map(shard_move, splits, offsets)
-    return (; move, overlap, init)
+    return (; splits, offsets, overlap, init)
 end
 
 function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
     src = lvl.val.data[tid]
-    m = plan.move[tid]
+    splits, offsets = plan.splits[tid], plan.offsets[tid]
     for run in runs
-        # No run straddles a moved range, so each run moves as a block.
-        shift = shard_pos(m, first(run)) - first(run)
+        isempty(run) && continue
+        # No run straddles two ranges, so each run moves as a block.
+        k = searchsortedlast(splits, first(run))
+        shift = offsets[k] - splits[k]
         if plan.overlap
             # Shards store fill values outside their band, so where runs
             # overlap, copy only stored values.

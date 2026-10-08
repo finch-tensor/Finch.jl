@@ -21,19 +21,52 @@ end
 # The number of leaf positions under each position of `lvl`'s parent.
 coalesce_leaves(lvl) = prod(level_size(lvl))
 
-# Levels below a hash handle one moved range per shard: positions
-# `src:(src + len - 1)` move to `dst`, and the rest add `offset`. A hash's shared
-# entry keeps an arbitrary child position, so its children map to the earlier
-# owner's position instead of following the shard's offset.
-function shard_move(splits, offsets)
-    offset = offsets[1] - splits[1]
-    length(offsets) == 1 && return (; offset, src=1, dst=1, len=0)
-    @assert length(offsets) == 3 && offsets[3] - splits[3] == offset
-    return (; offset, src=splits[2], dst=offsets[2], len=splits[3] - splits[2])
-end
+"""
+    shard_runs(splits, offsets, rank, parent)
 
-# Where a shard's position `pos` lands, given its `shard_move`.
-shard_pos(m, pos) = m.src <= pos < m.src + m.len ? pos - m.src + m.dst : pos + m.offset
+Order the entries of a sparse level's shards for merging. `rank(t, p)` is shard
+`t`'s first entry whose parent is at least `p`, and `parent(t, r)` is the parent
+of its entry `r`. Return runs `(t, lo, hi, delta)` of shard `t`'s entries `lo:hi`,
+in destination order, whose parents all move by `delta`.
+
+Each range of a shard moves as a block. A hash's shared entry keeps an arbitrary
+child position, so below a hash, a range can land inside an earlier shard's
+range. Cutting every range wherever any range lands leaves runs that meet only
+under a parent two shards share, where band order puts the earlier shard's
+entries first. A run that continues the one before it merges into it.
+"""
+function shard_runs(splits, offsets, rank, parent)
+    P = length(splits)
+    cuts = Int[]
+    for t in 1:P, k in eachindex(offsets[t])
+        push!(cuts, offsets[t][k], offsets[t][k] + splits[t][k + 1] - splits[t][k])
+    end
+    unique!(sort!(cuts))
+    runs = NTuple{4,Int}[]
+    for t in 1:P, k in eachindex(offsets[t])
+        start, stop = splits[t][k], splits[t][k + 1]
+        delta = offsets[t][k] - start
+        lo = rank(t, start)
+        for c in view(cuts, (searchsortedlast(cuts, start + delta) + 1):(searchsortedfirst(cuts, stop + delta) - 1))
+            hi = rank(t, c - delta) - 1
+            lo <= hi && push!(runs, (t, lo, hi, delta))
+            lo = hi + 1
+        end
+        hi = rank(t, stop) - 1
+        lo <= hi && push!(runs, (t, lo, hi, delta))
+    end
+    sort!(runs; by=((t, lo, _, delta),) -> (parent(t, lo) + delta, t))
+    merged = empty(runs)
+    for (t, lo, hi, delta) in runs
+        if !isempty(merged) && last(merged)[1] == t && last(merged)[3] + 1 == lo &&
+                last(merged)[4] == delta
+            merged[end] = (t, last(merged)[2], hi, delta)
+        else
+            push!(merged, (t, lo, hi, delta))
+        end
+    end
+    return merged
+end
 
 # The same ranges, for the `n` positions below each position.
 scale_positions(xs, n) = [(x .- 1) .* n .+ 1 for x in xs]

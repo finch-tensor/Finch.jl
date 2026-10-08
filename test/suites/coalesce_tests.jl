@@ -154,7 +154,7 @@ end
             @test eltype(plan.shared) == Int
             @test plan.shared == [0, shared]
             @test plan.shared_dst == [0, shared_dst]
-            fmt() isa SparseListLevel && @test plan.off == [0, 2]
+            fmt() isa SparseListLevel && @test plan.pieces == [[(1, 2, 1, 0, 0, 0)], [(1, 2, 3, 1, 1, 0)]]
             @test plan.nnz == 3
             @test plan.child.child.overlap
             for (buffer, start, value) in plan.init
@@ -197,6 +197,7 @@ end
         () -> SparseHash(Dense(Element(0)), 0, 8),
         () -> SparseHash(SparseByteMap(Element(0)), 0, 8),
         () -> SparseHash(SparseHash(Element(0), 0, 8), 0, 8),
+        () -> SparseHash(SparseList(Element(0)), 0, 8),
     ]
 
     # Columns hold flat indices 1:5, 6:10, 11:15, and 16:20; column 3 is empty.
@@ -217,13 +218,6 @@ end
         check_merge(fmt, data, [1:5, 6:5, 6:20, 21:20])
         # No entries will be copied, so initialization must finish the output.
         check_merge(fmt, zero(data), [1:5, 6:5, 6:20, 21:20])
-    end
-
-    @testset "lists cannot merge below a hash" begin
-        fmt = () -> SparseHash(SparseList(Element(0)), 0, 8)
-        src = band_shards(fmt, data, [1:3, 4:12, 13:20])
-        dst = Tensor(fmt(), zero(data)).lvl
-        @test_throws ArgumentError Finch.coalesce_shards!(src, dst, 3, 1, nothing)
     end
 
     @testset "thaw reuses merged child holes" for child in (
@@ -254,6 +248,9 @@ end
         () -> SparseList(SparseByteMap(SparseByteMap(Element(0)))),
         () -> SparseHash(Dense(SparseHash(Element(0), 0, 8)), 0, 8),
         () -> SparseHash(SparseByteMap(SparseHash(Element(0), 0, 8)), 0, 8),
+        () -> SparseHash(SparseList(Dense(Element(0))), 0, 8),
+        () -> SparseHash(Dense(SparseList(Element(0))), 0, 8),
+        () -> SparseList(SparseHash(SparseList(Element(0)), 0, 8)),
     ]
     data_3d = zeros(Int, 3, 2, 3)
     data_3d[[1, 3, 4, 8, 9, 13, 16, 18]] .= 1:8
@@ -307,6 +304,7 @@ end
         () -> SparseHash(Dense(Element(0))),
         () -> SparseHash(SparseByteMap(Element(0))),
         () -> SparseHash(SparseHash(Element(0))),
+        () -> SparseHash(SparseList(Element(0))),
     ]
 
     rng = MersenneTwister(1)
@@ -407,7 +405,8 @@ end
         shift = [0, 0, 1, 1, 2]
         plan = Finch.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
         initialize!(plan)
-        @test [m.offset for m in plan.move] == shift
+        # Shards with entries shift their parents uniformly.
+        @test plan.shifts == [isempty(es) ? Int[] : [s] for (es, s) in zip(entries, shift)]
         @test eltype(plan.shared) == Int
         @test plan.shared == [0, 0, 3, 2, 0]
         @test plan.shared_dst == [0, 0, 1, 1, 0]
@@ -421,7 +420,8 @@ end
         @test sum(plan.bucket_counts) == plan.nnz
         @test dst.tbl_count == plan.bucket_counts
         @test length(dst.key) == plan.max_child_pos
-        @test plan.bucket_shift == [Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in shift]
+        @test plan.rotations == [[Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in d]
+                                 for d in plan.shifts]
         @test src.key.data[1][src.perm.data[1][1]] == (1, 2, Finch.SPARSE_HASH_KEY_RETAINED)
 
         # Traversal ranks are concatenated by shard; bucket owners publish the

@@ -245,13 +245,12 @@ Hash levels keep their assembly bucket counts, `tbl_count`, through freeze,
 which extends them with checkpoints every `B` ranks of `perm`: block `j` counts
 each bucket's entries from rank `(j - 1) * B + 1` on, so block 1 is the totals
 and any rank range counts in O(B). A merge's output holds only the totals.
-Setup rotates each shard's totals by `a * offset mod B`, then subtracts its
-shared boundary entry from its output bucket. Below a hash, a shard's moved block
-counts as the difference of two checkpoint lookups, rotated from the shard's
-offset to the block's. Setup reads the first and last frozen entries of each
-shard, plus fewer than `2B` entries of each moved block. The busiest output
-bucket determines the common subtable capacity, keeping every bucket at most
-half full.
+Each range of a shard's parents moves by one shift, so setup counts the range's
+entries as the difference of two checkpoint lookups and rotates them by
+`a * shift mod B`, then subtracts each shard's shared boundary entry from its
+output bucket. Setup reads the first and last entries of each piece, plus fewer
+than `2B` entries per range end. The busiest output bucket determines the common
+subtable capacity, keeping every bucket at most half full.
 
 Hash children keep their arbitrary positions: shard `p`'s child `q` lands at
 `q + child_shift[p]`, where `child_shift` concatenates the lengths of the shards' `key`.
@@ -262,27 +261,28 @@ positions into ranges, here the positions before the shared child, the shared
 child, and the rest, and `offsets[p]` gives where each range starts in the
 merged output:
 
-- Dense and element levels need nothing more. Every run a hash passes down is
-  one entry's block, so no run straddles the exception.
-- A byte map or hash below a hash has one run of entries under the moved
-  parents, found through `ptr`. Bands cut in traversal order, so that run
-  belongs right after the owner's entries under the same parents.
-  Setup orders the index metadata (`srt`, or the hash's `perm`) as pieces,
-  runs of one shard's entries: each shard's entries up to that block, the runs
-  moved into it, then the rest. No child moves.
-- Lists are rejected below a hash: their children are addressed by entry, so
-  filling a gap would move children.
+- Dense and element levels shift each run as a block. No run a parent passes
+  down straddles two ranges.
+- Sparse levels order their index metadata (`idx`, `srt`, or the hash's `perm`)
+  with `shard_runs`. Each range's entries move as a block, so it splits each
+  shard's entries by range, cuts them wherever any range lands, and sorts the
+  runs by destination. Runs from different shards then meet only under a parent
+  both shards store, where band order puts the earlier shard first. A byte map
+  or hash addresses children by position, so no child moves.
+- A list addresses children by entry, so a moved run of entries moves its
+  children too. Below a hash, the run leaves a gap in its own shard, which
+  closes, and makes room in its owner, so the list's child gets a range per
+  piece. A shard has at most one run moved out, at its left boundary, and one
+  insertion, at its right, so it needs at most four ranges at any depth.
 
 A hash merge needs no second phase. Worker `tid` copies shard `tid`'s keys,
 `perm`, pointers, and children: `perm` holds child positions, so a shard places
 its entries in traversal order without knowing their table slots. Worker `tid`
-also owns output buckets `tid:P:B`. For each owned bucket, it visits the bucket
-of every frozen source shard that the shard's offset rotates onto it. A shard
-with a moved block shifts that block uniformly too, so the worker also visits the
-bucket the block's shift rotates onto it, taking only the block's entries there
-and skipping them in the first visit. Each source bucket is scanned once per
-shift, and each entry's child position goes in the first empty slot of its
-probe. Keys are
+also owns output buckets `tid:P:B`. For each owned bucket and each distinct
+shift of each frozen source shard, it visits the source bucket that shift
+rotates onto it, taking only the entries whose range has that shift. Each source
+bucket is scanned once per shift, and each entry's child position goes in the
+first empty slot of its probe. Keys are
 distinct once shared entries are dropped, so placement never compares keys or
 resizes. Each bucket has one writer, including when `B > P`. Since bucket work
 is tied to the worker, every worker must reach every level, even with an empty

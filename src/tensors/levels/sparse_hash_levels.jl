@@ -855,85 +855,59 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     child_shift = cumsum([0; [length(key[t]) for t in 1:(P - 1)]])
     max_child_pos = sum(length, key; init=0)
 
-    # Shifting parents by `delta` rotates buckets by `a * delta`, so add each
-    # shard's frozen totals rotated by its offset. Moved and shared entries are
-    # corrected below.
+    # Shifting parents by `delta` rotates buckets by `a * delta`, so each range of
+    # a shard adds its entries' frozen bucket counts, from checkpoints, rotated by
+    # its shift. Shared entries are corrected below. Placement gathers once per
+    # distinct shift of each shard.
     bucket(p, i) = sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)
     rotation(delta) = Int((SPARSE_HASH_POS_MULTIPLIER * (delta % UInt)) & UInt(B - 1))
     rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
-    move = map(shard_move, splits, offsets)
-    bucket_shift = [rotation(s.offset) for s in move]
+    rank(t, p) = p < 1 ? 1 : p <= length(ptr[t]) ? ptr[t][p] : length(perm[t]) + 1
     bucket_counts = zeros(Int, B)
-    for t in 1:P, b in 1:B
-        bucket_counts[rotate(b, bucket_shift[t])] += lvl.tbl_count.data[t][b]
-    end
-
-    # Shards concatenate, except that a hash above may move a block of a shard's
-    # parents into an earlier owner's range (see `shard_move`). Bands cut in
-    # traversal order, so the shard's entries under it form one run of `perm`,
-    # which belongs right after the owner's entries under the same block. Only
-    # `perm` and `ptr` make room for it: children keep their positions.
-    first_rank(t, p) = p <= length(ptr[t]) ? ptr[t][p] : length(perm[t]) + 1
-    under(t, lo, len) = first_rank(t, lo):(first_rank(t, lo + len) - 1)
-    moved = [1:0 for _ in 1:P]
-    owner = zeros(Int, P)
-    split = [length(perm[t]) for t in 1:P]
-    move_shift = zeros(Int, P)
+    shifts = [Int[] for _ in 1:P]
     for t in 1:P
-        s = move[t]
-        s.len > 0 || continue
-        moved[t] = under(t, s.src, s.len)
-        move_shift[t] = rotation(s.dst - s.src)
-        o = owner[t] = findlast(u -> move[u].offset < s.dst, 1:(t - 1))
-        split[o] = last(under(o, s.dst - move[o].offset, s.len))
-        # Checkpoints count the moved block's local buckets; rotate them from the
-        # shard's offset to the block's.
         counts_from(r) = sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
-        counts = counts_from(first(moved[t])) .- counts_from(last(moved[t]) + 1)
-        for b in 1:B
-            bucket_counts[rotate(b, bucket_shift[t])] -= counts[b]
-            bucket_counts[rotate(b, move_shift[t])] += counts[b]
+        for k in eachindex(offsets[t])
+            lo, hi = rank(t, splits[t][k]), rank(t, splits[t][k + 1])
+            lo < hi || continue
+            delta = offsets[t][k] - splits[t][k]
+            counts = counts_from(lo) .- counts_from(hi)
+            for b in 1:B
+                bucket_counts[rotate(b, rotation(delta))] += counts[b]
+            end
+            delta in shifts[t] || push!(shifts[t], delta)
         end
     end
+    rotations = [rotation.(d) for d in shifts]
 
-    # Emit pieces, runs of one shard's local ranks, in destination order. Piece
-    # `(lo, hi, start, dup, prev)` puts ranks `lo:hi` at consecutive ranks from
-    # `start`, skipping `lo` when it repeats the entry before it (`dup`); `prev`
-    # is the parent before the piece. Setup reads only the pieces' boundaries.
-    pieces = [NTuple{5,Int}[] for _ in 1:P]
+    # Piece `(lo, hi, start, dup, prev, delta)` puts ranks `lo:hi` at consecutive
+    # ranks from `start`, their parents moved by `delta`, skipping `lo` when it
+    # repeats the entry before it (`dup`); `prev` is the parent before the piece.
+    # Only `perm` and `ptr` make room for moved runs: children keep their
+    # positions. Setup reads only the pieces' boundary entries.
+    pieces = [NTuple{6,Int}[] for _ in 1:P]
     shared = zeros(Int, P)
     shared_dst = zeros(Int, P)
     nnz = 0
     last_key = nothing
     last_child = 0
-    function emit!(t, lo, hi)
-        lo > hi && return nothing
+    parent(t, r) = searchsortedlast(ptr[t], r)
+    for (t, lo, hi, delta) in shard_runs(splits, offsets, rank, parent)
         dup = false
         if last_key !== nothing
             p, i, q = entry(t, lo)
-            if (shard_pos(move[t], p), i) == last_key
+            if (p + delta, i) == last_key
                 dup = true
                 shared[t] = q
                 shared_dst[t] = last_child
                 bucket_counts[bucket(last_key...)] -= 1
             end
         end
-        push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key)))
+        push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key), delta))
         nnz += hi - lo + 1 - dup
         p, i, q = entry(t, hi)
-        last_key = (shard_pos(move[t], p), i)
+        last_key = (p + delta, i)
         dup && hi == lo || (last_child = q + child_shift[t])
-        return nothing
-    end
-    for o in 1:P
-        m, b = moved[o], split[o]
-        emit!(o, 1, min(first(m) - 1, b))
-        emit!(o, last(m) + 1, b)
-        for t in (o + 1):P
-            owner[t] == o && emit!(t, first(moved[t]), last(moved[t]))
-        end
-        emit!(o, b + 1, first(m) - 1)
-        emit!(o, max(last(m), b) + 1, length(perm[o]))
     end
 
     # Probing cannot leave its bucket, so size every bucket for the busiest.
@@ -954,19 +928,17 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     )
     init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
-    return (; P, move, pieces, shared, shared_dst, nnz, child_shift,
-        max_child_pos, bucket_counts, bucket_shift, move_shift, child, init)
+    return (; P, splits, offsets, shifts, rotations, pieces, shared, shared_dst, nnz,
+        child_shift, max_child_pos, bucket_counts, child, init)
 end
 
 # Worker `tid` copies shard `tid`'s keys, traversal order, and children, and
 # fills output buckets `tid:P:B` from every shard, so each bucket has one writer.
-# A uniform parent shift rotates a source bucket onto one output bucket, and a
-# shard's moved block shifts uniformly too, so each output bucket gathers from
-# one rotated source bucket per shift.
+# Parents that shift uniformly rotate a source bucket onto one output bucket, so
+# each output bucket gathers from one rotated source bucket per distinct shift.
 function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     key = lvl.key.data[tid]
     perm = lvl.perm.data[tid]
-    m = plan.move[tid]
     child_shift = plan.child_shift[tid]
     # Holes and shared duplicates stay free. Retained child records are copied
     # below, with the traversal permutation.
@@ -975,15 +947,12 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
             dst.key[q + child_shift] = (0, 0, SPARSE_HASH_KEY_FREE)
         end
     end
-    # Each piece lies in one of the shard's ranges, so its parents move together.
-    for (lo, hi, start, dup, prev) in plan.pieces[tid]
-        p_lo = first(key[perm[lo]])
-        shift = shard_pos(m, p_lo) - p_lo
+    for (lo, hi, start, dup, prev, delta) in plan.pieces[tid]
         for r in (lo + dup):hi
             rank = start + r - lo - dup
             q = perm[r]
             p, i = key[q]
-            x = p + shift
+            x = p + delta
             dst.key[q + child_shift] = (x, i, SPARSE_HASH_KEY_RETAINED)
             dst.perm[rank] = q + child_shift
             for y in (prev + 1):x
@@ -1008,27 +977,30 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
         dst.tbl[h] = q + plan.child_shift[t]
         return nothing
     end
-    # Place shard `t`'s entries from the source bucket that rotation `k` carries
-    # onto output bucket `b`, taking only the moved block's entries or only the
-    # rest. Either way, their parents share one shift.
-    function gather!(b, t, k, moved)
+    # Place shard `t`'s entries whose parents move by its `j`th shift, from the
+    # source bucket that shift rotates onto output bucket `b`.
+    function gather!(b, t, j)
         src_ctrl = lvl.tbl_ctrl.data[t]
         src_tbl = lvl.tbl.data[t]
-        s = plan.move[t]
-        shift = moved ? s.dst - s.src : s.offset
+        splits, offsets = plan.splits[t], plan.offsets[t]
+        delta = plan.shifts[t][j]
+        mixed = length(plan.shifts[t]) > 1
         width = length(src_ctrl) ÷ B
-        src_b = ((b - 1 - k) & (B - 1)) + 1
+        src_b = ((b - 1 - plan.rotations[t][j]) & (B - 1)) + 1
         for h in ((src_b - 1) * width + 1):(src_b * width)
             src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
             q = src_tbl[h]
             p, i = lvl.key.data[t][q]
-            (s.src <= p < s.src + s.len) == moved && place!(t, q, p + shift, i)
+            if mixed
+                k = searchsortedlast(splits, p)
+                offsets[k] - splits[k] == delta || continue
+            end
+            place!(t, q, p + delta, i)
         end
         return nothing
     end
-    for b in tid:(plan.P):B, t in 1:(plan.P)
-        gather!(b, t, plan.bucket_shift[t], false)
-        plan.move[t].len > 0 && gather!(b, t, plan.move_shift[t], true)
+    for b in tid:(plan.P):B, t in 1:(plan.P), j in eachindex(plan.shifts[t])
+        gather!(b, t, j)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split

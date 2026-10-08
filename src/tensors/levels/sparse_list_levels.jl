@@ -632,46 +632,51 @@ function sample(tid, lvl::SparseListLevel)
 end
 
 function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, splits, offsets, overlap)
-    # A hash's shared child may map into an earlier shard's range, and moving a
-    # list's entries there would move their children too.
-    any(o -> length(o) > 1, offsets) &&
-        throw(ArgumentError("SparseList levels cannot be coalesced below a SparseHash"))
-    shift = [o[1] - s[1] for (s, o) in zip(splits, offsets)]
     ptr = lvl.ptr.data
     idx = lvl.idx.data
+    n = map(length, idx)
+    rank(t, p) = p < 1 ? 1 : p <= length(ptr[t]) ? ptr[t][p] : n[t] + 1
+    parent(t, r) = searchsortedlast(ptr[t], r)
+    # Piece `(lo, hi, start, dup, prev, delta)` puts shard ranks `lo:hi` at
+    # consecutive ranks from `start`, their parents moved by `delta`, skipping
+    # `lo` when it repeats the entry before it (`dup`); `prev` is the parent
+    # before the piece.
+    pieces = [NTuple{6,Int}[] for _ in 1:P]
     shared = zeros(Int, P)
     shared_dst = zeros(Int, P)
-    off = zeros(Int, P)
-    prev = zeros(Int, P)
     nnz = 0
     last_pos = 0
     last_idx = 0
-    for p in 1:P
-        off[p] = nnz
-        prev[p] = last_pos
-        n = length(idx[p])
-        n == 0 && continue
-        # A shard shares its first entry if the previous shard ended on it.
-        if searchsortedlast(ptr[p], 1) + shift[p] == last_pos && idx[p][1] == last_idx
-            shared[p] = 1
-            shared_dst[p] = nnz
+    for (t, lo, hi, delta) in shard_runs(splits, offsets, rank, parent)
+        dup = parent(t, lo) + delta == last_pos && idx[t][lo] == last_idx
+        if dup
+            shared[t] = lo
+            shared_dst[t] = nnz
         end
-        nnz += n - (shared[p] != 0)
-        last_pos = searchsortedlast(ptr[p], n) + shift[p]
-        last_idx = idx[p][n]
+        push!(pieces[t], (lo, hi, nnz + 1, dup, last_pos, delta))
+        nnz += hi - lo + 1 - dup
+        last_pos = parent(t, hi) + delta
+        last_idx = idx[t][hi]
     end
     # Both buffers are rewritten completely; discard old contents before growth.
     empty!(dst.idx)
     resize!(dst.idx, nnz)
     empty!(dst.ptr)
     resize!(dst.ptr, max_pos + 1)
-    # Both shards' leaves under a shared entry overlap.
+    # Children are addressed by rank, so each piece's children move as a block,
+    # a shared entry's to the rank before the piece. A moved block leaves a gap
+    # and makes room in its owner, so below a hash, a shard's child can need a
+    # range per piece. An empty shard still gets one, empty range. Both shards'
+    # leaves under a shared entry overlap.
+    sorted = [isempty(ps) ? [(1, 0, 1, 0, 0, 0)] : sort(ps) for ps in pieces]
     child = setup_coalesce!(
-        lvl.lvl, nnz, dst.lvl, P, [[1, length(idx[p]) + 1] for p in 1:P],
-        [[off[p] + 1 - (shared[p] != 0)] for p in 1:P], any(!iszero, shared),
+        lvl.lvl, nnz, dst.lvl, P,
+        [[[lo for (lo,) in ps]; n[t] + 1] for (t, ps) in enumerate(sorted)],
+        [[start - dup for (_, _, start, dup) in ps] for ps in sorted],
+        any(!iszero, shared),
     )
     init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
-    return (; shift, shared, shared_dst, off, prev, nnz, child, init)
+    return (; pieces, shared, shared_dst, nnz, child, init)
 end
 
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
@@ -679,38 +684,32 @@ end
 function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     ptr = lvl.ptr.data[tid]
     idx = lvl.idx.data[tid]
-    n = length(idx)
-    # Every worker reaches every level: a hash below also inserts its buckets.
-    n == 0 && return coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, ())
-    shift = plan.shift[tid]
-    slot = plan.off[tid] + 1
-    pos_prev = plan.prev[tid]
-    shared = plan.shared[tid]
-    r = 1
-    pos_first = searchsortedlast(ptr, 1)
-    pos_last = searchsortedlast(ptr, n)
-    for pos in pos_first:pos_last
-        stop = ptr[pos + 1] - 1
-        r == shared && (r += 1)
-        r > stop && continue
-        for x in (pos_prev + 1):(pos + shift)
-            dst.ptr[x] = slot
-        end
-        pos_prev = pos + shift
-        for s in r:stop
-            s == shared && continue
-            dst.idx[slot] = idx[s]
-            slot += 1
-        end
-        r = stop + 1
-    end
-    if slot - 1 == plan.nnz && slot > plan.off[tid] + 1
-        for x in (pos_prev + 1):length(dst.ptr)
-            dst.ptr[x] = slot
+    for (lo, hi, start, dup, prev, delta) in plan.pieces[tid]
+        pos = searchsortedlast(ptr, lo)
+        for r in (lo + dup):hi
+            while ptr[pos + 1] <= r
+                pos += 1
+            end
+            rank = start + r - lo - dup
+            x = pos + delta
+            dst.idx[rank] = idx[r]
+            for y in (prev + 1):x
+                dst.ptr[y] = rank
+            end
+            prev = x
+            if rank == plan.nnz
+                for y in (x + 1):length(dst.ptr)
+                    dst.ptr[y] = rank + 1
+                end
+            end
         end
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
-    # between both shards.
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, (1:(n * coalesce_leaves(lvl.lvl)),))
+    # between both shards. Runs follow pieces, so none straddles two of the
+    # child's ranges. Every worker recurses, even with an empty shard: a hash
+    # below also inserts its buckets.
+    leaves = coalesce_leaves(lvl.lvl)
+    child_runs = (((lo - 1) * leaves + 1):(hi * leaves) for (lo, hi) in plan.pieces[tid])
+    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
 end
