@@ -417,11 +417,15 @@ end
         @test length(dst.perm) == 4
         @test length(dst.tbl) == length(dst.tbl_ctrl)
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
-        @test sum(plan.bucket_counts) == plan.nnz
-        @test dst.tbl_count == plan.bucket_counts
+        # Shared entries stay counted, which only overestimates.
+        @test sum(plan.bucket_counts) == sum(length, entries)
+        @test all(plan.bucket_bound .>= plan.bucket_counts)
+        @test length(dst.tbl_ctrl) ÷ 8 > maximum(plan.bucket_bound)
+        @test length(dst.tbl_count) == 8
         @test length(dst.key) == plan.max_child_pos
-        @test plan.rotations == [[Int((Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt)) & UInt(7)) for s in d]
-                                 for d in plan.shifts]
+        @test plan.rotations == [[Finch.sparse_hash_hash_subtable(
+                                      Finch.SPARSE_HASH_POS_MULTIPLIER * (s % UInt), 8) - 1
+                                  for s in d] for d in plan.shifts]
         @test src.key.data[1][src.perm.data[1][1]] == (1, 2, Finch.SPARSE_HASH_KEY_RETAINED)
 
         # Traversal ranks are concatenated by shard; bucket owners publish the
@@ -439,6 +443,12 @@ end
         for (p, i, q) in [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
             @test Finch.sparse_hash_lookup(dst.tbl_ctrl, dst.tbl, dst.key, p, i, 8) == q
         end
+        # Bucket owners count exactly what they place, within the setup bound.
+        width = length(dst.tbl_ctrl) ÷ 8
+        @test dst.tbl_count == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+            view(dst.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8]
+        @test sum(dst.tbl_count) == plan.nnz
+        @test all(dst.tbl_count .<= plan.bucket_bound)
         for tid in (3, 4)
             p, i = src.key.data[tid][first(src.perm.data[tid])]
             @test Finch.sparse_hash_lookup(
@@ -514,7 +524,7 @@ end
         dst = SparseHash(Element(0), 1000, 8)
         plan = Finch.setup_coalesce!(src, 1, dst, 1, uniform([0], 1)..., false)
         initialize!(plan)
-        @test plan.bucket_counts == [20, 0, 0, 0, 0, 0, 0, 0]
+        @test plan.bucket_bound == [20, 0, 0, 0, 0, 0, 0, 0]
         @test length(dst.tbl) == 8 * 64
         for (q, i) in enumerate(indices)
             x = Finch.sparse_hash_hash(1, i)
@@ -543,7 +553,7 @@ end
         @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
     end
 
-    @testset "rotated counts match entries" begin
+    @testset "rotated counts bound entries" begin
         for P in (1, 3, 5)
             B = nextpow(2, P)
             shift = [3t - 7 for t in 1:P]
@@ -556,9 +566,24 @@ end
             for t in 1:P, (p, i, _) in entries[t]
                 expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p + shift[t], i), B)] += 1
             end
-            @test plan.bucket_counts == expected
+            # Counts ignore carries; the bound adds the bucket each can carry into,
+            # and every bucket keeps an empty slot under it.
+            @test sum(plan.bucket_counts) == plan.nnz
+            @test all(plan.bucket_bound .>= expected)
+            @test sum(plan.bucket_bound) <= 2 * plan.nnz
+            @test length(dst.tbl_ctrl) ÷ B > maximum(plan.bucket_bound)
             @test plan.child_shift == collect(0:8:(8(P - 1)))
             @test plan.nnz == 4P
+            initialize!(plan)
+            Threads.@threads for tid in 1:P
+                Finch.coalesce_shard!(tid, plan, src, dst, ())
+            end
+            @test dst.tbl_count == expected
+            for t in 1:P, (p, i, q) in entries[t]
+                @test Finch.sparse_hash_lookup(
+                    dst.tbl_ctrl, dst.tbl, dst.key, p + shift[t], i, B
+                ) == q + plan.child_shift[t]
+            end
         end
     end
 
@@ -589,7 +614,7 @@ end
         @test all(v -> v.reads[] <= 2, perms)
         @test plan.nnz == 3000
         @test plan.max_child_pos == 6000
-        @test sum(plan.bucket_counts) == 3000
+        @test sum(plan.bucket_bound) == 3000
         @test_throws ArgumentError Finch.setup_coalesce!(
             src, 3, SparseHash(Element(0)), 3, uniform(zeros(Int, 3), 3)..., false
         )

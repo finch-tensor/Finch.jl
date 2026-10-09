@@ -36,12 +36,22 @@
             end
         end
         @test h(Int32(17), Int32(37)) == h(17, 37)
-        # Buckets use the low bits of the linear hash; slots mix it first.
-        x = UInt(0b101)
+        # Buckets use the high bits of the linear hash; slots mix it first.
+        x = UInt(0b101) << 61 | UInt(0b011)
         @test Finch.sparse_hash_hash_subtable(x, 8) == 6
+        @test Finch.sparse_hash_hash_subtable(UInt(0b101), 8) == 1
+        @test Finch.sparse_hash_hash_subtable(typemax(UInt), 1) == 1
         @test Finch.sparse_hash_hash_slot_parts(x, 512, 8) == (321, Int((hash(x) >>> 7) & 63), 63)
         @test Finch.sparse_hash_hash_slot_parts(typemax(UInt), 8, 8) == (8, 0, 0)
         @test Finch.sparse_hash_hash_ctrl(x) == 0x80 | (hash(x) % UInt8 & 0x7f)
+        # Shifting parents moves a bucket up by the rotation, or one more where
+        # the low bits carry.
+        B = 16
+        bucket(p, i) = Finch.sparse_hash_hash_subtable(h(p, i), B)
+        for delta in (1, 7, 12345, -3), p in 1:200, i in (1, 37, 1000)
+            r = Finch.sparse_hash_hash_subtable(a * (delta % UInt), B) - 1
+            @test mod(bucket(p + delta, i) - bucket(p, i) - r, B) in (0, 1)
+        end
     end
 
     @testset "collisions, wraparound, and resizing" for subtables in (1, 4)

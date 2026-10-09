@@ -22,11 +22,13 @@ Implementation invariants:
   bit of `tbl_ctrl[h]` set, seven hash fingerprint bits below it, and `tbl[h] == q`.
   `0x00` marks an empty slot, which ends a probe. Probes wrap within their bucket.
 * Keys hash as `x = a * p + hash(i)`, where `a` is a random odd multiplier shared
-  by all hash levels. The low `log2(subtables)` bits of `x` pick the bucket, so
-  shifting parents by `delta` rotates buckets by `a * delta`. `x` is linear in
-  `p`, and linear probing clusters on linear hashes of structured parents, so the
-  rest comes from `y = hash(x)`: its low seven bits are the fingerprint, and the
-  bits above them pick the starting slot.
+  by all hash levels. The high `log2(subtables)` bits of `x` pick the bucket, as
+  in multiply-shift hashing, so parents spread across buckets even when they
+  share their low bits. Shifting parents by `delta` adds `a * delta` to `x`,
+  which moves a bucket up by the high bits of `a * delta`, or by one more where
+  the low bits carry. `x` is linear in `p`, and linear probing clusters on linear
+  hashes of structured parents, so the rest comes from `y = hash(x)`: its low
+  seven bits are the fingerprint, and the bits above them pick the starting slot.
 * `tbl_count[b]` counts the entries in bucket `b`, plus keys still pending during
   assembly, which grows the table before any bucket is more than half full.
   Frozen, `tbl_count` holds checkpoints every `subtables` ranks of `perm`:
@@ -136,13 +138,15 @@ end
 sparse_hash_table_capacity(n) = nextpow(2, max(4, 2n))
 
 @inline sparse_hash_hash(p, i) = SPARSE_HASH_POS_MULTIPLIER * (p % UInt) + hash(i)
-@inline sparse_hash_hash_subtable(x::UInt, subtables) = Int(x & UInt(subtables - 1)) + 1
+# The high bits pick the bucket. One bucket shifts by the full width, giving 0.
+@inline sparse_hash_hash_subtable(x::UInt, subtables) =
+    Int(x >>> (8 * sizeof(UInt) - trailing_zeros(subtables))) + 1
 @inline sparse_hash_hash_ctrl(x::UInt) = SPARSE_HASH_CTRL_FULL | (hash(x) % UInt8 & 0x7f)
 # The bucket's first slot, the probe's starting offset within the bucket, and
 # the offset mask for a table of `n` slots. The offset skips the fingerprint bits.
 @inline function sparse_hash_hash_slot_parts(x::UInt, n, subtables)
     mask = (n >>> trailing_zeros(subtables)) - 1
-    base = Int(x & UInt(subtables - 1)) * (mask + 1) + 1
+    base = (sparse_hash_hash_subtable(x, subtables) - 1) * (mask + 1) + 1
     return base, Int((hash(x) >>> 7) & UInt(mask)), mask
 end
 
@@ -830,6 +834,10 @@ function sample(tid, lvl::SparseHashLevel)
     end
 end
 
+# The extra rotations a shift by `delta` can carry into. With one bucket, both
+# rotations name the same bucket.
+sparse_hash_carries(delta, B) = delta == 0 || B == 1 ? (0,) : (0, 1)
+
 # Prepare hash storage and child offsets. Children keep their positions: shard
 # `t`'s child `q` lands at `q + child_shift[t]`, except that its shared entry's
 # child lands at the owner's `shared_dst[t]`.
@@ -855,15 +863,19 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     child_shift = cumsum([0; [length(key[t]) for t in 1:(P - 1)]])
     max_child_pos = sum(length, key; init=0)
 
-    # Shifting parents by `delta` rotates buckets by `a * delta`, so each range of
-    # a shard adds its entries' frozen bucket counts, from checkpoints, rotated by
-    # its shift. Shared entries are corrected below. Placement gathers once per
+    # Shifting parents by `delta` moves an entry's bucket up by `rotation(delta)`,
+    # or by one more where its hash carries, and only placement can tell which.
+    # So each range of a shard adds its entries' frozen bucket counts, from
+    # checkpoints, rotated as if nothing carries. Carries in and out of a bucket
+    # mostly cancel, so these counts size the buckets. Shifted entries can still
+    # carry one bucket up, which `carried` tracks so no bucket fills. Shared
+    # entries stay counted, which only overestimates. Placement gathers once per
     # distinct shift of each shard.
-    bucket(p, i) = sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)
-    rotation(delta) = Int((SPARSE_HASH_POS_MULTIPLIER * (delta % UInt)) & UInt(B - 1))
+    rotation(delta) = sparse_hash_hash_subtable(SPARSE_HASH_POS_MULTIPLIER * (delta % UInt), B) - 1
     rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
     rank(t, p) = p < 1 ? 1 : p <= length(ptr[t]) ? ptr[t][p] : length(perm[t]) + 1
     bucket_counts = zeros(Int, B)
+    carried = zeros(Int, B)
     shifts = [Int[] for _ in 1:P]
     for t in 1:P
         counts_from(r) = sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
@@ -872,12 +884,14 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
             lo < hi || continue
             delta = offsets[t][k] - splits[t][k]
             counts = counts_from(lo) .- counts_from(hi)
-            for b in 1:B
-                bucket_counts[rotate(b, rotation(delta))] += counts[b]
+            for c in sparse_hash_carries(delta, B), b in 1:B
+                (c == 0 ? bucket_counts : carried)[rotate(b, rotation(delta) + c)] += counts[b]
             end
             delta in shifts[t] || push!(shifts[t], delta)
         end
     end
+    # Bucket `b` receives at most its uncarried entries and the carries from below.
+    bucket_bound = bucket_counts .+ carried
     rotations = [rotation.(d) for d in shifts]
 
     # Piece `(lo, hi, start, dup, prev, delta)` puts ranks `lo:hi` at consecutive
@@ -900,7 +914,6 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
                 dup = true
                 shared[t] = q
                 shared_dst[t] = last_child
-                bucket_counts[bucket(last_key...)] -= 1
             end
         end
         push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key), delta))
@@ -910,16 +923,20 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
         dup && hi == lo || (last_child = q + child_shift[t])
     end
 
-    # Probing cannot leave its bucket, so size every bucket for the busiest.
-    capacity = B * sparse_hash_table_capacity(maximum(bucket_counts))
+    # Probing cannot leave its bucket, so size every bucket for the busiest, and
+    # keep an empty slot in every bucket, even if all carries pile into one.
+    capacity = B * max(
+        sparse_hash_table_capacity(maximum(bucket_counts)),
+        nextpow(2, maximum(bucket_bound) + 1),
+    )
     for (buf, n) in ((dst.ptr, max_pos + 1), (dst.tbl_ctrl, capacity), (dst.tbl, capacity),
                      (dst.key, max_child_pos), (dst.perm, nnz))
         empty!(buf)
         resize!(buf, n)
     end
-    # The merge's output holds only the bucket totals.
+    # The merge's output holds only the bucket totals, which bucket owners count
+    # as they place entries.
     resize!(dst.tbl_count, B)
-    copyto!(dst.tbl_count, bucket_counts)
     child_ranges = [hash_child_ranges(child_shift[t], shared[t], shared_dst[t], length(key[t]))
                     for t in 1:P]
     child = setup_coalesce!(
@@ -929,13 +946,14 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
     return (; P, splits, offsets, shifts, rotations, pieces, shared, shared_dst, nnz,
-        child_shift, max_child_pos, bucket_counts, child, init)
+        child_shift, max_child_pos, bucket_counts, bucket_bound, child, init)
 end
 
 # Worker `tid` copies shard `tid`'s keys, traversal order, and children, and
 # fills output buckets `tid:P:B` from every shard, so each bucket has one writer.
-# Parents that shift uniformly rotate a source bucket onto one output bucket, so
-# each output bucket gathers from one rotated source bucket per distinct shift.
+# Parents that shift uniformly rotate a source bucket onto one output bucket, or
+# the next where hashes carry, so each output bucket gathers from at most two
+# rotated source buckets per distinct shift, and counts what it places.
 function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     key = lvl.key.data[tid]
     perm = lvl.perm.data[tid]
@@ -968,17 +986,10 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     end
 
     B = dst.subtables
+    # Place shard `t`'s entries whose parents move by its `j`th shift and land in
+    # output bucket `b`, returning how many. They come from the source bucket
+    # that shift rotates onto `b`, or, where their hash carries, the one below.
     # Keys are distinct after dropping shared entries, so place without comparing.
-    function place!(t, q, p, i)
-        q == plan.shared[t] && return nothing
-        x = sparse_hash_hash(p, i)
-        h = sparse_hash_vacancy(dst.tbl_ctrl, x, B)
-        dst.tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
-        dst.tbl[h] = q + plan.child_shift[t]
-        return nothing
-    end
-    # Place shard `t`'s entries whose parents move by its `j`th shift, from the
-    # source bucket that shift rotates onto output bucket `b`.
     function gather!(b, t, j)
         src_ctrl = lvl.tbl_ctrl.data[t]
         src_tbl = lvl.tbl.data[t]
@@ -986,21 +997,33 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
         delta = plan.shifts[t][j]
         mixed = length(plan.shifts[t]) > 1
         width = length(src_ctrl) ÷ B
-        src_b = ((b - 1 - plan.rotations[t][j]) & (B - 1)) + 1
-        for h in ((src_b - 1) * width + 1):(src_b * width)
-            src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
-            q = src_tbl[h]
-            p, i = lvl.key.data[t][q]
-            if mixed
-                k = searchsortedlast(splits, p)
-                offsets[k] - splits[k] == delta || continue
+        placed = 0
+        for c in sparse_hash_carries(delta, B)
+            src_b = ((b - 1 - plan.rotations[t][j] - c) & (B - 1)) + 1
+            for h in ((src_b - 1) * width + 1):(src_b * width)
+                src_ctrl[h] == SPARSE_HASH_CTRL_EMPTY && continue
+                q = src_tbl[h]
+                q == plan.shared[t] && continue
+                p, i = lvl.key.data[t][q]
+                if mixed
+                    k = searchsortedlast(splits, p)
+                    offsets[k] - splits[k] == delta || continue
+                end
+                x = sparse_hash_hash(p + delta, i)
+                sparse_hash_hash_subtable(x, B) == b || continue
+                h_dst = sparse_hash_vacancy(dst.tbl_ctrl, x, B)
+                dst.tbl_ctrl[h_dst] = sparse_hash_hash_ctrl(x)
+                dst.tbl[h_dst] = q + plan.child_shift[t]
+                placed += 1
             end
-            place!(t, q, p + delta, i)
         end
-        return nothing
+        return placed
     end
-    for b in tid:(plan.P):B, t in 1:(plan.P), j in eachindex(plan.shifts[t])
-        gather!(b, t, j)
+    for b in tid:(plan.P):B
+        dst.tbl_count[b] = 0
+        for t in 1:(plan.P), j in eachindex(plan.shifts[t])
+            dst.tbl_count[b] += gather!(b, t, j)
+        end
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
