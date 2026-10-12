@@ -11,16 +11,6 @@ isempty_band(lb, ub) = isless(reverse(ub), reverse(lb))
 empty_band(shapes) =
     ((map(one, Base.front(Tuple(shapes)))..., shapes[end] + 1), Tuple(shapes))
 
-# The column-major flat indices between two index tuples.
-function band_range(lb, ub, shapes)
-    isempty_band(lb, ub) && return 1:0
-    flat = LinearIndices(Tuple(shapes))
-    return flat[lb...]:flat[ub...]
-end
-
-# The number of leaf positions under each position of `lvl`'s parent.
-coalesce_leaves(lvl) = prod(level_size(lvl))
-
 """
     shard_runs(splits, offsets, rank, parent)
 
@@ -78,7 +68,8 @@ Allocate destination storage and plan the merge of `P` ordered shards. `max_pos`
 is the destination parent-position extent. Shard `p`'s local parent positions
 `splits[p][r]:(splits[p][r + 1] - 1)` land in the merged output starting at
 `offsets[p][r]`; a hash permutes child positions, so a shard below one can need
-several ranges. `overlap` indicates that dense leaves may overlap.
+several ranges. `overlap` indicates that leaves may overlap, so elements copy
+only values other than fill.
 
 Sparse plans report `shared[p]`, the local child position whose index metadata
 is already owned by an earlier shard, or `0` when all indices must be written.
@@ -112,9 +103,9 @@ the earlier shard owns it, and both shards' children land under it. Dense blocks
 can overlap too, since every shard stores fill values outside its band, so
 values merge by copying only non-fill values into a destination of fill.
 
-`bands[tid]` is the range of flat (column-major) indices shard `tid` holds, or
-`bands` is `nothing` if unknown. Bands keep each shard from scanning, and
-conditionally copying, the dense storage outside its band.
+`bands[tid]` is the band `(lb, ub)` of index tuples shard `tid` holds, or `bands`
+is `nothing` if unknown. Bands keep each shard from copying the dense storage
+outside its band, so shards that both store an entry split its children.
 
 Merging first plans storage. `setup_coalesce!(lvl, max_pos, dst, P,
 splits, offsets, overlap)` sizes `dst` and returns a plan saying where each shard's
@@ -122,10 +113,16 @@ positions land, which local child position is shared
 (`shared[p]`, or `0`), its destination (`shared_dst[p]`), and whether shards'
 leaves can overlap below. Then, in
 parallel, the ranges in `plan.init` are initialized. After initialization finishes,
-`coalesce_shard!(tid, plan, lvl, dst, runs)` copies each shard in parallel.
-`runs` iterates ranges of leaf positions (positions at the Element level) under
-which the shard stores values. Every worker must reach every level, even with an
-empty shard: worker `tid` also inserts a hash's output buckets `tid:P:B`.
+`coalesce_shard!(tid, plan, lvl, dst, runs, lb, ub)` copies each shard in
+parallel. `runs` iterates ranges of `lvl`'s own positions to copy, in the same
+terms as `splits`, and no run straddles two of a shard's ranges. The band starts
+within position `lb[1]` at index tuple `lb[2]` and stops within position `ub[1]`
+at `ub[2]`; a position below 1 bounds nothing. Each level copies its metadata
+and passes its child runs of child positions, and bounds at the children of its
+bounding entries: a dense level scales runs by its shape, cutting out the
+children outside the band, and a sparse level passes its entries' child
+positions. Every worker must reach every level, even with an empty shard: worker
+`tid` also inserts a hash's output buckets `tid:P:B`.
 """
 function coalesce_shards!(src, dst, P, max_pos, bands)
     plan = setup_coalesce!(
@@ -144,10 +141,20 @@ function coalesce_shards!(src, dst, P, max_pos, bands)
     end
     # Initialization must finish before another shard writes shared children.
     Threads.@threads for tid in 1:P
-        runs = isnothing(bands) ? (1:(max_pos * coalesce_leaves(src))) : bands[tid]
-        coalesce_shard!(tid, plan, src, dst, (runs,))
+        if isnothing(bands)
+            coalesce_shard!(tid, plan, src, dst, (1:max_pos,))
+        else
+            lb, ub = bands[tid]
+            coalesce_shard!(tid, plan, src, dst, (1:max_pos,), (1, lb), (max_pos, ub))
+        end
     end
     return dst
+end
+
+# Merge shards that may overlap anywhere, bounding nothing.
+function coalesce_shard!(tid, plan, lvl, dst, runs)
+    none = (0, map(zero, level_size(lvl)))
+    return coalesce_shard!(tid, plan, lvl, dst, runs, none, none)
 end
 
 @inbounds function binary_search(target::Int, arr)

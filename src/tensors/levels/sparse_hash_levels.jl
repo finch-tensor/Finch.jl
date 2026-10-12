@@ -941,7 +941,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
                     for t in 1:P]
     child = setup_coalesce!(
         lvl.lvl, max_child_pos, dst.lvl, P, first.(child_ranges), last.(child_ranges),
-        any(!iszero, shared),
+        overlap && any(!iszero, shared),
     )
     init = ((dst.tbl_ctrl, 1, SPARSE_HASH_CTRL_EMPTY), child.init...)
     nnz == 0 && (init = (init..., (dst.ptr, 1, 1)))
@@ -954,7 +954,9 @@ end
 # Parents that shift uniformly rotate a source bucket onto one output bucket, or
 # the next where hashes carry, so each output bucket gathers from at most two
 # rotated source buckets per distinct shift, and counts what it places.
-function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
+function coalesce_shard!(
+    tid, plan, lvl::SparseHashLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi)
+)
     key = lvl.key.data[tid]
     perm = lvl.perm.data[tid]
     child_shift = plan.child_shift[tid]
@@ -1027,8 +1029,14 @@ function coalesce_shard!(tid, plan, lvl::SparseHashLevel, dst, runs)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
-    # between both shards.
-    leaves = coalesce_leaves(lvl.lvl)
-    child_runs = (((q - 1) * leaves + 1):(q * leaves) for q in perm)
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
+    # between both shards. The band's bounds pass to the children of the entries
+    # on them.
+    entry(p, i) = sparse_hash_lookup(
+        lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables
+    )
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, (q:q for q in perm),
+        (entry(p_lo, i_lo[end]), Base.front(i_lo)),
+        (entry(p_hi, i_hi[end]), Base.front(i_hi)),
+    )
 end

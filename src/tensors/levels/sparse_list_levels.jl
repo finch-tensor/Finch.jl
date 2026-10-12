@@ -666,22 +666,31 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, splits, offsets,
     # Children are addressed by rank, so each piece's children move as a block,
     # a shared entry's to the rank before the piece. A moved block leaves a gap
     # and makes room in its owner, so below a hash, a shard's child can need a
-    # range per piece. An empty shard still gets one, empty range. Both shards'
-    # leaves under a shared entry overlap.
+    # range per piece. An empty shard still gets one, empty range. Without
+    # bands, both shards' leaves under a shared entry overlap.
     sorted = [isempty(ps) ? [(1, 0, 1, 0, 0, 0)] : sort(ps) for ps in pieces]
     child = setup_coalesce!(
         lvl.lvl, nnz, dst.lvl, P,
         [[[lo for (lo,) in ps]; n[t] + 1] for (t, ps) in enumerate(sorted)],
         [[start - dup for (_, _, start, dup) in ps] for ps in sorted],
-        any(!iszero, shared),
+        overlap && any(!iszero, shared),
     )
     init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
     return (; pieces, shared, shared_dst, nnz, child, init)
 end
 
+# The rank of the entry with index `i` under position `p`, or zero if it is absent.
+function sparse_list_rank(ptr, idx, p, i)
+    1 <= p < length(ptr) || return 0
+    r = ptr[p] - 1 + searchsortedfirst(view(idx, ptr[p]:(ptr[p + 1] - 1)), i)
+    return r < ptr[p + 1] && idx[r] == i ? r : 0
+end
+
 # Owned entries fill consecutive slots after earlier shards' entries. Each ptr
 # entry is written by the shard owning the first entry at or after it.
-function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
+function coalesce_shard!(
+    tid, plan, lvl::SparseListLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi)
+)
     ptr = lvl.ptr.data[tid]
     idx = lvl.idx.data[tid]
     for (lo, hi, start, dup, prev, delta) in plan.pieces[tid]
@@ -706,10 +715,14 @@ function coalesce_shard!(tid, plan, lvl::SparseListLevel, dst, runs)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
-    # between both shards. Runs follow pieces, so none straddles two of the
-    # child's ranges. Every worker recurses, even with an empty shard: a hash
-    # below also inserts its buckets.
-    leaves = coalesce_leaves(lvl.lvl)
-    child_runs = (((lo - 1) * leaves + 1):(hi * leaves) for (lo, hi) in plan.pieces[tid])
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
+    # between both shards. An entry's rank is its child's position, and runs
+    # follow pieces, so none straddles two of the child's ranges. Every worker
+    # recurses, even with an empty shard: a hash below also inserts its buckets.
+    # The band's bounds pass to the children of the entries on them.
+    child_runs = (lo:hi for (lo, hi) in plan.pieces[tid])
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, child_runs,
+        (sparse_list_rank(ptr, idx, p_lo, i_lo[end]), Base.front(i_lo)),
+        (sparse_list_rank(ptr, idx, p_hi, i_hi[end]), Base.front(i_hi)),
+    )
 end

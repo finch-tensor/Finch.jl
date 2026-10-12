@@ -288,6 +288,35 @@ function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, splits, offsets, over
     return (; child, init=child.init)
 end
 
-# Dense leaves positions below it where they were.
-coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs) =
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, runs)
+# The parts of run `r` outside the ranges `a` and `b`, where neither range holds
+# the other. An empty range cuts nothing, wherever it starts.
+function cut_run(r, a, b)
+    isempty(a) && (a = b)
+    isempty(b) && (b = a)
+    first(b) < first(a) && ((a, b) = (b, a))
+    return (
+        first(r):min(last(r), first(a) - 1),
+        max(first(r), last(a) + 1):min(last(r), first(b) - 1),
+        max(first(r), last(b) + 1):last(r),
+    )
+end
+
+# Position `p` holds child positions `(p - 1) * shape + 1:p * shape`, so a run of
+# positions holds a run of child positions, less the children of `p_lo` before
+# the band starts and those of `p_hi` after it stops. Below a hash, child
+# positions are unordered, so those can fall inside a run.
+function coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi))
+    n = lvl.shape
+    lo = (p_lo - 1) * n + i_lo[end]
+    hi = (p_hi - 1) * n + i_hi[end]
+    child_runs = Iterators.flatten(
+        cut_run(
+            ((first(run) - 1) * n + 1):(last(run) * n),
+            ((p_lo - 1) * n + 1):(lo - 1), (hi + 1):(p_hi * n),
+        ) for run in runs
+    )
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, child_runs,
+        (lo, Base.front(i_lo)), (hi, Base.front(i_hi)),
+    )
+end

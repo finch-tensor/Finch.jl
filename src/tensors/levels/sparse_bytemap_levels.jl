@@ -748,10 +748,10 @@ function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, splits, offse
     empty!(dst.srt)
     resize!(dst.srt, nnz)
     dst.ptr[1] = 1
-    # Both shards' leaves under a shared entry overlap.
+    # Without bands, both shards' leaves under a shared entry overlap.
     child = setup_coalesce!(
         lvl.lvl, max_pos * shape, dst.lvl, P, scale_positions(splits, shape),
-        scale_positions(offsets, shape), any(!iszero, shared),
+        scale_positions(offsets, shape), overlap && any(!iszero, shared),
     )
     # ptr[1] is the sentinel, not an unoccupied parent bound.
     init = (
@@ -764,7 +764,9 @@ end
 # Each shard writes its pieces of srt. ptr keeps freeze_level!'s layout, with
 # bounds only around occupied positions, so the merge stays O(nnz). The shard
 # owning a parent's first entry writes its bounds.
-function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
+function coalesce_shard!(
+    tid, plan, lvl::SparseByteMapLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi)
+)
     src = lvl.srt.data[tid]
     shape = lvl.shape
     # A shared entry's bit is set by its owner.
@@ -785,8 +787,11 @@ function coalesce_shard!(tid, plan, lvl::SparseByteMapLevel, dst, runs)
     end
 
     # Recurse on every entry, owned or not: a shared entry's children are split
-    # between both shards. Every worker recurses, even with an empty shard.
-    leaves = coalesce_leaves(lvl.lvl)
-    child_runs = (((q - 1) * leaves + 1):(q * leaves) for q in src)
-    coalesce_shard!(tid, plan.child, lvl.lvl, dst.lvl, child_runs)
+    # between both shards. Every worker recurses, even with an empty shard. As in
+    # a dense level, the band's bounds pass to children by position.
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, (q:q for q in src),
+        ((p_lo - 1) * shape + i_lo[end], Base.front(i_lo)),
+        ((p_hi - 1) * shape + i_hi[end], Base.front(i_hi)),
+    )
 end

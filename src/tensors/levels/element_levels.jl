@@ -275,7 +275,8 @@ function setup_coalesce!(
     return (; splits, offsets, overlap, init)
 end
 
-function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs) where {Vf}
+# Levels above cut runs to the band.
+function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs, lb, ub) where {Vf}
     src = lvl.val.data[tid]
     splits, offsets = plan.splits[tid], plan.offsets[tid]
     for run in runs

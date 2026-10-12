@@ -159,32 +159,42 @@ a destination of fill.
 
 In the default `:normalize` mode, task `tid` first sums every shard's entries in
 its band `(lb, ub)` into its own accumulator, so the shards meet this contract,
-and `bands[tid]` is that band as a range of flat indices. Bands keep each shard
-from scanning dense storage outside its band. In `:fast` mode, tasks write their
-shards directly and `bands` is `nothing`, so all dense storage may overlap.
+and `bands[tid]` is that band. Bands keep each shard from copying dense storage
+outside its band. In `:fast` mode, tasks write their shards directly and `bands`
+is `nothing`, so all dense storage may overlap.
 
 The merge plans storage, initializes it, then copies entries:
 
-- `setup_coalesce!(lvl, max_pos, dst, P, shift, overlap)` runs once. It sizes
-  each destination level and returns a plan recording where each shard's
-  parent positions land (`dst_pos = pos + shift[p]`), the local child position
-  shared with an earlier shard, and whether shards' leaves can overlap below it.
-  Levels that compute child positions from their parent (`Dense`,
-  `SparseByteMap`) scale the shift by their shape; levels that store children in
-  their own slots (`SparseList`) shift by the entries earlier shards own. A merge
-  in which every shard shares one position space is the case where every shift
-  is zero.
+- `setup_coalesce!(lvl, max_pos, dst, P, splits, offsets, overlap)` runs once.
+  It sizes each destination level and returns a plan recording where each
+  shard's parent positions land (shard `p`'s positions
+  `splits[p][r]:(splits[p][r + 1] - 1)` start at `offsets[p][r]`), the local
+  child position shared with an earlier shard, and whether shards' leaves can
+  overlap below it. Levels that compute child positions from their parent
+  (`Dense`, `SparseByteMap`) scale the ranges by their shape; levels that store
+  children in their own slots (`SparseList`, `SparseHash`) give each run of
+  entries its own range. Leaves overlap only without bands, under an entry two
+  shards share.
 - The plan's `init` tuples describe `(buffer, start, value)` ranges, including
   child storage. Allocation and resizing remain serial. `coalesce_shards!`
   partitions initialization across workers, then waits for every worker before
   starting the copies. This barrier prevents initialization from overwriting
   another shard's contributions under a shared boundary entry.
-- `coalesce_shard!(tid, plan, lvl, dst, runs)` then runs in parallel, copying
-  shard `tid`. `runs` iterates ranges of leaf positions (positions at the
-  `Element` level) under which the shard stores values. `Dense` levels leave leaf
-  positions unchanged, so they pass `runs` through. Sparse levels merge all
-  their shard's entries and pass on the leaves under them; each pointer entry is
-  written by the one shard owning the first entry at or after it.
+- `coalesce_shard!(tid, plan, lvl, dst, runs, lb, ub)` then runs in parallel,
+  copying shard `tid`. `runs` iterates ranges of the level's own positions,
+  starting from `(1:max_pos,)` at the root, and each level hands its child runs
+  of child positions. The band travels down the same way: `lb = (p, i)` says
+  the band starts within position `p` at index tuple `i`, and each level passes
+  its child the position of the entry at index `i[end]` under `p`, with the
+  remaining indices `i[1:end-1]`. A position below 1 bounds nothing, as when a
+  shard does not store that entry. `Dense` scales each run by its shape and
+  cuts out the children of `lb`'s position before the band and those of `ub`'s
+  after it. Below a hash, child positions are unordered, so those cuts can fall
+  inside a run. Sparse levels merge all their shard's entries and pass on their
+  entries' child positions: a list's pieces, or one position per byte-map or
+  hash entry. Each pointer entry is written by the one shard owning the first
+  entry at or after it. Two shards that store the same entry split its children
+  at their bands, so with bands, `Element` copies its runs as given.
   `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
   only around occupied positions, so the merge stays O(nnz).
 

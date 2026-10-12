@@ -123,9 +123,16 @@ end
 
     # Merging must give exactly the storage of a tensor built directly, whether
     # or not the merge knows each shard's band.
+    # The band of index tuples in the flat range `cut`.
+    function cut_band(data, cut)
+        isempty(cut) && return Finch.empty_band(size(data))
+        corners = CartesianIndices(data)
+        return Tuple(corners[first(cut)]), Tuple(corners[last(cut)])
+    end
+
     function check_merge(fmt, data, cuts)
         src = band_shards(fmt, data, cuts)
-        for bands in (cuts, nothing)
+        for bands in ([cut_band(data, cut) for cut in cuts], nothing)
             # Destinations arrive cleared, as assemble_level! leaves them.
             dst = Tensor(fmt(), zero(data)).lvl
             Finch.coalesce_shards!(src, dst, length(cuts), 1, bands)
@@ -147,24 +154,36 @@ end
         for (fmt, shared, shared_dst) in (
             (() -> SparseList(Dense(Element(0))), 1, 2),
             (() -> SparseByteMap(Dense(Element(0))), 4, 4),
-        )
+        ), bounded in (false, true)
             src = band_shards(fmt, data, cuts)
             dst = Tensor(fmt(), zero(data)).lvl
-            plan = Finch.setup_coalesce!(src, 1, dst, 2, [[1, 2], [1, 2]], [[1], [1]], true)
+            plan = Finch.setup_coalesce!(
+                src, 1, dst, 2, [[1, 2], [1, 2]], [[1], [1]], !bounded
+            )
             @test eltype(plan.shared) == Int
             @test plan.shared == [0, shared]
             @test plan.shared_dst == [0, shared_dst]
             fmt() isa SparseListLevel && @test plan.pieces == [[(1, 2, 1, 0, 0, 0)], [(1, 2, 3, 1, 1, 0)]]
             @test plan.nnz == 3
-            @test plan.child.child.overlap
+            @test plan.child.child.overlap == !bounded
             for (buffer, start, value) in plan.init
                 fill!(view(buffer, start:length(buffer)), value)
             end
-            for tid in 1:2
-                Finch.coalesce_shard!(tid, plan, src, dst, (cuts[tid],))
+            if bounded
+                # The shards split the shared column at their bands, so every
+                # stored value is written, whatever the destination held.
+                fill!(dst.lvl.lvl.val, -1)
+                for tid in 1:2
+                    lb, ub = cut_band(data, cuts[tid])
+                    Finch.coalesce_shard!(tid, plan, src, dst, (1:1,), (1, lb), (1, ub))
+                end
+            else
+                for tid in 1:2
+                    Finch.coalesce_shard!(tid, plan, src, dst, (1:1,))
+                end
+                @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
             end
             @test Array(Tensor(dst)) == data
-            @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
         end
     end
 

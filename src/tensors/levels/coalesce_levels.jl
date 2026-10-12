@@ -642,7 +642,6 @@ supports_reassembly(::VirtualCoalesceLevel) = false
 get_bands(P, shapes, style::MergeDense) = [balance(t, P, shapes, style) for t in 1:(P)]
 get_bands(sampler, P, shapes, style::MergeRandom) =
     [balance(sampler, t, P, shapes, style) for t in 1:(P)]
-do_band_ranges(shapes, bands) = [band_range(b..., shapes) for b in bands]
 
 function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
     lvl.declared || return lvl
@@ -669,7 +668,6 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         lb = freshen(ctx, :lb)
         ub = freshen(ctx, :ub)
         bands = freshen(ctx, :bands)
-        ranges = freshen(ctx, :ranges)
         mask = freshen(ctx, :mask)
         nnz = freshen(ctx, :nnz)
         sid = freshen(ctx, :sid)
@@ -693,7 +691,6 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
                     $bands = $band
-                    $ranges = Finch.do_band_ranges($shapes, $bands)
                     Finch.@barrier Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
                         $mask = Finch.tuplemask($lb, $ub)
@@ -794,7 +791,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
                     if typeof($(lvl_e).accumulator) === typeof($(lvl_e).lvl)
                         Finch.coalesce_shards!(
-                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $ranges
+                            $(lvl_e).accumulator, $(lvl_c), $P, $max_pos, $bands
                         )
                     else
                         # SparseList levels, including children of hashes,
@@ -857,7 +854,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                                 nothing
                             end)
                         end
-                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $ranges)
+                        Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, $bands)
                     end
                 end
             end,
