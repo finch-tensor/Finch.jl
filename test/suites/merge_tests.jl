@@ -221,3 +221,31 @@
         end
     end
 end
+
+@testitem "sparse_diagmask" begin
+    let
+        data = [
+            1 4 7 0 0 12
+            2 5 0 9 0 0
+            0 6 0 0 0 13
+            3 0 8 10 0 0
+            0 0 0 11 0 14
+        ]
+        a = dropfills!(Tensor(Dense(SparseList(Element(0)))), data)
+        b = Tensor(Dense(SparseList(Element(0))))
+        m, n = size(data)
+        for k in (-7, -2, 0, 1, 7)
+            diagonal = Finch.offset(diagmask, 0, -k)
+            for mask in
+                (diagonal, Finch.window(diagonal, Finch.Extent(1, m), Finch.Extent(1, n)))
+                @finch begin
+                    b .= 0
+                    for j in _, i in _
+                        b[i, j] = a[i, j] * mask[i, j]
+                    end
+                end
+                @test Array(b) == [data[i, j] * (i == j - k) for i in 1:m, j in 1:n]
+            end
+        end
+    end
+end

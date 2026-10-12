@@ -52,6 +52,12 @@ function SparseByteMapLevel{Ti}(
     SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}(lvl, shape, ptr, tbl, srt)
 end
 
+# Packed child positions use a zero-indexed parent and a one-indexed coordinate:
+# q = (p - 1) * shape + i. Thus q - 1 is the fully zero-indexed packed value.
+@inline sparse_bytemap_q_offset(p, shape) = (p - one(p)) * shape
+@inline sparse_bytemap_pack(p, i, shape) = sparse_bytemap_q_offset(p, shape) + i
+@inline sparse_bytemap_parent(q, shape) = fld(q - one(q), shape) + one(q)
+
 Base.summary(lvl::SparseByteMapLevel) = "SparseByteMap($(summary(lvl.lvl)))"
 function similar_level(lvl::SparseByteMapLevel, fill_value, eltype::Type, dims...)
     SparseByteMap(
@@ -139,7 +145,7 @@ function labelled_children(fbr::SubFiber{<:SparseByteMapLevel})
     pos = fbr.pos
     pos + 1 > length(lvl.ptr) && return []
     Tp = postype(lvl)
-    q_offset = (Tp(pos) - one(Tp)) * Tp(lvl.shape)
+    q_offset = sparse_bytemap_q_offset(Tp(pos), Tp(lvl.shape))
     map(lvl.ptr[pos]:(lvl.ptr[pos + 1] - 1)) do qos
         srt_entry = lvl.srt[qos]
         LabelledTree(
@@ -183,7 +189,7 @@ function (fbr::SubFiber{<:SparseByteMapLevel{Ti}})(idxs...) where {Ti}
     isempty(idxs) && return fbr
     lvl = fbr.lvl
     p = fbr.pos
-    q = (p - 1) * lvl.shape + idxs[end]
+    q = sparse_bytemap_pack(p, idxs[end], lvl.shape)
     if lvl.tbl[q]
         fbr_2 = SubFiber(lvl.lvl, q)
         fbr_2(idxs[1:(end - 1)]...)
@@ -327,8 +333,8 @@ function sparse_bytemap_parent_position(
     else
         return :($srt_shape = $(Tp)($(ctx(lvl.shape)))),
         :(
-            fld($q - $(Tp(1)), $srt_shape) + $(Tp(1))
-        )
+        Finch.sparse_bytemap_parent($q, $srt_shape)
+)
     end
 end
 
@@ -422,10 +428,13 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     tbl_len = freshen(ctx, lvl.tag, :tbl_len)
 
     quote
-        $q_start = ($(ctx(pos_start)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(Tp(1))
-        $q_stop = $(ctx(pos_stop)) * $(ctx(lvl.shape))
-        # Existing storage is already clean (declare_level! clears dirty entries),
-        # so only initialize what this call grows.
+        $q_start = Finch.sparse_bytemap_pack(
+            $(ctx(pos_start)), $(Tp(1)), $(ctx(lvl.shape))
+        )
+        $q_stop = Finch.sparse_bytemap_pack(
+            $(ctx(pos_stop)), $(Tp)($(ctx(lvl.shape))), $(ctx(lvl.shape))
+        )
+        # Existing storage is already clean; only initialize what this call grows.
         $ptr_len = length($(lvl.ptr))
         Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
         Finch.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
@@ -506,7 +515,9 @@ function unfurl(
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $my_q_offset = ($(ctx(pos)) - $(Tp(1))) * $(Tp)($(ctx(lvl.shape)))
+                $my_q_offset = Finch.sparse_bytemap_q_offset(
+                    $(ctx(pos)), $(Tp)($(ctx(lvl.shape)))
+                )
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
@@ -573,7 +584,9 @@ function unfurl(
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $my_q_offset = ($(ctx(pos)) - $(Tp(1))) * $(Tp)($(ctx(lvl.shape)))
+                $my_q_offset = Finch.sparse_bytemap_q_offset(
+                    $(ctx(pos)), $(Tp)($(ctx(lvl.shape)))
+                )
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
                 $my_r_stop = $(lvl.ptr)[$(ctx(pos)) + 1]
                 if $my_r != 0 && $my_r < $my_r_stop
@@ -635,7 +648,9 @@ function unfurl(
         body=Lookup(;
             body=(ctx, i) -> Thunk(;
                 preamble=quote
-                    $my_q = ($(ctx(q)) - $(Ti(1))) * $(ctx(lvl.shape)) + $(ctx(i))
+                    $my_q = Finch.sparse_bytemap_pack(
+                        $(ctx(q)), $(ctx(i)), $(ctx(lvl.shape))
+                    )
                 end,
                 body=(ctx) -> Switch([
                     value(:($(lvl.tbl)[$my_q])) => instantiate(
@@ -677,7 +692,9 @@ function unfurl(
         body=Lookup(;
             body=(ctx, idx) -> Thunk(;
                 preamble=quote
-                    $my_q = ($(ctx(pos)) - $(Tp(1))) * $(ctx(lvl.shape)) + $(ctx(idx))
+                    $my_q = Finch.sparse_bytemap_pack(
+                        $(ctx(pos)), $(ctx(idx)), $(ctx(lvl.shape))
+                    )
                     $dirty = false
                 end,
                 body=(ctx) -> instantiate(

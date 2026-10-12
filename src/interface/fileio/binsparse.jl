@@ -1,4 +1,4 @@
-const BINSPARSE_VERSION = 0.1
+const BINSPARSE_VERSION = v"0.1.0"
 
 """
     bspwrite(::AbstractString, tns)
@@ -13,6 +13,11 @@ Supported file extensions are:
 - `.bsp.h5`: HDF5 file format ([HDF5](https://github.com/JuliaIO/HDF5.jl) must be loaded)
 - `.bspnpy`: NumPy and JSON directory format ([NPZ](https://github.com/fhs/NPZ.jl) must be loaded)
 
+The `alias` keyword controls whether a predefined format name (e.g. `"CSR"`) is
+used for the output. When `alias=false`, the output always uses a `"custom"`
+format. Otherwise (`alias=true` or `alias=nothing`), a predefined format name
+is used whenever one describes the tensor's layout.
+
 !!! warning
     The Binsparse spec is under development. Additionally, this function may not
     be fully conformant. Please file bug reports if you see anything amiss.
@@ -25,6 +30,9 @@ bspread(::HDF5.File)
 bspread(::NPYPath)
 
 Read the [Binsparse](https://github.com/GraphBLAS/binsparse-specification) file into a Finch tensor.
+
+The file version must have the same major and minor versions as
+`BINSPARSE_VERSION` and an equal or lower patch version.
 
 Supported file extensions are:
 
@@ -56,13 +64,17 @@ bspread_type_lookup = OrderedDict(
 function bspread_vector end
 function bspwrite_vector end
 
-function bspread_data(f, desc, key)
-    t = desc["data_types"][key]
-    if (m = match(r"^iso\[([^\[]*)\]$", t)) !== nothing
-        throw(ArgumentError("iso values not currently supported"))
+function bspread_data(f, desc, key, t=desc["data_types"][key])
+    if (m = match(r"^iso\[(.+)\]$", t)) !== nothing
+        data = bspread_data(f, desc, key, m.captures[1])
+
+        n = key == "values" ? Int(desc["number_of_stored_values"]) : length(data)
+        if n == 0
+            return similar(data, 0)
+        end
+        return fill(data[1], n)
     elseif (m = match(r"^complex\[([^\[]*)\]$", t)) !== nothing
-        desc["data_types"][key] = m.captures[1]
-        data = bspread_data(f, desc, key)
+        data = bspread_data(f, desc, key, m.captures[1])
         return reinterpret(Complex{eltype(data)}, data)
     elseif (m = match(r"^[^\]]*$", t)) !== nothing
         haskey(bspread_type_lookup, t) || throw(ArgumentError("unknown binsparse type $t"))
@@ -243,14 +255,14 @@ struct NPYPath
     dirname::String
 end
 
-function bspwrite_h5(args...)
+function bspwrite_h5(args...; kwargs...)
     throw(
         FinchExtensionError(
             "HDF5.jl must be loaded to write .bsp.h5 files (hint: `using HDF5`)"
         ),
     )
 end
-function bspwrite_bspnpy(args...)
+function bspwrite_bspnpy(args...; kwargs...)
     throw(
         FinchExtensionError(
             "NPZ.jl must be loaded to write .bspnpy files (hint: `using NPZ`)"
@@ -258,23 +270,25 @@ function bspwrite_bspnpy(args...)
     )
 end
 
-function bspwrite(fname::AbstractString, arr, attrs=OrderedDict())
+function bspwrite(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
     if endswith(fname, ".h5") || endswith(fname, ".hdf5")
-        bspwrite_h5(fname, arr, attrs)
+        bspwrite_h5(fname, arr, attrs; kwargs...)
     elseif endswith(fname, ".bspnpy")
-        bspwrite_bspnpy(fname, arr, attrs)
+        bspwrite_bspnpy(fname, arr, attrs; kwargs...)
     else
         error("Unknown file extension for file $fname")
     end
 end
-bspwrite(fname, arr, attrs=OrderedDict()) = bspwrite_tensor(fname, arr, attrs)
+function bspwrite(fname, arr, attrs=OrderedDict(); kwargs...)
+    bspwrite_tensor(fname, arr, attrs; kwargs...)
+end
 
-function bspwrite_tensor(io, fbr::Tensor, attrs=OrderedDict())
-    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs)
+function bspwrite_tensor(io, fbr::Tensor, attrs=OrderedDict(); kwargs...)
+    bspwrite_tensor(io, swizzle(fbr, 1:ndims(fbr)...), attrs; kwargs...)
 end
 
 function bspwrite_tensor(
-    io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict()
+    io, arr::SwizzleArray{dims,<:Tensor}, attrs=OrderedDict(); alias=nothing
 ) where {dims}
     desc = OrderedDict(
         "custom" => OrderedDict{Any,Any}(
@@ -285,14 +299,21 @@ function bspwrite_tensor(
         "data_types" => OrderedDict(),
         "version" => "$BINSPARSE_VERSION",
         "number_of_stored_values" => countstored(arr),
-        "attrs" => attrs,
     )
-    if !issorted(reverse(collect(dims)))
-        desc["custom"]["transpose"] = reverse(collect(dims)) .- 1
+    if !isempty(attrs)
+        desc["attrs"] = attrs
+    end
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    transpose = reverse(invperm(Int[dims...])) .- 1
+    if !issorted(transpose)
+        desc["custom"]["transpose"] = transpose
     end
     bspwrite_level(io, desc, desc["custom"]["level"], arr.body.lvl)
-    if haskey(bspwrite_format_lookup, desc["custom"])
+    if alias !== false && haskey(bspwrite_format_lookup, desc["custom"])
         desc["format"] = bspwrite_format_lookup[desc["custom"]]
+        delete!(desc, "custom")
+    else
+        desc["format"] = "custom"
     end
     bspwrite_header(io, JSON.json(Dict("binsparse" => desc), 4))
 end
@@ -326,27 +347,42 @@ end
 
 function bspread_header end
 
+function bspread_check_version(version, supported=BINSPARSE_VERSION)
+    version = VersionNumber(version)
+    if version.major != supported.major || version.minor != supported.minor ||
+        version.patch > supported.patch
+        throw(
+            ArgumentError(
+                "unsupported Binsparse version $version; expected " *
+                "$(supported.major).$(supported.minor).x <= $supported",
+            ),
+        )
+    end
+    return nothing
+end
+
 function bspread(f)
     desc = bspread_header(f)["binsparse"]
-    @assert desc["version"] == "$BINSPARSE_VERSION"
+    bspread_check_version(desc["version"])
+
+    if get(desc, "structure", "general") != "general"
+        throw(ArgumentError("binsparse structure field currently unsupported"))
+    end
+
     fmt = OrderedDict{Any,Any}(
         get(() -> bspread_tensor_lookup[desc["format"]], desc, "custom")
     )
     if !haskey(fmt, "transpose")
         fmt["transpose"] = collect(0:(length(desc["shape"]) - 1))
     end
-    if !issorted(reverse(fmt["transpose"]))
-        sigma = sortperm(reverse(fmt["transpose"] .+ 1))
-        desc["shape"] = desc["shape"][sigma]
-    end
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    dims = reverse(Vector{Int}(fmt["transpose"]) .+ 1)
+    desc["shape"] = desc["shape"][dims]
     fbr = Tensor(bspread_level(f, desc, fmt["level"]))
-    if !issorted(reverse(fmt["transpose"]))
-        fbr = swizzle(fbr, reverse(fmt["transpose"] .+ 1)...)
+    if !issorted(dims)
+        fbr = swizzle(fbr, invperm(dims)...)
     end
-    if haskey(desc, "structure")
-        throw(ArgumentError("binsparse structure field currently unsupported"))
-    end
-    fbr
+    return fbr
 end
 
 bspread_level(f, desc, fmt) = bspread_level(f, desc, fmt, Val(Symbol(fmt["level_desc"])))

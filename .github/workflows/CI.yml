@@ -11,9 +11,24 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
+  style:
+    name: Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Run style tests
+        run: julia --color=yes test/runtests.jl --include style
+
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    needs: style
     runs-on: ${{ matrix.os }}
+    env:
+      FINCH_TEST_ARGS: --exclude style
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +52,10 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        if: runner.os == 'Linux'
+        with:
+          run-install: false
       - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts
@@ -62,6 +81,7 @@ jobs:
 
   docs:
     name: Documentation
+    needs: style
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +95,63 @@ jobs:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
 
   finch-tensor-tests:
-    name: Python tests
+    name: Python finch-tensor tests
+    needs: style
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Finch.jl
+        uses: actions/checkout@v4
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          # Match the Julia versions supported by the Python backend.
+          version: '1.12'
+      - name: Build Finch.jl package
+        uses: julia-actions/julia-buildpkg@v1
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout finch-tensor
+        uses: actions/checkout@v4
+        with:
+          repository: finch-tensor/finch-tensor
+          ref: 'main'
+          path: 'finch-tensor'
+      - name: Install package
+        working-directory: finch-tensor
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group test --editable '.[julia]'
+      - name: Use this Finch.jl checkout
+        working-directory: finch-tensor
+        run: |
+          python - <<'PY'
+          import os
+          import juliapkg
+
+          juliapkg.add(
+              "Finch",
+              uuid="9177782c-1635-4eb9-9bfb-d9dfa25e6bce",
+              path=os.environ["GITHUB_WORKSPACE"],
+              dev=True,
+          )
+          juliapkg.resolve()
+
+          from finch.compile_jl.julia import jl
+
+          assert os.path.samefile(
+              str(jl.seval("pkgdir(Finch)")), os.environ["GITHUB_WORKSPACE"]
+          )
+          PY
+      - name: Run finch-tensor tests
+        working-directory: finch-tensor
+        run: |
+          python -m pytest src/finch/tests/test_julia*.py src/finch/tests/test_accuracy.py
+
+  galley-jl-python-tests:
+    name: Python galley-jl-python tests
+    needs: style
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Finch.jl
@@ -92,19 +168,19 @@ jobs:
           python-version: '3.11'
       - name: Install Poetry
         uses: snok/install-poetry@v1
-      - name: Checkout finch-tensor
+      - name: Checkout galley-jl-python
         uses: actions/checkout@v4
         with:
-          # The original Python wrapper moved here; v0.2.13 supports Finch 1.3.
+          # Keep testing the original Array API wrapper against this checkout.
           repository: finch-tensor/galley-jl-python
           ref: 'v0.2.13'
-          path: 'finch-tensor'
+          path: 'galley-jl-python'
       - name: Install package
         run: |
-          cd finch-tensor
+          cd galley-jl-python
           poetry install --extras test
           poetry run python develop.py --path "${GITHUB_WORKSPACE}"
-      - name: Run finch-tensor tests
+      - name: Run galley-jl-python tests
         run: |
-          cd finch-tensor
+          cd galley-jl-python
           poetry run pytest tests/

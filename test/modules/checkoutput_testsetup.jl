@@ -31,21 +31,20 @@ macro repl(io, ex, quiet=false)
     end
 end
 
-# Dict iteration order can change between Julia versions. Keep every key and
-# value in SparseDict's printed storage, but compare the entries in sorted order.
-function normalize_dict_order(output)
+function normalize_sparse_dicts(output)
+    # Dict iteration order can change between Julia versions. Sort only the
+    # integer coordinate-to-position entries printed by SparseDict levels.
     entry = raw"\(-?\d+, -?\d+\) => -?\d+"
     dict = Regex(
-        raw"Dict(?:\{Tuple\{U?Int\d*, U?Int\d*\}, U?Int\d*\})?\(" *
-        entry * "(?:, " * entry * ")*\\)",
+        raw"\bDict(?:\{Tuple\{Int\d+, Int\d+\}, Int\d+\})?\(" *
+        entry * "(?:, " * entry * raw")*\)",
     )
-    replace(
-        output,
-        dict =>
-            s ->
-                first(split(s, '('; limit=2)) * "(" *
-                join(sort!([m.match for m in eachmatch(Regex(entry), s)]), ", ") *
-                ")",
+    return replace(
+        output, dict => function (value)
+            prefix = value[1:findfirst('(', value)]
+            entries = [m.match for m in eachmatch(Regex(entry), value)]
+            return prefix * join(sort!(entries), ", ") * ")"
+        end
     )
 end
 
@@ -69,7 +68,7 @@ function check_output(fname, arg)
     else
         reference = replace(read(ref_file, String), "\r" => "")
         result = replace(sprint(println, arg), "\r" => "")
-        if normalize_dict_order(reference) == normalize_dict_order(result)
+        if normalize_sparse_dicts(reference) == normalize_sparse_dicts(result)
             return true
         else
             println("disagreement with reference output")

@@ -7,3 +7,4 @@
 Manifest.toml
 */Manifest.toml
 *.mem
+build-compliance/

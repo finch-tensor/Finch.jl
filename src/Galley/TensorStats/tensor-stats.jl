@@ -330,14 +330,15 @@ function issimilar(stat1::DCStats, stat2::DCStats, rel_granularity)
             end
         end
     else
-        dc_dict = OrderedDict{DCKey}()
+        dc_dict = OrderedDict{DCKey,Float64}()
         for dc1 in stat1.dcs
             dc_dict[get_dc_key(dc1)] = dc1.d
         end
         for dc2 in stat2.dcs
-            if abs(
-                log(rel_granularity, dc_dict[get_dc_key(dc2)]) - log(rel_granularity, dc2.d)
-            ) > 1
+            # like the loop above, only compare DCs present in both stats
+            d1 = get(dc_dict, get_dc_key(dc2), nothing)
+            if !isnothing(d1) &&
+                abs(log(rel_granularity, d1) - log(rel_granularity, dc2.d)) > 1
                 return false
             end
         end
@@ -707,7 +708,7 @@ function _4d_structure_to_dcs(indices::Vector{Int}, s::Tensor)
     n_l, n_k, n_j, n_i = size(s)
     d_ijkl = Scalar(0)
     @finch begin
-        d_ijk .= 0
+        d_ijkl .= 0
         for i in _
             for j in _
                 for k in _

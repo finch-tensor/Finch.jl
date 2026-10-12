@@ -1,21 +1,35 @@
 @testitem "reference_dict_order" setup = [CheckOutput] begin
     a = "SparseDict(Dict((1, 2) => 3, (1, 1) => 2), [2, 3])"
     b = "SparseDict(Dict((1, 1) => 2, (1, 2) => 3), [2, 3])"
-    @test CheckOutput.normalize_dict_order(a) == CheckOutput.normalize_dict_order(b)
-    @test CheckOutput.normalize_dict_order(a) !=
-        CheckOutput.normalize_dict_order(replace(b, "=> 3" => "=> 4"))
-    @test CheckOutput.normalize_dict_order(a) !=
-        CheckOutput.normalize_dict_order(replace(b, "[2, 3]" => "[3, 2]"))
+    @test CheckOutput.normalize_sparse_dicts(a) == CheckOutput.normalize_sparse_dicts(b)
+    @test CheckOutput.normalize_sparse_dicts(a) !=
+        CheckOutput.normalize_sparse_dicts(replace(b, "=> 3" => "=> 4"))
+    @test CheckOutput.normalize_sparse_dicts(a) !=
+        CheckOutput.normalize_sparse_dicts(replace(b, "[2, 3]" => "[3, 2]"))
     typed_a = replace(a, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
     typed_b = replace(b, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
-    @test CheckOutput.normalize_dict_order(typed_a) ==
-        CheckOutput.normalize_dict_order(typed_b)
-    @test CheckOutput.normalize_dict_order(typed_a) != CheckOutput.normalize_dict_order(a)
-    @test CheckOutput.normalize_dict_order(typed_a) !=
-        CheckOutput.normalize_dict_order(replace(typed_b, "Int16" => "Int32"))
+    @test CheckOutput.normalize_sparse_dicts(typed_a) ==
+        CheckOutput.normalize_sparse_dicts(typed_b)
+    @test CheckOutput.normalize_sparse_dicts(typed_a) !=
+        CheckOutput.normalize_sparse_dicts(a)
+    @test CheckOutput.normalize_sparse_dicts(typed_a) !=
+        CheckOutput.normalize_sparse_dicts(replace(typed_b, "Int16" => "Int32"))
 end
 
 @testitem "print" setup = [CheckOutput] begin
+    @testset "SparseDict snapshot order" begin
+        normalize = CheckOutput.normalize_sparse_dicts
+        for prefix in
+            ("Dict", "Dict{Tuple{Int32, Int16}, Int32}", "Dict{Tuple{Int64, Int16}, Int64}")
+            ordered = "$prefix((1, 2) => 3, (4, 5) => 6)"
+            reversed = "$prefix((4, 5) => 6, (1, 2) => 3)"
+            @test normalize(ordered) == normalize(reversed)
+            @test normalize(ordered) != normalize("$prefix((1, 2) => 6, (4, 5) => 3)")
+            @test normalize(ordered) != normalize("$prefix((1, 3) => 3, (4, 5) => 6)")
+            @test normalize("Tensor($reversed, [2, 1])") == "Tensor($ordered, [2, 1])"
+        end
+    end
+
     A = Tensor([(i + j) % 3 for i in 1:5, j in 1:10])
 
     formats = [
