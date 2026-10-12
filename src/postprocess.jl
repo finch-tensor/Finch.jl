@@ -247,7 +247,7 @@ function (ctx::PropagateCopies)(ex)
     elseif @capture ex :block(~args...)
         return Expr(:block, map(ctx, args)...)
     elseif @capture(ex, (~f)(~args...)) &&
-        f in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :return)
+        f in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :..., :return)
         return Expr(f, map(ctx, args)...)
     elseif (@capture ex (~f)(~cond, ~body)) && f in [:&&, :||]
         cond = ctx(cond)
