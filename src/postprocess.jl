@@ -362,7 +362,7 @@ function (ctx::MarkDead)(ex, res)
         end
         return Expr(:block, reverse(args_2)...)
     elseif @capture(ex, (~head)(~args...)) &&
-        head in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :return)
+        head in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :..., :return)
         res |= head === :call && !ispure(args[1])
         res |= head === :return
         return Expr(head, reverse(map((arg) -> ctx(arg, res), reverse(args)))...)
