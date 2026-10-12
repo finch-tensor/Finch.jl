@@ -2,8 +2,10 @@
     function check_counts(lvl)
         B = lvl.subtables
         len = length(lvl.tbl_ctrl) ÷ B
-        @test lvl.tbl_count[1:B] == [count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
-            view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B]
+        @test lvl.tbl_count[1:B] == [
+            count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B
+        ]
         @test sum(lvl.tbl_count[1:B]) == length(lvl.perm)
         # Block j counts each bucket's entries of rank at least (j - 1) * B + 1.
         m = cld(length(lvl.perm), B) + 1
@@ -12,7 +14,9 @@
             expected = zeros(Int, B)
             for q in lvl.perm[((j - 1) * B + 1):end]
                 p, i = lvl.key[q]
-                expected[Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(p, i), B)] += 1
+                expected[Finch.sparse_hash_hash_subtable(
+                    Finch.sparse_hash_hash(p, i), B
+                )] += 1
             end
             @test lvl.tbl_count[((j - 1) * B + 1):(j * B)] == expected
         end
@@ -41,7 +45,8 @@
         @test Finch.sparse_hash_hash_subtable(x, 8) == 6
         @test Finch.sparse_hash_hash_subtable(UInt(0b101), 8) == 1
         @test Finch.sparse_hash_hash_subtable(typemax(UInt), 1) == 1
-        @test Finch.sparse_hash_hash_slot_parts(x, 512, 8) == (321, Int((hash(x) >>> 7) & 63), 63)
+        @test Finch.sparse_hash_hash_slot_parts(x, 512, 8) ==
+            (321, Int((hash(x) >>> 7) & 63), 63)
         @test Finch.sparse_hash_hash_slot_parts(typemax(UInt), 8, 8) == (8, 0, 0)
         @test Finch.sparse_hash_hash_ctrl(x) == 0x80 | (hash(x) % UInt8 & 0x7f)
         # Shifting parents moves a bucket up by the rotation, or one more where
@@ -65,7 +70,11 @@
             Finch.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
         end
         key = [(parents[q], 7, Finch.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
-        find(p, i) = Finch.sparse_hash_find(ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), subtables)
+        function find(p, i)
+            Finch.sparse_hash_find(
+                ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), subtables
+            )
+        end
         for (q, (p, i)) in enumerate(key)
             h = find(p, i)
             ctrl[h] = Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(p, i))
@@ -98,18 +107,27 @@
             for q in 1:12
                 p, i = key[q]
                 @test Finch.sparse_hash_lookup(ctrl, tbl, key, p, i, B) == q
-                h = Finch.sparse_hash_find(ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), B)
+                h = Finch.sparse_hash_find(
+                    ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i), B
+                )
                 @test ctrl[h] == Finch.sparse_hash_hash_ctrl(Finch.sparse_hash_hash(p, i))
             end
         end
     end
 
-    @testset "sparse clearing crosses cleared slots and wraps" for Tp in (Int8, Int32, Int), B in (1, 8)
+    @testset "sparse clearing crosses cleared slots and wraps" for Tp in (Int8, Int32, Int),
+        B in (1, 8)
+
         cap = 4096B
-        indices = collect(Iterators.take(Iterators.filter(Iterators.countfrom(1)) do i
-            Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(1, i), cap, B) ==
-                (1, 4095, 4095)
-        end, 4))
+        indices = collect(
+            Iterators.take(
+                Iterators.filter(Iterators.countfrom(1)) do i
+                    Finch.sparse_hash_hash_slot_parts(
+                        Finch.sparse_hash_hash(1, i), cap, B
+                    ) ==
+                    (1, 4095, 4095)
+                end, 4),
+        )
         # Interior child holes and a sorted permutation that differs from
         # insertion order. Clearing its first entry breaks the probe chain.
         perm = Tp[1, 4, 3, 6]
@@ -131,7 +149,10 @@
         @test all(iszero, ctrl)
     end
 
-    @testset "declaration reuses capacity across dense, sparse, and empty outputs" for Tp in (Int32, Int), B in (1, 8)
+    @testset "declaration reuses capacity across dense, sparse, and empty outputs" for Tp in
+                                                                                       (
+            Int32, Int
+        ), B in (1, 8)
         tensor = Tensor(SparseHash(Element{0,Int,Tp}(), 8192, B))
         input = Tensor(Dense(Element(0)), zeros(Int, 8192))
         capacity = 0
@@ -167,9 +188,11 @@
             ctrl[h], tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
             values[q] = data[i] = 10i
         end
-        tensor = Tensor(SparseHash{Int}(
-            Element(0, values), 64, 1, [1, 4], ctrl, tbl, key, [1, 3, 6], [3]
-        ))
+        tensor = Tensor(
+            SparseHash{Int}(
+                Element(0, values), 64, 1, [1, 4], ctrl, tbl, key, [1, 3, 6], [3]
+            ),
+        )
         input = Tensor(Dense(Element(0)), ones(Int, 64))
         @finch for i in _
             tensor[i] += input[i]
@@ -202,7 +225,10 @@
 
     @testset "skewed assembly and thawed growth" for Ti in (Int, Int32)
         B = 8
-        indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), B) == 1, 1:1000)[1:40]
+        indices = filter(
+            i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), B) == 1,
+            1:1000,
+        )[1:40]
         data = zeros(Int, 1000)
         data[indices[1:10]] .= 1
         tensor = Tensor(SparseHash{Ti}(Element(0), 1000, B), data)
@@ -218,11 +244,16 @@
         @test length(tensor.lvl.tbl) == B * 128
         @test length(tensor.lvl.perm) == 40
         check_counts(tensor.lvl)
-        @test Finch.sparse_hash_lookup(tensor.lvl.tbl_ctrl, tensor.lvl.tbl, tensor.lvl.key, 1, 1001, B) == 0
+        @test Finch.sparse_hash_lookup(
+            tensor.lvl.tbl_ctrl, tensor.lvl.tbl, tensor.lvl.key, 1, 1001, B
+        ) == 0
     end
 
     @testset "pending writers share keys across bucket growth" begin
-        indices = filter(i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1, 1:1000)[1:40]
+        indices = filter(
+            i -> Finch.sparse_hash_hash_subtable(Finch.sparse_hash_hash(1, i), 8) == 1,
+            1:1000,
+        )[1:40]
         coords = Tensor(Dense(Element(0)), indices)
         tensor = Tensor(SparseHash{Int}(Dense(Element(0), 2), 1000, 8))
         @finch begin
@@ -275,7 +306,7 @@ end
 @testitem "sparse_hash_pending" begin
     using Random
 
-    function table(Tp, B; capacity=4B)
+    function pending_table(Tp, B; capacity=4B)
         (; ctrl=zeros(UInt8, capacity), tbl=zeros(Tp, capacity), key=Tuple{Tp,Int,UInt8}[],
             counts=zeros(Int, B), free_head=Ref(zero(Tp)), B)
     end
@@ -335,7 +366,8 @@ end
 
     @testset "127-writer limit, promotion, and growth" for Tp in (Int, Int32),
         dirty in (false, true)
-        t = table(Tp, 4)
+
+        t = pending_table(Tp, 4)
         handles = [acquire!(t, (1, 1)) for _ in 1:127]
         q = first(handles).q
         @test state(t, (1, 1)) == 127
@@ -386,7 +418,7 @@ end
     end
 
     @testset "freeze trims free tails and preserves reusable holes" begin
-        t = table(Int, 4)
+        t = pending_table(Int, 4)
         handles = [acquire!(t, (1, i)) for i in 1:4]
         for (i, h) in enumerate(handles)
             release!(t, h, isodd(i))
@@ -401,7 +433,7 @@ end
         @test h.q == 2
         release!(t, h, true)
 
-        t = table(Int, 4)
+        t = pending_table(Int, 4)
         handles = [acquire!(t, (1, i)) for i in 1:4]
         foreach(h -> release!(t, h, false), handles)
         extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, 1)
@@ -415,7 +447,8 @@ end
 
     @testset "deletion crosses home slots and wraps within a bucket" for B in (1, 4),
         home in (0, 63)
-        t = table(Int, B; capacity=64B)
+
+        t = pending_table(Int, B; capacity=64B)
         function candidates(off)
             filter(1:50000) do i
                 Finch.sparse_hash_hash_slot_parts(Finch.sparse_hash_hash(1, i), 64B, B) ==
@@ -442,7 +475,8 @@ end
 
     @testset "random overlapping lifetimes against a reference" for Tp in (Int, Int32),
         B in (1, 8)
-        t = table(Tp, B)
+
+        t = pending_table(Tp, B)
         expected = Dict{Tuple{Int,Int},Tuple{Int,Bool}}()
         active = []
         rng = Xoshiro(17)
@@ -554,10 +588,10 @@ end
 
     # Reusing a byte map must not expose entries from earlier writes.
     @testset "$(summary(fmt())), $n columns" for fmt in (
-        () -> SparseByteMap(SparseByteMap(Element(0))),
-        () -> SparseByteMap(Dense(Element(0))),
-        () -> SparseByteMap(SparseList(Element(0))),
-    ), n in (3, 64)
+            () -> SparseByteMap(SparseByteMap(Element(0))),
+            () -> SparseByteMap(Dense(Element(0))),
+            () -> SparseByteMap(SparseList(Element(0))),
+        ), n in (3, 64)
         # Exercise both bulk clearing and clearing just the dirty positions.
         first = hcat([1 0 2; 0 3 0; 4 0 0], zeros(Int, 3, n - 3))
         second = hcat([0 5 0; 6 0 0; 0 0 7], zeros(Int, 3, n - 3))

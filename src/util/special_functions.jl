@@ -16,7 +16,7 @@ end
 [isequal](https://docs.julialang.org/en/v1/base/base/#Base.isequal) to `z`. If
 neither are `z`, then return `a`. Useful for getting the first nonfill value in
 a sparse array.
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> a = Tensor(SparseList(Element(0.0)), [0, 1.1, 0, 4.4, 0])
 5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0
@@ -44,7 +44,7 @@ struct FilterOp{Vf} end
 is handy for filtering out values based on a mask or a predicate.
 `map(filterop(0), cond, arg)` is analogous to `filter(x -> cond ? x: z, arg)`.
 
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> a = Tensor(SparseList(Element(0.0)), [0, 1.1, 0, 4.4, 0])
 5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0
@@ -76,7 +76,7 @@ filterop(d) = FilterOp{d}()
 
 Return the min of `a` or `b`, comparing them by `a[1]` and `b[1]`, and breaking
 ties to the left. Useful for implementing argmin operations:
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> a = [7.7, 3.3, 9.9, 3.3, 9.9]; x = Scalar(Inf => 0);
 
 julia> @finch for i=_; x[] <<minby>>= a[i] => i end;
@@ -92,7 +92,7 @@ minby(a, b) = a[1] > b[1] ? b : a
 
 Return the max of `a` or `b`, comparing them by `a[1]` and `b[1]`, and breaking
 ties to the left. Useful for implementing argmax operations:
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> a = [7.7, 3.3, 9.9, 3.3, 9.9]; x = Scalar(-Inf => 0);
 
 julia> @finch for i=_; x[] <<maxby>>= a[i] => i end;

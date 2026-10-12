@@ -1,6 +1,6 @@
 module Finch
 
-import AcceleratedKernels
+using AcceleratedKernels: AcceleratedKernels
 
 @static if !isdefined(Base, :get_extension)
     using Requires

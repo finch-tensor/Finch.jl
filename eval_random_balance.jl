@@ -4,13 +4,17 @@ CAPTURED = Vector{Tuple}(undef, 0)
 
 import Finch: balance, decrement_idxs, MergeRandom, build_sampler, sample
 
-@inbounds function Finch.balance(sampler::Vector{NTuple{m,Int}}, tid, P, shapes, style::MergeRandom) where {m}
+@inbounds function Finch.balance(
+    sampler::Vector{NTuple{m,Int}}, tid, P, shapes, style::MergeRandom
+) where {m}
     neg = ntuple(_ -> -1, m)
     start = searchsortedlast(sampler, neg; by=reverse) + 1
     n = length(sampler) - start + 1
     base = div(n, P)
     remainder = n % P
-    lb_at(t) = t == 1 ? ntuple(_ -> 1, m) : sampler[start + (t - 1) * base + min(t - 1, remainder)]
+    function lb_at(t)
+        t == 1 ? ntuple(_ -> 1, m) : sampler[start + (t - 1) * base + min(t - 1, remainder)]
+    end
     lb = Tuple(lb_at(tid))
     ub = tid == P ? Tuple(shapes) : Tuple(decrement_idxs(collect(lb_at(tid + 1)), shapes))
     CAPTURED[tid] = (lb, ub)
@@ -56,13 +60,17 @@ function run_once(n, m, P, density_fn, seed)
     dense_acc = zeros(n, m)
     for j in 1:m, i in 1:n
         if rand() < density_fn(j)
-            dense_acc[i, j] = round(rand() * 10, digits=2)
+            dense_acc[i, j] = round(rand() * 10; digits=2)
         end
     end
     acc = Tensor(SparseList(SparseList(Element(0.0))), dense_acc)
 
     cols_per_task = m ÷ P
-    shard_nnz = [count(!=(0.0), @view dense_acc[:, ((p - 1) * cols_per_task + 1):(p * cols_per_task)]) for p in 1:P]
+    shard_nnz = [
+        count(
+            !=(0.0), @view dense_acc[:, ((p - 1) * cols_per_task + 1):(p * cols_per_task)]
+        ) for p in 1:P
+    ]
 
     global CAPTURED = Vector{Tuple}(undef, P)
     @finch begin
@@ -97,8 +105,12 @@ function eval_case(name, n, m, P, density_fn; nseeds=6)
     fairs = [r.fairness for r in results]
     min_shard = minimum(r.min_shard for r in results)
     println("=== $name (n=$n, m=$m, P=$P), rate=$(RATE[]) ===")
-    println("  efficiency: ", round.(effs, digits=3), "  mean=", round(mean(effs), digits=3))
-    println("  Jain:       ", round.(fairs, digits=3), "  mean=", round(mean(fairs), digits=3))
+    println(
+        "  efficiency: ", round.(effs, digits=3), "  mean=", round(mean(effs); digits=3)
+    )
+    println(
+        "  Jain:       ", round.(fairs, digits=3), "  mean=", round(mean(fairs); digits=3)
+    )
     println()
     (name=name, mean_eff=mean(effs), mean_fair=mean(fairs))
 end

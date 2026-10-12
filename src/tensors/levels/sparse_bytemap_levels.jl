@@ -437,7 +437,8 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
             # Children that can't be reassembled are stale after a run, so redo them all.
             ctx_2 -> assemble_level!(
                 ctx_2, lvl.lvl,
-                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp), value(q_stop, Tp),
+                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp),
+                value(q_stop, Tp),
             ),
             ctx,
         ))

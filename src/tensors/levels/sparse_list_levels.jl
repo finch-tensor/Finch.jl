@@ -78,7 +78,7 @@ function countstored_level(lvl::SparseListLevel, pos, idxs, dim, proc, exact)
     q_start = my_ptr[pos]
     q_stop = my_ptr[pos + 1] - 1
     idx = exact ? idxs[length(idxs) - dim] : lvl.shape
-    
+
     ##First, find if there are indices underneath the target index.
     r = binary_search_ub(idx, my_idx, q_start, q_stop)
 
@@ -635,7 +635,14 @@ function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, splits, offsets,
     ptr = lvl.ptr.data
     idx = lvl.idx.data
     n = map(length, idx)
-    rank(t, p) = p < 1 ? 1 : p <= length(ptr[t]) ? ptr[t][p] : n[t] + 1
+    rank(t, p) =
+        if p < 1
+            1
+        elseif p <= length(ptr[t])
+            ptr[t][p]
+        else
+            n[t] + 1
+        end
     parent(t, r) = searchsortedlast(ptr[t], r)
     # Piece `(lo, hi, start, dup, prev, delta)` puts shard ranks `lo:hi` at
     # consecutive ranks from `start`, their parents moved by `delta`, skipping

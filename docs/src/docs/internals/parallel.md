@@ -165,38 +165,38 @@ is `nothing`, so all dense storage may overlap.
 
 The merge plans storage, initializes it, then copies entries:
 
-- `setup_coalesce!(lvl, max_pos, dst, P, splits, offsets, overlap)` runs once.
-  It sizes each destination level and returns a plan recording where each
-  shard's parent positions land (shard `p`'s positions
-  `splits[p][r]:(splits[p][r + 1] - 1)` start at `offsets[p][r]`), the local
-  child position shared with an earlier shard, and whether shards' leaves can
-  overlap below it. Levels that compute child positions from their parent
-  (`Dense`, `SparseByteMap`) scale the ranges by their shape; levels that store
-  children in their own slots (`SparseList`, `SparseHash`) give each run of
-  entries its own range. Leaves overlap only without bands, under an entry two
-  shards share.
-- The plan's `init` tuples describe `(buffer, start, value)` ranges, including
-  child storage. Allocation and resizing remain serial. `coalesce_shards!`
-  partitions initialization across workers, then waits for every worker before
-  starting the copies. This barrier prevents initialization from overwriting
-  another shard's contributions under a shared boundary entry.
-- `coalesce_shard!(tid, plan, lvl, dst, runs, lb, ub)` then runs in parallel,
-  copying shard `tid`. `runs` iterates ranges of the level's own positions,
-  starting from `(1:max_pos,)` at the root, and each level hands its child runs
-  of child positions. The band travels down the same way: `lb = (p, i)` says
-  the band starts within position `p` at index tuple `i`, and each level passes
-  its child the position of the entry at index `i[end]` under `p`, with the
-  remaining indices `i[1:end-1]`. A position below 1 bounds nothing, as when a
-  shard does not store that entry. `Dense` scales each run by its shape and
-  cuts out the children of `lb`'s position before the band and those of `ub`'s
-  after it. Below a hash, child positions are unordered, so those cuts can fall
-  inside a run. Sparse levels merge all their shard's entries and pass on their
-  entries' child positions: a list's pieces, or one position per byte-map or
-  hash entry. Each pointer entry is written by the one shard owning the first
-  entry at or after it. Two shards that store the same entry split its children
-  at their bands, so with bands, `Element` copies its runs as given.
-  `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
-  only around occupied positions, so the merge stays O(nnz).
+  - `setup_coalesce!(lvl, max_pos, dst, P, splits, offsets, overlap)` runs once.
+    It sizes each destination level and returns a plan recording where each
+    shard's parent positions land (shard `p`'s positions
+    `splits[p][r]:(splits[p][r + 1] - 1)` start at `offsets[p][r]`), the local
+    child position shared with an earlier shard, and whether shards' leaves can
+    overlap below it. Levels that compute child positions from their parent
+    (`Dense`, `SparseByteMap`) scale the ranges by their shape; levels that store
+    children in their own slots (`SparseList`, `SparseHash`) give each run of
+    entries its own range. Leaves overlap only without bands, under an entry two
+    shards share.
+  - The plan's `init` tuples describe `(buffer, start, value)` ranges, including
+    child storage. Allocation and resizing remain serial. `coalesce_shards!`
+    partitions initialization across workers, then waits for every worker before
+    starting the copies. This barrier prevents initialization from overwriting
+    another shard's contributions under a shared boundary entry.
+  - `coalesce_shard!(tid, plan, lvl, dst, runs, lb, ub)` then runs in parallel,
+    copying shard `tid`. `runs` iterates ranges of the level's own positions,
+    starting from `(1:max_pos,)` at the root, and each level hands its child runs
+    of child positions. The band travels down the same way: `lb = (p, i)` says
+    the band starts within position `p` at index tuple `i`, and each level passes
+    its child the position of the entry at index `i[end]` under `p`, with the
+    remaining indices `i[1:end-1]`. A position below 1 bounds nothing, as when a
+    shard does not store that entry. `Dense` scales each run by its shape and
+    cuts out the children of `lb`'s position before the band and those of `ub`'s
+    after it. Below a hash, child positions are unordered, so those cuts can fall
+    inside a run. Sparse levels merge all their shard's entries and pass on their
+    entries' child positions: a list's pieces, or one position per byte-map or
+    hash entry. Each pointer entry is written by the one shard owning the first
+    entry at or after it. Two shards that store the same entry split its children
+    at their bands, so with bands, `Element` copies its runs as given.
+    `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
+    only around occupied positions, so the merge stays O(nnz).
 
 Element and byte-map setup record newly allocated ranges instead of filling
 them. Byte maps use the first and last entries of their sorted dirty list,
@@ -223,20 +223,20 @@ entries per shard.
 
 Sparse plans use integer positions for boundary ownership:
 
-- `shared[p] == 0` means shard `p` writes all its index metadata.
-- `shared[p] == q` means the metadata for local child position `q` belongs to
-  an earlier shard. Skip that index, but still merge its children.
-- `shared_dst[p]` gives the destination child position for that shared entry,
-  or `0` when there is no shared entry. Empty shards between owners and later
-  contributors do not break the relationship.
+  - `shared[p] == 0` means shard `p` writes all its index metadata.
+  - `shared[p] == q` means the metadata for local child position `q` belongs to
+    an earlier shard. Skip that index, but still merge its children.
+  - `shared_dst[p]` gives the destination child position for that shared entry,
+    or `0` when there is no shared entry. Empty shards between owners and later
+    contributors do not break the relationship.
 
 The position is format-specific, not the entry's rank in traversal order:
 
-| Level | Meaning of `shared[p]` |
-|:------|:-----------------------|
-| `SparseList` | Position in `idx` (currently `1` at a shared boundary) |
-| `SparseByteMap` | Flattened child position stored in `srt` |
-| `SparseHash` | Child position `q` with `key[q] == (parent, index, state)` |
+| Level           | Meaning of `shared[p]`                                     |
+|:--------------- |:---------------------------------------------------------- |
+| `SparseList`    | Position in `idx` (currently `1` at a shared boundary)     |
+| `SparseByteMap` | Flattened child position stored in `srt`                   |
+| `SparseHash`    | Child position `q` with `key[q] == (parent, index, state)` |
 
 For example, a byte-map shard whose first `srt` entry is `7` reports
 `shared[p] = 7` when that entry is shared. A hash whose first frozen `perm`
@@ -271,19 +271,19 @@ positions into ranges, here the positions before the shared child, the shared
 child, and the rest, and `offsets[p]` gives where each range starts in the
 merged output:
 
-- Dense and element levels shift each run as a block. No run a parent passes
-  down straddles two ranges.
-- Sparse levels order their index metadata (`idx`, `srt`, or the hash's `perm`)
-  with `shard_runs`. Each range's entries move as a block, so it splits each
-  shard's entries by range, cuts them wherever any range lands, and sorts the
-  runs by destination. Runs from different shards then meet only under a parent
-  both shards store, where band order puts the earlier shard first. A byte map
-  or hash addresses children by position, so no child moves.
-- A list addresses children by entry, so a moved run of entries moves its
-  children too. Below a hash, the run leaves a gap in its own shard, which
-  closes, and makes room in its owner, so the list's child gets a range per
-  piece. A shard has at most one run moved out, at its left boundary, and one
-  insertion, at its right, so it needs at most four ranges at any depth.
+  - Dense and element levels shift each run as a block. No run a parent passes
+    down straddles two ranges.
+  - Sparse levels order their index metadata (`idx`, `srt`, or the hash's `perm`)
+    with `shard_runs`. Each range's entries move as a block, so it splits each
+    shard's entries by range, cuts them wherever any range lands, and sorts the
+    runs by destination. Runs from different shards then meet only under a parent
+    both shards store, where band order puts the earlier shard first. A byte map
+    or hash addresses children by position, so no child moves.
+  - A list addresses children by entry, so a moved run of entries moves its
+    children too. Below a hash, the run leaves a gap in its own shard, which
+    closes, and makes room in its owner, so the list's child gets a range per
+    piece. A shard has at most one run moved out, at its left boundary, and one
+    insertion, at its right, so it needs at most four ranges at any depth.
 
 A hash merge needs no second phase. Worker `tid` copies shard `tid`'s keys,
 `perm`, pointers, and children: `perm` holds child positions, so a shard places
@@ -308,14 +308,14 @@ maps write their pointers the same way.
 variable assigned more than once boxes it, and inference then sees `Any`
 wherever the closure reads it. Generated code keeps captures single-assignment:
 
-- Every parallel loop is wrapped in `Finch.@barrier`, which binds the loop's
-  free variables in a `let` just before it. The thread closure captures those
-  fresh bindings, so code outside may rebind a buffer, for example when
-  `distribute_buffer` writes it back, without boxing anything.
-- `@barrier` never binds a constant global, such as the `Finch` module. As a
-  local, `Finch` would hide every `Finch.f(...)` from inference and make each
-  call dynamic.
-- Distributed levels freshen their scalar assembly state (`qos_stop` and the
-  like), so each task assigns its own locals instead of a shared variable.
-- Other generated loops are plain loops over fixed-size buffers, not
-  comprehensions, so they create no closures.
+  - Every parallel loop is wrapped in `Finch.@barrier`, which binds the loop's
+    free variables in a `let` just before it. The thread closure captures those
+    fresh bindings, so code outside may rebind a buffer, for example when
+    `distribute_buffer` writes it back, without boxing anything.
+  - `@barrier` never binds a constant global, such as the `Finch` module. As a
+    local, `Finch` would hide every `Finch.f(...)` from inference and make each
+    call dynamic.
+  - Distributed levels freshen their scalar assembly state (`qos_stop` and the
+    like), so each task assigns its own locals instead of a shared variable.
+  - Other generated loops are plain loops over fixed-size buffers, not
+    comprehensions, so they create no closures.

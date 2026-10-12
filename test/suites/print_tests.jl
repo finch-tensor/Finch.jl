@@ -1,3 +1,13 @@
+@testitem "reference_dict_order" setup = [CheckOutput] begin
+    a = "SparseDict(Dict((1, 2) => 3, (1, 1) => 2), [2, 3])"
+    b = "SparseDict(Dict((1, 1) => 2, (1, 2) => 3), [2, 3])"
+    @test CheckOutput.normalize_dict_order(a) == CheckOutput.normalize_dict_order(b)
+    @test CheckOutput.normalize_dict_order(a) !=
+        CheckOutput.normalize_dict_order(replace(b, "=> 3" => "=> 4"))
+    @test CheckOutput.normalize_dict_order(a) !=
+        CheckOutput.normalize_dict_order(replace(b, "[2, 3]" => "[3, 2]"))
+end
+
 @testitem "print" setup = [CheckOutput] begin
     A = Tensor([(i + j) % 3 for i in 1:5, j in 1:10])
 

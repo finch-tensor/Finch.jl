@@ -31,6 +31,20 @@ macro repl(io, ex, quiet=false)
     end
 end
 
+# Dict iteration order can change between Julia versions. Keep every key and
+# value in SparseDict's printed storage, but compare the entries in sorted order.
+function normalize_dict_order(output)
+    entry = raw"\(-?\d+, -?\d+\) => -?\d+"
+    dict = Regex("Dict\\(" * entry * "(?:, " * entry * ")*\\)")
+    replace(
+        output,
+        dict =>
+            s ->
+                "Dict(" * join(sort!([m.match for m in eachmatch(Regex(entry), s)]), ", ") *
+                ")",
+    )
+end
+
 """
 check_output(fname, arg)
 
@@ -51,7 +65,7 @@ function check_output(fname, arg)
     else
         reference = replace(read(ref_file, String), "\r" => "")
         result = replace(sprint(println, arg), "\r" => "")
-        if reference == result
+        if normalize_dict_order(reference) == normalize_dict_order(result)
             return true
         else
             println("disagreement with reference output")

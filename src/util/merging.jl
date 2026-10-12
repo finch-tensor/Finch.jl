@@ -8,8 +8,9 @@ isempty_band(lb, ub) = isless(reverse(ub), reverse(lb))
 # A band with no indices, whatever the shape: its lower bound is past the last
 # index. Tasks with empty bands skip accumulation, since tuplemask assumes
 # `lb <= ub`.
-empty_band(shapes) =
+function empty_band(shapes)
     ((map(one, Base.front(Tuple(shapes)))..., shapes[end] + 1), Tuple(shapes))
+end
 
 """
     shard_runs(splits, offsets, rank, parent)
@@ -37,7 +38,10 @@ function shard_runs(splits, offsets, rank, parent)
         start, stop = splits[t][k], splits[t][k + 1]
         delta = offsets[t][k] - start
         lo = rank(t, start)
-        for c in view(cuts, (searchsortedlast(cuts, start + delta) + 1):(searchsortedfirst(cuts, stop + delta) - 1))
+        for c in view(
+            cuts,
+            (searchsortedlast(cuts, start + delta) + 1):(searchsortedfirst(cuts, stop + delta) - 1),
+        )
             hi = rank(t, c - delta) - 1
             lo <= hi && push!(runs, (t, lo, hi, delta))
             lo = hi + 1
@@ -49,7 +53,7 @@ function shard_runs(splits, offsets, rank, parent)
     merged = empty(runs)
     for (t, lo, hi, delta) in runs
         if !isempty(merged) && last(merged)[1] == t && last(merged)[3] + 1 == lo &&
-                last(merged)[4] == delta
+            last(merged)[4] == delta
             merged[end] = (t, last(merged)[2], hi, delta)
         else
             push!(merged, (t, lo, hi, delta))

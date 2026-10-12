@@ -1,6 +1,5 @@
 using Finch
 
-
 ##BUGS: The only failures are all the same already-known edge case: a processor whose entire quota got absorbed by a duplicate cluster, producing an inverted lb > ub 
 ##Probably not worth fixing as they won't happen under realistic conditions.
 struct MergeNormalization end

@@ -95,7 +95,9 @@ const SparseHash = SparseHashLevel
 const SPARSE_HASH_BUFFERS = (:ptr, :tbl_ctrl, :tbl, :key, :perm, :tbl_count)
 
 SparseHashLevel(lvl, args...) = SparseHashLevel{Int}(lvl, args...)
-SparseHashLevel(lvl, shape::Ti, args...) where {Ti} = SparseHashLevel{Ti}(lvl, shape, args...)
+function SparseHashLevel(lvl, shape::Ti, args...) where {Ti}
+    SparseHashLevel{Ti}(lvl, shape, args...)
+end
 function SparseHashLevel{Ti}(lvl, shape=zero(Ti), subtables=1) where {Ti}
     sparse_hash_check_subtables(subtables)
     Tp = postype(lvl)
@@ -385,8 +387,11 @@ function similar_level(
     )
 end
 
-coalesce_similar_level(lvl, P) =
-    similar_level(lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...)
+function coalesce_similar_level(lvl, P)
+    similar_level(
+        lvl, level_fill_value(typeof(lvl)), level_eltype(typeof(lvl)), level_size(lvl)...
+    )
+end
 function coalesce_similar_level(lvl::SparseHashLevel{Ti}, P) where {Ti}
     P > 0 || throw(ArgumentError("Coalesce worker count must be positive"))
     SparseHashLevel{Ti}(
@@ -395,11 +400,13 @@ function coalesce_similar_level(lvl::SparseHashLevel{Ti}, P) where {Ti}
 end
 
 postype(T::Type{<:SparseHashLevel}) = postype(fieldtype(T, :lvl))
-Base.resize!(lvl::SparseHashLevel, dims...) =
+function Base.resize!(lvl::SparseHashLevel, dims...)
     sparse_hash_with(lvl, resize!(lvl.lvl, dims[1:(end - 1)]...), dims[end])
+end
 pattern!(lvl::SparseHashLevel) = sparse_hash_with(lvl, pattern!(lvl.lvl))
-set_fill_value!(lvl::SparseHashLevel, init) =
+function set_fill_value!(lvl::SparseHashLevel, init)
     sparse_hash_with(lvl, set_fill_value!(lvl.lvl, init))
+end
 function transfer(Tm, lvl::SparseHashLevel{Ti}) where {Ti}
     SparseHashLevel{Ti}(
         transfer(Tm, lvl.lvl), lvl.shape, lvl.subtables,
@@ -440,7 +447,16 @@ function Base.show(io::IO, lvl::SparseHashLevel{Ti}) where {Ti}
 end
 
 function labelled_show(io::IO, fbr::SubFiber{<:SparseHashLevel})
-    print(io, "SparseHash (", fill_value(fbr), ") [", ":,"^(ndims(fbr) - 1), "1:", size(fbr)[end], "]")
+    print(
+        io,
+        "SparseHash (",
+        fill_value(fbr),
+        ") [",
+        ":,"^(ndims(fbr) - 1),
+        "1:",
+        size(fbr)[end],
+        "]",
+    )
 end
 
 function labelled_children(fbr::SubFiber{<:SparseHashLevel})
@@ -473,7 +489,9 @@ end
 function (fbr::SubFiber{<:SparseHashLevel})(idxs...)
     isempty(idxs) && return fbr
     lvl = fbr.lvl
-    q = sparse_hash_lookup(lvl.tbl_ctrl, lvl.tbl, lvl.key, fbr.pos, idxs[end], lvl.subtables)
+    q = sparse_hash_lookup(
+        lvl.tbl_ctrl, lvl.tbl, lvl.key, fbr.pos, idxs[end], lvl.subtables
+    )
     q == 0 ? fill_value(fbr) : SubFiber(lvl.lvl, q)(idxs[1:(end - 1)]...)
 end
 
@@ -672,7 +690,8 @@ function unfurl(
                     seek=(ctx, ext) -> quote
                         if $(idx(my_r)) < $(ctx(getstart(ext)))
                             $my_r = Finch.sparse_hash_scansearch(
-                                $(lvl.key), $(lvl.perm), $(ctx(getstart(ext))), $my_r,
+                                $(lvl.key), $(lvl.perm), $(ctx(getstart(ext))),
+                                $my_r,
                                 $my_r_stop - 1,
                             )
                         end
@@ -685,7 +704,9 @@ function unfurl(
                     chunk=Spike(;
                         body=FillLeaf(virtual_level_fill_value(lvl)),
                         tail=Simplify(
-                            instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q, Tp)), mode)
+                            instantiate(
+                                ctx, VirtualSubFiber(lvl.lvl, value(my_q, Tp)), mode
+                            ),
                         ),
                     ),
                     next=(ctx, ext) -> :($my_r += $(Tp(1))),
@@ -711,7 +732,11 @@ function unfurl(
             end,
             body=(ctx) -> Switch([
                 value(:($my_q != 0)) =>
-                    instantiate(ctx, VirtualSubFiber(lvl.lvl, value(my_q, postype(lvl))), mode),
+                    instantiate(
+                        ctx,
+                        VirtualSubFiber(lvl.lvl, value(my_q, postype(lvl))),
+                        mode,
+                    ),
                 literal(true) => FillLeaf(virtual_level_fill_value(lvl)),
             ]),
         ),
@@ -763,7 +788,7 @@ function unfurl(
                     if 2 * $B * ($tbl_count[$b] + 1) > length($tbl_ctrl)
                         Finch.sparse_hash_resize!(
                             $tbl_ctrl, $tbl, $key,
-                            max(2 * length($tbl_ctrl), 4 * $B), $B, $qos_stop
+                            max(2 * length($tbl_ctrl), 4 * $B), $B, $qos_stop,
                         )
                     end
                     $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
@@ -784,7 +809,7 @@ function unfurl(
                             $(contain(
                                 ctx_2 -> assemble_level!(
                                     ctx_2, lvl.lvl, value(old, Tp),
-                                    value(q_stop, Tp)
+                                    value(q_stop, Tp),
                                 ),
                                 ctx,
                             ))
@@ -802,7 +827,7 @@ function unfurl(
                 end,
                 body=(ctx) -> instantiate(
                     ctx, VirtualHollowSubFiber(lvl.lvl, value(qos, Tp), dirty),
-                    mode
+                    mode,
                 ),
                 epilogue=quote
                     $dirty && ($(fbr.dirty) = true)
@@ -843,9 +868,13 @@ sparse_hash_carries(delta, B) = delta == 0 || B == 1 ? (0,) : (0, 1)
 # child lands at the owner's `shared_dst[t]`.
 # Splits and offsets for shard child positions `1:n`, which add `offset` except
 # the shared child `q` (if nonzero), which moves to `q_dst`.
-hash_child_ranges(offset, q, q_dst, n) = q == 0 ?
-    ([1, n + 1], [1 + offset]) :
-    ([1, q, q + 1, n + 1], [1 + offset, q_dst, q + 1 + offset])
+function hash_child_ranges(offset, q, q_dst, n)
+    if q == 0
+        ([1, n + 1], [1 + offset])
+    else
+        ([1, q, q + 1, n + 1], [1 + offset, q_dst, q + 1 + offset])
+    end
+end
 
 function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets, overlap)
     key = lvl.key.data
@@ -871,14 +900,25 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     # carry one bucket up, which `carried` tracks so no bucket fills. Shared
     # entries stay counted, which only overestimates. Placement gathers once per
     # distinct shift of each shard.
-    rotation(delta) = sparse_hash_hash_subtable(SPARSE_HASH_POS_MULTIPLIER * (delta % UInt), B) - 1
+    function rotation(delta)
+        sparse_hash_hash_subtable(SPARSE_HASH_POS_MULTIPLIER * (delta % UInt), B) - 1
+    end
     rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
-    rank(t, p) = p < 1 ? 1 : p <= length(ptr[t]) ? ptr[t][p] : length(perm[t]) + 1
+    rank(t, p) =
+        if p < 1
+            1
+        elseif p <= length(ptr[t])
+            ptr[t][p]
+        else
+            length(perm[t]) + 1
+        end
     bucket_counts = zeros(Int, B)
     carried = zeros(Int, B)
     shifts = [Int[] for _ in 1:P]
     for t in 1:P
-        counts_from(r) = sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
+        function counts_from(r)
+            sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
+        end
         for k in eachindex(offsets[t])
             lo, hi = rank(t, splits[t][k]), rank(t, splits[t][k + 1])
             lo < hi || continue
@@ -916,7 +956,10 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
                 shared_dst[t] = last_child
             end
         end
-        push!(pieces[t], (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key), delta))
+        push!(
+            pieces[t],
+            (lo, hi, nnz + 1, dup, last_key === nothing ? 0 : first(last_key), delta),
+        )
         nnz += hi - lo + 1 - dup
         p, i, q = entry(t, hi)
         last_key = (p + delta, i)
@@ -925,20 +968,23 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
 
     # Probing cannot leave its bucket, so size every bucket for the busiest, and
     # keep an empty slot in every bucket, even if all carries pile into one.
-    capacity = B * max(
-        sparse_hash_table_capacity(maximum(bucket_counts)),
-        nextpow(2, maximum(bucket_bound) + 1),
-    )
+    capacity =
+        B * max(
+            sparse_hash_table_capacity(maximum(bucket_counts)),
+            nextpow(2, maximum(bucket_bound) + 1),
+        )
     for (buf, n) in ((dst.ptr, max_pos + 1), (dst.tbl_ctrl, capacity), (dst.tbl, capacity),
-                     (dst.key, max_child_pos), (dst.perm, nnz))
+        (dst.key, max_child_pos), (dst.perm, nnz))
         empty!(buf)
         resize!(buf, n)
     end
     # The merge's output holds only the bucket totals, which bucket owners count
     # as they place entries.
     resize!(dst.tbl_count, B)
-    child_ranges = [hash_child_ranges(child_shift[t], shared[t], shared_dst[t], length(key[t]))
-                    for t in 1:P]
+    child_ranges = [
+        hash_child_ranges(child_shift[t], shared[t], shared_dst[t], length(key[t]))
+        for t in 1:P
+    ]
     child = setup_coalesce!(
         lvl.lvl, max_child_pos, dst.lvl, P, first.(child_ranges), last.(child_ranges),
         overlap && any(!iszero, shared),
@@ -1031,9 +1077,11 @@ function coalesce_shard!(
     # Recurse on every entry, owned or not: a shared entry's children are split
     # between both shards. The band's bounds pass to the children of the entries
     # on them.
-    entry(p, i) = sparse_hash_lookup(
-        lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables
-    )
+    function entry(p, i)
+        sparse_hash_lookup(
+            lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables
+        )
+    end
     coalesce_shard!(
         tid, plan.child, lvl.lvl, dst.lvl, (q:q for q in perm),
         (entry(p_lo, i_lo[end]), Base.front(i_lo)),

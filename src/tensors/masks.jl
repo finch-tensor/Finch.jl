@@ -213,19 +213,19 @@ function unfurl(ctx, arr::VirtualBandMaskColumn, ext, mode, proto::typeof(defaul
     ])
 end
 
-struct TupleMask{N, Ti} <: AbstractTensor
-    lb::NTuple{N, Ti}
-    ub::NTuple{N, Ti}
+struct TupleMask{N,Ti} <: AbstractTensor
+    lb::NTuple{N,Ti}
+    ub::NTuple{N,Ti}
 end
 
-Base.ndims(::TupleMask{N, Ti}) where {N, Ti} = N
-Base.ndims(::Type{TupleMask{N, Ti}}) where {N, Ti} = N
+Base.ndims(::TupleMask{N,Ti}) where {N,Ti} = N
+Base.ndims(::Type{TupleMask{N,Ti}}) where {N,Ti} = N
 Base.eltype(::TupleMask) = Bool
-Base.eltype(::Type{TupleMask{N, Ti}}) where {N, Ti} = Bool
+Base.eltype(::Type{TupleMask{N,Ti}}) where {N,Ti} = Bool
 Base.size(tns::TupleMask) = map(max, tns.lb, tns.ub)
 Base.axes(tns::TupleMask) = map(s -> 1:s, size(tns))
 fill_value(::TupleMask) = false
-fill_value(::Type{TupleMask{N, Ti}}) where {N, Ti} = false
+fill_value(::Type{TupleMask{N,Ti}}) where {N,Ti} = false
 
 """
     tuplemask
@@ -247,7 +247,7 @@ struct VirtualTupleMask
     ub
 end
 
-function virtualize(ctx, ex, ::Type{TupleMask{N, Ti}}) where {N, Ti}
+function virtualize(ctx, ex, ::Type{TupleMask{N,Ti}}) where {N,Ti}
     lb = freshen(ctx, :lb)
     ub = freshen(ctx, :ub)
 
@@ -257,7 +257,7 @@ function virtualize(ctx, ex, ::Type{TupleMask{N, Ti}}) where {N, Ti}
             $ub = $ex.ub
         end,
     )
-    VirtualTupleMask(N, value(lb, NTuple{N, Ti}), value(ub, NTuple{N, Ti}))
+    VirtualTupleMask(N, value(lb, NTuple{N,Ti}), value(ub, NTuple{N,Ti}))
 end
 
 FinchNotation.finch_leaf(x::VirtualTupleMask) = virtual(x)
@@ -397,7 +397,7 @@ fill_value(::Type{SplitMask{Ti}}) where {Ti} = false
 
 A mask to evenly divide `n` indices into P regions. If `M = splitmask(P, n)`,
 then `M[i, j] = fld(n * (j - 1), P) <= i < fld(n * j, P)`.
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> splitmask(10, 3)
 10×3 Finch.SplitMask{Int64}:
  1  0  0
@@ -518,7 +518,7 @@ end
 A mask to evenly divide `n` indices into regions of size `b`. If `m =
 chunkmask(b, n)`, then `m[i, j] = b * (j - 1) < i <= b * j`. Note that this
 specializes for the cleanup case at the end of the range.
-```jldoctest setup=:(using Finch)
+```jldoctest; setup=:(using Finch)
 julia> chunkmask(10, 3)
 10×4 Finch.ChunkMask{Int64}:
  1  0  0  0
