@@ -32,7 +32,7 @@ quote
         end
     Finch.resize_if_smaller!(y_lvl_3_val, y_lvl_stop)
     Finch.fill_range!(y_lvl_3_val, 0, 1, y_lvl_stop)
-    resize!(x_lvl_2_val, x_lvl_stop)
+    Finch.resize_if_larger!(x_lvl_2_val, x_lvl_stop)
     x_lvl_2_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), x_lvl_2_val)
     y_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), y_lvl_3_val)
     y_lvl_2_locks_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), y_lvl_2_locks)
@@ -61,7 +61,7 @@ quote
                         end)
             end)
     resize!(y_lvl_2_locks_2, y_lvl_stop)
-    resize!(y_lvl_3_val_2, y_lvl_stop)
+    Finch.resize_if_larger!(y_lvl_3_val_2, y_lvl_stop)
     (x = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(x_lvl_2_val_2), x_lvl_stop)), y = Tensor((DenseLevel){Int64}((MutexLevel){Vector{Base.Threads.SpinLock}, ElementLevel{0, Int64, Int64, Vector{Int64}}}(ElementLevel{0, Int64, Int64}(y_lvl_3_val_2), y_lvl_2_locks_2), y_lvl_stop)))
 end
 julia> @finch begin

@@ -316,7 +316,7 @@ begin
                                             end
                                         end
                                     end
-                                    resize!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                    Finch.resize_if_larger!(tmp_lvl_2_val_3, input_lvl_2_stop)
                                     for x_46 = 1:input_lvl_2_stop
                                         output_lvl_2_q = (output_lvl_q - 1) * input_lvl_2_stop + x_46
                                         tmp_lvl_q_2 = (1 - 1) * input_lvl_2_stop + x_46
@@ -331,6 +331,6 @@ begin
                             end
                         end)
             end)
-    resize!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
+    Finch.resize_if_larger!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
     (output = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(output_lvl_3_val_2), input_lvl_2_stop), input_lvl_stop)),)
 end

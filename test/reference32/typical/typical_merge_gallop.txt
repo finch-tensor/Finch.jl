@@ -414,7 +414,7 @@ quote
     end
     qos_stop = z_lvl_ptr[1 + 1] - 1
     resize!(z_lvl_idx, qos_stop)
-    resize!(z_lvl_2_val, qos_stop)
+    Finch.resize_if_larger!(z_lvl_2_val, qos_stop)
     (z = Tensor((SparseListLevel){Int32}(ElementLevel{0.0, Float64, Int32}(z_lvl_2_val), y_lvl_stop, z_lvl_ptr, z_lvl_idx)),)
 end
 julia> @finch begin

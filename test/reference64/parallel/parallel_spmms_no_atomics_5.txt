@@ -340,6 +340,6 @@ begin
                             end
                         end)
             end)
-    resize!(Ct_lvl_3_val_2, A_lvl_stop1 * B_lvl_stop2)
+    Finch.resize_if_larger!(Ct_lvl_3_val_2, A_lvl_stop1 * B_lvl_stop2)
     (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(Ct_lvl_3_val_2), A_lvl_stop1), B_lvl_stop2)),)
 end

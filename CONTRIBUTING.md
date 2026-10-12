@@ -87,17 +87,21 @@ This information is summarized with `./test/runtests.jl --help`
 
 ### Python test suite
 
-[finch-tensor-python](https://github.com/finch-tensor/finch-tensor-python) contains
-a separate Array API compatible test suite written in Python. It requires
-Python 3.10 or later and Poetry installed.
+[galley-jl-python](https://github.com/finch-tensor/galley-jl-python), formerly
+finch-tensor-python, contains a separate Array API compatible test suite written
+in Python. To match the `finch-tensor-tests` job in `.github/workflows/CI.yml`,
+use release `v0.2.13`, Julia 1.10, Python 3.11, and Poetry.
 
-It can be run with:
+With Julia 1.10 on your `PATH`, run the following commands, replacing
+`/absolute/path/to/Finch.jl` with the path to your Finch.jl checkout:
 
 ```sh
-git clone https://github.com/finch-tensor/finch-tensor-python.git
-cd finch-tensor-python
-poetry install --with test
-FINCH_REPO_PATH=<PATH_TO_FINCH_REPO> poetry run pytest tests/
+git clone --branch v0.2.13 https://github.com/finch-tensor/galley-jl-python.git finch-tensor
+cd finch-tensor
+poetry env use python3.11
+poetry install --extras test
+poetry run python develop.py --path "/absolute/path/to/Finch.jl"
+poetry run pytest tests/
 ```
 
 ## Benchmarking

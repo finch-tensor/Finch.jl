@@ -41,7 +41,7 @@
         end
         @test h(Int32(17), Int32(37)) == h(17, 37)
         # Buckets use the high bits of the linear hash; slots mix it first.
-        x = UInt(0b101) << 61 | UInt(0b011)
+        x = UInt(0b101) << (Sys.WORD_SIZE - 3) | UInt(0b011)
         @test Finch.sparse_hash_hash_subtable(x, 8) == 6
         @test Finch.sparse_hash_hash_subtable(UInt(0b101), 8) == 1
         @test Finch.sparse_hash_hash_subtable(typemax(UInt), 1) == 1

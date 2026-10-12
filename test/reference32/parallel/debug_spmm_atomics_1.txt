@@ -200,6 +200,6 @@ begin
             end
         end
     end
-    resize!(CR_lvl_3_val, A_lvl_stop1 * B_lvl_stop2)
+    Finch.resize_if_larger!(CR_lvl_3_val, A_lvl_stop1 * B_lvl_stop2)
     (CR = Tensor((DenseLevel){Int32}((DenseLevel){Int32}(ElementLevel{0x00000000, UInt32, Int32}(CR_lvl_3_val), A_lvl_stop1), B_lvl_stop2)),)
 end
