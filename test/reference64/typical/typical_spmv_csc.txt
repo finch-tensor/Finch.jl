@@ -78,7 +78,7 @@ quote
             end
         end
     end
-    resize!(y_lvl_2_val, A_lvl_2_stop)
+    Finch.resize_if_larger!(y_lvl_2_val, A_lvl_2_stop)
     (y = Tensor((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(y_lvl_2_val), A_lvl_2_stop)),)
 end
 julia> @finch begin

@@ -6,6 +6,13 @@
         CheckOutput.normalize_dict_order(replace(b, "=> 3" => "=> 4"))
     @test CheckOutput.normalize_dict_order(a) !=
         CheckOutput.normalize_dict_order(replace(b, "[2, 3]" => "[3, 2]"))
+    typed_a = replace(a, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
+    typed_b = replace(b, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
+    @test CheckOutput.normalize_dict_order(typed_a) ==
+        CheckOutput.normalize_dict_order(typed_b)
+    @test CheckOutput.normalize_dict_order(typed_a) != CheckOutput.normalize_dict_order(a)
+    @test CheckOutput.normalize_dict_order(typed_a) !=
+        CheckOutput.normalize_dict_order(replace(typed_b, "Int16" => "Int32"))
 end
 
 @testitem "print" setup = [CheckOutput] begin

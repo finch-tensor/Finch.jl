@@ -35,12 +35,16 @@ end
 # value in SparseDict's printed storage, but compare the entries in sorted order.
 function normalize_dict_order(output)
     entry = raw"\(-?\d+, -?\d+\) => -?\d+"
-    dict = Regex("Dict\\(" * entry * "(?:, " * entry * ")*\\)")
+    dict = Regex(
+        raw"Dict(?:\{Tuple\{U?Int\d*, U?Int\d*\}, U?Int\d*\})?\(" *
+        entry * "(?:, " * entry * ")*\\)",
+    )
     replace(
         output,
         dict =>
             s ->
-                "Dict(" * join(sort!([m.match for m in eachmatch(Regex(entry), s)]), ", ") *
+                first(split(s, '('; limit=2)) * "(" *
+                join(sort!([m.match for m in eachmatch(Regex(entry), s)]), ", ") *
                 ")",
     )
 end
