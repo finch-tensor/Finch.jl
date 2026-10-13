@@ -691,7 +691,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
             quote
                 $nnz, $unordered = Finch.get_total_nnz($(lvl_e), true)
                 $shapes = (
-                    $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...), $max_pos,
+                    $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...), $max_pos
                 )
                 if $nnz > 0
                     if !$dense
