@@ -690,7 +690,9 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         push_preamble!(ctx,
             quote
                 $nnz, $unordered = Finch.get_total_nnz($(lvl_e), true)
-                $shapes = (Finch.level_size($(lvl_e))..., $max_pos)
+                $shapes = (
+                    $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...), $max_pos,
+                )
                 if $nnz > 0
                     if !$dense
                         $(lvl.sampler) = Finch.build_sampler(

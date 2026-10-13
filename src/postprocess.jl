@@ -247,7 +247,7 @@ function (ctx::PropagateCopies)(ex)
     elseif @capture ex :block(~args...)
         return Expr(:block, map(ctx, args)...)
     elseif @capture(ex, (~f)(~args...)) &&
-        f in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :..., :return)
+        f in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :return)
         return Expr(f, map(ctx, args)...)
     elseif (@capture ex (~f)(~cond, ~body)) && f in [:&&, :||]
         cond = ctx(cond)
@@ -362,7 +362,7 @@ function (ctx::MarkDead)(ex, res)
         end
         return Expr(:block, reverse(args_2)...)
     elseif @capture(ex, (~head)(~args...)) &&
-        head in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :..., :return)
+        head in (:ref, :call, :., :curly, :string, :kw, :parameters, :tuple, :return)
         res |= head === :call && !ispure(args[1])
         res |= head === :return
         return Expr(head, reverse(map((arg) -> ctx(arg, res), reverse(args)))...)
