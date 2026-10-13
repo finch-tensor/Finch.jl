@@ -71,6 +71,6 @@ begin
         p_data.val = p_val
         P_lvl_2_val[P_lvl_q] = p_val
     end
-    resize!(P_lvl_2_val, A_lvl_stop)
+    Finch.resize_if_larger!(P_lvl_2_val, A_lvl_stop)
     (P = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(P_lvl_2_val), A_lvl_stop)),)
 end

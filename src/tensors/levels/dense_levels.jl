@@ -88,6 +88,12 @@ function countstored_level(lvl::DenseLevel, pos)
     countstored_level(lvl.lvl, pos * lvl.shape)
 end
 
+function countstored_level(lvl::DenseLevel, pos, idxs, dim, proc, exact)
+    idx = exact ? idxs[length(idxs) - dim] : lvl.shape
+    q = (pos - 1) * lvl.shape + idx
+    countstored_level(lvl.lvl, q, idxs, dim + 1, proc, exact)
+end
+
 function Base.show(io::IO, lvl::DenseLevel{Ti}) where {Ti}
     if get(io, :compact, false)
         print(io, "Dense(")
@@ -185,6 +191,8 @@ end
 
 virtual_level_eltype(lvl::VirtualDenseLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualDenseLevel) = virtual_level_fill_value(lvl.lvl)
+@inline sample_dims(lvl::VirtualDenseLevel) = 1 + sample_dims(lvl.lvl)
+@inline all_dense(lvl::VirtualDenseLevel) = true & all_dense(lvl.lvl)
 
 postype(lvl::VirtualDenseLevel) = postype(lvl.lvl)
 
@@ -199,7 +207,7 @@ function assemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     assemble_level!(ctx, lvl.lvl, qos_start, qos_stop)
 end
 
-supports_reassembly(::VirtualDenseLevel) = true
+supports_reassembly(lvl::VirtualDenseLevel) = supports_reassembly(lvl.lvl)
 function reassemble_level!(ctx, lvl::VirtualDenseLevel, pos_start, pos_stop)
     qos_start = call(+, call(*, call(-, pos_start, lvl.Ti(1)), lvl.shape), 1)
     qos_stop = call(*, pos_stop, lvl.shape)
@@ -265,24 +273,50 @@ function unfurl(
     )
 end
 
-function coalesce_level!(
-    lvl::DenseLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
-)
-    shape = lvl.shape
-    global_fbr_map, local_fbr_map, task_map, factor = merge_dense(
-        global_fbr_map, local_fbr_map, task_map, factor, shape, P
-    )
-
-    if factor < 1
-        return nothing
-    end
-
-    coalesce_level!(lvl.lvl, global_fbr_map, local_fbr_map, task_map,
-        factor, P, coalescent.lvl)
+function sample(tid, lvl::DenseLevel)
+    tup, idx = sample(tid, lvl.lvl)
+    idx_2 = mod1(idx, lvl.shape)
+    pos_2 = fld(idx - 1, lvl.shape) + 1
+    return (tup..., idx_2), pos_2
 end
 
-Base.@propagate_inbounds function merge_dense(
-    global_fbr_map, local_fbr_map, task_map, factor, shape, P
-)
-    return global_fbr_map, local_fbr_map, task_map, factor * shape
+function setup_coalesce!(lvl::DenseLevel, max_pos, dst, P, splits, offsets, overlap)
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * lvl.shape, dst.lvl, P,
+        scale_positions(splits, lvl.shape), scale_positions(offsets, lvl.shape), overlap,
+    )
+    return (; child, init=child.init)
+end
+
+# The parts of run `r` outside the ranges `a` and `b`, where neither range holds
+# the other. An empty range cuts nothing, wherever it starts.
+function cut_run(r, a, b)
+    isempty(a) && (a = b)
+    isempty(b) && (b = a)
+    first(b) < first(a) && ((a, b) = (b, a))
+    return (
+        first(r):min(last(r), first(a) - 1),
+        max(first(r), last(a) + 1):min(last(r), first(b) - 1),
+        max(first(r), last(b) + 1):last(r),
+    )
+end
+
+# Position `p` holds child positions `(p - 1) * shape + 1:p * shape`, so a run of
+# positions holds a run of child positions, less the children of `p_lo` before
+# the band starts and those of `p_hi` after it stops. Below a hash, child
+# positions are unordered, so those can fall inside a run.
+function coalesce_shard!(tid, plan, lvl::DenseLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi))
+    n = lvl.shape
+    lo = (p_lo - 1) * n + i_lo[end]
+    hi = (p_hi - 1) * n + i_hi[end]
+    child_runs = Iterators.flatten(
+        cut_run(
+            ((first(run) - 1) * n + 1):(last(run) * n),
+            ((p_lo - 1) * n + 1):(lo - 1), (hi + 1):(p_hi * n),
+        ) for run in runs
+    )
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, child_runs,
+        (lo, Base.front(i_lo)), (hi, Base.front(i_hi)),
+    )
 end
