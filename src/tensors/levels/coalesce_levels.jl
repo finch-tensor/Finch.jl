@@ -48,7 +48,7 @@ function gen_accumulator(
 ) where {Ti}
     SparseHashLevel{Ti}(
         gen_accumulator(lvl.lvl, fill_value, eltype, dims[1:(end - 1)]...),
-        dims[end], lvl.subtables,
+        dims[end], lvl.subtables, lvl.pos_multiplier,
     )
 end
 
