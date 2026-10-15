@@ -37,8 +37,11 @@ include(joinpath(@__DIR__, "../docs/examples/pagerank.jl"))
 include(joinpath(@__DIR__, "../docs/examples/shortest_paths.jl"))
 include(joinpath(@__DIR__, "../docs/examples/spgemm.jl"))
 include(joinpath(@__DIR__, "../docs/examples/triangle_counting.jl"))
+include(joinpath(@__DIR__, "coalesce_outer.jl"))
 
 SUITE = BenchmarkGroup()
+
+SUITE["coalesce"] = coalesce_outer_benchmarks()
 
 SUITE["high-level"] = BenchmarkGroup()
 
