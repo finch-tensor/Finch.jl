@@ -210,6 +210,6 @@ begin
         ptr_2[p_3] += 1
     end
     qos_stop = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
-    resize!(fmt_lvl_3_val, qos_stop)
+    Finch.resize_if_larger!(fmt_lvl_3_val, qos_stop)
     result
 end
