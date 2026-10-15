@@ -707,12 +707,12 @@ function virtual_parallel_region(
         end
     end
     return quote
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
+                                                                 1:($(ctx(device.n)))
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end
@@ -755,12 +755,12 @@ function virtual_parallel_region(
     end
 
     return quote
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in 1:($(ctx(device.n)))
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
+                                                                 1:($(ctx(device.n)))
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end
@@ -812,12 +812,11 @@ function virtual_parallel_region(
             put!($tid_ch, $tid_tmp)
         end
 
-        Threads.@threads $(QuoteNode(schedule.schedule)) for $chk_id in 1:($num_chks)
-            Finch.@barrier begin
+        Finch.@barrier begin
+            Threads.@threads $(QuoteNode(schedule.schedule)) for $chk_id in 1:($num_chks)
                 @inbounds @fastmath begin
                     $code
                 end
-                nothing
             end
         end
     end
@@ -962,13 +961,11 @@ function transfer(dev::CPUThread, arr::MultiChannelBuffer)
     return arr.data[dev.tid]
 end
 
+# Always the task's own channel, so distributed buffers stay concretely typed.
 function transfer(task::MemoryChannel, arr::MultiChannelBuffer)
-    if task.device == arr.device
-        temp = arr.data[task.t]
-        return temp
-    else
-        return arr
-    end
+    task.device == arr.device ||
+        throw(ArgumentError("Cannot transfer a buffer to another device's channel"))
+    return arr.data[task.t]
 end
 
 function transfer(dst::MultiChannelBuffer, arr::MultiChannelBuffer)

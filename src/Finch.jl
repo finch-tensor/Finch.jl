@@ -1,5 +1,7 @@
 module Finch
 
+using AcceleratedKernels: AcceleratedKernels
+
 @static if !isdefined(Base, :get_extension)
     using Requires
 end
@@ -138,12 +140,12 @@ include("tensors/abstract_level.jl")
 include("tensors/tensors.jl")
 include("tensors/levels/sparse_rle_levels.jl")
 include("tensors/levels/sparse_interval_levels.jl")
+include("tensors/levels/sparse_hash_levels.jl")
 include("tensors/levels/sparse_list_levels.jl")
 include("tensors/levels/sparse_point_levels.jl")
 include("tensors/levels/sparse_coo_levels.jl")
 include("tensors/levels/sparse_band_levels.jl")
 include("tensors/levels/sparse_dict_levels.jl")
-include("tensors/levels/sparse_hash_levels.jl")
 include("tensors/levels/parallel_sparse_dict_levels.jl")
 include("tensors/levels/sparse_bytemap_levels.jl")
 include("tensors/levels/sparse_vbl_levels.jl")

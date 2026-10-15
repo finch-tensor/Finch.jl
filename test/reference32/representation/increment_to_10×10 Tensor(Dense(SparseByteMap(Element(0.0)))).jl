@@ -63,7 +63,7 @@ begin
                                     fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
                                     Finch.resize_if_smaller!(fmt_lvl_2_srt, fmt_lvl_2_qos_stop)
                                 end
-                                fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = (fmt_lvl_q, arr_2_lvl_i_2)
+                                fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = fmt_lvl_2_q
                             end
                             arr_2_lvl_q_2 += 1
                         else
@@ -79,7 +79,7 @@ begin
                                         fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
                                         Finch.resize_if_smaller!(fmt_lvl_2_srt, fmt_lvl_2_qos_stop)
                                     end
-                                    fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = (fmt_lvl_q, phase_stop_5)
+                                    fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = fmt_lvl_2_q
                                 end
                                 arr_2_lvl_q_2 += 1
                             end
@@ -116,7 +116,7 @@ begin
                                         fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
                                         Finch.resize_if_smaller!(fmt_lvl_2_srt, fmt_lvl_2_qos_stop)
                                     end
-                                    fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = (fmt_lvl_q, arr_2_lvl_i_3)
+                                    fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = fmt_lvl_2_q_2
                                 end
                                 arr_2_lvl_q_3 += 1
                             else
@@ -132,7 +132,7 @@ begin
                                             fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
                                             Finch.resize_if_smaller!(fmt_lvl_2_srt, fmt_lvl_2_qos_stop)
                                         end
-                                        fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = (fmt_lvl_q, phase_stop_10)
+                                        fmt_lvl_2_srt[fmt_lvl_2_qos_fill] = fmt_lvl_2_q_2
                                     end
                                     arr_2_lvl_q_3 += 1
                                 end
@@ -147,13 +147,14 @@ begin
         end
     end
     result = ()
-    resize!(fmt_lvl_2_ptr, fmt_lvl_stop + 1)
-    resize!(fmt_lvl_2_tbl, fmt_lvl_stop * fmt_lvl_2_stop)
+    Finch.resize_if_larger!(fmt_lvl_2_ptr, fmt_lvl_stop + 1)
+    Finch.resize_if_larger!(fmt_lvl_2_tbl, fmt_lvl_stop * fmt_lvl_2_stop)
     resize!(fmt_lvl_2_srt, fmt_lvl_2_qos_fill)
     sort!(fmt_lvl_2_srt)
+    fmt_lvl_2_srt_shape = (Int32)(fmt_lvl_2_stop)
     fmt_lvl_2_p_prev = 0
     for fmt_lvl_2_r = 1:fmt_lvl_2_qos_fill
-        fmt_lvl_2_p_2 = first(fmt_lvl_2_srt[fmt_lvl_2_r])
+        fmt_lvl_2_p_2 = fld(fmt_lvl_2_srt[fmt_lvl_2_r] - 1, fmt_lvl_2_srt_shape) + 1
         if fmt_lvl_2_p_2 != fmt_lvl_2_p_prev
             fmt_lvl_2_ptr[fmt_lvl_2_p_prev + 1] = fmt_lvl_2_r
             fmt_lvl_2_ptr[fmt_lvl_2_p_2] = fmt_lvl_2_r
@@ -161,6 +162,6 @@ begin
         fmt_lvl_2_p_prev = fmt_lvl_2_p_2
     end
     fmt_lvl_2_ptr[fmt_lvl_2_p_prev + 1] = fmt_lvl_2_qos_fill + 1
-    resize!(fmt_lvl_3_val, fmt_lvl_2_stop * fmt_lvl_stop)
+    Finch.resize_if_larger!(fmt_lvl_3_val, fmt_lvl_2_stop * fmt_lvl_stop)
     result
 end
