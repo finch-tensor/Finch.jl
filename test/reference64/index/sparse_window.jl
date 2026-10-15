@@ -67,6 +67,6 @@ begin
     end
     qos_stop = C_lvl_ptr[1 + 1] - 1
     resize!(C_lvl_idx, qos_stop)
-    resize!(C_lvl_2_val, qos_stop)
+    Finch.resize_if_larger!(C_lvl_2_val, qos_stop)
     (C = Tensor((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(C_lvl_2_val), 3, C_lvl_ptr, C_lvl_idx)),)
 end

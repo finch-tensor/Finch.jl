@@ -1,6 +1,6 @@
 name = "Finch"
 uuid = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
-version = "1.6.0"
+version = "1.7.0"
 authors = ["Willow Ahrens"]
 
 [deps]
@@ -40,7 +40,7 @@ TensorMarketExt = "TensorMarket"
 
 [compat]
 AbstractTrees = "0.3.4, 0.4"
-AcceleratedKernels = "0.4.3"
+AcceleratedKernels = "0.4.3, 0.5"
 AutoHashEquals = "2.2"
 Compat = "3.29, 4"
 DataStructures = "0.18, 0.19"
@@ -59,7 +59,7 @@ SyntaxInterface = "0.2.1"
 TOML = "1.0"
 TensorMarket = "0.2.1, 0.3"
 UUIDs = "1.4"
-UnsafeAtomics = "0.2.1, 0.3"
+UnsafeAtomics = "0.2.1, 0.3, 0.4"
 julia = "1.10"
 
 [extras]

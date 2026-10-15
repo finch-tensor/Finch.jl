@@ -1,3 +1,21 @@
+@testitem "reference_dict_order" setup = [CheckOutput] begin
+    a = "SparseDict(Dict((1, 2) => 3, (1, 1) => 2), [2, 3])"
+    b = "SparseDict(Dict((1, 1) => 2, (1, 2) => 3), [2, 3])"
+    @test CheckOutput.normalize_sparse_dicts(a) == CheckOutput.normalize_sparse_dicts(b)
+    @test CheckOutput.normalize_sparse_dicts(a) !=
+        CheckOutput.normalize_sparse_dicts(replace(b, "=> 3" => "=> 4"))
+    @test CheckOutput.normalize_sparse_dicts(a) !=
+        CheckOutput.normalize_sparse_dicts(replace(b, "[2, 3]" => "[3, 2]"))
+    typed_a = replace(a, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
+    typed_b = replace(b, "Dict(" => "Dict{Tuple{Int64, Int16}, Int64}(")
+    @test CheckOutput.normalize_sparse_dicts(typed_a) ==
+        CheckOutput.normalize_sparse_dicts(typed_b)
+    @test CheckOutput.normalize_sparse_dicts(typed_a) !=
+        CheckOutput.normalize_sparse_dicts(a)
+    @test CheckOutput.normalize_sparse_dicts(typed_a) !=
+        CheckOutput.normalize_sparse_dicts(replace(typed_b, "Int16" => "Int32"))
+end
+
 @testitem "print" setup = [CheckOutput] begin
     @testset "SparseDict snapshot order" begin
         normalize = CheckOutput.normalize_sparse_dicts

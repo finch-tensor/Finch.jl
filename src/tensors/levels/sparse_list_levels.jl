@@ -72,6 +72,30 @@ function countstored_level(lvl::SparseListLevel, pos)
     countstored_level(lvl.lvl, lvl.ptr[pos + 1] - 1)
 end
 
+function countstored_level(lvl::SparseListLevel, pos, idxs, dim, proc, exact)
+    my_ptr = lvl.ptr.data[proc]
+    my_idx = lvl.idx.data[proc]
+    q_start = my_ptr[pos]
+    q_stop = my_ptr[pos + 1] - 1
+    idx = exact ? idxs[length(idxs) - dim] : lvl.shape
+
+    ##First, find if there are indices underneath the target index.
+    r = binary_search_ub(idx, my_idx, q_start, q_stop)
+
+    ##If not, do a cumulative sum of the previous position (or return 0 if at position 1, as there is no position 0)
+    ##If yes, that becomes the new position, we recurse on that.
+    if r == -1
+        q_start == 1 && return 0
+        count = countstored_level(lvl.lvl, q_start - 1, idxs, dim + 1, proc, exact & false)
+    elseif my_idx[r] == idx
+        count = countstored_level(lvl.lvl, r, idxs, dim + 1, proc, exact & true)
+    else
+        count = countstored_level(lvl.lvl, r, idxs, dim + 1, proc, exact & false)
+    end
+
+    return count
+end
+
 function pattern!(lvl::SparseListLevel{Ti}) where {Ti}
     SparseListLevel{Ti}(pattern!(lvl.lvl), lvl.shape, lvl.ptr, lvl.idx)
 end
@@ -233,9 +257,9 @@ function distribute_level(
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.idx, arch, style),
         lvl.shape,
-        lvl.qos_fill,
-        lvl.qos_stop,
-        lvl.prev_pos,
+        freshen(ctx, lvl.tag, :_qos_fill),
+        freshen(ctx, lvl.tag, :_qos_stop),
+        freshen(ctx, lvl.tag, :_prev_pos),
     )
 end
 
@@ -272,6 +296,8 @@ end
 
 virtual_level_eltype(lvl::VirtualSparseListLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseListLevel) = virtual_level_fill_value(lvl.lvl)
+@inline sample_dims(lvl::VirtualSparseListLevel) = 1 + sample_dims(lvl.lvl)
+@inline all_dense(lvl::VirtualSparseListLevel) = false
 
 postype(lvl::VirtualSparseListLevel) = postype(lvl.lvl)
 
@@ -593,260 +619,117 @@ function unfurl(
     )
 end
 
-function coalesce_level!(
-    lvl::SparseListLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
-)
-    if factor > 1
-        global_fbr_map, local_fbr_map, task_map = unroll_dense_coalesce(
-            global_fbr_map, local_fbr_map, task_map, factor, P
-        )
-        factor = 1
-    end
+function sample(tid, lvl::SparseListLevel)
+    tup, idx = sample(tid, lvl.lvl)
 
-    #lvl.idx and lvl.ptr should be MultiChannelBuffers
-    idx = lvl.idx.data
+    lfbr = binary_search(idx, lvl.ptr.data[tid])
+    acc = lvl.ptr.data[tid][lfbr]
+    delta = idx - acc
+    @assert delta >= 0
+
+    idx_2 = lvl.idx.data[tid][acc + delta]
+    return (tup..., idx_2), lfbr
+end
+
+function setup_coalesce!(lvl::SparseListLevel, max_pos, dst, P, splits, offsets, overlap)
     ptr = lvl.ptr.data
-    max_level_dim = global_fbr_map[length(global_fbr_map)]
-    cutoffs = compute_proc_cutoffs(idx, P)
-
-    #Don't merge zero-ed arrays.
-    if cutoffs[P + 1] <= 1
-        return nothing
+    idx = lvl.idx.data
+    n = map(length, idx)
+    rank(t, p) =
+        if p < 1
+            1
+        elseif p <= length(ptr[t])
+            ptr[t][p]
+        else
+            n[t] + 1
+        end
+    parent(t, r) = searchsortedlast(ptr[t], r)
+    # Piece `(lo, hi, start, dup, prev, delta)` puts shard ranks `lo:hi` at
+    # consecutive ranks from `start`, their parents moved by `delta`, skipping
+    # `lo` when it repeats the entry before it (`dup`); `prev` is the parent
+    # before the piece.
+    pieces = [NTuple{6,Int}[] for _ in 1:P]
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
+    nnz = 0
+    last_pos = 0
+    last_idx = 0
+    for (t, lo, hi, delta) in shard_runs(splits, offsets, rank, parent)
+        dup = parent(t, lo) + delta == last_pos && idx[t][lo] == last_idx
+        if dup
+            shared[t] = lo
+            shared_dst[t] = nnz
+        end
+        push!(pieces[t], (lo, hi, nnz + 1, dup, last_pos, delta))
+        nnz += hi - lo + 1 - dup
+        last_pos = parent(t, hi) + delta
+        last_idx = idx[t][hi]
     end
-
-    ptr_2 = coalescent.ptr
-    idx_2 = coalescent.idx
-
-    pos_map, idx_map, lfm, tm = gen_pos_idx_map(
-        global_fbr_map, local_fbr_map, task_map, ptr, idx, cutoffs, P
+    # Both buffers are rewritten completely; discard old contents before growth.
+    empty!(dst.idx)
+    resize!(dst.idx, nnz)
+    empty!(dst.ptr)
+    resize!(dst.ptr, max_pos + 1)
+    # Children are addressed by rank, so each piece's children move as a block,
+    # a shared entry's to the rank before the piece. A moved block leaves a gap
+    # and makes room in its owner, so below a hash, a shard's child can need a
+    # range per piece. An empty shard still gets one, empty range. Without
+    # bands, both shards' leaves under a shared entry overlap.
+    sorted = [isempty(ps) ? [(1, 0, 1, 0, 0, 0)] : sort(ps) for ps in pieces]
+    child = setup_coalesce!(
+        lvl.lvl, nnz, dst.lvl, P,
+        [[[lo for (lo,) in ps]; n[t] + 1] for (t, ps) in enumerate(sorted)],
+        [[start - dup for (_, _, start, dup) in ps] for ps in sorted],
+        overlap && any(!iszero, shared),
     )
-    global_fbr_map, local_fbr_map, task_map = process_next_lvl(
-        pos_map, idx_map, tm, lfm, P, max_level_dim, ptr_2, idx_2
-    )
-
-    coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent.lvl
-    )
+    init = nnz == 0 ? ((dst.ptr, 1, 1), child.init...) : child.init
+    return (; pieces, shared, shared_dst, nnz, child, init)
 end
 
-Base.@propagate_inbounds function unroll_dense_coalesce(
-    global_fbr_map, local_fbr_map, task_map, factor, P
+# The rank of the entry with index `i` under position `p`, or zero if it is absent.
+function sparse_list_rank(ptr, idx, p, i)
+    1 <= p < length(ptr) || return 0
+    r = ptr[p] - 1 + searchsortedfirst(view(idx, ptr[p]:(ptr[p + 1] - 1)), i)
+    return r < ptr[p + 1] && idx[r] == i ? r : 0
+end
+
+# Owned entries fill consecutive slots after earlier shards' entries. Each ptr
+# entry is written by the shard owning the first entry at or after it.
+function coalesce_shard!(
+    tid, plan, lvl::SparseListLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi)
 )
-    unrolled_size = factor * length(global_fbr_map)
-
-    global_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
-    local_fbr_map_unrolled = Vector{Int64}(undef, unrolled_size)
-    task_map_unrolled = Vector{Int64}(undef, unrolled_size)
-
-    chk_size = fld(length(global_fbr_map) + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        for i in 0:(chk_size - 1)
-            offset = init + i
-
-            if offset > length(global_fbr_map)
-                break
+    ptr = lvl.ptr.data[tid]
+    idx = lvl.idx.data[tid]
+    for (lo, hi, start, dup, prev, delta) in plan.pieces[tid]
+        pos = searchsortedlast(ptr, lo)
+        for r in (lo + dup):hi
+            while ptr[pos + 1] <= r
+                pos += 1
             end
-            start_write = (offset - 1) * factor + 1
-            finish_write = offset * factor
-
-            gfbr = (global_fbr_map[offset] - 1) * factor + 1
-            lfbr = (local_fbr_map[offset] - 1) * factor + 1
-            task = task_map[offset]
-
-            for j in start_write:finish_write
-                global_fbr_map_unrolled[j] = gfbr
-                local_fbr_map_unrolled[j] = lfbr
-                task_map_unrolled[j] = task
-
-                gfbr += 1
-                lfbr += 1
+            rank = start + r - lo - dup
+            x = pos + delta
+            dst.idx[rank] = idx[r]
+            for y in (prev + 1):x
+                dst.ptr[y] = rank
+            end
+            prev = x
+            if rank == plan.nnz
+                for y in (x + 1):length(dst.ptr)
+                    dst.ptr[y] = rank + 1
+                end
             end
         end
     end
 
-    return global_fbr_map_unrolled, local_fbr_map_unrolled, task_map_unrolled
-end
-
-Base.@propagate_inbounds function gen_pos_idx_map(
-    global_fbr_map, local_fbr_map, task_map, ptr, index, cutoffs, P
-)
-    ordering = Base.Order.By(j -> (task_map[j], local_fbr_map[j]))
-    sorter = AcceleratedKernels.sortperm(collect(1:length(task_map)); order=ordering)
-
-    nnz = cutoffs[length(cutoffs)] - 1
-    merged_positions = Vector{Int}(undef, nnz)
-    merged_indices = Vector{Int}(undef, nnz)
-
-    task_map2 = Vector{Int}(undef, nnz)
-    local_fbr_map2 = Vector{Int}(undef, nnz)
-
-    chk_size = fld(nnz + P - 1, P)
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        proc_id = binary_search(init, cutoffs)
-        idx_id = init - cutoffs[proc_id] + 1
-
-        local_fbr = binary_search(idx_id, ptr[proc_id])
-
-        tag = get_permute_idx(proc_id, ptr) + local_fbr
-
-        @assert local_fbr > 0
-        @assert tag > 0
-
-        global_fbr = global_fbr_map[sorter[tag]]
-        local_fbr_id_child = init - cutoffs[proc_id] + 1
-
-        j = 0
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            nz_id = j + idx_id
-            idx = index[proc_id][nz_id]
-            merged_positions[offset] = global_fbr
-            merged_indices[offset] = idx
-            task_map2[offset] = proc_id
-            local_fbr_map2[offset] = local_fbr_id_child
-
-            if nz_id >= length(index[proc_id]) && proc_id < P
-                proc_id += 1
-
-                while proc_id < P && length(index[proc_id]) < 1
-                    proc_id += 1
-                end
-
-                if length(index[proc_id]) < 1
-                    break
-                end
-
-                idx_id = 1
-                j = 0
-                local_fbr_id_child = 1
-
-                local_fbr = binary_search(idx_id, ptr[proc_id])
-                tag = get_permute_idx(proc_id, ptr) + local_fbr
-
-                global_fbr = global_fbr_map[sorter[tag]]
-            elseif nz_id + 1 >= ptr[proc_id][local_fbr + 1] &&
-                local_fbr + 1 < length(ptr[proc_id]) &&
-                ptr[proc_id][local_fbr + 1] < ptr[proc_id][length(ptr[proc_id])]
-                local_fbr = binary_search(nz_id + 1, ptr[proc_id])
-
-                tag = get_permute_idx(proc_id, ptr) + local_fbr
-                global_fbr = global_fbr_map[sorter[tag]]
-                local_fbr_id_child += 1
-                j += 1
-            else
-                j += 1
-                local_fbr_id_child += 1
-            end
-        end
-    end
-    return merged_positions, merged_indices, local_fbr_map2, task_map2
-end
-
-Base.@propagate_inbounds function process_next_lvl(
-    merged_positions, merged_indices, task_map, local_fbr_map, P, max_level_dim, lvl_ptr,
-    lvl_idx,
-)
-    ordering = Base.Order.By(j -> (merged_positions[j], merged_indices[j]))
-    shuffler = AcceleratedKernels.sortperm(
-        collect(1:length(merged_positions)); order=ordering
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards. An entry's rank is its child's position, and runs
+    # follow pieces, so none straddles two of the child's ranges. Every worker
+    # recurses, even with an empty shard: a hash below also inserts its buckets.
+    # The band's bounds pass to the children of the entries on them.
+    child_runs = (lo:hi for (lo, hi) in plan.pieces[tid])
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, child_runs,
+        (sparse_list_rank(ptr, idx, p_lo, i_lo[end]), Base.front(i_lo)),
+        (sparse_list_rank(ptr, idx, p_hi, i_hi[end]), Base.front(i_hi)),
     )
-
-    nnz = length(local_fbr_map)
-    global_fbr_map2 = Vector{Int}(undef, nnz)
-
-    merged_positions_s = p_permute(shuffler, merged_positions)
-    merged_indices_s = p_permute(shuffler, merged_indices)
-    task_map = p_permute(shuffler, task_map)
-    local_fbr_map = p_permute(shuffler, local_fbr_map)
-
-    uq_ptr = zeros(Int, P + 1)
-    uq_idx = zeros(Int, P + 1)
-
-    chk_size = fld(nnz + P - 1, P)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen = 0
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (-1, -1)
-        prev_ptr = init > 1 ? merged_positions_s[init - 1] : 1
-        seen_ptr = 0
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                prev = tup
-                seen += 1
-            end
-
-            p = merged_positions_s[offset]
-            if prev_ptr != p
-                seen_ptr += (p - prev_ptr)
-                prev_ptr = p
-            end
-        end
-        uq_idx[tid + 1] = seen
-        uq_ptr[tid + 1] = seen_ptr
-    end
-    uq_ptr_s = s_prefix_sum(uq_ptr)
-    uq_idx_s = s_prefix_sum(uq_idx)
-
-    resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
-    resize_if_smaller!(lvl_ptr, max_level_dim + 1)
-    fill!(lvl_ptr, 0)
-
-    Threads.@threads for tid in 1:P
-        init = (tid - 1) * chk_size + 1
-        seen_ptr = uq_ptr_s[tid] + 2
-        seen_idx = uq_idx_s[tid] + 1
-        prev =
-            init > 1 ? (merged_positions_s[init - 1], merged_indices_s[init - 1]) : (1, -1)
-
-        for i in 0:(chk_size - 1)
-            offset = init + i
-            if offset > nnz
-                break
-            end
-
-            while seen_ptr < merged_positions_s[offset]
-                lvl_ptr[seen_ptr] = seen_idx
-                seen_ptr += 1
-            end
-
-            tup = (merged_positions_s[offset], merged_indices_s[offset])
-            if tup != prev
-                lvl_idx[seen_idx] = tup[2]
-
-                p = merged_positions_s[offset]
-                if prev[1] != p
-                    lvl_ptr[seen_ptr] = seen_idx
-                    seen_ptr += 1
-                end
-                prev = tup
-                seen_idx += 1
-            end
-            global_fbr_map2[offset] = seen_idx - 1
-        end
-    end
-
-    lvl_ptr[1] = 1
-    i = length(lvl_ptr)
-    while lvl_ptr[i] == 0
-        lvl_ptr[i] = length(lvl_idx) + 1
-        i -= 1
-    end
-
-    return global_fbr_map2, local_fbr_map, task_map
 end

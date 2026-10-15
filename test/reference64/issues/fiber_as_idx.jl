@@ -62,6 +62,6 @@ begin
             break
         end
     end
-    resize!(B_lvl_2_val, A_lvl_stop)
+    Finch.resize_if_larger!(B_lvl_2_val, A_lvl_stop)
     (B = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(B_lvl_2_val), A_lvl_stop)),)
 end

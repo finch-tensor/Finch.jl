@@ -89,6 +89,6 @@ begin
     end
     qos_stop = B_lvl_2_ptr[A_lvl_stop + 1] - 1
     resize!(B_lvl_2_idx, qos_stop)
-    resize!(B_lvl_3_val, qos_stop)
+    Finch.resize_if_larger!(B_lvl_3_val, qos_stop)
     (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_3_val), A_lvl_stop, B_lvl_2_ptr, B_lvl_2_idx), A_lvl_stop)),)
 end
