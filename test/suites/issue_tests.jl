@@ -1275,5 +1275,4 @@
         R = fsprand(Bool, 100, 100, 0.01)
         @test adjoint(R) == permutedims(Array(R))
     end
-
 end
