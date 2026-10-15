@@ -97,6 +97,12 @@ function countstored_level(lvl::SparseByteMapLevel, pos)
     countstored_level(lvl.lvl, pos * lvl.shape)
 end
 
+function countstored_level(lvl::SparseByteMapLevel, pos, idxs, dim, proc, exact)
+    idx = exact ? idxs[length(idxs) - dim] : lvl.shape
+    q = (pos - 1) * lvl.shape + idx
+    countstored_level(lvl.lvl, q, idxs, dim + 1, proc, exact)
+end
+
 function Base.show(
     io::IO, lvl::SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}
 ) where {Ti,Ptr,Tbl,Srt,Lvl}
@@ -170,7 +176,6 @@ function data_rep_level(
 ) where {Ti,Ptr,Tbl,Srt,Lvl}
     SparseData(data_rep_level(Lvl))
 end
-
 function isstructequal(a::T, b::T) where {T<:SparseByteMap}
     a.shape == b.shape &&
         a.ptr == b.ptr &&
@@ -260,18 +265,22 @@ end
 function distribute_level(
     ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, arch, diff, style
 )
+    srt = distribute_buffer(ctx, lvl.srt, arch, style)
+    # length(MultiChannelBuffer) is 0, so re-derive the dirty count from the
+    # distributed srt; declare_level! needs it to clear last run's entries.
+    qos_fill = freshen(ctx, lvl.tag, :_qos_fill)
+    qos_stop = freshen(ctx, lvl.tag, :_qos_stop)
+    push_preamble!(ctx, :($qos_stop = $qos_fill = length($srt)))
     diff[lvl.tag] = VirtualSparseByteMapLevel(
         lvl.tag,
         distribute_level(ctx, lvl.lvl, arch, diff, style),
         lvl.Ti,
         distribute_buffer(ctx, lvl.ptr, arch, style),
         distribute_buffer(ctx, lvl.tbl, arch, style),
-        distribute_buffer(ctx, lvl.srt, arch, style),
+        srt,
         lvl.shape,
-        distribute_buffer(ctx, lvl.qos_fill, arch, style),
-        # lvl.qos_fill,
-        # lvl.qos_stop,
-        distribute_buffer(ctx, lvl.qos_stop, arch, style),
+        qos_fill,
+        qos_stop,
     )
 end
 
@@ -308,6 +317,8 @@ end
 
 virtual_level_eltype(lvl::VirtualSparseByteMapLevel) = virtual_level_eltype(lvl.lvl)
 virtual_level_fill_value(lvl::VirtualSparseByteMapLevel) = virtual_level_fill_value(lvl.lvl)
+@inline sample_dims(lvl::VirtualSparseByteMapLevel) = 1 + sample_dims(lvl.lvl)
+@inline all_dense(lvl::VirtualSparseByteMapLevel) = false & all_dense(lvl.lvl)
 
 postype(lvl::VirtualSparseByteMapLevel) = postype(lvl.lvl)
 
@@ -341,18 +352,36 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
         ctx,
         quote
             $srt_shape_init
-            for $r in 1:($(lvl.qos_fill))
-                $q = $(lvl.srt)[$r]
-                $p = $parent_position
-                $(lvl.ptr)[$p] = $(Tp(0))
-                $(lvl.ptr)[$p + 1] = $(Tp(0))
-                $(lvl.tbl)[$q] = false
-                if $(supports_reassembly(lvl.lvl))
-                    $(contain(
-                        ctx_2 ->
-                            assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
-                        ctx,
-                    ))
+            # Dirty positions are sorted, so visiting them streams through memory;
+            # past about 1/16 of the positions, clearing them all is cheaper.
+            if $(lvl.qos_fill) > length($(lvl.tbl)) >>> 4
+                fill!($(lvl.ptr), $(Tp(0)))
+                fill!($(lvl.tbl), false)
+                $(
+                    if supports_reassembly(lvl.lvl)
+                        contain(
+                            ctx_2 -> assemble_level!(
+                                ctx_2, lvl.lvl, literal(Tp(1)),
+                                value(:(length($(lvl.tbl))), Tp),
+                            ),
+                            ctx,
+                        )
+                    end
+                )
+            else
+                for $r in 1:($(lvl.qos_fill))
+                    $q = $(lvl.srt)[$r]
+                    $p = $parent_position
+                    $(lvl.ptr)[$p] = $(Tp(0))
+                    $(lvl.ptr)[$p + 1] = $(Tp(0))
+                    $(lvl.tbl)[$q] = false
+                    if $(supports_reassembly(lvl.lvl))
+                        $(contain(
+                            ctx_2 ->
+                                assemble_level!(ctx_2, lvl.lvl, value(q, Tp), value(q, Tp)),
+                            ctx,
+                        ))
+                    end
                 end
             end
             $(lvl.qos_fill) = 0
@@ -362,8 +391,9 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, p
             $(lvl.ptr)[1] = 1
         end,
     )
+    # Nested byte maps must reset their own dirty entries and counts as well.
+    lvl.lvl = declare_level!(ctx, lvl.lvl, call(*, pos, lvl.shape), init)
     if !supports_reassembly(lvl.lvl)
-        lvl.lvl = declare_level!(ctx, lvl.lvl, call(*, pos, lvl.shape), init)
         push_preamble!(
             ctx,
             contain(
@@ -394,6 +424,8 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     q_stop = freshen(ctx, lvl.tag, :q_stop)
     q = freshen(ctx, lvl.tag, :q)
     old = freshen(ctx, lvl.tag, :old)
+    ptr_len = freshen(ctx, lvl.tag, :ptr_len)
+    tbl_len = freshen(ctx, lvl.tag, :tbl_len)
 
     quote
         $q_start = Finch.sparse_bytemap_pack(
@@ -402,16 +434,27 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
         $q_stop = Finch.sparse_bytemap_pack(
             $(ctx(pos_stop)), $(Tp)($(ctx(lvl.shape))), $(ctx(lvl.shape))
         )
+        # Existing storage is already clean; only initialize what this call grows.
+        $ptr_len = length($(lvl.ptr))
         Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
-        $old = length($(lvl.tbl)) + 1
+        Finch.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
+        $tbl_len = length($(lvl.tbl))
+        $old = max($q_start, $tbl_len + 1)
         Finch.resize_if_smaller!($(lvl.tbl), $q_stop)
         Finch.fill_range!($(lvl.tbl), false, $old, $q_stop)
         $(contain(
-            ctx_2 -> assemble_level!(ctx_2, lvl.lvl, value(old, Tp), value(q_stop, Tp)), ctx
+            # Children that can't be reassembled are stale after a run, so redo them all.
+            ctx_2 -> assemble_level!(
+                ctx_2, lvl.lvl,
+                value(supports_reassembly(lvl.lvl) ? old : q_start, Tp),
+                value(q_stop, Tp),
+            ),
+            ctx,
         ))
     end
 end
+
+supports_reassembly(lvl::VirtualSparseByteMapLevel) = true
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, pos_stop)
     r = freshen(ctx, lvl.tag, :_r)
@@ -428,8 +471,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
-            resize!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
+            Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
+            Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
             $srt_shape_init
@@ -678,167 +721,95 @@ function unfurl(
     )
 end
 
-function coalesce_level!(
-    lvl::SparseByteMapLevel, global_fbr_map, local_fbr_map, task_map, factor, P, coalescent
-)
-    shape = lvl.shape
-    srt = lvl.srt.data
-    pos_stop = max(maximum(global_fbr_map), factor)
-    cutoffs = compute_proc_cutoffs(srt, P)
-
-    #Don't merge zero-ed arrays.
-    if cutoffs[P + 1] <= 1
-        return nothing
+function sample(tid, lvl::SparseByteMapLevel)
+    if lvl.lvl isa ElementLevel
+        # Draw a stored entry; the element level would pick a random dense position.
+        q = rand(lvl.srt.data[tid])
+        return (mod1(q, lvl.shape),), fld(q - 1, lvl.shape) + 1
     end
-
-    global_fbr_map, local_fbr_map, task_map = merge_bytemap(
-        srt,
-        coalescent.srt,
-        coalescent.tbl,
-        coalescent.ptr,
-        cutoffs,
-        P,
-        pos_stop,
-        shape,
-    )
-
-    coalesce_level!(
-        lvl.lvl, global_fbr_map, local_fbr_map, task_map, 1, P, coalescent.lvl
-    )
+    tup, idx = sample(tid, lvl.lvl)
+    idx_2 = mod1(idx, lvl.shape)
+    pos_2 = fld(idx - 1, lvl.shape) + 1
+    return (tup..., idx_2), pos_2
 end
 
-Base.@propagate_inbounds function merge_bytemap(
-    srt, lvl_srt, lvl_tbl, lvl_ptr, cutoffs, P, pos_stop, shape
+function setup_coalesce!(lvl::SparseByteMapLevel, max_pos, dst, P, splits, offsets, overlap)
+    srt = lvl.srt.data
+    shape = lvl.shape
+    rank(t, p) = searchsortedfirst(srt[t], (p - 1) * shape + 1)
+    parent(t, r) = fld(srt[t][r] - 1, shape) + 1
+    # Piece `(lo, hi, start, dup, prev, shift)` puts ranks `lo:hi` at consecutive
+    # ranks from `start`, moved by `shift`, skipping `lo` when it repeats the entry
+    # before it (`dup`); `prev` is the parent before the piece. Only `srt` and
+    # `ptr` make room for moved runs: children are addressed by position.
+    pieces = [NTuple{6,Int}[] for _ in 1:P]
+    shared = zeros(Int, P)
+    shared_dst = zeros(Int, P)
+    nnz = 0
+    last_q = 0
+    for (t, lo, hi, delta) in shard_runs(splits, offsets, rank, parent)
+        shift = delta * shape
+        dup = srt[t][lo] + shift == last_q
+        if dup
+            shared[t] = srt[t][lo]
+            shared_dst[t] = last_q
+        end
+        push!(pieces[t], (lo, hi, nnz + 1, dup, fld(last_q - 1, shape) + 1, shift))
+        nnz += hi - lo + 1 - dup
+        last_q = srt[t][hi] + shift
+    end
+    # Unoccupied bounds and bitmap entries retain their cleared values.
+    ptr_start = min(length(dst.ptr), max_pos + 1) + 1
+    tbl_start = min(length(dst.tbl), max_pos * shape) + 1
+    resize!(dst.ptr, max_pos + 1)
+    resize!(dst.tbl, max_pos * shape)
+    empty!(dst.srt)
+    resize!(dst.srt, nnz)
+    dst.ptr[1] = 1
+    # Without bands, both shards' leaves under a shared entry overlap.
+    child = setup_coalesce!(
+        lvl.lvl, max_pos * shape, dst.lvl, P, scale_positions(splits, shape),
+        scale_positions(offsets, shape), overlap && any(!iszero, shared),
+    )
+    # ptr[1] is the sentinel, not an unoccupied parent bound.
+    init = (
+        (dst.ptr, max(2, ptr_start), 0),
+        (dst.tbl, tbl_start, false), child.init...,
+    )
+    return (; pieces, shared, shared_dst, nnz, child, init)
+end
+
+# Each shard writes its pieces of srt. ptr keeps freeze_level!'s layout, with
+# bounds only around occupied positions, so the merge stays O(nnz). The shard
+# owning a parent's first entry writes its bounds.
+function coalesce_shard!(
+    tid, plan, lvl::SparseByteMapLevel, dst, runs, (p_lo, i_lo), (p_hi, i_hi)
 )
-    nnz = cutoffs[P + 1] - 1
-    q_stop = pos_stop * shape
-    @inbounds for tid in 1:P
-        if !isempty(srt[tid])
-            q_stop = max(q_stop, srt[tid][end])
-        end
-    end
-    pos_stop = max(pos_stop, sparse_bytemap_parent(q_stop, shape))
-
-    q_cutoffs = Vector{Int}(undef, P + 1)
-    q_cutoffs[1] = 1
-    q_cutoffs[P + 1] = q_stop + 1
-    # Partition the q-domain by approximate input rank. Equal q values stay
-    # within one bracket, so using lvl_tbl as a parallel dedup bitmap is safe.
-    @inbounds for part in 2:P
-        target = fld((part - 1) * nnz, P)
-        lo = 1
-        hi = q_stop + 1
-        while lo < hi
-            mid = (lo + hi) >>> 1
-            count = 0
-            for tid in 1:P
-                count += searchsortedfirst(srt[tid], mid) - 1
+    src = lvl.srt.data[tid]
+    shape = lvl.shape
+    # A shared entry's bit is set by its owner.
+    for (lo, hi, start, dup, prev, shift) in plan.pieces[tid]
+        for r in (lo + dup):hi
+            rank = start + r - lo - dup
+            q = src[r] + shift
+            dst.tbl[q] = true
+            dst.srt[rank] = q
+            p = fld(q - 1, shape) + 1
+            if p != prev
+                dst.ptr[prev + 1] = rank
+                dst.ptr[p] = rank
             end
-            if count < target
-                lo = mid + 1
-            else
-                hi = mid
-            end
-        end
-        q_cutoffs[part] = lo
-    end
-
-    @assert length(lvl_tbl) >= pos_stop * shape
-
-    chunk_srt = Vector{Vector{Int}}(undef, P)
-    chunk_global = Vector{Vector{Int}}(undef, P)
-    chunk_local = Vector{Vector{Int}}(undef, P)
-    chunk_task = Vector{Vector{Int}}(undef, P)
-    Threads.@threads for part in 1:P
-        lo = q_cutoffs[part]
-        hi = q_cutoffs[part + 1]
-        local_srt = Int[]
-        map_count = 0
-        @inbounds for tid in 1:P
-            xs = srt[tid]
-            start = searchsortedfirst(xs, lo)
-            stop = searchsortedfirst(xs, hi) - 1
-            map_count += max(0, stop - start + 1)
-            for r in start:stop
-                q = xs[r]
-                if !lvl_tbl[q]
-                    lvl_tbl[q] = true
-                    push!(local_srt, q)
-                end
-            end
-        end
-        sort!(local_srt)
-        local_global = Vector{Int}(undef, map_count)
-        local_local = Vector{Int}(undef, map_count)
-        local_task = Vector{Int}(undef, map_count)
-        k = 1
-        @inbounds for q in local_srt
-            for tid in 1:P
-                xs = srt[tid]
-                r = searchsortedfirst(xs, q)
-                if r <= length(xs) && xs[r] == q
-                    local_global[k] = q
-                    local_local[k] = q
-                    local_task[k] = tid
-                    k += 1
-                end
-            end
-        end
-        chunk_srt[part] = local_srt
-        chunk_global[part] = local_global
-        chunk_local[part] = local_local
-        chunk_task[part] = local_task
-    end
-
-    q_offsets = Vector{Int}(undef, P)
-    map_offsets = Vector{Int}(undef, P)
-    q_offset = 1
-    map_offset = 1
-    @inbounds for part in 1:P
-        q_offsets[part] = q_offset
-        map_offsets[part] = map_offset
-        q_offset += length(chunk_srt[part])
-        map_offset += length(chunk_global[part])
-    end
-
-    seen = q_offset - 1
-    resize!(lvl_srt, seen)
-    global_fbr_map = Vector{Int}(undef, nnz)
-    local_fbr_map = Vector{Int}(undef, nnz)
-    task_map = Vector{Int}(undef, nnz)
-    Threads.@threads for part in 1:P
-        @inbounds begin
-            q_len = length(chunk_srt[part])
-            map_len = length(chunk_global[part])
-            if q_len > 0
-                copyto!(lvl_srt, q_offsets[part], chunk_srt[part], 1, q_len)
-            end
-            if map_len > 0
-                copyto!(global_fbr_map, map_offsets[part], chunk_global[part], 1, map_len)
-                copyto!(local_fbr_map, map_offsets[part], chunk_local[part], 1, map_len)
-                copyto!(task_map, map_offsets[part], chunk_task[part], 1, map_len)
-            end
+            rank == plan.nnz && (dst.ptr[p + 1] = rank + 1)
+            prev = p
         end
     end
 
-    @assert length(lvl_ptr) >= pos_stop + 1
-    if seen == 0
-        lvl_ptr[1] = 1
-    else
-        Threads.@threads for r in 1:seen
-            @inbounds begin
-                p = sparse_bytemap_parent(lvl_srt[r], shape)
-                p_prev = r == 1 ? 0 : sparse_bytemap_parent(lvl_srt[r - 1], shape)
-                p_next = r == seen ? 0 : sparse_bytemap_parent(lvl_srt[r + 1], shape)
-                if p != p_prev
-                    lvl_ptr[p_prev + 1] = r
-                    lvl_ptr[p] = r
-                end
-                if p != p_next
-                    lvl_ptr[p + 1] = r + 1
-                end
-            end
-        end
-    end
-    return global_fbr_map, local_fbr_map, task_map
+    # Recurse on every entry, owned or not: a shared entry's children are split
+    # between both shards. Every worker recurses, even with an empty shard. As in
+    # a dense level, the band's bounds pass to children by position.
+    coalesce_shard!(
+        tid, plan.child, lvl.lvl, dst.lvl, (q:q for q in src),
+        ((p_lo - 1) * shape + i_lo[end], Base.front(i_lo)),
+        ((p_hi - 1) * shape + i_hi[end], Base.front(i_hi)),
+    )
 end

@@ -84,6 +84,7 @@ function (fbr::SubFiber{<:ElementLevel})()
 end
 
 countstored_level(lvl::ElementLevel, pos) = pos
+countstored_level(lvl::ElementLevel, pos, idxs, dim, proc, exact) = pos
 
 mutable struct VirtualElementLevel <: AbstractVirtualLevel
     tag
@@ -137,6 +138,8 @@ virtual_level_size(ctx, ::VirtualElementLevel) = ()
 virtual_level_ndims(ctx, lvl::VirtualElementLevel) = 0
 virtual_level_eltype(lvl::VirtualElementLevel) = lvl.Tv
 virtual_level_fill_value(lvl::VirtualElementLevel) = lvl.Vf
+@inline sample_dims(::VirtualElementLevel) = 0
+@inline all_dense(lvl::VirtualElementLevel) = true
 
 postype(lvl::VirtualElementLevel) = lvl.Tp
 
@@ -153,7 +156,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
     push_preamble!(
         ctx,
         quote
-            resize!($(lvl.val), $(ctx(pos)))
+            Finch.resize_if_larger!($(lvl.val), $(ctx(pos)))
         end,
     )
     return lvl
@@ -238,92 +241,61 @@ end
 function coalesce_level!(
     lvl::ElementLevel{Vf,Tv,Tp,Val},
     global_fbr_map,
-    local_fbr_map,
-    task_map,
     factor,
+    max_dim,
     P,
     coalescent,
+    weak,
 ) where {Vf,Tv,Tp,Val}
     val = lvl.val.data
-    val2 = coalescent.val
+    lvl_val = coalescent.val
 
     if length(val) < 1
         return nothing
     end
-    if length(val2) == 1 && global_fbr_map[end] == 1 && local_fbr_map[end] == 1
-        merge_element_scalar(val, P, val2)
-    elseif factor > 1
-        merge_dense_element_level(
+    if factor > 1
+        merge_dense_element(
             factor, val, P, val2
         )
     else
-        merge_element_level(global_fbr_map, local_fbr_map, task_map, val, P, val2)
+        merge_element(global_fbr_map, val, max_dim, P, lvl_val)
     end
 end
 
-Base.@propagate_inbounds function merge_element_scalar(val, P, lvl_val)
-    lvl_val[1] = 0
-    for t in 1:P
-        @fastmath lvl_val[1] += val[t][1]
-    end
+function sample(tid, lvl::ElementLevel)
+    return (), rand(1:length(lvl.val.data[tid]))
 end
 
-Base.@propagate_inbounds function merge_element_level(
-    global_fbr_map, local_fbr_map, task_map, val, P, val_merged
-)
-    chk_size = fld(length(global_fbr_map) + P - 1, P)
-    resize_if_smaller!(val_merged, global_fbr_map[length(global_fbr_map)])
+function setup_coalesce!(
+    lvl::ElementLevel{Vf}, max_pos, dst, P, splits, offsets, overlap
+) where {Vf}
+    init_start = min(length(dst.val), max_pos) + 1
+    resize!(dst.val, max_pos)
+    init = ((dst.val, init_start, Vf),)
+    return (; splits, offsets, overlap, init)
+end
 
-    Threads.@threads for tid in 1:P
-        start, finish = 0, 0
-
-        if tid > 1
-            offset_start = (tid - 1) * chk_size + 1
-            if offset_start > length(global_fbr_map)
-                continue
+# Levels above cut runs to the band.
+function coalesce_shard!(tid, plan, lvl::ElementLevel{Vf}, dst, runs, lb, ub) where {Vf}
+    src = lvl.val.data[tid]
+    splits, offsets = plan.splits[tid], plan.offsets[tid]
+    for run in runs
+        isempty(run) && continue
+        # No run straddles two ranges, so each run moves as a block.
+        k = searchsortedlast(splits, first(run))
+        shift = offsets[k] - splits[k]
+        if plan.overlap
+            # Shards store fill values outside their band, so where runs
+            # overlap, copy only stored values.
+            for i in run
+                src[i] != Vf && (dst.val[i + shift] = src[i])
             end
-            last_idx = global_fbr_map[offset_start - 1]
-
-            while offset_start > 1 && offset_start <= length(global_fbr_map) &&
-                      global_fbr_map[offset_start] == last_idx
-                offset_start += 1
-            end
-            start = offset_start
+        elseif length(run) > 16
+            copyto!(dst.val, first(run) + shift, src, first(run), length(run))
         else
-            start = 1
-        end
-
-        if tid < P
-            offset_finish = tid * chk_size + 1
-            if offset_finish > length(global_fbr_map)
-                finish = length(global_fbr_map) + 1
-            else
-                last_idx = global_fbr_map[offset_finish - 1]
-
-                while offset_finish <= length(global_fbr_map) &&
-                    global_fbr_map[offset_finish] == last_idx
-                    offset_finish += 1
-                end
-                finish = offset_finish
+            for i in run
+                dst.val[i + shift] = src[i]
             end
-        else
-            finish = length(global_fbr_map) + 1
-        end
-
-        for i in start:(finish - 1)
-            val_merged[global_fbr_map[i]] = 0
-        end
-
-        for i in start:(finish - 1)
-            @fastmath val_merged[global_fbr_map[i]] += val[task_map[i]][local_fbr_map[i]]
-        end
-    end
-end
-
-Base.@propagate_inbounds function merge_dense_element_level(factor, val, P, val2)
-    Threads.@threads for i in 1:factor
-        for proc_id in 1:P
-            @fastmath val2[i] += val[proc_id][i]
         end
     end
 end

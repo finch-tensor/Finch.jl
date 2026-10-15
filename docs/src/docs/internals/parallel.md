@@ -87,3 +87,235 @@ local_memory
 shared_memory
 global_memory
 ```
+
+## Coalescing task-local output
+
+Hash levels in the destination, source shards, and normalization accumulators
+inside `Coalesce` use `nextpow(2, get_num_tasks(device))`
+subtables, rounding the configured merge worker count up to a power of two.
+For example, `cpu(:k, 5)` uses eight subtables regardless of `Threads.nthreads()`.
+Explicit `SparseHash` bucket counts must still be positive powers of two.
+`coalesce_similar_level` constructs empty levels with the requested bucket
+count; it does not copy or rehash the supplied level's contents.
+
+For parent position `p` and index `i`, bucket routing uses
+`(a * UInt(p) + hash(i)) & UInt(B - 1)`, with a shared random odd `a` and
+`B` buckets. A uniform parent shift `delta` therefore rotates buckets by
+`a * delta` modulo `B`. Bucket routing reads the low bits of
+the hash word `x = a * UInt(p) + hash(i)`. Linear probing clusters on linear
+hashes of structured parents, so the control-byte fingerprint (low seven bits)
+and the starting slot within a bucket (the bits above those) come from
+`hash(x)`.
+Assembly sizes the table for its busiest bucket, including
+pending keys; routing alone does not guarantee balanced occupancy.
+
+Every hash inserts tentative entries directly into the table using the same
+writer protocol. Each child record stores `(parent, index, state)`: state `0x00`
+means free, `0x01:0x7f` counts outstanding writers, and `0x80` means retained.
+Attempting to add a 128th pending writer throws an error without changing the
+count. Every occupied table slot keeps its fingerprint, including tentative
+entries, so probes compare keys only after a fingerprint match.
+
+The first writer whose child retains data marks the record retained; later
+writers cannot discard it. If all writers decline to retain data, the last one
+locates the table slot, removes it with backward-shift deletion, marks the
+record free, and recycles the child position. A local `free_head` is shared by
+all accesses to that hash level within the task. Free records store the next
+child position in their parent field, with zero ending the chain, so recycling
+needs no separate pool buffer. Writer counts are accessed through
+stable child positions, so growth and deletion do not require repairing cached
+slots. These are overlapping generated access scopes within one task, not
+concurrent CPU writes to a shard. Freeze requires every such access to finish.
+
+Growth rebuilds the table by scanning initialized child records in position
+order, skipping free records and regenerating fingerprints. It does not read or
+copy the old table, even when records have pending writers or holes. Freeze
+also collects live children directly from their records. It trims unused child
+positions beyond the last live entry, so an empty hash also has an empty child.
+On thaw, a level with interior holes rebuilds its free chain by scanning child
+records, including holes left by coalesce. When `length(perm) == length(key)`,
+there are no holes and thaw skips the scan. Each coalesce worker fills
+its output child range in position order, writing each record once as retained
+or free, including holes and discarded shared duplicates.
+
+Declaring a hash empty retains its table capacity, so reusing an accumulator
+does not repeat table growth. With at most one live entry per 1,024 slots, reset
+uses the frozen permutation to locate and clear just the occupied control bytes;
+otherwise, it clears the whole control array. Sparse clearing probes past slots
+already cleared, since clearing an entry must not hide later entries in its
+collision chain. Slot words need no initialization: an empty control byte makes
+their old contents inaccessible. Child records, free positions, and counts reset
+for the new accumulation.
+
+When a `CoalesceLevel` freezes, it merges its `P` task shards with
+`coalesce_shards!(src, dst, P, max_pos, bands)`. The shards must be ordered and
+disjoint: everything shard `p` stores precedes, in outermost-first index order,
+everything shard `p + 1` stores, so the result is their concatenation. The only
+overlap is at a band boundary, where neighboring shards can both store the same
+parent entry. The earlier shard owns it, and both shards' children land under it.
+Dense blocks under a shared entry overlap too, since every shard stores fill
+values outside its band; there, values merge by copying only non-fill values into
+a destination of fill.
+
+In the default `:normalize` mode, task `tid` first sums every shard's entries in
+its band `(lb, ub)` into its own accumulator, so the shards meet this contract,
+and `bands[tid]` is that band. Bands keep each shard from copying dense storage
+outside its band. In `:fast` mode, tasks write their shards directly and `bands`
+is `nothing`, so all dense storage may overlap.
+
+The merge plans storage, initializes it, then copies entries:
+
+  - `setup_coalesce!(lvl, max_pos, dst, P, splits, offsets, overlap)` runs once.
+    It sizes each destination level and returns a plan recording where each
+    shard's parent positions land (shard `p`'s positions
+    `splits[p][r]:(splits[p][r + 1] - 1)` start at `offsets[p][r]`), the local
+    child position shared with an earlier shard, and whether shards' leaves can
+    overlap below it. Levels that compute child positions from their parent
+    (`Dense`, `SparseByteMap`) scale the ranges by their shape; levels that store
+    children in their own slots (`SparseList`, `SparseHash`) give each run of
+    entries its own range. Leaves overlap only without bands, under an entry two
+    shards share.
+  - The plan's `init` tuples describe `(buffer, start, value)` ranges, including
+    child storage. Allocation and resizing remain serial. `coalesce_shards!`
+    partitions initialization across workers, then waits for every worker before
+    starting the copies. This barrier prevents initialization from overwriting
+    another shard's contributions under a shared boundary entry.
+  - `coalesce_shard!(tid, plan, lvl, dst, runs, lb, ub)` then runs in parallel,
+    copying shard `tid`. `runs` iterates ranges of the level's own positions,
+    starting from `(1:max_pos,)` at the root, and each level hands its child runs
+    of child positions. The band travels down the same way: `lb = (p, i)` says
+    the band starts within position `p` at index tuple `i`, and each level passes
+    its child the position of the entry at index `i[end]` under `p`, with the
+    remaining indices `i[1:end-1]`. A position below 1 bounds nothing, as when a
+    shard does not store that entry. `Dense` scales each run by its shape and
+    cuts out the children of `lb`'s position before the band and those of `ub`'s
+    after it. Below a hash, child positions are unordered, so those cuts can fall
+    inside a run. Sparse levels merge all their shard's entries and pass on their
+    entries' child positions: a list's pieces, or one position per byte-map or
+    hash entry. Each pointer entry is written by the one shard owning the first
+    entry at or after it. Two shards that store the same entry split its children
+    at their bands, so with bands, `Element` copies its runs as given.
+    `SparseByteMap` keeps the pointer layout `freeze_level!` produces, with bounds
+    only around occupied positions, so the merge stays O(nnz).
+
+Element and byte-map setup record newly allocated ranges instead of filling
+them. Byte maps use the first and last entries of their sorted dirty list,
+`srt`, to find boundaries; they do not scan the bitmap during setup. Declaration
+already uses that dirty list to clear reused bitmap entries and parent bounds,
+or clears them all once more than 1/64 of the positions are dirty, so coalesce
+initialization only needs to fill newly allocated storage. An empty
+sparse list records its whole pointer array for parallel initialization to `1`.
+
+Buffers whose contents are completely rewritten are emptied before resizing:
+sparse-list indices and pointers, the byte-map dirty list, and hash pointers,
+keys, and permutations. This avoids preserving old contents if growth reallocates
+storage. Buffers written only at occupied positions retain their cleared
+regions; setup records only the newly added range for initialization.
+
+Setup's metadata work is O(P) per level, except for sparse-list boundary
+searches, which take O(P log M) for M parent positions, and hash setup, which
+takes O(PB) for B buckets. With B equal to the worker count rounded up to a
+power of two, hash setup is O(P²). These bounds exclude buffer
+allocation/resizing. Setup does not initialize buffers, and reads only O(B)
+entries per shard.
+
+### Shared positions and ownership
+
+Sparse plans use integer positions for boundary ownership:
+
+  - `shared[p] == 0` means shard `p` writes all its index metadata.
+  - `shared[p] == q` means the metadata for local child position `q` belongs to
+    an earlier shard. Skip that index, but still merge its children.
+  - `shared_dst[p]` gives the destination child position for that shared entry,
+    or `0` when there is no shared entry. Empty shards between owners and later
+    contributors do not break the relationship.
+
+The position is format-specific, not the entry's rank in traversal order:
+
+| Level           | Meaning of `shared[p]`                                     |
+|:--------------- |:---------------------------------------------------------- |
+| `SparseList`    | Position in `idx` (currently `1` at a shared boundary)     |
+| `SparseByteMap` | Flattened child position stored in `srt`                   |
+| `SparseHash`    | Child position `q` with `key[q] == (parent, index, state)` |
+
+For example, a byte-map shard whose first `srt` entry is `7` reports
+`shared[p] = 7` when that entry is shared. A hash whose first frozen `perm`
+entry is child position `3`, keyed `(2, 5)`, reports `shared[p] = 3`. Neither reports `1` merely
+because the shared entry comes first in traversal order. Counts and offsets
+subtract `shared[p] != 0`, not `shared[p]`.
+
+`Dense` and `Element` do not own sparse index metadata, so their plans do not
+need a shared-position field. Dense levels pass through to their child plan;
+elements copy non-fill values when their positions overlap.
+
+A hash stores its keys by child position, `key[q] == (parent, index, state)`, and its
+table slots and `perm` hold child positions. A frozen `key` spans exactly the
+child positions, free vacancies included, so its length is the child extent.
+Hash levels keep their assembly bucket counts, `tbl_count`, through freeze,
+which extends them with checkpoints every `B` ranks of `perm`: block `j` counts
+each bucket's entries from rank `(j - 1) * B + 1` on, so block 1 is the totals
+and any rank range counts in O(B). A merge's output holds only the totals.
+Each range of a shard's parents moves by one shift, so setup counts the range's
+entries as the difference of two checkpoint lookups and rotates them by
+`a * shift mod B`, then subtracts each shard's shared boundary entry from its
+output bucket. Setup reads the first and last entries of each piece, plus fewer
+than `2B` entries per range end. The busiest output bucket determines the common
+subtable capacity, keeping every bucket at most half full.
+
+Hash children keep their arbitrary positions: shard `p`'s child `q` lands at
+`q + child_shift[p]`, where `child_shift` concatenates the lengths of the shards' `key`.
+The one exception is the shared entry, whose child lands at the earlier owner's
+`shared_dst[p]`. The hash passes that exception down through its child's
+`splits` and `offsets`: like a `ptr`, `splits[p]` cuts shard `p`'s child
+positions into ranges, here the positions before the shared child, the shared
+child, and the rest, and `offsets[p]` gives where each range starts in the
+merged output:
+
+  - Dense and element levels shift each run as a block. No run a parent passes
+    down straddles two ranges.
+  - Sparse levels order their index metadata (`idx`, `srt`, or the hash's `perm`)
+    with `shard_runs`. Each range's entries move as a block, so it splits each
+    shard's entries by range, cuts them wherever any range lands, and sorts the
+    runs by destination. Runs from different shards then meet only under a parent
+    both shards store, where band order puts the earlier shard first. A byte map
+    or hash addresses children by position, so no child moves.
+  - A list addresses children by entry, so a moved run of entries moves its
+    children too. Below a hash, the run leaves a gap in its own shard, which
+    closes, and makes room in its owner, so the list's child gets a range per
+    piece. A shard has at most one run moved out, at its left boundary, and one
+    insertion, at its right, so it needs at most four ranges at any depth.
+
+A hash merge needs no second phase. Worker `tid` copies shard `tid`'s keys,
+`perm`, pointers, and children: `perm` holds child positions, so a shard places
+its entries in traversal order without knowing their table slots. Worker `tid`
+also owns output buckets `tid:P:B`. For each owned bucket and each distinct
+shift of each frozen source shard, it visits the source bucket that shift
+rotates onto it, taking only the entries whose range has that shift. Each source
+bucket is scanned once per shift, and each entry's child position goes in the
+first empty slot of its probe. Keys are
+distinct once shared entries are dropped, so placement never compares keys or
+resizes. Each bucket has one writer, including when `B > P`. Since bucket work
+is tied to the worker, every worker must reach every level, even with an empty
+shard.
+
+Pointers need the parent of the entry before each piece; setup records it from
+the previous piece's last entry, so shards write pointers independently. Byte
+maps write their pointers the same way.
+
+## Closures in generated code
+
+`Threads.@threads` turns its loop body into a closure. A closure that captures a
+variable assigned more than once boxes it, and inference then sees `Any`
+wherever the closure reads it. Generated code keeps captures single-assignment:
+
+  - Every parallel loop is wrapped in `Finch.@barrier`, which binds the loop's
+    free variables in a `let` just before it. The thread closure captures those
+    fresh bindings, so code outside may rebind a buffer, for example when
+    `distribute_buffer` writes it back, without boxing anything.
+  - `@barrier` never binds a constant global, such as the `Finch` module. As a
+    local, `Finch` would hide every `Finch.f(...)` from inference and make each
+    call dynamic.
+  - Distributed levels freshen their scalar assembly state (`qos_stop` and the
+    like), so each task assigns its own locals instead of a shared variable.
+  - Other generated loops are plain loops over fixed-size buffers, not
+    comprehensions, so they create no closures.
