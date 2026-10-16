@@ -278,6 +278,8 @@ end
         @test typeof(copy(sw)) == typeof(sw)
         @test Array(copy(sw)) == permutedims(m)
         @test collect(sw) == permutedims(m)
+    end
+
     @testset "scalar arithmetic" begin
         A = Tensor(Dense(Dense(Element(0.0))), [1.0 2.0; 3.0 4.0])
         a = Array(A)
