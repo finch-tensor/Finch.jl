@@ -136,7 +136,7 @@ Base.:*(
 Base.:-(x::AbstractTensor) = map(-, x)
 
 Base.:-(x::AbstractTensor, y::Union{Base.AbstractArrayOrBroadcasted,Number}) = map(-, x, y)
-Base.:-(x::Union{Base.AbstractArrayOrBroadcasted,Number}, y::Tensor) = map(-, x, y)
+Base.:-(x::Union{Base.AbstractArrayOrBroadcasted,Number}, y::AbstractTensor) = x .- y
 Base.:-(x::AbstractTensor, y::AbstractTensor) = map(-, x, y)
 
 Base.:/(x::AbstractTensor, y::Number) = map(/, x, y)
@@ -169,6 +169,28 @@ end
 
 function LinearAlgebra.norm(arr::AbstractTensorOrBroadcast, p::Real=2)
     compute(norm(lazy(arr), p))[]
+end
+
+"""
+    transpose(arr::AbstractTensor)
+
+Transpose a 2-dimensional tensor, returning a new tensor (equivalent to
+`permutedims`).
+"""
+function LinearAlgebra.transpose(arr::AbstractTensor)
+    @assert ndims(arr) == 2 "transpose is only defined for 2-dimensional tensors"
+    permutedims(arr)
+end
+
+"""
+    adjoint(arr::AbstractTensor)
+
+Form the conjugate transpose of a 2-dimensional tensor, returning a new tensor.
+For real element types this is equivalent to `transpose`.
+"""
+function LinearAlgebra.adjoint(arr::AbstractTensor)
+    @assert ndims(arr) == 2 "adjoint is only defined for 2-dimensional tensors"
+    compute(adjoint(lazy(arr)))
 end
 
 """
@@ -595,6 +617,6 @@ function reshape!(dst, src::SwizzleArray{perm}, dims::Union{Integer,Colon}) wher
     end
 end
 function reshape!(dst, src::AbstractTensor, dims::Tuple{Vararg{Union{Integer,Colon}}})
-    (combine_mask, split_mask) = reshape_plan(tns, dims)
+    (combine_mask, split_mask) = reshape_plan(src, dims)
     reshape_kernel(dst, src, dims, Val(combine_mask), Val(split_mask))
 end
