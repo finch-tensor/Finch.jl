@@ -1,5 +1,5 @@
 """
-    SparseHashLevel{[Ti=Int]}(lvl, [dim], [subtables=1])
+    SparseHashLevel{[Ti=Int]}(lvl, [dim], [subtables=1], [pos_multiplier])
 
 A subfiber of a sparse level does not need to represent slices `A[:, ..., :, i]`
 which are entirely [`fill_value`](@ref). Instead, only potentially non-fill
@@ -7,6 +7,10 @@ slices are stored as subfibers in `lvl`. A hash table records which slices are
 stored. Optionally, `dim` is the size of the last dimension, and `subtables`, a
 power of two, splits the table into buckets that parallel merges fill
 independently.
+
+`pos_multiplier` is an odd `UInt` stored with the table. It defaults to a shared
+random value. Preserve it alongside the buffers when serializing or reconstructing
+a level; shards and their merge destination must use the same multiplier.
 
 `Ti` is the type of the last fiber index. Up to 127 overlapping logical writers
 can share a tentative entry within one task.
@@ -21,9 +25,9 @@ Implementation invariants:
   contiguous buckets. Every occupied slot, tentative or retained, has the high
   bit of `tbl_ctrl[h]` set, seven hash fingerprint bits below it, and `tbl[h] == q`.
   `0x00` marks an empty slot, which ends a probe. Probes wrap within their bucket.
-* Keys hash as `x = a * p + hash(i)`, where `a` is a random odd multiplier shared
-  by all hash levels. The high `log2(subtables)` bits of `x` pick the bucket, as
-  in multiply-shift hashing, so parents spread across buckets even when they
+* Keys hash as `x = a * p + hash(i)`, where `a = pos_multiplier` is an odd
+  multiplier stored in the level. The high `log2(subtables)` bits of `x` pick the
+  bucket, as in multiply-shift hashing, so parents spread across buckets even when they
   share their low bits. Shifting parents by `delta` adds `a * delta` to `x`,
   which moves a bucket up by the high bits of `a * delta`, or by one more where
   the low bits carry. `x` is linear in `p`, and linear probing clusters on linear
@@ -82,6 +86,7 @@ struct SparseHashLevel{Ti,Ptr,TblCtrl,Tbl,Key,Perm,TblCount,Lvl} <: AbstractLeve
     lvl::Lvl
     shape::Ti
     subtables::Int
+    pos_multiplier::UInt
     ptr::Ptr
     tbl_ctrl::TblCtrl
     tbl::Tbl
@@ -91,35 +96,43 @@ struct SparseHashLevel{Ti,Ptr,TblCtrl,Tbl,Key,Perm,TblCount,Lvl} <: AbstractLeve
 end
 const SparseHash = SparseHashLevel
 
-# The buffers a hash level carries, in constructor order after `subtables`.
+# The buffers a hash level carries, in constructor order after `pos_multiplier`.
 const SPARSE_HASH_BUFFERS = (:ptr, :tbl_ctrl, :tbl, :key, :perm, :tbl_count)
 
 SparseHashLevel(lvl, args...) = SparseHashLevel{Int}(lvl, args...)
 function SparseHashLevel(lvl, shape::Ti, args...) where {Ti}
     SparseHashLevel{Ti}(lvl, shape, args...)
 end
-function SparseHashLevel{Ti}(lvl, shape=zero(Ti), subtables=1) where {Ti}
+function SparseHashLevel{Ti}(
+    lvl, shape=zero(Ti), subtables=1, pos_multiplier=SPARSE_HASH_POS_MULTIPLIER
+) where {Ti}
     sparse_hash_check_subtables(subtables)
     Tp = postype(lvl)
     SparseHashLevel{Ti}(
-        lvl, shape, subtables, Tp[1], UInt8[], Tp[], Tuple{Tp,Ti,UInt8}[], Tp[],
+        lvl, shape, subtables, pos_multiplier, Tp[1], UInt8[], Tp[], Tuple{Tp,Ti,UInt8}[],
+        Tp[],
         zeros(Int, subtables),
     )
 end
 function SparseHashLevel{Ti}(
-    lvl::Lvl, shape, subtables, ptr::Ptr, tbl_ctrl::TblCtrl, tbl::Tbl, key::Key,
+    lvl::Lvl, shape, subtables, pos_multiplier, ptr::Ptr, tbl_ctrl::TblCtrl, tbl::Tbl,
+    key::Key,
     perm::Perm, tbl_count::TblCount,
 ) where {Ti,Ptr,TblCtrl,Tbl,Key,Perm,TblCount,Lvl}
     sparse_hash_check_subtables(subtables)
+    pos_multiplier isa Integer && isodd(pos_multiplier) ||
+        throw(ArgumentError("SparseHash position multiplier must be an odd integer"))
     SparseHashLevel{Ti,Ptr,TblCtrl,Tbl,Key,Perm,TblCount,Lvl}(
-        lvl, Ti(shape), Int(subtables), ptr, tbl_ctrl, tbl, key, perm, tbl_count
+        lvl, Ti(shape), Int(subtables), UInt(pos_multiplier), ptr, tbl_ctrl, tbl, key, perm,
+        tbl_count,
     )
 end
 
 # `lvl` with a new child and shape, keeping its table.
 function sparse_hash_with(lvl::SparseHashLevel{Ti}, child, shape=lvl.shape) where {Ti}
     SparseHashLevel{Ti}(
-        child, shape, lvl.subtables, (getfield(lvl, f) for f in SPARSE_HASH_BUFFERS)...
+        child, shape, lvl.subtables, lvl.pos_multiplier,
+        (getfield(lvl, f) for f in SPARSE_HASH_BUFFERS)...,
     )
 end
 
@@ -127,7 +140,7 @@ const SPARSE_HASH_CTRL_EMPTY = 0x00
 const SPARSE_HASH_CTRL_FULL = 0x80
 const SPARSE_HASH_KEY_FREE = 0x00
 const SPARSE_HASH_KEY_RETAINED = 0x80
-# Sample once and keep it fixed, including across shards and table resizes.
+# Default for new tables only. Existing tables always use their stored multiplier.
 const SPARSE_HASH_POS_MULTIPLIER = rand(UInt) | one(UInt)
 
 function sparse_hash_check_subtables(subtables)
@@ -139,7 +152,7 @@ end
 # Slots for a bucket of `n` entries, keeping it at most half full.
 sparse_hash_table_capacity(n) = nextpow(2, max(4, 2n))
 
-@inline sparse_hash_hash(p, i) = SPARSE_HASH_POS_MULTIPLIER * (p % UInt) + hash(i)
+@inline sparse_hash_hash(p, i, pos_multiplier) = pos_multiplier * (p % UInt) + hash(i)
 # The high bits pick the bucket. One bucket shifts by the full width, giving 0.
 @inline sparse_hash_hash_subtable(x::UInt, subtables) =
     Int(x >>> (8 * sizeof(UInt) - trailing_zeros(subtables))) + 1
@@ -178,21 +191,23 @@ end
 end
 
 # The child position of key `(p, i)`, or zero if it is absent.
-@inline function sparse_hash_lookup(tbl_ctrl, tbl, key, p, i, subtables)
+@inline function sparse_hash_lookup(tbl_ctrl, tbl, key, p, i, subtables, pos_multiplier)
     isempty(tbl_ctrl) && return zero(eltype(tbl))
-    h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, sparse_hash_hash(p, i), subtables)
+    h = sparse_hash_find(
+        tbl_ctrl, tbl, key, p, i, sparse_hash_hash(p, i, pos_multiplier), subtables
+    )
     @inbounds return tbl_ctrl[h] == SPARSE_HASH_CTRL_EMPTY ? zero(eltype(tbl)) : tbl[h]
 end
 
 # Clear a frozen table without releasing its capacity. Visiting an entry costs a
 # hash and a random probe, while filling the control array costs well under a
 # nanosecond per slot, so only visit entries at very low occupancy.
-function sparse_hash_clear!(tbl_ctrl, tbl, key, perm, subtables)
+function sparse_hash_clear!(tbl_ctrl, tbl, key, perm, subtables, pos_multiplier)
     if length(perm) <= length(tbl_ctrl) ÷ 4096
         @inbounds for q in perm
             p, i, _ = key[q]
             base, off, mask = sparse_hash_hash_slot_parts(
-                sparse_hash_hash(p, i), length(tbl_ctrl), subtables
+                sparse_hash_hash(p, i, pos_multiplier), length(tbl_ctrl), subtables
             )
             # Slots do not move during clearing. Continue past emptied slots
             # in the probe chain until this child's occupied slot is found.
@@ -209,7 +224,9 @@ end
 
 # Child records hold both liveness and writer state, so every rebuild scans
 # them sequentially. The unused capacity after `qos_stop` is never read.
-function sparse_hash_resize!(tbl_ctrl, tbl, key, cap, subtables, qos_stop=length(key))
+function sparse_hash_resize!(
+    tbl_ctrl, tbl, key, cap, subtables, pos_multiplier, qos_stop=length(key)
+)
     empty!(tbl_ctrl)
     resize!(tbl_ctrl, cap)
     fill!(tbl_ctrl, SPARSE_HASH_CTRL_EMPTY)
@@ -218,7 +235,7 @@ function sparse_hash_resize!(tbl_ctrl, tbl, key, cap, subtables, qos_stop=length
     @inbounds for q in 1:qos_stop
         p, i, state = key[q]
         state == SPARSE_HASH_KEY_FREE && continue
-        x = sparse_hash_hash(p, i)
+        x = sparse_hash_hash(p, i, pos_multiplier)
         h = sparse_hash_vacancy(tbl_ctrl, x, subtables)
         tbl_ctrl[h] = sparse_hash_hash_ctrl(x)
         tbl[h] = q
@@ -264,7 +281,7 @@ end
 
 # Checkpoint frozen bucket counts every `B` ranks (see the level's invariants).
 # Walking `perm` backward, each block starts from the one after it.
-function sparse_hash_count_buckets!(tbl_count, perm, key, B)
+function sparse_hash_count_buckets!(tbl_count, perm, key, B, pos_multiplier)
     n = length(perm)
     m = cld(n, B) + 1
     resize!(tbl_count, m * B)
@@ -274,7 +291,9 @@ function sparse_hash_count_buckets!(tbl_count, perm, key, B)
         copyto!(tbl_count, block + 1, tbl_count, block + B + 1, B)
         for r in (block + 1):min(block + B, n)
             p, i = key[perm[r]]
-            tbl_count[block + sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)] += 1
+            tbl_count[block + sparse_hash_hash_subtable(
+                sparse_hash_hash(p, i, pos_multiplier), B
+            )] += 1
         end
     end
     return tbl_count
@@ -282,12 +301,12 @@ end
 
 # Frozen bucket counts of ranks `r` onward: the checkpoint at or after `r`, plus
 # the fewer than `B` entries before it.
-function sparse_hash_counts_from(tbl_count, perm, key, B, r)
+function sparse_hash_counts_from(tbl_count, perm, key, B, r, pos_multiplier)
     j = cld(r - 1, B) + 1
     counts = tbl_count[((j - 1) * B + 1):(j * B)]
     @inbounds for s in r:min((j - 1) * B, length(perm))
         p, i = key[perm[s]]
-        counts[sparse_hash_hash_subtable(sparse_hash_hash(p, i), B)] += 1
+        counts[sparse_hash_hash_subtable(sparse_hash_hash(p, i, pos_multiplier), B)] += 1
     end
     return counts
 end
@@ -319,7 +338,7 @@ end
 
 # Repair a linear-probing bucket after deleting h. Only slots move: child
 # positions, including those held by other unfinished writers, remain stable.
-@inline function sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables)
+@inline function sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables, pos_multiplier)
     base, _, mask = sparse_hash_hash_slot_parts(x, length(tbl_ctrl), subtables)
     hole = h - base
     scan = (hole + 1) & mask
@@ -327,7 +346,7 @@ end
         q = tbl[base + scan]
         p, i, _ = key[q]
         _, home, _ = sparse_hash_hash_slot_parts(
-            sparse_hash_hash(p, i), length(tbl_ctrl), subtables
+            sparse_hash_hash(p, i, pos_multiplier), length(tbl_ctrl), subtables
         )
         if ((hole - home) & mask) < ((scan - home) & mask)
             tbl_ctrl[base + hole] = tbl_ctrl[base + scan]
@@ -343,7 +362,9 @@ end
 
 # Finish a tentative access through its stable child position. Only deleting
 # the last unretained writer needs to locate a table slot.
-@inline function sparse_hash_release!(tbl_ctrl, tbl, key, q, x, subtables, dirty, free_head)
+@inline function sparse_hash_release!(
+    tbl_ctrl, tbl, key, q, x, subtables, dirty, free_head, pos_multiplier
+)
     @inbounds begin
         p, i, state = key[q]
         state == SPARSE_HASH_KEY_RETAINED && return false
@@ -353,7 +374,7 @@ end
             key[q] = (p, i, state - 0x01)
         else
             h = sparse_hash_find(tbl_ctrl, tbl, key, p, i, x, subtables)
-            sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables)
+            sparse_hash_delete!(tbl_ctrl, tbl, key, h, x, subtables, pos_multiplier)
             key[q] = (free_head, i, SPARSE_HASH_KEY_FREE)
             return true
         end
@@ -383,7 +404,8 @@ function similar_level(
     lvl::SparseHashLevel{Ti}, fill_value, eltype::Type, dim, tail...
 ) where {Ti}
     SparseHashLevel{Ti}(
-        similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables
+        similar_level(lvl.lvl, fill_value, eltype, tail...), dim, lvl.subtables,
+        lvl.pos_multiplier,
     )
 end
 
@@ -395,7 +417,7 @@ end
 function coalesce_similar_level(lvl::SparseHashLevel{Ti}, P) where {Ti}
     P > 0 || throw(ArgumentError("Coalesce worker count must be positive"))
     SparseHashLevel{Ti}(
-        coalesce_similar_level(lvl.lvl, P), lvl.shape, nextpow(2, P)
+        coalesce_similar_level(lvl.lvl, P), lvl.shape, nextpow(2, P), lvl.pos_multiplier
     )
 end
 
@@ -409,7 +431,7 @@ function set_fill_value!(lvl::SparseHashLevel, init)
 end
 function transfer(Tm, lvl::SparseHashLevel{Ti}) where {Ti}
     SparseHashLevel{Ti}(
-        transfer(Tm, lvl.lvl), lvl.shape, lvl.subtables,
+        transfer(Tm, lvl.lvl), lvl.shape, lvl.subtables, lvl.pos_multiplier,
         (transfer(Tm, getfield(lvl, f)) for f in SPARSE_HASH_BUFFERS)...,
     )
 end
@@ -438,6 +460,8 @@ function Base.show(io::IO, lvl::SparseHashLevel{Ti}) where {Ti}
     if get(io, :compact, false)
         print(io, ", …")
     else
+        print(io, ", ")
+        show(io, lvl.pos_multiplier)
         for f in SPARSE_HASH_BUFFERS
             print(io, ", ")
             show(io, getfield(lvl, f))
@@ -481,6 +505,7 @@ data_rep_level(T::Type{<:SparseHashLevel}) = SparseData(data_rep_level(fieldtype
 
 function isstructequal(a::T, b::T) where {T<:SparseHash}
     a.shape == b.shape && a.subtables == b.subtables &&
+        a.pos_multiplier == b.pos_multiplier &&
         all(f -> getfield(a, f) == getfield(b, f), SPARSE_HASH_BUFFERS) &&
         isstructequal(a.lvl, b.lvl)
 end
@@ -490,7 +515,8 @@ function (fbr::SubFiber{<:SparseHashLevel})(idxs...)
     isempty(idxs) && return fbr
     lvl = fbr.lvl
     q = sparse_hash_lookup(
-        lvl.tbl_ctrl, lvl.tbl, lvl.key, fbr.pos, idxs[end], lvl.subtables
+        lvl.tbl_ctrl, lvl.tbl, lvl.key, fbr.pos, idxs[end], lvl.subtables,
+        lvl.pos_multiplier,
     )
     q == 0 ? fill_value(fbr) : SubFiber(lvl.lvl, q)(idxs[1:(end - 1)]...)
 end
@@ -501,6 +527,7 @@ mutable struct VirtualSparseHashLevel <: AbstractVirtualLevel
     Ti
     shape
     subtables
+    pos_multiplier
     # Buffers, in the order of SPARSE_HASH_BUFFERS.
     ptr
     tbl_ctrl
@@ -541,7 +568,8 @@ function virtualize(ctx, ex, T::Type{<:SparseHashLevel{Ti}}, tag=:lvl) where {Ti
     lvl_2 = virtualize(ctx, :($tag.lvl), fieldtype(T, :lvl), tag)
     VirtualSparseHashLevel(
         tag, lvl_2, Ti, value(stop, Int), value(:($tag.subtables), Int),
-        buffers..., freshen(ctx, tag, :_qos_stop), freshen(ctx, tag, :_pending),
+        value(:($tag.pos_multiplier), UInt), buffers..., freshen(ctx, tag, :_qos_stop),
+        freshen(ctx, tag, :_pending),
         freshen(ctx, tag, :_free_head),
     )
 end
@@ -550,6 +578,7 @@ function lower(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, ::DefaultStyl
     quote
         $SparseHashLevel{$(lvl.Ti)}(
             $(ctx(lvl.lvl)), $(ctx(lvl.shape)), $(ctx(lvl.subtables)),
+            $(ctx(lvl.pos_multiplier)),
             $((getfield(lvl, f) for f in SPARSE_HASH_BUFFERS)...),
         )
     end
@@ -560,7 +589,7 @@ function distribute_level(
 )
     return diff[lvl.tag] = VirtualSparseHashLevel(
         lvl.tag, distribute_level(ctx, lvl.lvl, arch, diff, style), lvl.Ti,
-        lvl.shape, lvl.subtables,
+        lvl.shape, lvl.subtables, lvl.pos_multiplier,
         (
             distribute_buffer(ctx, getfield(lvl, f), arch, style) for
             f in SPARSE_HASH_BUFFERS
@@ -602,7 +631,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
         ctx,
         quote
             Finch.sparse_hash_clear!(
-                $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(lvl.perm), $(ctx(lvl.subtables))
+                $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(lvl.perm), $(ctx(lvl.subtables)),
+                $(ctx(lvl.pos_multiplier)),
             )
             empty!($(lvl.key))
             empty!($(lvl.perm))
@@ -630,7 +660,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
                 $(ctx(pos_stop)), $(lvl.qos_stop),
             )
             Finch.sparse_hash_count_buckets!(
-                $(lvl.tbl_count), $(lvl.perm), $(lvl.key), $(ctx(lvl.subtables))
+                $(lvl.tbl_count), $(lvl.perm), $(lvl.key), $(ctx(lvl.subtables)),
+                $(ctx(lvl.pos_multiplier)),
             )
         end,
     )
@@ -727,7 +758,7 @@ function unfurl(
             preamble=quote
                 $my_q = Finch.sparse_hash_lookup(
                     $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(ctx(pos)), $(ctx(i)),
-                    $(ctx(lvl.subtables)),
+                    $(ctx(lvl.subtables)), $(ctx(lvl.pos_multiplier)),
                 )
             end,
             body=(ctx) -> Switch([
@@ -766,6 +797,7 @@ function unfurl(
     tag = lvl.tag
     Tp = postype(lvl)
     B = ctx(lvl.subtables)
+    pos_multiplier = ctx(lvl.pos_multiplier)
     (tbl_ctrl, tbl, key, tbl_count, qos_stop) = (
         lvl.tbl_ctrl, lvl.tbl, lvl.key, lvl.tbl_count, lvl.qos_stop
     )
@@ -781,14 +813,15 @@ function unfurl(
                 preamble=quote
                     $p = $(ctx(pos))
                     $i = $(ctx(idx))
-                    $x = Finch.sparse_hash_hash($p, $i)
+                    $x = Finch.sparse_hash_hash($p, $i, $pos_multiplier)
                     $b = Finch.sparse_hash_hash_subtable($x, $B)
                     # Grow before probing, so the probed slot stays valid if the
                     # key turns out to be new.
                     if 2 * $B * ($tbl_count[$b] + 1) > length($tbl_ctrl)
                         Finch.sparse_hash_resize!(
                             $tbl_ctrl, $tbl, $key,
-                            max(2 * length($tbl_ctrl), 4 * $B), $B, $qos_stop,
+                            max(2 * length($tbl_ctrl), 4 * $B), $B, $pos_multiplier,
+                            $qos_stop,
                         )
                     end
                     $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
@@ -833,7 +866,8 @@ function unfurl(
                     $dirty && ($(fbr.dirty) = true)
                     if $s
                         if Finch.sparse_hash_release!(
-                            $tbl_ctrl, $tbl, $key, $qos, $x, $B, $dirty, $free_head
+                            $tbl_ctrl, $tbl, $key, $qos, $x, $B, $dirty, $free_head,
+                            $pos_multiplier,
                         )
                             $tbl_count[$b] -= 1
                             $free_head = $Tp($qos)
@@ -883,6 +917,8 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     B = dst.subtables
     lvl.subtables == B ||
         throw(ArgumentError("Coalescing hashes must use the same bucket count"))
+    lvl.pos_multiplier == dst.pos_multiplier ||
+        throw(ArgumentError("Coalescing hashes must use the same position multiplier"))
     # Shard t's local rank r, as (parent, index, child position).
     function entry(t, r)
         q = perm[t][r]
@@ -901,7 +937,7 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     # entries stay counted, which only overestimates. Placement gathers once per
     # distinct shift of each shard.
     function rotation(delta)
-        sparse_hash_hash_subtable(SPARSE_HASH_POS_MULTIPLIER * (delta % UInt), B) - 1
+        sparse_hash_hash_subtable(lvl.pos_multiplier * (delta % UInt), B) - 1
     end
     rotate(b, k) = ((b - 1 + k) & (B - 1)) + 1
     rank(t, p) =
@@ -917,7 +953,9 @@ function setup_coalesce!(lvl::SparseHashLevel, max_pos, dst, P, splits, offsets,
     shifts = [Int[] for _ in 1:P]
     for t in 1:P
         function counts_from(r)
-            sparse_hash_counts_from(lvl.tbl_count.data[t], perm[t], key[t], B, r)
+            sparse_hash_counts_from(
+                lvl.tbl_count.data[t], perm[t], key[t], B, r, lvl.pos_multiplier
+            )
         end
         for k in eachindex(offsets[t])
             lo, hi = rank(t, splits[t][k]), rank(t, splits[t][k + 1])
@@ -1057,7 +1095,7 @@ function coalesce_shard!(
                     k = searchsortedlast(splits, p)
                     offsets[k] - splits[k] == delta || continue
                 end
-                x = sparse_hash_hash(p + delta, i)
+                x = sparse_hash_hash(p + delta, i, dst.pos_multiplier)
                 sparse_hash_hash_subtable(x, B) == b || continue
                 h_dst = sparse_hash_vacancy(dst.tbl_ctrl, x, B)
                 dst.tbl_ctrl[h_dst] = sparse_hash_hash_ctrl(x)
@@ -1079,7 +1117,8 @@ function coalesce_shard!(
     # on them.
     function entry(p, i)
         sparse_hash_lookup(
-            lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables
+            lvl.tbl_ctrl.data[tid], lvl.tbl.data[tid], key, p, i, lvl.subtables,
+            lvl.pos_multiplier,
         )
     end
     coalesce_shard!(
