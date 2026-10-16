@@ -328,8 +328,8 @@ function assemble_level!(ctx, lvl::VirtualSparseListLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
     end
 end
 
@@ -366,7 +366,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseListLevel, pos_sto
                 if issafe(get_mode_flag(ctx))
                     quote
                         $(lvl.prev_pos) =
-                            Finch.scansearch(
+                            Galley.scansearch(
                                 $(lvl.ptr), $(lvl.qos_stop) + 1, 1, $pos_stop
                             ) - 1
                     end
@@ -415,7 +415,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch(
+                            $my_q = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_q,
@@ -506,7 +506,7 @@ function unfurl(
                 body=(ctx, ext) -> Jumper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch(
+                            $my_q = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_q,
@@ -578,7 +578,7 @@ function unfurl(
                 preamble=quote
                     if $qos > $qos_stop
                         $qos_stop = max($qos_stop << 1, 1)
-                        Finch.resize_if_smaller!($(lvl.idx), $qos_stop)
+                        Galley.resize_if_smaller!($(lvl.idx), $qos_stop)
                         $(contain(
                             ctx_2 -> assemble_level!(
                                 ctx_2,

@@ -25,7 +25,7 @@ zeros use [`dropfills`](@ref).
 See also: [`sparse`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.sparse)
 
 # Examples
-```jldoctest; setup=:(using Finch)
+```jldoctest; setup=:(using Galley)
 julia> I = ([1, 2, 3], [1, 2, 3], [1, 2, 3]);
 
 julia> V = [1.0, 2.0, 3.0];
@@ -300,7 +300,7 @@ tensor is in COO format.
 See also: [`spzeros`](https://docs.julialang.org/en/v1/stdlib/SparseArrays/#SparseArrays.spzeros)
 
 # Examples
-```jldoctest; setup=:(using Finch)
+```jldoctest; setup=:(using Galley)
 julia> A = fspzeros(Bool, 3, 3)
 3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{false, Bool, Int64, Vector{Bool}}}}:
  0  0  0
@@ -333,7 +333,7 @@ end
 """
     ffindnz(arr)
 
-Return the nonzero elements of `arr`, as Finch understands `arr`. Returns `(I...,
+Return the nonzero elements of `arr`, as Galley understands `arr`. Returns `(I...,
 V)`, where `I` are the coordinate vectors, one for each mode of `arr`, and
 `V` is a vector of corresponding nonzero values, which can be passed to
 [`fsparse`](@ref).

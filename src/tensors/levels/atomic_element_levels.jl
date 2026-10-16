@@ -18,7 +18,7 @@ end
 const AtomicElement = AtomicElementLevel
 
 function AtomicElementLevel(d, args...)
-    isbits(d) || throw(ArgumentError("Finch currently only supports isbits defaults"))
+    isbits(d) || throw(ArgumentError("Galley currently only supports isbits defaults"))
     AtomicElementLevel{d}(args...)
 end
 AtomicElementLevel{Vf}() where {Vf} = AtomicElementLevel{Vf,typeof(Vf)}()
@@ -163,8 +163,8 @@ function assemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_sto
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     quote
-        Finch.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
-        Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+        Galley.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
+        Galley.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
     end
 end
 
@@ -175,7 +175,7 @@ function reassemble_level!(ctx, lvl::VirtualAtomicElementLevel, pos_start, pos_s
     push_preamble!(
         ctx,
         quote
-            Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+            Galley.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
         end,
     )
     lvl
@@ -205,7 +205,7 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualAtomicElementLevel}, mode
     op = ctx(op)
     rhs = ctx(rhs)
     device = ctx(get_device(get_task(ctx)))
-    :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
+    :(Galley.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end
 
 function lower_assign(
@@ -221,5 +221,5 @@ function lower_assign(
     op = ctx(op)
     rhs = ctx(rhs)
     device = ctx(get_device(get_task(ctx)))
-    :(Finch.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
+    :(Galley.atomic_modify!($device, $(lvl.val), $(ctx(pos)), $op, $rhs))
 end

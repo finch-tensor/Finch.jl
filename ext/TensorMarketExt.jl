@@ -1,10 +1,10 @@
 module TensorMarketExt
 
-using Finch
+using Galley
 
 isdefined(Base, :get_extension) ? (using TensorMarket) : (using ..TensorMarket)
 
-function Finch.fttread(filename::AbstractString, infoonly=false, retcoord=false)
+function Galley.fttread(filename::AbstractString, infoonly=false, retcoord=false)
     infoonly && return ttread(filename, true)
     out = ttread(filename, false, retcoord)
     if out isa Tuple
@@ -20,24 +20,24 @@ function Finch.fttread(filename::AbstractString, infoonly=false, retcoord=false)
     end
 end
 
-function Finch.fttwrite(filename::AbstractString, A)
+function Galley.fttwrite(filename::AbstractString, A)
     IV = ffindnz(A)
     I = IV[1:(end - 1)]
     V = IV[end]
     ttwrite(filename, I, V, size(A))
 end
 
-function Finch.ftnsread(filename::AbstractString)
+function Galley.ftnsread(filename::AbstractString)
     (I, V) = tnsread(filename)
     IR = (reverse(I)...,)
-    if issorted(1:length(V); lt=(i, j) -> Finch.fsparse_lt(IR, i, j))
+    if issorted(1:length(V); lt=(i, j) -> Galley.fsparse_lt(IR, i, j))
         swizzle(fsparse!(IR..., V), reverse(1:length(I))...)
     else
         fsparse!(I..., V)
     end
 end
 
-function Finch.ftnswrite(filename::AbstractString, A)
+function Galley.ftnswrite(filename::AbstractString, A)
     IV = ffindnz(A)
     I = IV[1:(end - 1)]
     V = IV[end]

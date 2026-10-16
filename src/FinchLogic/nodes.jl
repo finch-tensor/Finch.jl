@@ -127,7 +127,7 @@ plan
 """
     LogicNode
 
-A Finch Logic IR node. Finch uses a variant of Concrete Field Notation as an
+A Finch Logic IR node. Galley uses a variant of Concrete Field Notation as an
 intermediate representation.
 
 The LogicNode struct represents many different Finch IR nodes. The nodes are

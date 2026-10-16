@@ -1,9 +1,9 @@
 @testitem "merges" begin
     using Base.Iterators
-    using Finch: Structure
+    using Galley: Structure
     #TODO this is a hack to get around the fact that we don't call leaf_instance on interpolated values
     #and leaf_instance isn't super robust
-    using Finch.FinchNotation: literal_instance
+    using Galley.FinchNotation: literal_instance
     fmts = [
         (;
             fmt=(z) -> Tensor(Dense(SparseList(Element(z)))),
@@ -235,9 +235,11 @@ end
         b = Tensor(Dense(SparseList(Element(0))))
         m, n = size(data)
         for k in (-7, -2, 0, 1, 7)
-            diagonal = Finch.offset(diagmask, 0, -k)
+            diagonal = Galley.offset(diagmask, 0, -k)
             for mask in
-                (diagonal, Finch.window(diagonal, Finch.Extent(1, m), Finch.Extent(1, n)))
+                (
+                diagonal, Galley.window(diagonal, Galley.Extent(1, m), Galley.Extent(1, n))
+            )
                 @finch begin
                     b .= 0
                     for j in _, i in _

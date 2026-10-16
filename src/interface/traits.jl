@@ -9,7 +9,7 @@ and is sometimes represented by `lvl`.
 struct SparseData
     lvl
 end
-Finch.finch_leaf(x::SparseData) = virtual(x)
+Galley.finch_leaf(x::SparseData) = virtual(x)
 
 Base.ndims(fbr::SparseData) = 1 + ndims(fbr.lvl)
 fill_value(fbr::SparseData) = fill_value(fbr.lvl)
@@ -27,7 +27,7 @@ and is sometimes represented by repeated runs of `lvl`.
 struct RepeatData
     lvl
 end
-Finch.finch_leaf(x::RepeatData) = virtual(x)
+Galley.finch_leaf(x::RepeatData) = virtual(x)
 
 Base.ndims(fbr::RepeatData) = 1 + ndims(fbr.lvl)
 fill_value(fbr::RepeatData) = fill_value(fbr.lvl)
@@ -44,7 +44,7 @@ Represents a tensor `A` where each `A[:, ..., :, i]` is represented by `lvl`.
 struct DenseData
     lvl
 end
-Finch.finch_leaf(x::DenseData) = virtual(x)
+Galley.finch_leaf(x::DenseData) = virtual(x)
 fill_value(fbr::DenseData) = fill_value(fbr.lvl)
 Base.ndims(fbr::DenseData) = 1 + ndims(fbr.lvl)
 Base.eltype(fbr::DenseData) = eltype(fbr.lvl)
@@ -60,7 +60,7 @@ Represents a tensor `A` where `A[:, ..., :, 1]` is the only slice, and is repres
 struct ExtrudeData
     lvl
 end
-Finch.finch_leaf(x::ExtrudeData) = virtual(x)
+Galley.finch_leaf(x::ExtrudeData) = virtual(x)
 fill_value(fbr::ExtrudeData) = fill_value(fbr.lvl)
 Base.ndims(fbr::ExtrudeData) = 1 + ndims(fbr.lvl)
 Base.eltype(fbr::ExtrudeData) = eltype(fbr.lvl)
@@ -76,7 +76,7 @@ Represents a tensor which is represented by `lvl` but is sometimes entirely `fil
 struct HollowData
     lvl
 end
-Finch.finch_leaf(x::HollowData) = virtual(x)
+Galley.finch_leaf(x::HollowData) = virtual(x)
 fill_value(fbr::HollowData) = fill_value(fbr.lvl)
 Base.ndims(fbr::HollowData) = ndims(fbr.lvl)
 Base.eltype(fbr::HollowData) = eltype(fbr.lvl)
@@ -93,7 +93,7 @@ struct ElementData
     fill_value
     eltype
 end
-Finch.finch_leaf(x::ElementData) = virtual(x)
+Galley.finch_leaf(x::ElementData) = virtual(x)
 fill_value(fbr::ElementData) = fbr.fill_value
 Base.ndims(fbr::ElementData) = 0
 Base.eltype(fbr::ElementData) = fbr.eltype

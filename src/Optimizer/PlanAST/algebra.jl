@@ -1,4 +1,4 @@
-# This file manages the logic of algebraic properties. For the moment, we just spoof Finch's
+# This file manages the logic of algebraic properties. For the moment, we just spoof Galley's
 # properties, but in the future we can extend these or write our own.
 
 function isassociative(f)
@@ -8,7 +8,7 @@ function isassociative(f)
     if f == choose(false)
         return true
     end
-    return Finch.isassociative(Finch.DefaultAlgebra(), f)
+    return Galley.isassociative(Galley.DefaultAlgebra(), f)
 end
 
 function iscommutative(f)
@@ -18,7 +18,7 @@ function iscommutative(f)
     if f == choose(false)
         return true
     end
-    return Finch.iscommutative(Finch.DefaultAlgebra(), f)
+    return Galley.iscommutative(Galley.DefaultAlgebra(), f)
 end
 
 function isunarynull(f)
@@ -32,7 +32,7 @@ function isdistributive(f, g)
     if typeof(f) == PlanNode && typeof(g) == PlanNode
         throw(error("Can't check distributivity of plan nodes!"))
     end
-    return Finch.isdistributive(Finch.DefaultAlgebra(), f, g)
+    return Galley.isdistributive(Galley.DefaultAlgebra(), f, g)
 end
 
 function cansplitpush(f, g)
@@ -68,21 +68,21 @@ function isidentity(f, x)
     if typeof(f) == PlanNode && typeof(x) == PlanNode
         throw(error("Can't check identity of plan nodes!"))
     end
-    return Finch.isidentity(Finch.DefaultAlgebra(), f, x)
+    return Galley.isidentity(Galley.DefaultAlgebra(), f, x)
 end
 
 function isannihilator(f, x)
     if typeof(f) == PlanNode && typeof(x) == PlanNode
         throw(error("Can't check annihilator of plan nodes!"))
     end
-    return Finch.isannihilator(Finch.DefaultAlgebra(), f, x)
+    return Galley.isannihilator(Galley.DefaultAlgebra(), f, x)
 end
 
 function isidempotent(f)
     if typeof(f) == PlanNode
         throw(error("Can't check idempotency of plan nodes!"))
     end
-    return Finch.isidempotent(Finch.DefaultAlgebra(), f)
+    return Galley.isidempotent(Galley.DefaultAlgebra(), f)
 end
 
 function is_binary(f)

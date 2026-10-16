@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Finch Developers
 # SPDX-License-Identifier: MIT
 
-"""Send one request to the persistent Finch server, with bounded waits."""
+"""Send one request to the persistent Galley server, with bounded waits."""
 
 import errno
 import json
@@ -27,7 +27,7 @@ def request(command, args):
             try:
                 os.kill(int(server_pid), 0)
             except ProcessLookupError:
-                raise RuntimeError(f"Finch server exited while {stage}") from None
+                raise RuntimeError(f"Galley server exited while {stage}") from None
         if time.monotonic() >= deadline:
             raise TimeoutError(f"timed out after {timeout:g}s while {stage}")
 
@@ -37,7 +37,7 @@ def request(command, args):
             "cmd": command, "args": args, "response": str(response),
         }) + "\n").encode()
         while True:
-            check_server("connecting to Finch server")
+            check_server("connecting to Galley server")
             try:
                 fd = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
                 break
@@ -49,7 +49,7 @@ def request(command, args):
             # Long paths can make requests larger than one nonblocking write.
             remaining = memoryview(payload)
             while remaining:
-                check_server("sending request to Finch server")
+                check_server("sending request to Galley server")
                 try:
                     written = os.write(fd, remaining)
                     remaining = remaining[written:]
@@ -59,7 +59,7 @@ def request(command, args):
             os.close(fd)
 
         while not response.exists():
-            check_server(f"waiting for Finch server response to {command}")
+            check_server(f"waiting for Galley server response to {command}")
             time.sleep(0.01)
         result = json.loads(response.read_text())
         if result.get("error"):

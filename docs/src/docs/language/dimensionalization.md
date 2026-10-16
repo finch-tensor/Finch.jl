@@ -58,5 +58,5 @@ The rules of declaration dimensionalization are as follows:
   - The new dimensions of the declared tensor are used when the tensor is on the right hand side (reading) access.
 
 ```@docs
-Finch.FinchNotation.Auto
+Galley.FinchNotation.Auto
 ```

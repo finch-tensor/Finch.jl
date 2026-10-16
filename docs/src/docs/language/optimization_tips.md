@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Optimization Tips for Finch
@@ -18,7 +18,7 @@ order, we call this
 concordant traversal of a sparse matrix, as the outer loops access the higher
 levels of the tensor tree:
 
-```jldoctest example1; setup=:(using Finch)
+```jldoctest example1; setup=:(using Galley)
 A = Tensor(
     Dense(SparseList(Element(0.0))),
     fsparse([2, 3, 4, 1, 3], [1, 1, 1, 3, 3], [1.1, 2.2, 3.3, 4.4, 5.5], (4, 3)),
@@ -67,7 +67,7 @@ quote
         phase_stop = min(A_lvl_2_i1, A_lvl_2_stop)
         if phase_stop >= 1
             if A_lvl_2_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
                 A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
@@ -135,7 +135,7 @@ quote
             phase_stop = min(i_3, A_lvl_2_i1)
             if phase_stop >= i_3
                 if A_lvl_2_idx[A_lvl_2_q] < i_3
-                    A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                    A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, i_3, A_lvl_2_q, A_lvl_2_q_stop - 1)
                 end
                 while true
                     A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
@@ -260,7 +260,7 @@ end
 
 ## Use Known Functions
 
-Unless you declare the properties of your functions using Finch's [User-Defined Functions](@ref) interface, Finch doesn't know how they work. For example, using a lambda obscures
+Unless you declare the properties of your functions using Galley's [User-Defined Functions](@ref) interface, Finch doesn't know how they work. For example, using a lambda obscures
 the meaning of `*`.
 
 ```jldoctest example1
@@ -327,7 +327,7 @@ quote
         if phase_stop >= 1
             i = 1
             if A_lvl_2_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
                 A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]

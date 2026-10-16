@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # (Experimental) Parallelization in Finch
@@ -14,9 +14,9 @@ level types, and a few levels which can reinterpret other level formats in a
 concurrent way.
 
 ```@docs
-Finch.AtomicElementLevel
-Finch.MutexLevel
-Finch.SeparateLevel
+Galley.AtomicElementLevel
+Galley.MutexLevel
+Galley.SeparateLevel
 ```
 
 ## Parallel Loops
@@ -25,7 +25,7 @@ A loop can be run in parallel with a `parallel` dimension. A dimension can be
 wrapped in the `parallel()` modifier to indicate that it should run in parallel.
 
 ```@docs
-Finch.parallel
-Finch.CPU
-Finch.Serial
+Galley.parallel
+Galley.CPU
+Galley.Serial
 ```

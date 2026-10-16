@@ -1,10 +1,10 @@
 @testitem "coalesce_hash_subtables" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
-    hash_counts(lvl::Finch.AbstractLevel) =
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    hash_counts(lvl::Galley.AbstractLevel) =
         hasproperty(lvl, :lvl) ? hash_counts(lvl.lvl) : Int[]
-    hash_counts(lvl::Finch.SparseHashLevel) = [lvl.subtables; hash_counts(lvl.lvl)]
+    hash_counts(lvl::Galley.SparseHashLevel) = [lvl.subtables; hash_counts(lvl.lvl)]
     function check_hash_multipliers(lvl, original)
-        if original isa Finch.SparseHashLevel
+        if original isa Galley.SparseHashLevel
             @test lvl.pos_multiplier === original.pos_multiplier
         end
         if hasproperty(original, :lvl)
@@ -78,13 +78,13 @@
 end
 
 @testitem "coalesce_merges" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     # Split `data` into shards as the normalizing merge sees them: shard p stores
     # `data` restricted to the flat (column-major) index range `cuts[p]`.
     function band_shards(fmt, data, cuts)
         P = length(cuts)
-        mem = Finch.MultiChannelMemory(cpu(:t, P), P)
-        chans(xs) = Finch.MultiChannelBuffer(mem, xs)
+        mem = Galley.MultiChannelMemory(cpu(:t, P), P)
+        chans(xs) = Galley.MultiChannelBuffer(mem, xs)
         shards = map(cuts) do cut
             masked = zero(data)
             masked[cut] = data[cut]
@@ -92,22 +92,22 @@ end
         end
         function stack(lvls)
             lvl = first(lvls)
-            if lvl isa Finch.ElementLevel
+            if lvl isa Galley.ElementLevel
                 Element(zero(eltype(data)), chans([l.val for l in lvls]))
-            elseif lvl isa Finch.DenseLevel
+            elseif lvl isa Galley.DenseLevel
                 Dense(stack([l.lvl for l in lvls]), lvl.shape)
-            elseif lvl isa Finch.SparseListLevel
+            elseif lvl isa Galley.SparseListLevel
                 SparseList{Int}(
                     stack([l.lvl for l in lvls]), lvl.shape,
                     chans([l.ptr for l in lvls]), chans([l.idx for l in lvls]),
                 )
-            elseif lvl isa Finch.SparseHashLevel
+            elseif lvl isa Galley.SparseHashLevel
                 SparseHash{Int}(
                     stack([l.lvl for l in lvls]), lvl.shape, lvl.subtables,
                     lvl.pos_multiplier,
                     (
                         chans([getfield(l, f) for l in lvls]) for
-                        f in Finch.SPARSE_HASH_BUFFERS
+                        f in Galley.SPARSE_HASH_BUFFERS
                     )...,
                 )
             else
@@ -122,10 +122,10 @@ end
     end
 
     has_hash(lvl) =
-        lvl isa Finch.SparseHashLevel ||
+        lvl isa Galley.SparseHashLevel ||
         (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
     function check_hash_storage(lvl)
-        if lvl isa Finch.SparseHashLevel
+        if lvl isa Galley.SparseHashLevel
             pos_multiplier = lvl.pos_multiplier
             @test issorted(lvl.key[lvl.perm])
             # The first block holds the bucket totals.
@@ -136,14 +136,14 @@ end
                 q ->
                     lvl.key[q][3] == (
                         if q in live
-                            Finch.SPARSE_HASH_KEY_RETAINED
+                            Galley.SPARSE_HASH_KEY_RETAINED
                         else
-                            Finch.SPARSE_HASH_KEY_FREE
+                            Galley.SPARSE_HASH_KEY_FREE
                         end
                     ), eachindex(lvl.key))
             width = length(lvl.tbl) ÷ lvl.subtables
             @test totals == [
-                count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                count(!=(Galley.SPARSE_HASH_CTRL_EMPTY),
                     view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for
                 b in 1:(lvl.subtables)
             ]
@@ -151,7 +151,7 @@ end
                 q = lvl.perm[r]
                 p, i = lvl.key[q]
                 @test lvl.ptr[p] <= r < lvl.ptr[p + 1]
-                @test Finch.sparse_hash_lookup(
+                @test Galley.sparse_hash_lookup(
                     lvl.tbl_ctrl, lvl.tbl, lvl.key, p, i, lvl.subtables, pos_multiplier
                 ) == q
             end
@@ -163,7 +163,7 @@ end
     # or not the merge knows each shard's band.
     # The band of index tuples in the flat range `cut`.
     function cut_band(data, cut)
-        isempty(cut) && return Finch.empty_band(size(data))
+        isempty(cut) && return Galley.empty_band(size(data))
         corners = CartesianIndices(data)
         return Tuple(corners[first(cut)]), Tuple(corners[last(cut)])
     end
@@ -173,11 +173,11 @@ end
         for bands in ([cut_band(data, cut) for cut in cuts], nothing)
             # Destinations arrive cleared, as assemble_level! leaves them.
             dst = Tensor(fmt(), zero(data)).lvl
-            Finch.coalesce_shards!(src, dst, length(cuts), 1, bands)
+            Galley.coalesce_shards!(src, dst, length(cuts), 1, bands)
             if has_hash(dst)
                 check_hash_storage(dst)
             else
-                @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+                @test Galley.isstructequal(dst, Tensor(fmt(), data).lvl)
             end
             @test Array(Tensor(dst)) == data
         end
@@ -195,7 +195,7 @@ end
             ), bounded in (false, true)
             src = band_shards(fmt, data, cuts)
             dst = Tensor(fmt(), zero(data)).lvl
-            plan = Finch.setup_coalesce!(
+            plan = Galley.setup_coalesce!(
                 src, 1, dst, 2, [[1, 2], [1, 2]], [[1], [1]], !bounded
             )
             @test eltype(plan.shared) == Int
@@ -214,13 +214,13 @@ end
                 fill!(dst.lvl.lvl.val, -1)
                 for tid in 1:2
                     lb, ub = cut_band(data, cuts[tid])
-                    Finch.coalesce_shard!(tid, plan, src, dst, (1:1,), (1, lb), (1, ub))
+                    Galley.coalesce_shard!(tid, plan, src, dst, (1:1,), (1, lb), (1, ub))
                 end
             else
                 for tid in 1:2
-                    Finch.coalesce_shard!(tid, plan, src, dst, (1:1,))
+                    Galley.coalesce_shard!(tid, plan, src, dst, (1:1,))
                 end
-                @test Finch.isstructequal(dst, Tensor(fmt(), data).lvl)
+                @test Galley.isstructequal(dst, Tensor(fmt(), data).lvl)
             end
             @test Array(Tensor(dst)) == data
         end
@@ -228,13 +228,13 @@ end
 
     @testset "initialize overlapping values with their fill value" begin
         for P in (1, 2, 5), old_length in (0, 2, 8)
-            mem = Finch.MultiChannelMemory(cpu(:init, P), P)
+            mem = Galley.MultiChannelMemory(cpu(:init, P), P)
             values = [fill(7, 3) for _ in 1:P]
             values[1][1] = 1
             values[end][3] = 3
-            src = Element(7, Finch.MultiChannelBuffer(mem, values))
+            src = Element(7, Galley.MultiChannelBuffer(mem, values))
             dst = Element(7, fill(7, old_length))
-            Finch.coalesce_shards!(src, dst, P, 3, nothing)
+            Galley.coalesce_shards!(src, dst, P, 3, nothing)
             @test dst.val == [1, 7, 3]
         end
     end
@@ -286,7 +286,7 @@ end
         fmt = () -> SparseHash(child(), 0, 8, pos_multiplier)
         src = band_shards(fmt, data, [1:3, 4:12, 13:20])
         dst = Tensor(fmt(), zero(data)).lvl
-        Finch.coalesce_shards!(src, dst, 3, 1, nothing)
+        Galley.coalesce_shards!(src, dst, 3, 1, nothing)
         @test length(dst.key) > length(dst.perm)
         extent = length(dst.key)
         tensor = Tensor(dst)
@@ -329,11 +329,11 @@ end
 end
 
 @testitem "coalesce_end_to_end" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     using Random
 
     has_hash(lvl) =
-        lvl isa Finch.SparseHashLevel ||
+        lvl isa Galley.SparseHashLevel ||
         (hasproperty(lvl, :lvl) && has_hash(lvl.lvl))
 
     function outer!(C, A, BT, device)
@@ -394,7 +394,7 @@ end
             expected = a_i * transpose(bt)
             @test Array(C) == expected
             if !has_hash(C.lvl.coalescent)
-                @test Finch.isstructequal(C.lvl.coalescent, Tensor(fmt(), expected).lvl)
+                @test Galley.isstructequal(C.lvl.coalescent, Tensor(fmt(), expected).lvl)
             end
         end
 
@@ -424,35 +424,35 @@ end
 end
 
 @testitem "coalesce_hash_setup" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ (typemax(UInt) - UInt(1))
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ (typemax(UInt) - UInt(1))
     # Splits and offsets that shift each shard's parents `1:n` uniformly.
     uniform(shift, n) = ([[1, n + 1] for _ in shift], [[1 + s] for s in shift])
     # Frozen hash shards holding entries (p, i, q), one list per shard.
     function hash_shards(entries; B=nextpow(2, length(entries)))
         P = length(entries)
-        mem = Finch.MultiChannelMemory(cpu(:setup, P), P)
-        channels(data) = Finch.MultiChannelBuffer(mem, data)
+        mem = Galley.MultiChannelMemory(cpu(:setup, P), P)
+        channels(data) = Galley.MultiChannelBuffer(mem, data)
         shards = map(entries) do es
             counts = zeros(Int, B)
             for (p, i, _) in es
-                counts[Finch.sparse_hash_hash_subtable(
-                    Finch.sparse_hash_hash(p, i, pos_multiplier), B
+                counts[Galley.sparse_hash_hash_subtable(
+                    Galley.sparse_hash_hash(p, i, pos_multiplier), B
                 )] += 1
             end
-            ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY,
-                B * Finch.sparse_hash_table_capacity(maximum(counts)))
+            ctrl = fill(Galley.SPARSE_HASH_CTRL_EMPTY,
+                B * Galley.sparse_hash_table_capacity(maximum(counts)))
             tbl = zeros(Int, length(ctrl))
-            key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), maximum(e -> e[3], es; init=0))
+            key = fill((0, 0, Galley.SPARSE_HASH_KEY_FREE), maximum(e -> e[3], es; init=0))
             for (p, i, q) in es
-                x = Finch.sparse_hash_hash(p, i, pos_multiplier)
-                h = Finch.sparse_hash_vacancy(ctrl, x, B)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x),
+                x = Galley.sparse_hash_hash(p, i, pos_multiplier)
+                h = Galley.sparse_hash_vacancy(ctrl, x, B)
+                ctrl[h], tbl[h], key[q] = Galley.sparse_hash_hash_ctrl(x),
                 q,
-                (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
+                (p, i, Galley.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0))
-            Finch.sparse_hash_count_buckets!(counts, perm, key, B, pos_multiplier)
+            Galley.sparse_hash_freeze!(ptr, perm, key, maximum(first, es; init=0))
+            Galley.sparse_hash_count_buckets!(counts, perm, key, B, pos_multiplier)
             (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=counts)
         end
         return SparseHash{Int}(
@@ -460,7 +460,7 @@ end
             pos_multiplier,
             (
                 channels([getfield(s, f) for s in shards]) for
-                f in Finch.SPARSE_HASH_BUFFERS
+                f in Galley.SPARSE_HASH_BUFFERS
             )...,
         )
     end
@@ -480,7 +480,7 @@ end
         src = hash_shards(entries)
         dst = SparseHash{Int}(Element(0), 1000, 8, pos_multiplier)
         shift = [0, 0, 1, 1, 2]
-        plan = Finch.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
+        plan = Galley.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
         initialize!(plan)
         # Shards with entries shift their parents uniformly.
         @test plan.shifts == [isempty(es) ? Int[] : [s] for (es, s) in zip(entries, shift)]
@@ -493,7 +493,7 @@ end
         @test length(dst.ptr) == 5
         @test length(dst.perm) == 4
         @test length(dst.tbl) == length(dst.tbl_ctrl)
-        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+        @test all(==(Galley.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
         # Shared entries stay counted, which only overestimates.
         @test sum(plan.bucket_counts) == sum(length, entries)
         @test all(plan.bucket_bound .>= plan.bucket_counts)
@@ -502,12 +502,13 @@ end
         @test length(dst.key) == plan.max_child_pos
         @test plan.rotations == [
             [
-                Finch.sparse_hash_hash_subtable(
+                Galley.sparse_hash_hash_subtable(
                     pos_multiplier * (s % UInt), 8) - 1
                 for s in d
             ] for d in plan.shifts
         ]
-        @test src.key.data[1][src.perm.data[1][1]] == (1, 2, Finch.SPARSE_HASH_KEY_RETAINED)
+        @test src.key.data[1][src.perm.data[1][1]] ==
+            (1, 2, Galley.SPARSE_HASH_KEY_RETAINED)
 
         # Traversal ranks are concatenated by shard; bucket owners publish the
         # final table slots into those ranks without resizing or sorting.
@@ -516,36 +517,36 @@ end
         src.lvl.val.data[4][4] = 27
         src.lvl.val.data[5][1] = 37
         Threads.@threads for tid in 1:5
-            Finch.coalesce_shard!(tid, plan, src, dst, ())
+            Galley.coalesce_shard!(tid, plan, src, dst, ())
         end
         @test entries_of(dst) == [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
         @test dst.ptr == [1, 2, 4, 5, 5]
         @test dst.lvl.val[[4, 1, 11, 12]] == [12, 25, 27, 37]
         for (p, i, q) in [(1, 2, 4), (2, 5, 1), (2, 7, 11), (3, 7, 12)]
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 dst.tbl_ctrl, dst.tbl, dst.key, p, i, 8, pos_multiplier
             ) == q
         end
         # Bucket owners count exactly what they place, within the setup bound.
         width = length(dst.tbl_ctrl) ÷ 8
         @test dst.tbl_count == [
-            count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+            count(!=(Galley.SPARSE_HASH_CTRL_EMPTY),
                 view(dst.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8
         ]
         @test sum(dst.tbl_count) == plan.nnz
         @test all(dst.tbl_count .<= plan.bucket_bound)
         for tid in (3, 4)
             p, i = src.key.data[tid][first(src.perm.data[tid])]
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 dst.tbl_ctrl, dst.tbl, dst.key, p + shift[tid], i, 8, pos_multiplier
             ) == plan.shared_dst[tid]
         end
 
         # Repeated setup schedules control-byte initialization.
-        plan = Finch.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
-        @test (dst.tbl_ctrl, 1, Finch.SPARSE_HASH_CTRL_EMPTY) in plan.init
+        plan = Galley.setup_coalesce!(src, 4, dst, 5, uniform(shift, 4)..., true)
+        @test (dst.tbl_ctrl, 1, Galley.SPARSE_HASH_CTRL_EMPTY) in plan.init
         initialize!(plan)
-        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+        @test all(==(Galley.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
     end
 
     @testset "nested hash with an interior shared parent" begin
@@ -555,12 +556,12 @@ end
         inner.lvl.val.data[2] .= [47, 35]
         src = SparseHash{Int}(
             inner, outer.shape, outer.subtables, pos_multiplier,
-            (getfield(outer, f) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (getfield(outer, f) for f in Galley.SPARSE_HASH_BUFFERS)...,
         )
         dst = SparseHash(
             SparseHash(Element(0), 1000, 8, pos_multiplier), 1000, 8, pos_multiplier
         )
-        Finch.coalesce_shards!(src, dst, 2, 1, nothing)
+        Galley.coalesce_shards!(src, dst, 2, 1, nothing)
         result = Tensor(dst)
         @test [result[1, 2], result[2, 5], result[3, 5], result[4, 7]] == [12, 25, 35, 47]
         @test result[1, 5] == result[3, 2] == 0
@@ -568,7 +569,7 @@ end
         for lvl in (dst, dst.lvl)
             width = length(lvl.tbl) ÷ lvl.subtables
             @test lvl.tbl_count == [
-                count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                count(!=(Galley.SPARSE_HASH_CTRL_EMPTY),
                     view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8
             ]
         end
@@ -591,12 +592,12 @@ end
         foreach(v -> fill!(v, 1), inner.lvl.val.data)
         src = SparseHash{Int}(
             inner, outer.shape, outer.subtables, pos_multiplier,
-            (getfield(outer, f) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (getfield(outer, f) for f in Galley.SPARSE_HASH_BUFFERS)...,
         )
         dst = SparseHash(
             SparseHash(Element(0), 1000, 8, pos_multiplier), 1000, 8, pos_multiplier
         )
-        Finch.coalesce_shards!(src, dst, 2, 1, nothing)
+        Galley.coalesce_shards!(src, dst, 2, 1, nothing)
         expected = zeros(Int, 1000, 1000)
         expected[1:30, 5] .= 1
         expected[1:5, 2] .= 1
@@ -606,7 +607,7 @@ end
         for lvl in (dst, dst.lvl)
             width = length(lvl.tbl) ÷ lvl.subtables
             @test lvl.tbl_count == [
-                count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+                count(!=(Galley.SPARSE_HASH_CTRL_EMPTY),
                     view(lvl.tbl_ctrl, ((b - 1) * width + 1):(b * width))) for b in 1:8
             ]
         end
@@ -614,25 +615,25 @@ end
 
     @testset "skewed buckets" begin
         indices = filter(1:1000) do i
-            Finch.sparse_hash_hash_subtable(
-                Finch.sparse_hash_hash(1, i, pos_multiplier), 8
+            Galley.sparse_hash_hash_subtable(
+                Galley.sparse_hash_hash(1, i, pos_multiplier), 8
             ) == 1
         end[1:20]
         src = hash_shards([[(1, i, q) for (q, i) in enumerate(indices)]]; B=8)
         dst = SparseHash(Element(0), 1000, 8, pos_multiplier)
-        plan = Finch.setup_coalesce!(src, 1, dst, 1, uniform([0], 1)..., false)
+        plan = Galley.setup_coalesce!(src, 1, dst, 1, uniform([0], 1)..., false)
         initialize!(plan)
         @test plan.bucket_bound == [20, 0, 0, 0, 0, 0, 0, 0]
         @test length(dst.tbl) == 8 * 64
         for (q, i) in enumerate(indices)
-            x = Finch.sparse_hash_hash(1, i, pos_multiplier)
-            h = Finch.sparse_hash_vacancy(dst.tbl_ctrl, x, 8)
-            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Finch.sparse_hash_hash_ctrl(x),
+            x = Galley.sparse_hash_hash(1, i, pos_multiplier)
+            h = Galley.sparse_hash_vacancy(dst.tbl_ctrl, x, 8)
+            dst.tbl_ctrl[h], dst.tbl[h], dst.key[q] = Galley.sparse_hash_hash_ctrl(x),
             q,
-            (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
+            (1, i, Galley.SPARSE_HASH_KEY_RETAINED)
         end
         @test all(enumerate(indices)) do (q, i)
-            Finch.sparse_hash_lookup(
+            Galley.sparse_hash_lookup(
                 dst.tbl_ctrl, dst.tbl, dst.key, 1, i, 8, pos_multiplier
             ) == q
         end
@@ -641,7 +642,7 @@ end
     @testset "empty shards" begin
         src = hash_shards([Tuple{Int,Int,Int}[] for _ in 1:3])
         dst = SparseHash(Element(0), 1000, 4, pos_multiplier)
-        plan = Finch.setup_coalesce!(src, 3, dst, 3, uniform(zeros(Int, 3), 3)..., true)
+        plan = Galley.setup_coalesce!(src, 3, dst, 3, uniform(zeros(Int, 3), 3)..., true)
         @test (dst.ptr, 1, 1) in plan.init
         initialize!(plan)
         @test plan.nnz == 0
@@ -652,7 +653,7 @@ end
         @test dst.ptr == ones(Int, 4)
         @test isempty(dst.perm)
         @test length(dst.tbl) == length(dst.tbl_ctrl) == 16
-        @test all(==(Finch.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
+        @test all(==(Galley.SPARSE_HASH_CTRL_EMPTY), dst.tbl_ctrl)
     end
 
     @testset "rotated counts bound entries" begin
@@ -663,11 +664,11 @@ end
             src = hash_shards(entries; B)
             dst = SparseHash(Element(0), 1000, B, pos_multiplier)
             # Every shard's entries sit under local parent 8.
-            plan = Finch.setup_coalesce!(src, 3P + 1, dst, P, uniform(shift, 8)..., false)
+            plan = Galley.setup_coalesce!(src, 3P + 1, dst, P, uniform(shift, 8)..., false)
             expected = zeros(Int, B)
             for t in 1:P, (p, i, _) in entries[t]
-                expected[Finch.sparse_hash_hash_subtable(
-                    Finch.sparse_hash_hash(p + shift[t], i, pos_multiplier), B
+                expected[Galley.sparse_hash_hash_subtable(
+                    Galley.sparse_hash_hash(p + shift[t], i, pos_multiplier), B
                 )] += 1
             end
             # Counts ignore carries; the bound adds the bucket each can carry into,
@@ -680,11 +681,11 @@ end
             @test plan.nnz == 4P
             initialize!(plan)
             Threads.@threads for tid in 1:P
-                Finch.coalesce_shard!(tid, plan, src, dst, ())
+                Galley.coalesce_shard!(tid, plan, src, dst, ())
             end
             @test dst.tbl_count == expected
             for t in 1:P, (p, i, q) in entries[t]
-                @test Finch.sparse_hash_lookup(
+                @test Galley.sparse_hash_lookup(
                     dst.tbl_ctrl, dst.tbl, dst.key, p + shift[t], i, B, pos_multiplier
                 ) == q + plan.child_shift[t]
             end
@@ -710,11 +711,11 @@ end
         guarded = SparseHash{Int}(
             src.lvl, src.shape, src.subtables, pos_multiplier, src.ptr, src.tbl_ctrl,
             src.tbl,
-            Finch.MultiChannelBuffer(src.key.device, keys),
-            Finch.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
+            Galley.MultiChannelBuffer(src.key.device, keys),
+            Galley.MultiChannelBuffer(src.perm.device, perms), src.tbl_count,
         )
         dst = SparseHash(Element(0), 1000, 4, pos_multiplier)
-        plan = Finch.setup_coalesce!(
+        plan = Galley.setup_coalesce!(
             guarded, 3, dst, 3, uniform(zeros(Int, 3), 3)..., false
         )
         @test all(v -> v.reads[] <= 2, keys)
@@ -722,11 +723,11 @@ end
         @test plan.nnz == 3000
         @test plan.max_child_pos == 6000
         @test sum(plan.bucket_bound) == 3000
-        @test_throws ArgumentError Finch.setup_coalesce!(
+        @test_throws ArgumentError Galley.setup_coalesce!(
             src, 3, SparseHash(Element(0), 0, 1, pos_multiplier), 3,
             uniform(zeros(Int, 3), 3)..., false,
         )
-        @test_throws "same position multiplier" Finch.setup_coalesce!(
+        @test_throws "same position multiplier" Galley.setup_coalesce!(
             src, 3, SparseHash(Element(0), 1000, 4, pos_multiplier ⊻ UInt(2)), 3,
             uniform(zeros(Int, 3), 3)..., false,
         )
@@ -734,38 +735,38 @@ end
 end
 
 @testitem "coalesce_hash_sampling" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     using Random
 
     device = cpu(:sample, 2)
-    mem = Finch.MultiChannelMemory(device, 2)
-    channels(data) = Finch.MultiChannelBuffer(mem, data)
+    mem = Galley.MultiChannelMemory(device, 2)
+    channels(data) = Galley.MultiChannelBuffer(mem, data)
     # Frozen hash shards with one bucket, holding entries (p, i, q) and unused
     # child positions.
     function hash_shards(child, entries; parents=2, extents=[0, 0])
         shards = map(entries, extents) do es, extent
-            ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, 16)
+            ctrl = fill(Galley.SPARSE_HASH_CTRL_EMPTY, 16)
             tbl = zeros(Int, 16)
             key = fill(
-                (0, 0, Finch.SPARSE_HASH_KEY_FREE),
+                (0, 0, Galley.SPARSE_HASH_KEY_FREE),
                 max(maximum(e -> e[3], es; init=0), extent),
             )
             for (p, i, q) in es
-                x = Finch.sparse_hash_hash(p, i, pos_multiplier)
-                h = Finch.sparse_hash_vacancy(ctrl, x, 1)
-                ctrl[h], tbl[h], key[q] = Finch.sparse_hash_hash_ctrl(x),
+                x = Galley.sparse_hash_hash(p, i, pos_multiplier)
+                h = Galley.sparse_hash_vacancy(ctrl, x, 1)
+                ctrl[h], tbl[h], key[q] = Galley.sparse_hash_hash_ctrl(x),
                 q,
-                (p, i, Finch.SPARSE_HASH_KEY_RETAINED)
+                (p, i, Galley.SPARSE_HASH_KEY_RETAINED)
             end
             ptr, perm = Int[], Int[]
-            Finch.sparse_hash_freeze!(ptr, perm, key, parents)
+            Galley.sparse_hash_freeze!(ptr, perm, key, parents)
             (; ptr, tbl_ctrl=ctrl, tbl, key, perm, tbl_count=[length(es)])
         end
         return SparseHash{Int}(
             child, 10, 1, pos_multiplier,
             (
                 channels([getfield(s, f) for s in shards]) for
-                f in Finch.SPARSE_HASH_BUFFERS
+                f in Galley.SPARSE_HASH_BUFFERS
             )...,
         )
     end
@@ -777,16 +778,16 @@ end
             src = hash_shards(child, entries)
             for tid in 1:2, seed in 1:30
                 Random.seed!(seed)
-                inner, q = Finch.sample(tid, child)
+                inner, q = Galley.sample(tid, child)
                 p, i, _ = only(filter(e -> e[3] == q, entries[tid]))
                 Random.seed!(seed)
-                @test Finch.sample(tid, src) == ((inner..., i), p)
+                @test Galley.sample(tid, src) == ((inner..., i), p)
                 Random.seed!(seed)
-                @test Finch.sample(tid, Dense(src, 2)) == ((inner..., i, p), 1)
+                @test Galley.sample(tid, Dense(src, 2)) == ((inner..., i, p), 1)
             end
-            virtual = Finch.virtualize(Finch.FinchCompiler(), :sample_hash, typeof(src))
-            @test Finch.sample_dims(virtual) == (dense_child ? 2 : 1)
-            @test !Finch.all_dense(virtual)
+            virtual = Galley.virtualize(Galley.FinchCompiler(), :sample_hash, typeof(src))
+            @test Galley.sample_dims(virtual) == (dense_child ? 2 : 1)
+            @test !Galley.all_dense(virtual)
         end
     end
 
@@ -797,11 +798,11 @@ end
         src = hash_shards(inner, entries)
         for tid in 1:2, seed in 1:30
             Random.seed!(seed)
-            _, q = Finch.sample(tid, leaf)
+            _, q = Galley.sample(tid, leaf)
             child_pos, i, _ = only(filter(e -> e[3] == q, inner_entries[tid]))
             parent, j, _ = only(filter(e -> e[3] == child_pos, entries[tid]))
             Random.seed!(seed)
-            @test Finch.sample(tid, src) == ((i, j), parent)
+            @test Galley.sample(tid, src) == ((i, j), parent)
         end
     end
 
@@ -810,9 +811,9 @@ end
         live = [(1, 5, 3), (2, 7, 1), (2, 9, 4)]
         src = hash_shards(leaf, [live, Tuple{Int,Int,Int}[]]; extents=[4, 4])
         Random.seed!(1)
-        samples = [Finch.sample(1, src) for _ in 1:100]
+        samples = [Galley.sample(1, src) for _ in 1:100]
         @test Set(samples) == Set(((i,), p) for (p, i, _) in live)
-        @test_throws ArgumentError Finch.sample(2, src)
+        @test_throws ArgumentError Galley.sample(2, src)
     end
 
     @testset "coalesce sampler integration" begin
@@ -820,11 +821,11 @@ end
         src = Dense(hash_shards(leaf, entries), 2)
         dst = Dense(SparseHash(Element(0), 10, 1, pos_multiplier), 2)
         lvl = Coalesce(
-            device, src, dst, Finch.FinchStaticSchedule{:dynamic}(), nothing; mode=:fast
+            device, src, dst, Galley.FinchStaticSchedule{:dynamic}(), nothing; mode=:fast
         )
-        nnz, _ = Finch.get_total_nnz(lvl, true)
+        nnz, _ = Galley.get_total_nnz(lvl, true)
         Random.seed!(1)
-        samples = Finch.build_sampler(lvl, 2, nnz, 2)
+        samples = Galley.build_sampler(lvl, 2, nnz, 2)
         @test length(samples) == 400
         @test issorted(samples; by=reverse)
         @test Set(samples) == Set((i, p) for shard in entries for (p, i, _) in shard)
@@ -832,7 +833,7 @@ end
 end
 
 @testitem "coalesce_parents" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     function sum_parent_vectors!(C, A, device)
         @finch begin
             C .= 0

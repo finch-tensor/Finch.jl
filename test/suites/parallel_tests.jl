@@ -333,7 +333,7 @@
 
             #=
 
-            @test_throws Finch.FinchConcurrencyError begin
+            @test_throws Galley.FinchConcurrencyError begin
                 @finch_code begin
                     Ct .= 0
                     for i = _
@@ -484,7 +484,7 @@
         #     A = Tensor(Dense(SparseList(Element(0.0))))
         #     x = Tensor(Dense(Element(0.0)))
         #     y = Tensor(Dense(Element(0.0)))
-        #     @test_throws Finch.FinchConcurrencyError begin
+        #     @test_throws Galley.FinchConcurrencyError begin
         #         @finch_code begin
         #             y .= 0
         #             for j in parallel(_)
@@ -501,7 +501,7 @@
         #     x = Tensor(Dense(Element(0.0)))
         #     y = Tensor(Dense(Element(0.0)))
 
-        #     @test_throws Finch.FinchConcurrencyError begin
+        #     @test_throws Galley.FinchConcurrencyError begin
         #         @finch_code begin
         #             y .= 0
         #             for j in parallel(_)
@@ -519,7 +519,7 @@
             x = Tensor(Dense(Element(0.0)))
             y = Tensor(Dense(Element(0.0)))
 
-            @test_throws Finch.EnforceLifecyclesError begin
+            @test_throws Galley.EnforceLifecyclesError begin
                 @finch_code begin
                     y .= 0
                     for j in parallel(_)
@@ -537,7 +537,7 @@
         #     A = rand(5, 5)
         #     B = rand(5, 5)
 
-        #     @test_throws Finch.FinchConcurrencyError begin
+        #     @test_throws Galley.FinchConcurrencyError begin
         #         @finch_code begin
         #             for j in _
         #                 for i in parallel(_)
@@ -554,7 +554,7 @@
             input = Tensor(Dense(Dense(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
             Cpu = cpu(:test)
-            tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
+            tmp = transfer(Galley.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
                 "parallel/parallel_blur.jl",
@@ -579,7 +579,7 @@
             input = Tensor(Dense(SparseList(Element(0.0))))
             output = Tensor(Dense(Dense(Element(0.0))))
             Cpu = cpu(:test)
-            tmp = transfer(Finch.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
+            tmp = transfer(Galley.CPULocalMemory(Cpu), Tensor(Dense(Element(0))))
 
             check_output(
                 "parallel/parallel_blur_sparse.jl",

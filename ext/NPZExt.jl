@@ -1,9 +1,9 @@
 module NPZExt
 
-using Finch
-using Finch: NPYPath
-using Finch.JSON
-using Finch.DataStructures
+using Galley
+using Galley: NPYPath
+using Galley.JSON
+using Galley.DataStructures
 
 isdefined(Base, :get_extension) ? (using NPZ) : (using ..NPZ)
 
@@ -28,18 +28,18 @@ function Base.haskey(g::NPYPath, key::AbstractString)
         isdir(joinpath(mkpath(g.dirname), key))
 end
 
-Finch.bspread_header(g::NPYPath) = JSON.parsefile(joinpath(g.dirname, "binsparse.json"))
-function Finch.bspwrite_header(g::NPYPath, str::String)
+Galley.bspread_header(g::NPYPath) = JSON.parsefile(joinpath(g.dirname, "binsparse.json"))
+function Galley.bspwrite_header(g::NPYPath, str::String)
     write(joinpath(mkpath(g.dirname), "binsparse.json"), str)
 end
-Finch.bspread_vector(g::NPYPath, key) = g[key]
-Finch.bspwrite_vector(g::NPYPath, vec, key) = (g[key] = vec)
+Galley.bspread_vector(g::NPYPath, key) = g[key]
+Galley.bspwrite_vector(g::NPYPath, vec, key) = (g[key] = vec)
 
-function Finch.bspread_bspnpy(fname::AbstractString)
+function Galley.bspread_bspnpy(fname::AbstractString)
     bspread(NPYPath(fname))
 end
 
-function Finch.bspwrite_bspnpy(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
+function Galley.bspwrite_bspnpy(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
     bspwrite(NPYPath(fname), arr, attrs; kwargs...)
     fname
 end

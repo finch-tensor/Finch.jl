@@ -18,8 +18,8 @@ begin
     y_lvl_2 = y_lvl.lvl
     y_lvl_2_val = y_lvl_2.val
     y_lvl_stop == A_lvl_2_stop || throw(DimensionMismatch("mismatched dimension limits ($(y_lvl_stop) != $(A_lvl_2_stop))"))
-    Finch.resize_if_smaller!(P_lvl_2_val, A_lvl_stop)
-    Finch.fill_range!(P_lvl_2_val, 0, 1, A_lvl_stop)
+    Galley.resize_if_smaller!(P_lvl_2_val, A_lvl_stop)
+    Galley.fill_range!(P_lvl_2_val, 0, 1, A_lvl_stop)
     for j_4 = 1:A_lvl_stop
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
         P_lvl_q = (1 - 1) * A_lvl_stop + j_4
@@ -42,13 +42,13 @@ begin
         if phase_stop >= 1
             i = 1
             if y_lvl_idx[y_lvl_q] < 1
-                y_lvl_q = Finch.scansearch(y_lvl_idx, 1, y_lvl_q, y_lvl_q_stop - 1)
+                y_lvl_q = Galley.scansearch(y_lvl_idx, 1, y_lvl_q, y_lvl_q_stop - 1)
             end
             if A_lvl_2_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while i <= phase_stop
-                if Finch.isannihilator(Finch.DefaultAlgebra(), Finch.Chooser{0}(), p_val)
+                if Galley.isannihilator(Galley.DefaultAlgebra(), Galley.Chooser{0}(), p_val)
                     break
                 end
                 y_lvl_i = y_lvl_idx[y_lvl_q]
@@ -57,7 +57,7 @@ begin
                 if y_lvl_i == phase_stop_2 && A_lvl_2_i == phase_stop_2
                     A_lvl_3_val_2 = A_lvl_3_val[A_lvl_2_q]
                     y_lvl_2_val_2 = y_lvl_2_val[y_lvl_q]
-                    p_val = (Finch.Chooser{0}())(p_val, ifelse(y_lvl_2_val_2 && A_lvl_3_val_2, phase_stop_2, 0))
+                    p_val = (Galley.Chooser{0}())(p_val, ifelse(y_lvl_2_val_2 && A_lvl_3_val_2, phase_stop_2, 0))
                     y_lvl_q += 1
                     A_lvl_2_q += 1
                 elseif A_lvl_2_i == phase_stop_2
@@ -71,6 +71,6 @@ begin
         p_data.val = p_val
         P_lvl_2_val[P_lvl_q] = p_val
     end
-    Finch.resize_if_larger!(P_lvl_2_val, A_lvl_stop)
+    Galley.resize_if_larger!(P_lvl_2_val, A_lvl_stop)
     (P = Tensor((DenseLevel){Int64}(ElementLevel{0, Int64, Int64}(P_lvl_2_val), A_lvl_stop)),)
 end

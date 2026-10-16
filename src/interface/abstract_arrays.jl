@@ -42,7 +42,7 @@ function distribute(
     )
 end
 
-function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
+function Galley.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArray, diff)
     get(diff, arr.tag, arr)
 end
 
@@ -64,8 +64,8 @@ thaw!(ctx::AbstractCompiler, arr::VirtualAbstractArray) = arr
     idx
 end
 
-function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff)
-    VirtualAbstractArraySlice(Finch.redistribute(ctx, arr.mtx, diff), arr.idx)
+function Galley.redistribute(ctx::AbstractCompiler, arr::VirtualAbstractArraySlice, diff)
+    VirtualAbstractArraySlice(Galley.redistribute(ctx, arr.mtx, diff), arr.idx)
 end
 
 FinchNotation.finch_leaf(x::VirtualAbstractArraySlice) = virtual(x)

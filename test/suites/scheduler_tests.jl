@@ -1,34 +1,34 @@
 @testitem "scheduler" begin
-    using Finch: JuliaContext
-    using Finch.FinchNotation: finch_unparse_program, @finch_program_instance
+    using Galley: JuliaContext
+    using Galley.FinchNotation: finch_unparse_program, @finch_program_instance
 
     # test `propagate_map_queries`
     let
-        plan = Finch.plan(
-            Finch.query(
-                Finch.alias(:A),
-                Finch.aggregate(
-                    Finch.immediate(:B),
-                    Finch.immediate(:C),
-                    Finch.immediate(:D),
+        plan = Galley.plan(
+            Galley.query(
+                Galley.alias(:A),
+                Galley.aggregate(
+                    Galley.immediate(:B),
+                    Galley.immediate(:C),
+                    Galley.immediate(:D),
                 ),
             ),
-            Finch.query(Finch.alias(:E), Finch.alias(:A)),
-            Finch.produces(Finch.alias(:E)),
+            Galley.query(Galley.alias(:E), Galley.alias(:A)),
+            Galley.produces(Galley.alias(:E)),
         )
-        expected = Finch.plan(
-            Finch.query(
-                Finch.alias(:E),
-                Finch.mapjoin(
-                    Finch.immediate(:B),
-                    Finch.immediate(:C),
-                    Finch.immediate(:D),
+        expected = Galley.plan(
+            Galley.query(
+                Galley.alias(:E),
+                Galley.mapjoin(
+                    Galley.immediate(:B),
+                    Galley.immediate(:C),
+                    Galley.immediate(:D),
                 ),
             ),
-            Finch.produces(Finch.alias(:E)),
+            Galley.produces(Galley.alias(:E)),
         )
 
-        result = Finch.propagate_map_queries(plan)
+        result = Galley.propagate_map_queries(plan)
         @test result == expected
     end
 
@@ -43,7 +43,7 @@
     end
 
     @testset "concordize" begin
-        using Finch.FinchLogic
+        using Galley.FinchLogic
         A = alias(:A)
         B = alias(:B)
         C = alias(:C)
@@ -82,11 +82,11 @@
                 ),
             ),
             produces(C))
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(produces())
         prgm_out = plan(produces())
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j)),
@@ -115,7 +115,7 @@
             ),
             produces(C),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j)),
@@ -127,7 +127,7 @@
             query(B, reorder(relabel(A, i, j), i, j)),
             produces(B),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         D = alias(:D)
         prgm_in = plan(
@@ -146,7 +146,7 @@
             query(D, reorder(relabel(B_2, i, j), i, j)),
             produces(C, D),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j)),
@@ -175,7 +175,7 @@
             ),
             produces(C),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0)),
@@ -187,7 +187,7 @@
             query(B, reorder(relabel(A))),
             produces(B),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
 
         prgm_in = plan(
             query(A, table(0, i, j, k)),
@@ -221,11 +221,11 @@
             ),
             produces(D),
         )
-        @test Finch.concordize(prgm_in) == prgm_out
+        @test Galley.concordize(prgm_in) == prgm_out
     end
 
     @testset "push_fields" begin
-        using Finch.FinchLogic
+        using Galley.FinchLogic
         A = alias(:A)
         i = field(:i)
         j = field(:j)
@@ -234,14 +234,14 @@
         # Test 1: Simple reorder and relabel on a table
         expr_in = reorder(relabel(table(A, i, j, k), k, j, i), i, j, k)
         expr_out = reorder(table(A, k, j, i), i, j, k)  # After push_fields, reorder and relabel should be absorbed
-        @test Finch.push_fields(expr_in) == expr_out
+        @test Galley.push_fields(expr_in) == expr_out
 
         # Test 2: Nested reorders and relabels on a table
         expr_in = reorder(
             relabel(reorder(relabel(table(A, i, j, k), j, i, k), k, j, i), i, k, j), j, i, k
         )
         expr_out = reorder(table(A, k, j, i), j, i, k)
-        @test Finch.push_fields(expr_in) == expr_out
+        @test Galley.push_fields(expr_in) == expr_out
 
         # Test 3: Mapjoin with internal reordering and relabeling
         expr_in = mapjoin(+,
@@ -250,12 +250,12 @@
         expr_out = mapjoin(+,
             reorder(table(A, j, i), i, j),
             reorder(table(A, i, j), j, i))
-        @test Finch.push_fields(expr_in) == expr_out
+        @test Galley.push_fields(expr_in) == expr_out
 
         # Test 4: Immediate values absorbing relabel and reorder
         expr_in = reorder(relabel(immediate(42)), i)
         expr_out = reorder(immediate(42), i)
-        @test Finch.push_fields(expr_in) == expr_out
+        @test Galley.push_fields(expr_in) == expr_out
 
         # Test 5: Complex nested structure with mapjoin and aggregates
         expr_in = mapjoin(+,
@@ -274,7 +274,7 @@
                 ), j, i, k),
             mapjoin(*,
                 reorder(table(A, j, i, k), k, j, i)))
-        @test Finch.push_fields(expr_in) == expr_out
+        @test Galley.push_fields(expr_in) == expr_out
 
         #=
         query(A1, table(0, i0, i1))

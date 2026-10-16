@@ -363,8 +363,8 @@ function assemble_level!(ctx, lvl::VirtualRunListLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 1, $pos_start + 1, $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ptr), 1, $pos_start + 1, $pos_stop + 1)
     end
 end
 
@@ -407,8 +407,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop
             $qos += $(pos_stop) - $(lvl.prev_pos)
             if $qos > $qos_stop
                 $qos_stop = $qos
-                Finch.resize_if_smaller!($(lvl.right), $qos_stop)
-                Finch.fill_range!(
+                Galley.resize_if_smaller!($(lvl.right), $qos_stop)
+                Galley.fill_range!(
                     $(lvl.right), $(ctx(lvl.shape)), $qos_fill + 1, $qos_stop
                 )
                 $(contain(
@@ -579,7 +579,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualRunListLevel, pos_stop)
         $(lvl.qos_stop) = $(lvl.qos_fill)
         $(lvl.i_prev) = $(lvl.right)[$(lvl.qos_fill)]
         $qos_stop = $(lvl.qos_fill)
-        $(lvl.prev_pos) = Finch.scansearch($(lvl.ptr), $(lvl.qos_stop) + 1, 1, $pos_stop) - 1
+        $(lvl.prev_pos) = Galley.scansearch($(lvl.ptr), $(lvl.qos_stop) + 1, 1, $pos_stop) - 1
         for $p = $pos_stop:-1:1
             $(lvl.ptr)[$p + 1] -= $(lvl.ptr)[$p]
         end
@@ -626,7 +626,7 @@ function unfurl(
             body=(ctx) -> Stepper(;
                 seek=(ctx, ext) -> quote
                     if $(lvl.right)[$my_q] < $(ctx(getstart(ext)))
-                        $my_q = Finch.scansearch(
+                        $my_q = Galley.scansearch(
                             $(lvl.right),
                             $(ctx(getstart(ext))),
                             $my_q,
@@ -722,8 +722,8 @@ function unfurl(
                             while $qos_3 > $qos_stop
                                 $qos_stop = max($qos_stop << 1, 1)
                             end
-                            Finch.resize_if_smaller!($(lvl.right), $qos_stop)
-                            Finch.fill_range!(
+                            Galley.resize_if_smaller!($(lvl.right), $qos_stop)
+                            Galley.fill_range!(
                                 $(lvl.right), $(ctx(lvl.shape)), $qos_2, $qos_stop
                             )
                             $(contain(

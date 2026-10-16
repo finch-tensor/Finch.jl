@@ -1,4 +1,4 @@
-# Binsparse symmetry expansion is unsupported by Finch.
+# Binsparse symmetry expansion is unsupported by Galley.
 # These test-ID substrings cover symmetric, skew-symmetric, and Hermitian cases.
 # The current upstream suite does not generate these cases yet.
 symmetric

@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Parallel Processing in Finch
@@ -308,12 +308,12 @@ maps write their pointers the same way.
 variable assigned more than once boxes it, and inference then sees `Any`
 wherever the closure reads it. Generated code keeps captures single-assignment:
 
-  - Every parallel loop is wrapped in `Finch.@barrier`, which binds the loop's
+  - Every parallel loop is wrapped in `Galley.@barrier`, which binds the loop's
     free variables in a `let` just before it. The thread closure captures those
     fresh bindings, so code outside may rebind a buffer, for example when
     `distribute_buffer` writes it back, without boxing anything.
   - `@barrier` never binds a constant global, such as the `Finch` module. As a
-    local, `Finch` would hide every `Finch.f(...)` from inference and make each
+    local, `Finch` would hide every `Galley.f(...)` from inference and make each
     call dynamic.
   - Distributed levels freshen their scalar assembly state (`qos_stop` and the
     like), so each task assigns its own locals instead of a shared variable.

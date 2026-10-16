@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Finch Logic (High-Level IR)

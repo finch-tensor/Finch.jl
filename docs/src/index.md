@@ -1,26 +1,30 @@
-# Finch.jl
+# Galley.jl
 
-Finch is a Julia-to-Julia compiler for sparse or structured multidimensional arrays. Finch empowers users to write high-level array programs which are transformed behind-the-scenes into fast sparse code.
+The package is now imported with `using Galley`. Compiler APIs such as `@finch`,
+`Galley.FinchNotation`, and `Galley.FinchLogic` keep their names. The optimizer
+submodule previously accessed as `Finch.Galley` is now `Galley.Optimizer`.
 
-## Why Finch.jl?
+Galley is a Julia-to-Julia compiler for sparse or structured multidimensional arrays. Galley empowers users to write high-level array programs which are transformed behind-the-scenes into fast sparse code.
 
-Finch was built to make sparse and structured array programming easier and more efficient.  Finch.jl leverages compiler technology to automatically generate customized, fused sparse kernels for each specific
-use case. This allows users to write readable, high-level sparse array programs without worrying about the performance of the generated code. Finch can automatically generate efficient implementations even for unique problems that lack existing library solutions.
+## Why Galley.jl?
+
+Galley was built to make sparse and structured array programming easier and more efficient.  Galley.jl leverages compiler technology to automatically generate customized, fused sparse kernels for each specific
+use case. This allows users to write readable, high-level sparse array programs without worrying about the performance of the generated code. Galley can automatically generate efficient implementations even for unique problems that lack existing library solutions.
 
 # Installation
 
-At the [Julia](https://julialang.org/downloads/) REPL, install the latest stable version by running:
+At the [Julia](https://julialang.org/downloads/) REPL, install this package from its repository by running:
 
 ```julia
 julia> using Pkg;
-       Pkg.add("Finch");
+       Pkg.add(; url="https://github.com/finch-tensor/FinchGalley.jl");
 
 ```
 
 ## Quickstart
 
 ```julia
-julia> using Finch
+julia> using Galley
 
 # Create a sparse tensor
 
@@ -41,7 +45,7 @@ julia> B = A + A
 
 ### Sparse and Structured Tensors
 
-Finch supports most major sparse formats (CSR, CSC, DCSR, DCSC, CSF, COO, Hash, Bytemap). Finch also allows users to define their own sparse formats with a parameterized format language.
+Galley supports most major sparse formats (CSR, CSC, DCSR, DCSC, CSF, COO, Hash, Bytemap). Galley also allows users to define their own sparse formats with a parameterized format language.
 
 ```
 CSC_matrix = Tensor(CSCFormat())
@@ -49,14 +53,14 @@ CSR_matrix = swizzle(Tensor(CSCFormat()), 2, 1)
 CSF_tensor = Tensor(CSFFormat(3))
 ```
 
-Finch also supports a wide variety of array structure beyond sparsity. Whether you're dealing with [custom background (zero) values](https://en.wikipedia.org/wiki/GraphBLAS), [run-length encoding](https://en.wikipedia.org/wiki/Run-length_encoding), or matrices with [special structures](https://en.wikipedia.org/wiki/Sparse_matrix#Special_structure) like banded or triangular matrices, Finch’s compiler can understand and optimize various data patterns and computational rules to adapt to the structure of data.
+Galley also supports a wide variety of array structure beyond sparsity. Whether you're dealing with [custom background (zero) values](https://en.wikipedia.org/wiki/GraphBLAS), [run-length encoding](https://en.wikipedia.org/wiki/Run-length_encoding), or matrices with [special structures](https://en.wikipedia.org/wiki/Sparse_matrix#Special_structure) like banded or triangular matrices, Galley’s compiler can understand and optimize various data patterns and computational rules to adapt to the structure of data.
 
 ### Examples:
 
-Finch supports many high-level array operations out of the box, such as `+`, `*`, `maximum`, `sum`, `map`, `broadcast`, and `reduce`.
+Galley supports many high-level array operations out of the box, such as `+`, `*`, `maximum`, `sum`, `map`, `broadcast`, and `reduce`.
 
 ```julia
-julia> using Finch
+julia> using Galley
 
 # Define sparse tensor A
 
@@ -80,7 +84,7 @@ julia> D = sum(C; dims=2)
 
 ```
 
-For situations where more complex operations are needed, Finch supports an `@einsum` syntax on sparse and structured tensors.
+For situations where more complex operations are needed, Galley supports an `@einsum` syntax on sparse and structured tensors.
 
 ```julia
 julia> @einsum E[i] += A[i, j] * B[i, j]
@@ -89,12 +93,12 @@ julia> @einsum F[i, k] << max >>= A[i, j] + B[k, j]
 
 ```
 
-Finch even allows users to fuse multiple operations into a single kernel with `lazy` and `compute`.  The `lazy` function creates a lazy tensor, which is a symbolic representation of the computation. The `compute` function evaluates the computation.
+Galley even allows users to fuse multiple operations into a single kernel with `lazy` and `compute`.  The `lazy` function creates a lazy tensor, which is a symbolic representation of the computation. The `compute` function evaluates the computation.
 Different optimizers can be used with `compute`, such as the state-of-the-art `Galley` optimizer, which can adapt to the
 sparsity patterns of the inputs.
 
 ```julia
-julia> using Finch, BenchmarkTools
+julia> using Galley, BenchmarkTools
 
 julia> A = fsprand(1000, 1000, 0.1);
        B = fsprand(1000, 1000, 0.1);
@@ -115,11 +119,11 @@ julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
 
 ### How it Works
 
-Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically.
+Galley first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Galley optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Galley can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically.
 
 ## Learn More
 
-The following manuscripts provide a good description of the research behind Finch:
+The following manuscripts provide a good description of the research behind Galley:
 
 [Finch: Sparse and Structured Array Programming with Control Flow](https://arxiv.org/abs/2404.16730).
 Willow Ahrens, Teodoro Fields Collin, Radha Patel, Kyle Deeds, Changwan Hong, Saman Amarasinghe.
@@ -129,7 +133,7 @@ Willow Ahrens, Daniel Donenfeld, Fredrik Kjolstad, Saman Amarasinghe.
 
 ## Beyond Finch
 
-The following research efforts use Finch:
+The following research efforts use the Finch compiler:
 
 [SySTeC: A Symmetric Sparse Tensor Compiler](https://arxiv.org/abs/2406.09266).
 Radha Patel, Willow Ahrens, Saman Amarasinghe.

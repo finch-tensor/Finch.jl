@@ -8,12 +8,12 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    Finch.resize_if_smaller!(tmp_lvl_left, 1)
-    Finch.resize_if_smaller!(tmp_lvl_right, 1)
-    Finch.fill_range!(tmp_lvl_left, 1, 1, 1)
-    Finch.fill_range!(tmp_lvl_right, 0, 1, 1)
-    Finch.resize_if_smaller!(tmp_lvl_val, 1)
-    Finch.fill_range!(tmp_lvl_val, false, 1, 1)
+    Galley.resize_if_smaller!(tmp_lvl_left, 1)
+    Galley.resize_if_smaller!(tmp_lvl_right, 1)
+    Galley.fill_range!(tmp_lvl_left, 1, 1, 1)
+    Galley.fill_range!(tmp_lvl_right, 0, 1, 1)
+    Galley.resize_if_smaller!(tmp_lvl_val, 1)
+    Galley.fill_range!(tmp_lvl_val, false, 1, 1)
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -24,7 +24,7 @@ quote
     phase_stop = min(ref_lvl_i1, ref_lvl.shape)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]

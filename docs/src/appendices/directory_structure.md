@@ -1,6 +1,6 @@
 # Directory Structure
 
-Here's a little roadmap to the Finch codebase! Please file an issue if this is
+Here's a little roadmap to the Galley codebase! Please file an issue if this is
 not up to date.
 
 ```
@@ -13,7 +13,7 @@ not up to date.
 │   ├── [build]                # rendered docs website
 │   ├── src                    # docs website source
 │   ├── fix.jl                 # fix docstrings
-│   ├── examples               # example applications implemented in Finch!
+│   ├── examples               # example applications implemented in Galley!
 │   │   └── ...
 │   ├── make.jl                # build documentation locally
 │   └── ...
@@ -33,7 +33,7 @@ not up to date.
 │   │   └── ...
 │   ├── looplets               # this is where all the Looplets live
 │   ├── symbolic               # term rewriting systems for program and bounds
-│   ├── tensors                # built-in Finch tensor definitions
+│   ├── tensors                # built-in Galley tensor definitions
 │   │   ├── levels             # all of the levels
 │   │   │   └── ...
 │   │   ├── combinators        # tensor combinators which modify tensor behavior

@@ -31,13 +31,13 @@ begin
     phase_stop = min(arr_2_lvl_stop2, arr_2_lvl_i_stop)
     if phase_stop >= 1
         if arr_2_lvl_tbl2[arr_2_lvl_q] < 1
-            arr_2_lvl_q = Finch.scansearch(arr_2_lvl_tbl2, 1, arr_2_lvl_q, arr_2_lvl_q_stop - 1)
+            arr_2_lvl_q = Galley.scansearch(arr_2_lvl_tbl2, 1, arr_2_lvl_q, arr_2_lvl_q_stop - 1)
         end
         while true
             arr_2_lvl_i = arr_2_lvl_tbl2[arr_2_lvl_q]
             arr_2_lvl_q_step = arr_2_lvl_q
             if arr_2_lvl_tbl2[arr_2_lvl_q] == arr_2_lvl_i
-                arr_2_lvl_q_step = Finch.scansearch(arr_2_lvl_tbl2, arr_2_lvl_i + 1, arr_2_lvl_q, arr_2_lvl_q_stop - 1)
+                arr_2_lvl_q_step = Galley.scansearch(arr_2_lvl_tbl2, arr_2_lvl_i + 1, arr_2_lvl_q, arr_2_lvl_q_stop - 1)
             end
             if arr_2_lvl_i < phase_stop
                 fmt_lvl_q = (1 - 1) * fmt_lvl_stop + arr_2_lvl_i
@@ -50,7 +50,7 @@ begin
                 phase_stop_3 = min(arr_2_lvl_stop1, arr_2_lvl_i_stop_2)
                 if phase_stop_3 >= 1
                     if arr_2_lvl_tbl1[arr_2_lvl_q] < 1
-                        arr_2_lvl_q_2 = Finch.scansearch(arr_2_lvl_tbl1, 1, arr_2_lvl_q, arr_2_lvl_q_step - 1)
+                        arr_2_lvl_q_2 = Galley.scansearch(arr_2_lvl_tbl1, 1, arr_2_lvl_q, arr_2_lvl_q_step - 1)
                     end
                     while true
                         arr_2_lvl_i_2 = arr_2_lvl_tbl1[arr_2_lvl_q_2]
@@ -64,10 +64,10 @@ begin
                                     fmt_lvl_2_qos = length(fmt_lvl_2_tbl) + 1
                                     if fmt_lvl_2_qos > fmt_lvl_2_qos_stop
                                         fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
-                                        Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
-                                        Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
-                                        Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
-                                        Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                        Galley.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                        Galley.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                        Galley.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                        Galley.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
                                     end
                                 end
                                 fmt_lvl_2_tbl[(fmt_lvl_q, arr_2_lvl_i_2)] = fmt_lvl_2_qos
@@ -87,10 +87,10 @@ begin
                                         fmt_lvl_2_qos = length(fmt_lvl_2_tbl) + 1
                                         if fmt_lvl_2_qos > fmt_lvl_2_qos_stop
                                             fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
-                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
-                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
-                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
-                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                            Galley.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                            Galley.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
+                                            Galley.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                            Galley.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos, fmt_lvl_2_qos_stop)
                                         end
                                     end
                                     fmt_lvl_2_tbl[(fmt_lvl_q, phase_stop_5)] = fmt_lvl_2_qos
@@ -117,7 +117,7 @@ begin
                     phase_stop_8 = min(arr_2_lvl_stop1, arr_2_lvl_i_stop_3)
                     if phase_stop_8 >= 1
                         if arr_2_lvl_tbl1[arr_2_lvl_q] < 1
-                            arr_2_lvl_q_3 = Finch.scansearch(arr_2_lvl_tbl1, 1, arr_2_lvl_q, arr_2_lvl_q_step - 1)
+                            arr_2_lvl_q_3 = Galley.scansearch(arr_2_lvl_tbl1, 1, arr_2_lvl_q, arr_2_lvl_q_step - 1)
                         end
                         while true
                             arr_2_lvl_i_3 = arr_2_lvl_tbl1[arr_2_lvl_q_3]
@@ -131,10 +131,10 @@ begin
                                         fmt_lvl_2_qos_2 = length(fmt_lvl_2_tbl) + 1
                                         if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_stop
                                             fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
-                                            Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
-                                            Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
-                                            Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
-                                            Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                            Galley.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                            Galley.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                            Galley.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                            Galley.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
                                         end
                                     end
                                     fmt_lvl_2_tbl[(fmt_lvl_q, arr_2_lvl_i_3)] = fmt_lvl_2_qos_2
@@ -154,10 +154,10 @@ begin
                                             fmt_lvl_2_qos_2 = length(fmt_lvl_2_tbl) + 1
                                             if fmt_lvl_2_qos_2 > fmt_lvl_2_qos_stop
                                                 fmt_lvl_2_qos_stop = max(fmt_lvl_2_qos_stop << 1, 1)
-                                                Finch.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
-                                                Finch.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
-                                                Finch.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
-                                                Finch.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                                Galley.resize_if_smaller!(fmt_lvl_3_val, fmt_lvl_2_qos_stop)
+                                                Galley.fill_range!(fmt_lvl_3_val, 0.0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
+                                                Galley.resize_if_smaller!(fmt_lvl_2_val, fmt_lvl_2_qos_stop)
+                                                Galley.fill_range!(fmt_lvl_2_val, 0, fmt_lvl_2_qos_2, fmt_lvl_2_qos_stop)
                                             end
                                         end
                                         fmt_lvl_2_tbl[(fmt_lvl_q, phase_stop_10)] = fmt_lvl_2_qos_2
@@ -179,7 +179,7 @@ begin
     result = ()
     resize!(fmt_lvl_2_ptr, fmt_lvl_stop + 1)
     fmt_lvl_2_ptr[1] = 1
-    Finch.fill_range!(fmt_lvl_2_ptr, 0, 2, fmt_lvl_stop + 1)
+    Galley.fill_range!(fmt_lvl_2_ptr, 0, 2, fmt_lvl_stop + 1)
     pdx_tmp = Vector{Int64}(undef, length(fmt_lvl_2_tbl))
     resize!(fmt_lvl_2_idx, length(fmt_lvl_2_tbl))
     resize!(fmt_lvl_2_val, length(fmt_lvl_2_tbl))
@@ -210,6 +210,6 @@ begin
         ptr_2[p_3] += 1
     end
     qos_stop = fmt_lvl_2_ptr[fmt_lvl_stop + 1] - 1
-    Finch.resize_if_larger!(fmt_lvl_3_val, qos_stop)
+    Galley.resize_if_larger!(fmt_lvl_3_val, qos_stop)
     result
 end

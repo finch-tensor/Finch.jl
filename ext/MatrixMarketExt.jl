@@ -1,17 +1,17 @@
 module MatrixMarketExt
 
-using Finch
+using Galley
 using SparseArrays
 
 isdefined(Base, :get_extension) ? (using MatrixMarket) : (using ..MatrixMarket)
 
-# Exchange coordinates without relying on Finch's SparseArrays conversion methods.
-function Finch.fmmread(filename::AbstractString)
+# Exchange coordinates without relying on Galley's SparseArrays conversion methods.
+function Galley.fmmread(filename::AbstractString)
     A = sparse(mmread(filename))
     fsparse(findnz(A)..., size(A))
 end
 
-function Finch.fmmwrite(filename::AbstractString, A)
+function Galley.fmmwrite(filename::AbstractString, A)
     ndims(A) == 2 || throw(ArgumentError("Matrix Market only supports matrices"))
     fill_value(A) === zero(eltype(A)) || throw(
         ArgumentError("Matrix Market only supports zero fill values")

@@ -30,7 +30,7 @@ zero as well. To remedy the situation, Finch leverages `PlusOneVector` and `CInd
 `PlusOneVector` is a view that adds `1` on access to an underlying 0-Index vector.
 This allows to use Python/NumPy vector, without copying, as a mutable index array.
 
-```jldoctest example2; setup = :(using Finch)
+```jldoctest example2; setup = :(using Galley)
 julia> v = Vector([1, 0, 2, 3])
 4-element Vector{Int64}:
  1
@@ -80,7 +80,7 @@ Finch array without copying by calling
 
 ```@meta
 DocTestSetup = quote
-    using Finch
+    using Galley
     using CIndices
 end
 ```

@@ -1,31 +1,31 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # User-Defined Functions
 
 ## User Functions
 
-Finch supports arbitrary Julia Base functions over
+Galley supports arbitrary Julia Base functions over
 [`isbits`](https://docs.julialang.org/en/v1/base/base/#Base.isbits) types.  You
-can also use your own functions and use them in Finch! Just remember to define
-any special algebraic properties of your functions so that Finch can optimize
+can also use your own functions and use them in Galley! Just remember to define
+any special algebraic properties of your functions so that Galley can optimize
 them better. You must declare the properties of your functions before you call
-any Finch functions on them.
+any Galley functions on them.
 
-Finch only supports incrementing assignments to arrays such as `+=` or `*=`. If
+Galley only supports incrementing assignments to arrays such as `+=` or `*=`. If
 you would like to increment `A[i...]` by the value of `ex` with a custom
 reduction operator `op`, you may use the following syntax: `A[i...] <<op>>= ex`.
 
 Consider the greatest common divisor function `gcd`. This function is
 associative and commutative, and the greatest common divisor of 1 and anything
 else is 1, so 1 is an annihilator.  We declare these properties by overloading
-trait functions on Finch's default algebra as follows:
+trait functions on Galley's default algebra as follows:
 
 ```
-Finch.isassociative(::Finch.DefaultAlgebra, ::typeof(gcd)) = true
-Finch.iscommutative(::Finch.DefaultAlgebra, ::typeof(gcd)) = true
-Finch.isannihilator(::Finch.DefaultAlgebra, ::typeof(gcd), x) = x == 1
+Galley.isassociative(::Galley.DefaultAlgebra, ::typeof(gcd)) = true
+Galley.iscommutative(::Galley.DefaultAlgebra, ::typeof(gcd)) = true
+Galley.isannihilator(::Galley.DefaultAlgebra, ::typeof(gcd), x) = x == 1
 ```
 
 Then, the following code will only call gcd when neither `u[i]` nor `v[i]` are 1
@@ -41,7 +41,7 @@ w = Tensor(SparseList(Element(1)))
 
 ## A Few Convenient Functions
 
-For your convenience, Finch defines a few useful functions that help express common array operations inside Finch:
+For your convenience, Galley defines a few useful functions that help express common array operations inside Galley:
 
 ```@docs
 choose
@@ -51,7 +51,7 @@ maxby
 
 ## Properties
 
-The full list of properties recognized by Finch is as follows (use these to declare the properties of your own functions):
+The full list of properties recognized by Galley is as follows (use these to declare the properties of your own functions):
 
 ```@docs
 isassociative
@@ -62,18 +62,18 @@ isidentity
 isannihilator
 isinverse
 isinvolution
-Finch.return_type
+Galley.return_type
 ```
 
-## Finch Kernel Caching
+## Galley Kernel Caching
 
-Finch code is cached when you first run it. Thus, if you run a Finch
-function once, then make changes to the Finch compiler (like defining new
+Galley code is cached when you first run it. Thus, if you run a Galley
+function once, then make changes to the Galley compiler (like defining new
 properties), the cached code will be used and the changes will not be reflected.
 
-It's best to design your code so that modifications to the Finch compiler occur
-before any Finch functions are called. However, if you really need to modify a
-precompiled Finch kernel, you can call `Finch.refresh()` to invalidate the
+It's best to design your code so that modifications to the Galley compiler occur
+before any Galley functions are called. However, if you really need to modify a
+precompiled Galley kernel, you can call `Galley.refresh()` to invalidate the
 code cache.
 
 ```@docs
@@ -82,11 +82,11 @@ refresh
 
 ### (Advanced) On World-Age and Generated Functions
 
-Julia uses a "world age" to describe the set of defined functions at a point in time. Generated functions run in the same world age in which they were defined, so they can't call functions defined after the generated function. This means that if Finch used normal generated functions, users can't define their own functions without first redefining all of Finch's generated functions.
+Julia uses a "world age" to describe the set of defined functions at a point in time. Generated functions run in the same world age in which they were defined, so they can't call functions defined after the generated function. This means that if Galley used normal generated functions, users can't define their own functions without first redefining all of Galley's generated functions.
 
-Finch uses special generators that run in the current world age, but do not
+Galley uses special generators that run in the current world age, but do not
 update with subsequent compiler function invalidations. If two packages modify
-the behavior of Finch in different ways, and call those Finch functions during
+the behavior of Galley in different ways, and call those Galley functions during
 precompilation, the resulting behavior is undefined.
 
 There are several packages that take similar, but different, approaches to
@@ -111,12 +111,12 @@ properties as follows:
 ```
 struct MyAlgebra <: AbstractAlgebra end
 
-Finch.isassociative(::MyAlgebra, ::typeof(gcd)) = true
-Finch.iscommutative(::MyAlgebra, ::typeof(gcd)) = true
-Finch.isannihilator(::MyAlgebra, ::typeof(gcd), x) = x == 1
+Galley.isassociative(::MyAlgebra, ::typeof(gcd)) = true
+Galley.iscommutative(::MyAlgebra, ::typeof(gcd)) = true
+Galley.isannihilator(::MyAlgebra, ::typeof(gcd), x) = x == 1
 ```
 
-We pass the algebra to Finch as an optional first argument:
+We pass the algebra to Galley as an optional first argument:
 
 ```
 @finch MyAlgebra() (w .= 1; for i=_; w[i] = gcd(u[i], v[i]) end; return w)

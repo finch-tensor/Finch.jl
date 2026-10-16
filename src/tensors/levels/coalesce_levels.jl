@@ -665,7 +665,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         push_preamble!(
             ctx,
             quote
-                Finch.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, nothing)
+                Galley.coalesce_shards!($(lvl_e).lvl, $(lvl_c), $P, $max_pos, nothing)
             end,
         )
     else
@@ -682,28 +682,28 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
         tsize = sample_dims(lvl) + 1
         dense = all_dense(lvl)
         band = if dense
-            :(Finch.get_bands($P, $shapes, Finch.MergeDense()))
+            :(Galley.get_bands($P, $shapes, Galley.MergeDense()))
         else
-            :(Finch.get_bands($(lvl.sampler), $P, $shapes, Finch.MergeRandom()))
+            :(Galley.get_bands($(lvl.sampler), $P, $shapes, Galley.MergeRandom()))
         end
 
         push_preamble!(ctx,
             quote
-                $nnz, $unordered = Finch.get_total_nnz($(lvl_e), true)
+                $nnz, $unordered = Galley.get_total_nnz($(lvl_e), true)
                 $shapes = (
                     $(map(ctx, map(getstop, virtual_level_size(ctx, lvl)))...), $max_pos
                 )
                 if $nnz > 0
                     if !$dense
-                        $(lvl.sampler) = Finch.build_sampler(
-                            Finch.Dense($(lvl_e).lvl, $max_pos), $P, $nnz, $tsize
+                        $(lvl.sampler) = Galley.build_sampler(
+                            Galley.Dense($(lvl_e).lvl, $max_pos), $P, $nnz, $tsize
                         )
                     end
                     # Task tid sums every shard's entries in its band into its accumulator.
                     $bands = $band
-                    Finch.@barrier Threads.@threads for $tid in 1:($P)
+                    Galley.@barrier Threads.@threads for $tid in 1:($P)
                         $lb, $ub = $bands[$tid]
-                        $mask = Finch.tuplemask($lb, $ub)
+                        $mask = Galley.tuplemask($lb, $ub)
 
                         $(
                             contain(ctx) do ctx_2
@@ -740,7 +740,7 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
 
                                 push_preamble!(ctx_2,
                                     quote
-                                        Finch.isempty_band($lb, $ub) || for $sid in 1:($P)
+                                        Galley.isempty_band($lb, $ub) || for $sid in 1:($P)
                                             $(
                                                 contain(ctx_2) do ctx_3
                                                     channel_dev_2 = VirtualMultiChannelMemory(
@@ -833,15 +833,15 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                     end
 
                     if typeof($(lvl_e).accumulator) === typeof($(lvl_e).lvl)
-                        Finch.coalesce_shards!(
-                            Finch.Dense($(lvl_e).accumulator, $max_pos),
-                            Finch.Dense($(lvl_c), $max_pos), $P, 1, $bands,
+                        Galley.coalesce_shards!(
+                            Galley.Dense($(lvl_e).accumulator, $max_pos),
+                            Galley.Dense($(lvl_c), $max_pos), $P, 1, $bands,
                         )
                     else
                         # SparseList levels, including children of hashes,
                         # accumulate into hashes. Restore the output format
                         # whenever any level differs before merging the bands.
-                        Finch.@barrier Threads.@threads for $tid in 1:($P)
+                        Galley.@barrier Threads.@threads for $tid in 1:($P)
                             $(
                                 contain(ctx) do ctx_2
                                     diff = Dict()
@@ -912,9 +912,9 @@ function freeze_level!(ctx, lvl::VirtualCoalesceLevel, pos)
                                 end
                             )
                         end
-                        Finch.coalesce_shards!(
-                            Finch.Dense($(lvl_e).lvl, $max_pos),
-                            Finch.Dense($(lvl_c), $max_pos), $P, 1, $bands,
+                        Galley.coalesce_shards!(
+                            Galley.Dense($(lvl_e).lvl, $max_pos),
+                            Galley.Dense($(lvl_c), $max_pos), $P, 1, $bands,
                         )
                     end
                 end

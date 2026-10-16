@@ -1,14 +1,14 @@
 @testitem "interface_einsum" setup = [CheckOutput] begin
-    using Finch: AsArray
+    using Galley: AsArray
     using SparseArrays
     using LinearAlgebra
 
     for (key, scheduler) in [
-        "default" => Finch.default_scheduler(),
-        "interp" => Finch.DefaultLogicOptimizer(Finch.LogicInterpreter()),
-        "galley" => Finch.galley_scheduler(),
+        "default" => Galley.default_scheduler(),
+        "interp" => Galley.DefaultLogicOptimizer(Galley.LogicInterpreter()),
+        "galley" => Galley.galley_scheduler(),
     ]
-        Finch.with_scheduler(scheduler) do
+        Galley.with_scheduler(scheduler) do
             @testset "$key scheduler" begin
                 # Test 0
                 A = [1 2; 3 4]
@@ -159,7 +159,7 @@
 end
 
 @testitem "interface_asmd" setup = [CheckOutput] begin
-    using Finch: AsArray
+    using Galley: AsArray
     using SparseArrays
     using Statistics
     using LinearAlgebra
@@ -298,7 +298,7 @@ end
         @test reshape(LinearIndices((6, 6)), (3, 12)) == reshape(A, (3, 12))
         @test reshape(LinearIndices((6, 6)), 3, 12) == reshape(A, 3, 12)
         @test reshape(LinearIndices((6, 6)), 3, :) == reshape(A, 3, :)
-        @test Finch.reshape!(
+        @test Galley.reshape!(
             Tensor(Dense(Dense(Element(0))), 3, 12), A, (3, 12)
         ) == reshape(LinearIndices((6, 6)), (3, 12))
 
@@ -421,11 +421,11 @@ end
     end
 
     for (key, scheduler) in [
-        "default" => Finch.default_scheduler(),
-        "interp" => Finch.DefaultLogicOptimizer(Finch.LogicInterpreter()),
-        "galley" => Finch.galley_scheduler(),
+        "default" => Galley.default_scheduler(),
+        "interp" => Galley.DefaultLogicOptimizer(Galley.LogicInterpreter()),
+        "galley" => Galley.galley_scheduler(),
     ]
-        Finch.with_scheduler(scheduler) do
+        Galley.with_scheduler(scheduler) do
             @testset "$key scheduler" begin
                 let
                     io = IOBuffer()
@@ -665,7 +665,7 @@ end
 end
 
 @testitem "interface_issues" setup = [CheckOutput] begin
-    using Finch: AsArray
+    using Galley: AsArray
     using SparseArrays
     using LinearAlgebra
 
@@ -686,11 +686,11 @@ end
     end
 
     for (key, scheduler) in [
-        "default" => Finch.default_scheduler(),
-        "interp" => Finch.DefaultLogicOptimizer(Finch.LogicInterpreter()),
-        "galley" => Finch.galley_scheduler(),
+        "default" => Galley.default_scheduler(),
+        "interp" => Galley.DefaultLogicOptimizer(Galley.LogicInterpreter()),
+        "galley" => Galley.galley_scheduler(),
     ]
-        Finch.with_scheduler(scheduler) do
+        Galley.with_scheduler(scheduler) do
             @testset "$key scheduler" begin
 
                 #https://github.com/finch-tensor/Finch.jl/issues/383
@@ -706,25 +706,27 @@ end
                 let
                     @test eltype(
                         broadcast(
-                            Finch.fld_nothrow, Tensor(ones(Int16, 1)), Tensor(ones(Int8, 1))
+                            Galley.fld_nothrow, Tensor(ones(Int16, 1)),
+                            Tensor(ones(Int8, 1)),
                         ),
                     ) == Int16
                     @test eltype(
                         broadcast(
-                            Finch.fld_nothrow, Tensor(ones(Int16, 0)), Tensor(ones(Int8, 0))
+                            Galley.fld_nothrow, Tensor(ones(Int16, 0)),
+                            Tensor(ones(Int8, 0)),
                         ),
                     ) == Int16
 
                     @test eltype(
                         broadcast(
-                            Finch.fld_nothrow,
+                            Galley.fld_nothrow,
                             Tensor(ones(Float64, 1)),
                             Tensor(ones(Float32, 1)),
                         ),
                     ) == Float64
                     @test eltype(
                         broadcast(
-                            Finch.fld_nothrow,
+                            Galley.fld_nothrow,
                             Tensor(ones(Float64, 0)),
                             Tensor(ones(Float32, 0)),
                         ),
@@ -753,7 +755,7 @@ end
                     a_tns = Tensor(a)
                     b_tns = Tensor(b)
 
-                    res = Finch.tensordot(a_tns, b_tns, ((1,), (1,)))
+                    res = Galley.tensordot(a_tns, b_tns, ((1,), (1,)))
 
                     @test eltype(res) == ComplexF64
                 end
@@ -762,7 +764,7 @@ end
                 let
                     a = Tensor(ones(UInt8, 1))
                     b = Tensor(ones(UInt8, 1))
-                    @test eltype(Finch.tensordot(a, b, 0)) == UInt8
+                    @test eltype(Galley.tensordot(a, b, 0)) == UInt8
                 end
 
                 #https://github.com/finch-tensor/Finch.jl/issues/474
@@ -774,8 +776,8 @@ end
                     tns2 = Tensor(Dense(Dense(Element(0))), arr2)
 
                     broadcast(/, tns, tns2)  # passes
-                    broadcast(Finch.fld_nothrow, tns, tns2)  # fails with RewriteTools.RuleRewriteError
-                    broadcast(Finch.rem_nothrow, tns, tns2)
+                    broadcast(Galley.fld_nothrow, tns, tns2)  # fails with RewriteTools.RuleRewriteError
+                    broadcast(Galley.rem_nothrow, tns, tns2)
                 end
 
                 #https://github.com/finch-tensor/Finch.jl/issues/520
@@ -971,7 +973,7 @@ end
                     A = Tensor(Dense(Dense(Element(0.0))), 10, 10)
                     res = sum(tensordot(A, A, ((1,), (2,))))
 
-                    A_lazy = Finch.LazyTensor(A)
+                    A_lazy = Galley.LazyTensor(A)
                     res = sum(tensordot(A_lazy, A_lazy, ((1,), (2,))))  # fails
                 end
 
@@ -1074,21 +1076,21 @@ end
                     @test argmax(A; dims=(1, 2)) == argmax(Tensor(A); dims=(1, 2))
 
                     A = rand(4)
-                    @test argmin(A) == Finch.argmin_python(Tensor(A))
-                    @test argmax(A) == Finch.argmax_python(Tensor(A))
+                    @test argmin(A) == Galley.argmin_python(Tensor(A))
+                    @test argmax(A) == Galley.argmax_python(Tensor(A))
 
                     A = rand(4, 5)
                     flat = LinearIndices(size(A))
-                    @test flat[argmin(A)] == Finch.argmin_python(Tensor(A))
+                    @test flat[argmin(A)] == Galley.argmin_python(Tensor(A))
                     @test first.(Tuple.(argmin(A; dims=1))) ==
-                        Finch.argmin_python(Tensor(A); dims=1)
+                        Galley.argmin_python(Tensor(A); dims=1)
                     @test map(i -> flat[i], argmin(A; dims=(1, 2))) ==
-                        Finch.argmin_python(Tensor(A); dims=(1, 2))
-                    @test flat[argmax(A)] == Finch.argmax_python(Tensor(A))
+                        Galley.argmin_python(Tensor(A); dims=(1, 2))
+                    @test flat[argmax(A)] == Galley.argmax_python(Tensor(A))
                     @test first.(Tuple.(argmax(A; dims=1))) ==
-                        Finch.argmax_python(Tensor(A); dims=1)
+                        Galley.argmax_python(Tensor(A); dims=1)
                     @test map(i -> flat[i], argmax(A; dims=(1, 2))) ==
-                        Finch.argmax_python(Tensor(A); dims=(1, 2))
+                        Galley.argmax_python(Tensor(A); dims=(1, 2))
                 end
 
                 #https://github.com/finch-tensor/Finch.jl/issues/726

@@ -4,7 +4,7 @@ abstract type AbstractVirtualFiber{Lvl} <: AbstractVirtualTensor end
 """
     Tensor{Lvl} <: AbstractFiber{Lvl}
 
-The multidimensional array type used by `Finch`. `Tensor` is a thin wrapper
+The multidimensional array type used by `Galley`. `Tensor` is a thin wrapper
 around the hierarchical level storage of type `Lvl`.
 """
 struct Tensor{Lvl} <: AbstractFiber{Lvl}
@@ -362,7 +362,7 @@ isstructequal(a, b) = a === b
 
 isstructequal(a::T, b::T) where {T<:Tensor} = isstructequal(a.lvl, b.lvl)
 
-function isstructequal(a::T, b::T) where {T<:Finch.SubFiber}
+function isstructequal(a::T, b::T) where {T<:Galley.SubFiber}
     isstructequal(a.lvl, b.lvl) &&
         isstructequal(a.ptr, b.ptr)
 end

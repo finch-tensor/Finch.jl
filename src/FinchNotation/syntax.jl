@@ -97,7 +97,7 @@ initwrite(z) = InitWriter{z}()
 `overwrite(z)` is a function which returns `b` always. `lhs[] := rhs` is equivalent to
 `lhs[] <<overwrite>>= rhs`.
 
-```jldoctest; setup=:(using Finch)
+```jldoctest; setup=:(using Galley)
 julia> a = Tensor(SparseList(Element(0.0)), [0, 1.1, 0, 4.4, 0])
 5 Tensor{SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0
@@ -155,11 +155,11 @@ function (ctx::FinchParserVisitor)(ex::Expr)
     elseif @capture ex :if(~cond, ~body, ~tail)
         throw(
             FinchSyntaxError(
-                "Finch does not support else, elseif, or the ternary operator. Consider using multiple if blocks, or the ifelse() function instead."
+                "Galley does not support else, elseif, or the ternary operator. Consider using multiple if blocks, or the ifelse() function instead."
             ),
         )
     elseif @capture ex :elseif(~args...)
-        throw(FinchSyntaxError("Finch does not support elseif."))
+        throw(FinchSyntaxError("Galley does not support elseif."))
     elseif @capture ex :(.=)(~tns, ~init)
         return :($(ctx.nodes.declare)(
             $(ctx(tns)), $(ctx(init)), $(ctx.nodes.literal)(auto)
@@ -256,9 +256,9 @@ function (ctx::FinchParserVisitor)(ex::Expr)
         lhs = :($(ctx.nodes.access)($(ctx(tns)), $mode($(ctx(op))), $(map(ctx, idxs)...)))
         return :($(ctx.nodes.assign)($lhs, $(ctx(op)), $(ctx(rhs))))
     elseif @capture ex :>>=(:call(:<<, ~lhs, ~op), ~rhs)
-        error("Finch doesn't support incrementing definitions of variables")
+        error("Galley doesn't support incrementing definitions of variables")
     elseif @capture ex :(=)(~lhs, ~rhs)
-        error("Finch doesn't support variable bindings outside of let statements")
+        error("Galley doesn't support variable bindings outside of let statements")
     elseif @capture ex :tuple(~args...)
         return ctx(:(tuple($(args...))))
     elseif @capture ex :comparison(~a, ~cmp, ~b)

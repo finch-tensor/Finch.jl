@@ -1,27 +1,27 @@
 module SparseArraysExt
 
-using Finch
-using Finch: AbstractCompiler, DefaultStyle, VirtualExtent
-using Finch: Unfurled, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
+using Galley
+using Galley: AbstractCompiler, DefaultStyle, VirtualExtent
+using Galley: Unfurled, Stepper, Jumper, Run, FillLeaf, Lookup, Simplify, Sequence, Phase,
     Thunk, Spike
-using Finch: virtual_size, virtual_fill_value, getstart, getstop, freshen, push_preamble!,
+using Galley: virtual_size, virtual_fill_value, getstart, getstop, freshen, push_preamble!,
     push_epilogue!, SwizzleArray
-using Finch: get_mode_flag, issafe, contain
-using Finch: FinchProtocolError
-using Finch.FinchNotation
+using Galley: get_mode_flag, issafe, contain
+using Galley: FinchProtocolError
+using Galley.FinchNotation
 
 using Base: @kwdef
 
 isdefined(Base, :get_extension) ? (using SparseArrays) : (using ..SparseArrays)
 
-function Finch.Tensor(arr::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
+function Galley.Tensor(arr::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
     (m, n) = size(arr)
     return Tensor(
         Dense(SparseList{Ti}(Element{zero(Tv)}(arr.nzval), m, arr.colptr, arr.rowval), n)
     )
 end
 
-function Finch.Tensor(arr::SparseVector{Tv,Ti}) where {Tv,Ti}
+function Galley.Tensor(arr::SparseVector{Tv,Ti}) where {Tv,Ti}
     (n,) = size(arr)
     return Tensor(
         SparseList{Ti}(
@@ -89,15 +89,15 @@ end
     prev_pos
 end
 
-function Finch.virtual_size(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
+function Galley.virtual_size(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     return arr.shape
 end
 
-function Finch.virtual_resize!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, m, n)
+function Galley.virtual_resize!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, m, n)
     arr.shape = [m, n]
 end
 
-function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ::DefaultStyle)
+function Galley.lower(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ::DefaultStyle)
     return quote
         $SparseMatrixCSC(
             $(ctx(getstop(arr.shape[1]))),
@@ -109,7 +109,7 @@ function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, ::Defau
     end
 end
 
-function Finch.virtualize(
+function Galley.virtualize(
     ctx, ex, ::Type{<:SparseMatrixCSC{Tv,Ti}}, tag=:tns
 ) where {Tv,Ti}
     tag = freshen(ctx, tag)
@@ -157,11 +157,11 @@ function distribute(
     )
 end
 
-function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
+function Galley.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, diff)
     get(diff, arr.tag, arr)
 end
 
-function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init)
+function Galley.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init)
     #TODO check that init == fill_value
     Tp = Ti = arr.Ti
     pos_stop = ctx(getstop(virtual_size(ctx, arr)[2]))
@@ -186,7 +186,7 @@ function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC, init
     return arr
 end
 
-function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
+function Galley.freeze!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     p = freshen(ctx, :p)
     pos_stop = ctx(getstop(virtual_size(ctx, arr)[2]))
     qos_stop = freshen(ctx, :qos_stop)
@@ -205,7 +205,7 @@ function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     return arr
 end
 
-function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
+function Galley.thaw!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
     p = freshen(ctx, :p)
     pos_stop = ctx(getstop(virtual_size(ctx, arr)[2]))
     qos_stop = freshen(ctx, :qos_stop)
@@ -219,7 +219,7 @@ function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSC)
                 if issafe(get_mode_flag(ctx))
                     quote
                         $(arr.prev_pos) =
-                            Finch.scansearch(
+                            Galley.scansearch(
                                 $(arr.ptr), $(arr.qos_stop) + 1, 1, $pos_stop
                             ) - 1
                     end
@@ -238,13 +238,13 @@ end
     j
 end
 
-function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
-    VirtualSparseMatrixCSCColumn(Finch.redistribute(ctx, arr.mtx, diff), arr.j)
+function Galley.redistribute(ctx::AbstractCompiler, arr::VirtualSparseMatrixCSCColumn, diff)
+    VirtualSparseMatrixCSCColumn(Galley.redistribute(ctx, arr.mtx, diff), arr.j)
 end
 
 FinchNotation.finch_leaf(x::VirtualSparseMatrixCSCColumn) = virtual(x)
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx,
     tns::VirtualSparseMatrixCSCColumn,
     ext,
@@ -278,7 +278,7 @@ function Finch.unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch(
+                            $my_q = Galley.scansearch(
                                 $(arr.idx),
                                 $(ctx(getstart(ext))),
                                 $my_q,
@@ -309,11 +309,11 @@ function Finch.unfurl(
     )
 end
 
-#Finch.is_injective(ctx, tns::VirtualSparseMatrixCSCColumn) = is_injective(ctx, tns.mtx)[1]
-#Finch.is_atomic(ctx, tns::VirtualSparseMatrixCSCColumn) = is_atomic(ctx, tns.mtx)[1]
-#Finch.is_concurrent(ctx, tns::VirtualSparseMatrixCSCColumn) = is_concurrent(ctx, tns.mtx)[1]
+#Galley.is_injective(ctx, tns::VirtualSparseMatrixCSCColumn) = is_injective(ctx, tns.mtx)[1]
+#Galley.is_atomic(ctx, tns::VirtualSparseMatrixCSCColumn) = is_atomic(ctx, tns.mtx)[1]
+#Galley.is_concurrent(ctx, tns::VirtualSparseMatrixCSCColumn) = is_concurrent(ctx, tns.mtx)[1]
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx::AbstractCompiler,
     arr::VirtualSparseMatrixCSC,
     ext,
@@ -329,7 +329,7 @@ function Finch.unfurl(
     )
 end
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx::AbstractCompiler,
     arr::VirtualSparseMatrixCSC,
     ext,
@@ -345,7 +345,7 @@ function Finch.unfurl(
     )
 end
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx,
     tns::VirtualSparseMatrixCSCColumn,
     ext,
@@ -380,14 +380,14 @@ function Finch.unfurl(
                 preamble=quote
                     if $qos > $qos_stop
                         $qos_stop = max($qos_stop << 1, 1)
-                        Finch.resize_if_smaller!($(arr.idx), $qos_stop)
-                        Finch.resize_if_smaller!($(arr.val), $qos_stop)
+                        Galley.resize_if_smaller!($(arr.idx), $qos_stop)
+                        Galley.resize_if_smaller!($(arr.val), $qos_stop)
                     end
                     $dirty = false
                 end,
-                body=(ctx) -> Finch.instantiate(
+                body=(ctx) -> Galley.instantiate(
                     ctx,
-                    Finch.VirtualSparseScalar(
+                    Galley.VirtualSparseScalar(
                         nothing,
                         nothing,
                         arr.Tv,
@@ -420,10 +420,10 @@ function Finch.unfurl(
     )
 end
 
-Finch.FinchNotation.finch_leaf(x::VirtualSparseMatrixCSC) = virtual(x)
+Galley.FinchNotation.finch_leaf(x::VirtualSparseMatrixCSC) = virtual(x)
 
-Finch.virtual_fill_value(ctx, arr::VirtualSparseMatrixCSC) = zero(arr.Tv)
-Finch.virtual_eltype(ctx, tns::VirtualSparseMatrixCSC) = tns.Tv
+Galley.virtual_fill_value(ctx, arr::VirtualSparseMatrixCSC) = zero(arr.Tv)
+Galley.virtual_eltype(ctx, tns::VirtualSparseMatrixCSC) = tns.Tv
 
 """
     SparseVector(arr::Union{Tensor, SwizzleArray})
@@ -460,21 +460,21 @@ end
     qos_stop
 end
 
-function Finch.virtual_size(ctx::AbstractCompiler, arr::VirtualSparseVector)
+function Galley.virtual_size(ctx::AbstractCompiler, arr::VirtualSparseVector)
     return arr.shape
 end
 
-function Finch.virtual_resize!(ctx::AbstractCompiler, arr::VirtualSparseVector, n)
+function Galley.virtual_resize!(ctx::AbstractCompiler, arr::VirtualSparseVector, n)
     arr.shape = [n]
 end
 
-function Finch.lower(ctx::AbstractCompiler, arr::VirtualSparseVector, ::DefaultStyle)
+function Galley.lower(ctx::AbstractCompiler, arr::VirtualSparseVector, ::DefaultStyle)
     return quote
         $SparseVector($(ctx(getstop(arr.shape[1]))), $(arr.idx), $(arr.val))
     end
 end
 
-function Finch.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) where {Tv,Ti}
+function Galley.virtualize(ctx, ex, ::Type{<:SparseVector{Tv,Ti}}, tag=:tns) where {Tv,Ti}
     tag = freshen(ctx, tag)
     shape = [VirtualExtent(literal(1), value(:($ex.n), Ti))]
     idx = freshen(ctx, tag, :_idx)
@@ -507,11 +507,11 @@ function distribute(
     )
 end
 
-function Finch.redistribute(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
+function Galley.redistribute(ctx::AbstractCompiler, arr::VirtualSparseVector, diff)
     get(diff, arr.tag, arr)
 end
 
-function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
+function Galley.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
     #TODO check that init == fill_value
     Tp = Ti = arr.Ti
     push_preamble!(
@@ -524,7 +524,7 @@ function Finch.declare!(ctx::AbstractCompiler, arr::VirtualSparseVector, init)
     return arr
 end
 
-function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseVector)
+function Galley.freeze!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     p = freshen(ctx, :p)
     qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
@@ -538,7 +538,7 @@ function Finch.freeze!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     return arr
 end
 
-function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseVector)
+function Galley.thaw!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     p = freshen(ctx, :p)
     qos_stop = freshen(ctx, :qos_stop)
     push_preamble!(
@@ -552,7 +552,7 @@ function Finch.thaw!(ctx::AbstractCompiler, arr::VirtualSparseVector)
     return arr
 end
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx::AbstractCompiler,
     arr::VirtualSparseVector,
     ext,
@@ -587,7 +587,7 @@ function Finch.unfurl(
                     body=(ctx, ext) -> Stepper(;
                         seek=(ctx, ext) -> quote
                             if $(arr.idx)[$my_q] < $(ctx(getstart(ext)))
-                                $my_q = Finch.scansearch(
+                                $my_q = Galley.scansearch(
                                     $(arr.idx),
                                     $(ctx(getstart(ext))),
                                     $my_q,
@@ -619,7 +619,7 @@ function Finch.unfurl(
     )
 end
 
-function Finch.unfurl(
+function Galley.unfurl(
     ctx, arr::VirtualSparseVector, ext, mode, ::Union{typeof(defaultupdate),typeof(extrude)}
 )
     tag = arr.tag
@@ -640,14 +640,14 @@ function Finch.unfurl(
                     preamble=quote
                         if $qos > $qos_stop
                             $qos_stop = max($qos_stop << 1, 1)
-                            Finch.resize_if_smaller!($(arr.idx), $qos_stop)
-                            Finch.resize_if_smaller!($(arr.val), $qos_stop)
+                            Galley.resize_if_smaller!($(arr.idx), $qos_stop)
+                            Galley.resize_if_smaller!($(arr.val), $qos_stop)
                         end
                         $dirty = false
                     end,
-                    body=(ctx) -> Finch.instantiate(
+                    body=(ctx) -> Galley.instantiate(
                         ctx,
-                        Finch.VirtualSparseScalar(
+                        Galley.VirtualSparseScalar(
                             nothing,
                             nothing,
                             arr.Tv,
@@ -673,10 +673,10 @@ function Finch.unfurl(
     )
 end
 
-Finch.FinchNotation.finch_leaf(x::VirtualSparseVector) = virtual(x)
+Galley.FinchNotation.finch_leaf(x::VirtualSparseVector) = virtual(x)
 
-Finch.virtual_fill_value(ctx, arr::VirtualSparseVector) = zero(arr.Tv)
-Finch.virtual_eltype(ctx, tns::VirtualSparseVector) = tns.Tv
+Galley.virtual_fill_value(ctx, arr::VirtualSparseVector) = zero(arr.Tv)
+Galley.virtual_eltype(ctx, tns::VirtualSparseVector) = tns.Tv
 
 SparseArrays.nnz(fbr::Tensor) = countstored(fbr)
 

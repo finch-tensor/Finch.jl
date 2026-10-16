@@ -346,7 +346,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBlockListLevel,
             $(lvl.qos_stop) = $(Tp(0))
             $(lvl.ros_fill) = $(Tp(0))
             $(lvl.ros_stop) = $(Tp(0))
-            Finch.resize_if_smaller!($(lvl.ofs), 1)
+            Galley.resize_if_smaller!($(lvl.ofs), 1)
             $(lvl.ofs)[1] = 1
         end,
     )
@@ -366,8 +366,8 @@ function assemble_level!(ctx, lvl::VirtualSparseBlockListLevel, pos_start, pos_s
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
     end
 end
 
@@ -432,7 +432,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_r] < $(ctx(getstart(ext)))
-                            $my_r = Finch.scansearch(
+                            $my_r = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_r,
@@ -516,7 +516,7 @@ function unfurl(
                 body=(ctx, ext) -> Jumper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_r] < $(ctx(getstart(ext)))
-                            $my_r = Finch.scansearch(
+                            $my_r = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_r,
@@ -639,8 +639,8 @@ function unfurl(
                             $ros += $(Tp(1))
                             if $ros > $ros_stop
                                 $ros_stop = max($ros_stop << 1, 1)
-                                Finch.resize_if_smaller!($(lvl.idx), $ros_stop)
-                                Finch.resize_if_smaller!($(lvl.ofs), $ros_stop + 1)
+                                Galley.resize_if_smaller!($(lvl.idx), $ros_stop)
+                                Galley.resize_if_smaller!($(lvl.ofs), $ros_stop + 1)
                             end
                         end
                         $(lvl.idx)[$ros] = $my_i_prev = $(ctx(idx))

@@ -1,15 +1,16 @@
 @testitem "galley" begin
     using Test
-    using Finch
-    using Finch: AsArray, StableSet
+    using Galley
+    using Galley: AsArray, StableSet
     using SparseArrays
     using LinearAlgebra
 
-    using Finch.Galley
-    using Finch.Galley: t_sparse_list, t_dense
-    using Finch.Galley: canonicalize, insert_statistics!, get_reduce_query, AnnotatedQuery,
+    using Galley.Optimizer
+    using Galley.Optimizer: t_sparse_list, t_dense
+    using Galley.Optimizer: canonicalize, insert_statistics!, get_reduce_query,
+        AnnotatedQuery,
         reduce_idx!, cost_of_reduce, greedy_query_to_plan
-    using Finch.Galley:
+    using Galley.Optimizer:
         estimate_nnz, reduce_tensor_stats, condense_stats!, merge_tensor_stats
 
     @testset verbose = true "Plan Equality" begin
@@ -683,7 +684,7 @@
 
         # https://github.com/finch-tensor/Finch.jl/issues/811
         @testset "issimilar with >= 50 DCs" begin
-            using Finch.Galley: issimilar, DC, copy_def
+            using Galley.Optimizer: issimilar, DC, copy_def
 
             A = Tensor(Dense(Dense(Dense(Dense(Element(0.0))))), rand(8, 8, 8, 8))
             stat = DCStats(A, [:i, :j, :k, :l])
@@ -703,7 +704,7 @@
             @test !issimilar(stat, with_dcs(StableSet{DC}(scaled)), 2.0)
 
             # AdaptiveExecutor calls issimilar when it revisits a cached plan
-            ctx = Finch.galley_scheduler()
+            ctx = Galley.galley_scheduler()
             for n in (6, 8)
                 A = Tensor(Dense(Dense(Dense(Dense(Element(0.0))))), rand(n, n, n, n))
                 B = Tensor(Dense(Dense(Element(0.0))), rand(n, 4))

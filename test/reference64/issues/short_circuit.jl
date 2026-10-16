@@ -32,13 +32,13 @@ begin
     if phase_stop >= 1
         i = 1
         if y_lvl_idx[y_lvl_q] < 1
-            y_lvl_q = Finch.scansearch(y_lvl_idx, 1, y_lvl_q, y_lvl_q_stop - 1)
+            y_lvl_q = Galley.scansearch(y_lvl_idx, 1, y_lvl_q, y_lvl_q_stop - 1)
         end
         if x_lvl_idx[x_lvl_q] < 1
-            x_lvl_q = Finch.scansearch(x_lvl_idx, 1, x_lvl_q, x_lvl_q_stop - 1)
+            x_lvl_q = Galley.scansearch(x_lvl_idx, 1, x_lvl_q, x_lvl_q_stop - 1)
         end
         while i <= phase_stop
-            if Finch.isannihilator(Finch.DefaultAlgebra(), |, s_val)
+            if Galley.isannihilator(Galley.DefaultAlgebra(), |, s_val)
                 break
             end
             y_lvl_i = y_lvl_idx[y_lvl_q]

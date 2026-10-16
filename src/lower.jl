@@ -1,7 +1,7 @@
 """
     FinchCompiler
 
-The core compiler for Finch, lowering canonicalized Finch IR to Julia code.
+The core compiler for Galley, lowering canonicalized Finch IR to Julia code.
 """
 @kwdef mutable struct FinchCompiler <: AbstractCompiler
     code = JuliaContext()
@@ -189,7 +189,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
     elseif root.kind === access
         tns = resolve(ctx, root.tns)
         if length(root.idxs) > 0
-            throw(FinchCompileError("Finch failed to completely lower an access to $tns"))
+            throw(FinchCompileError("Galley failed to completely lower an access to $tns"))
         end
         @assert (root.mode.kind === reader) || (root.mode.kind === updater)
         return lower_access(ctx, tns, root.mode)
@@ -241,7 +241,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         @assert root.lhs.kind === access
         @assert root.lhs.mode.kind === updater
         if length(root.lhs.idxs) > 0
-            throw(FinchCompileError("Finch failed to completely lower an access to $tns"))
+            throw(FinchCompileError("Galley failed to completely lower an access to $tns"))
         end
         rhs = simplify(ctx, root.rhs)
         tns = resolve(ctx, root.lhs.tns)

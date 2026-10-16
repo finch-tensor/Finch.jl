@@ -2,7 +2,7 @@
     using MatrixMarket
     using Pkg
     using HDF5
-    using Finch: Structure
+    using Galley: Structure
     @testset "h5 binsparse" begin
         let f = mktempdir()
             A = [0.0 1.0 2.0 2.0;
@@ -184,7 +184,7 @@ end
 
 @testitem "fileio_binsparse_iso" begin
     using HDF5
-    using Finch: JSON
+    using Galley: JSON
 
     mktempdir() do dir
         for (T, type_name) in ((Float32, "float32"), (Float64, "float64")), n in (0, 1, 4)
@@ -194,7 +194,7 @@ end
                 fname = joinpath(dir, "iso.bsp.h5")
                 h5open(fname, "w") do io
                     desc = Dict(
-                        "version" => string(Finch.BINSPARSE_VERSION),
+                        "version" => string(Galley.BINSPARSE_VERSION),
                         "format" => "DVEC",
                         "shape" => [n],
                         "number_of_stored_values" => n,
@@ -206,20 +206,20 @@ end
                     io["values"] = n == 0 ? T[] : T[real(value), imag(value)]
                     io["fill_value"] = T[real(fill_value), imag(fill_value)]
                     original = deepcopy(desc)
-                    @test Finch.bspread_data(io, desc, "values") == fill(value, n)
-                    @test Finch.bspread_data(io, desc, "fill_value") == [fill_value]
+                    @test Galley.bspread_data(io, desc, "values") == fill(value, n)
+                    @test Galley.bspread_data(io, desc, "fill_value") == [fill_value]
                     @test desc == original
-                    Finch.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
+                    Galley.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
 
                     desc["data_types"]["values"] = "iso[complex[unknown]]"
                     original = deepcopy(desc)
-                    @test_throws ArgumentError Finch.bspread_data(io, desc, "values")
+                    @test_throws ArgumentError Galley.bspread_data(io, desc, "values")
                     @test desc == original
                 end
                 tensor = bspread(fname)
                 @test eltype(tensor) == Complex{T}
                 @test Array(tensor) == fill(value, n)
-                @test Finch.fill_value(tensor) == fill_value
+                @test Galley.fill_value(tensor) == fill_value
             end
         end
     end
@@ -245,7 +245,7 @@ end
         )
         # MatrixMarket arrays store entries in column-major order.
         expected = [1.0 3.0 5.0; 2.0 4.0 6.0]
-        @test Array(Finch.fmmread(fname)) == expected
+        @test Array(Galley.fmmread(fname)) == expected
         @test Array(fread(fname)) == expected
 
         for expected in (
@@ -327,10 +327,10 @@ end
 
 @testitem "fileio_binsparse_layouts" begin
     using HDF5
-    using Finch: JSON
+    using Galley: JSON
 
     mktempdir() do dir
-        # Stored dimensions are (j, i, k). Finch's internal order (k, i, j)
+        # Stored dimensions are (j, i, k). Galley's internal order (k, i, j)
         # requires a non-self-inverse permutation to recover logical (i, j, k).
         expected = zeros(Int64, 2, 3, 4)
         expected[2, 1, 4] = 5
@@ -345,7 +345,7 @@ end
         path = joinpath(dir, "coordinates.h5")
         h5open(path, "w") do io
             desc = Dict(
-                "version" => string(Finch.BINSPARSE_VERSION),
+                "version" => string(Galley.BINSPARSE_VERSION),
                 "format" => "custom", "custom" => custom,
                 "shape" => [2, 3, 4], "number_of_stored_values" => 2,
                 "data_types" => Dict(
@@ -357,7 +357,7 @@ end
             io["indices_1"] = Int64[1, 0]
             io["indices_2"] = Int64[3, 1]
             io["values"] = Int64[5, 7]
-            Finch.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
+            Galley.bspwrite_header(io, JSON.json(Dict("binsparse" => desc)))
         end
         tensor_read = bspread(path)
         @test Array(tensor_read) == expected
@@ -370,7 +370,7 @@ end
         )
         bspwrite(path, tensor)
         h5open(path, "r") do io
-            @test Finch.bspread_header(io)["binsparse"]["custom"] == custom
+            @test Galley.bspread_header(io)["binsparse"]["custom"] == custom
             @test read(io["indices_0"]) == [0, 2]
             @test read(io["indices_1"]) == [1, 0]
             @test read(io["indices_2"]) == [3, 1]

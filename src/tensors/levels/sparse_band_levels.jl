@@ -299,7 +299,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseBandLevel, pos,
         quote
             $(lvl.qos_fill) = $(Tp(0))
             $(lvl.qos_stop) = $(Tp(0))
-            Finch.resize_if_smaller!($(lvl.ofs), 1)
+            Galley.resize_if_smaller!($(lvl.ofs), 1)
             $(lvl.ofs)[1] = 1
         end,
     )
@@ -319,10 +319,10 @@ function assemble_level!(ctx, lvl::VirtualSparseBandLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.idx), $pos_stop)
-        Finch.fill_range!($(lvl.idx), 1, $pos_start, $pos_stop)
-        Finch.resize_if_smaller!($(lvl.ofs), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ofs), 0, $pos_start + 1, $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.idx), $pos_stop)
+        Galley.fill_range!($(lvl.idx), 1, $pos_start, $pos_stop)
+        Galley.resize_if_smaller!($(lvl.ofs), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ofs), 0, $pos_start + 1, $pos_stop + 1)
     end
 end
 

@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # High-Level Array API
 
-Finch tensors also support many of the basic array operations one might expect,
+Galley tensors also support many of the basic array operations one might expect,
 including indexing, slicing, and elementwise maps, broadcast, and reduce.
 For example:
 
-```jldoctest example1; setup = :(using Finch)
+```jldoctest example1; setup = :(using Galley)
 julia> A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [1.0, 2.0, 3.0])
 3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0  1.0  0.0  2.0  0.0  0.0
@@ -47,7 +47,7 @@ julia> map(x -> x^2, B)
 
 # Einsum
 
-Finch also supports a highly general `@einsum` macro which supports any reduction over any simple pointwise array expression.
+Galley also supports a highly general `@einsum` macro which supports any reduction over any simple pointwise array expression.
 
 ```@docs
 @einsum
@@ -55,7 +55,7 @@ Finch also supports a highly general `@einsum` macro which supports any reductio
 
 # Array Fusion
 
-Finch supports array fusion, which allows you to compose multiple array operations
+Galley supports array fusion, which allows you to compose multiple array operations
 into a single kernel. This can be a significant performance optimization, as it
 allows the compiler to optimize the entire operation at once. The two functions
 the user needs to know about are `lazy` and `compute`. You can use `lazy` to
@@ -119,7 +119,7 @@ default_scheduler
 
 ### The Galley Optimizer
 
-Galley is a cost-based optimizer for Finch's lazy evaluation interface based on techniques from database
+Galley is a cost-based optimizer for Galley's lazy evaluation interface based on techniques from database
 query optimization. To use Galley, you just add the parameter `ctx=galley_optimizer()` to the `compute`
 function. While the default optimizer (`ctx=default_scheduler()`) makes decisions entirely based on
 the types of the inputs, Galley gathers statistics on their sparsity to make cost-based based optimization
@@ -154,7 +154,7 @@ be useful to distinguish between different uses of the same function using the
 `tag` keyword argument to `compute` or `fuse`.  For example, we may wish to
 distinguish one spmv from another, as follows:
 
-```jldoctest example2; setup=:(using Finch)
+```jldoctest example2; setup=:(using Galley)
 julia> A = rand(1000, 1000);
        B = rand(1000, 1000);
        C = fsprand(1000, 1000, 0.0001);
@@ -178,5 +178,5 @@ The following functions can be fused:
 `.+`, `.&`, `.min`,), `reduce`, `map`, `sum`, `prod`, `any`, `all`, `mapreduce`,
 `maximum`, `minimum`, `extrema`, `Statistics.mean`, `Statistics.std`,
 `Statistics.var`, `Statistics.stdm`, `Statistics.varm`, `LinearAlgebra.norm`,
-`argmax`, `argmin`, `transpose`, `permutedims`, `Finch.tensordot`, `Finch.@einsum`,
-`dropdims`, `Finch.expanddims`.
+`argmax`, `argmin`, `transpose`, `permutedims`, `Galley.tensordot`, `Galley.@einsum`,
+`dropdims`, `Galley.expanddims`.

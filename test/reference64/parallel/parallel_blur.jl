@@ -21,16 +21,16 @@ begin
     input_lvl_2_stop == input_lvl_2_stop + -1 || throw(DimensionMismatch("mismatched dimension limits ($(input_lvl_2_stop) != $(input_lvl_2_stop + -1))"))
     1 == 1 || throw(DimensionMismatch("mismatched dimension limits ($(1) != $(1))"))
     pos_stop = input_lvl_2_stop * input_lvl_stop
-    Finch.resize_if_smaller!(output_lvl_3_val, pos_stop)
-    Finch.fill_range!(output_lvl_3_val, 0.0, 1, pos_stop)
-    tmp_lvl_2_val_2 = (Finch).transfer((CPULocalMemory)(Finch.CPU{:test}(n)), tmp_lvl_2_val)
-    input_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:test}(n)), input_lvl_3_val)
-    output_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:test}(n)), output_lvl_3_val)
-    Finch.@barrier Threads.@threads(:dynamic, for tid = 1:n
+    Galley.resize_if_smaller!(output_lvl_3_val, pos_stop)
+    Galley.fill_range!(output_lvl_3_val, 0.0, 1, pos_stop)
+    tmp_lvl_2_val_2 = (Galley).transfer((CPULocalMemory)(Galley.CPU{:test}(n)), tmp_lvl_2_val)
+    input_lvl_3_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:test}(n)), input_lvl_3_val)
+    output_lvl_3_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:test}(n)), output_lvl_3_val)
+    Galley.@barrier Threads.@threads(:dynamic, for tid = 1:n
                 @inbounds @fastmath(begin
-                            tmp_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), tmp_lvl_2_val_2)
-                            input_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), input_lvl_3_val_2)
-                            output_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:test}(n), (Finch.SerialTask)()), output_lvl_3_val_2)
+                            tmp_lvl_2_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:test}(n), (Galley.SerialTask)()), tmp_lvl_2_val_2)
+                            input_lvl_3_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:test}(n), (Galley.SerialTask)()), input_lvl_3_val_2)
+                            output_lvl_3_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:test}(n), (Galley.SerialTask)()), output_lvl_3_val_2)
                             phase_start_2 = max(1, 1 + fld(input_lvl_stop * (-1 + tid), n))
                             phase_stop_2 = min(input_lvl_stop, fld(input_lvl_stop * tid, n))
                             if phase_stop_2 >= phase_start_2
@@ -39,8 +39,8 @@ begin
                                     input_lvl_q = (1 - 1) * input_lvl_stop + y_8
                                     input_lvl_q_3 = (1 - 1) * input_lvl_stop + y_8
                                     output_lvl_q = (1 - 1) * input_lvl_stop + y_8
-                                    Finch.resize_if_smaller!(tmp_lvl_2_val_3, input_lvl_2_stop)
-                                    Finch.fill_range!(tmp_lvl_2_val_3, 0, 1, input_lvl_2_stop)
+                                    Galley.resize_if_smaller!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                    Galley.fill_range!(tmp_lvl_2_val_3, 0, 1, input_lvl_2_stop)
                                     for x_9 = 1:input_lvl_2_stop
                                         tmp_lvl_q = (1 - 1) * input_lvl_2_stop + x_9
                                         input_lvl_2_q = (input_lvl_q_2 - 1) * input_lvl_2_stop + (-1 + x_9)
@@ -51,7 +51,7 @@ begin
                                         input_lvl_3_val_6 = input_lvl_3_val_3[input_lvl_2_q_3]
                                         tmp_lvl_2_val_3[tmp_lvl_q] = input_lvl_3_val_5 + input_lvl_3_val_4 + input_lvl_3_val_6 + tmp_lvl_2_val_3[tmp_lvl_q]
                                     end
-                                    Finch.resize_if_larger!(tmp_lvl_2_val_3, input_lvl_2_stop)
+                                    Galley.resize_if_larger!(tmp_lvl_2_val_3, input_lvl_2_stop)
                                     for x_10 = 1:input_lvl_2_stop
                                         output_lvl_2_q = (output_lvl_q - 1) * input_lvl_2_stop + x_10
                                         tmp_lvl_q_2 = (1 - 1) * input_lvl_2_stop + x_10
@@ -66,6 +66,6 @@ begin
                             end
                         end)
             end)
-    Finch.resize_if_larger!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
+    Galley.resize_if_larger!(output_lvl_3_val_2, input_lvl_2_stop * input_lvl_stop)
     (output = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(output_lvl_3_val_2), input_lvl_2_stop), input_lvl_stop)),)
 end

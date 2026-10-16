@@ -472,7 +472,7 @@ end
 @inline Base.zero(::Square{T,S}) where {T,S} = Square{T,S}(zero(T), zero(S))
 @inline Base.isone(x::Square) = isone(root(x))
 
-@inline Base.isinf(x::Finch.Square) = isinf(x.arg) || isinf(x.scale)
+@inline Base.isinf(x::Galley.Square) = isinf(x.arg) || isinf(x.scale)
 
 function Base.promote_rule(::Type{Square{T1,S1}}, ::Type{Square{T2,S2}}) where {T1,S1,T2,S2}
     return Square{promote_type(T1, T2),promote_type(S1, S2)}
@@ -526,7 +526,7 @@ end
 @inline Base.zero(::Type{Power{T,S,E}}) where {T,S,E} =
     Power{T,S,E}(zero(T), zero(S), one(E))
 @inline Base.zero(x::Power) = Power(zero(x.arg), zero(x.scale), x.exponent)
-@inline Base.isinf(x::Finch.Power) = isinf(x.arg) || isinf(x.scale) || isinf(x.exponent)
+@inline Base.isinf(x::Galley.Power) = isinf(x.arg) || isinf(x.scale) || isinf(x.exponent)
 @inline Base.isone(x::Power) = isone(root(x))
 
 function Base.promote_rule(
@@ -698,7 +698,7 @@ set_scheduler!(scheduler) = current_scheduler[] = scheduler
 """
     get_scheduler()
 
-Get the current Finch scheduler used by `compute` to execute lazy tensor programs.
+Get the current Galley scheduler used by `compute` to execute lazy tensor programs.
 """
 get_scheduler() = current_scheduler[]
 

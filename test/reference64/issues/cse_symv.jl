@@ -34,6 +34,6 @@ begin
         end
     end
     result = ()
-    Finch.resize_if_larger!(y_lvl_2_val, y_lvl_stop)
+    Galley.resize_if_larger!(y_lvl_2_val, y_lvl_stop)
     result
 end

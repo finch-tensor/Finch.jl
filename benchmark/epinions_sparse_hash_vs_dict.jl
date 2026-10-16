@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using BenchmarkTools
-using Finch
+using Galley
 using MatrixDepot
 using Printf
 using SparseArrays

@@ -107,7 +107,7 @@ macro barrier(args_ex...)
     f = gensym()
     esc(
         quote
-            $f = Finch.@closure ($(args...),) -> $ex
+            $f = Galley.@closure ($(args...),) -> $ex
             $f()
         end,
     )

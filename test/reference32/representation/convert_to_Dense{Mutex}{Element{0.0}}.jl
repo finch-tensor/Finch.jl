@@ -8,14 +8,14 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    Finch.resize_if_smaller!(tmp_lvl_locks, 1)
+    Galley.resize_if_smaller!(tmp_lvl_locks, 1)
     @inbounds for idx = 1:1
-            tmp_lvl_locks[idx] = Finch.make_lock(eltype(Vector{Base.Threads.SpinLock}))
+            tmp_lvl_locks[idx] = Galley.make_lock(eltype(Vector{Base.Threads.SpinLock}))
         end
-    Finch.resize_if_smaller!(tmp_lvl_2_val, ref_lvl.shape)
-    Finch.fill_range!(tmp_lvl_2_val, 0.0, 1, ref_lvl.shape)
-    tmp_lvlatomicArraysAcc = Finch.get_lock(CPU(1), tmp_lvl_locks, 1, eltype(Vector{Base.Threads.SpinLock}))
-    Finch.aquire_lock!(CPU(1), tmp_lvlatomicArraysAcc)
+    Galley.resize_if_smaller!(tmp_lvl_2_val, ref_lvl.shape)
+    Galley.fill_range!(tmp_lvl_2_val, 0.0, 1, ref_lvl.shape)
+    tmp_lvlatomicArraysAcc = Galley.get_lock(CPU(1), tmp_lvl_locks, 1, eltype(Vector{Base.Threads.SpinLock}))
+    Galley.aquire_lock!(CPU(1), tmp_lvlatomicArraysAcc)
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -26,7 +26,7 @@ quote
     phase_stop = min(ref_lvl.shape, ref_lvl_i1)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]
@@ -47,7 +47,7 @@ quote
             end
         end
     end
-    Finch.release_lock!(CPU(1), tmp_lvlatomicArraysAcc)
+    Galley.release_lock!(CPU(1), tmp_lvlatomicArraysAcc)
     resize!(tmp_lvl_locks, 1)
     resize!(tmp_lvl_2_val, ref_lvl.shape)
     (tmp = Tensor((MutexLevel){Vector{Base.Threads.SpinLock}, DenseLevel{Int32, ElementLevel{0.0, Float64, Int32, Vector{Float64}}}}((DenseLevel){Int32}(tmp_lvl_3, ref_lvl.shape), tmp_lvl_locks)),)

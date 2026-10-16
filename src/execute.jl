@@ -157,11 +157,11 @@ Finch programs are composed using the following syntax:
 Symbols are used to represent variables, and their values are taken from the environment. Loops introduce
 index variables into the scope of their bodies.
 
-Finch uses the types of the arrays and symbolic analysis to discover program
+Galley uses the types of the arrays and symbolic analysis to discover program
 optimizations. If `B` and `C` are sparse array types, the program will only run
 over the nonzeros of either.
 
-Semantically, Finch programs execute every iteration. However, Finch can use
+Semantically, Finch programs execute every iteration. However, Galley can use
 sparsity information to reliably skip iterations when possible.
 
 `options` are optional keyword arguments:

@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Finch Developers
 # SPDX-License-Identifier: MIT
 #
-# Run the Binsparse compliance test suite against Finch.jl using a persistent Julia server process.
+# Run the Binsparse compliance test suite against Galley.jl using a persistent Julia server process.
 # FINCH_SERVER_STARTUP_TIMEOUT and FINCH_SERVER_TIMEOUT default to 300 seconds
 # for startup and each conversion request, respectively.
 
@@ -54,7 +54,7 @@ julia --project="${repo_root}/test" -e '
   Pkg.instantiate()
 ' "${repo_root}"
 
-# Set up FIFO for persistent Finch server
+# Set up FIFO for persistent Galley server
 FIFO_DIR=$(mktemp -d)
 FIFO="${FIFO_DIR}/finch_fifo"
 READY_FILE="${FIFO_DIR}/ready"
@@ -85,7 +85,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "Starting persistent Finch server..."
+echo "Starting persistent Galley server..."
 julia --project="${repo_root}/test" "${script_dir}/finch_server.jl" "$FIFO" "$READY_FILE" &
 SERVER_PID=$!
 export FINCH_SERVER_PID="$SERVER_PID"
@@ -94,18 +94,18 @@ export FINCH_SERVER_PID="$SERVER_PID"
 startup_deadline=$((SECONDS + ${FINCH_SERVER_STARTUP_TIMEOUT:-300}))
 while [[ ! -f "$READY_FILE" ]]; do
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "error: Finch server failed to start" >&2
+    echo "error: Galley server failed to start" >&2
     exit 1
   fi
   if (( SECONDS >= startup_deadline )); then
-    echo "error: timed out waiting for Finch server to start" >&2
+    echo "error: timed out waiting for Galley server to start" >&2
     exit 1
   fi
   sleep 0.2
 done
-echo "Finch server ready!"
+echo "Galley server ready!"
 
-# point the harness at the Finch CLI wrappers
+# point the harness at the Galley CLI wrappers
 export BINSPARSE_TO_NPY="${script_dir}/binsparse_to_npy"
 export BINSPARSE_TO_BINSPARSE="${script_dir}/binsparse_to_binsparse"
 

@@ -223,11 +223,11 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
 
     verbose >= 4 && display(prgm_instance)
     verbose >= 5 && println(
-        Finch.unquote_literals(
-            Finch.dataflow(
-                Finch.unresolve(
-                    Finch.pretty(
-                        Finch.execute_code(
+        Galley.unquote_literals(
+            Galley.dataflow(
+                Galley.unresolve(
+                    Galley.pretty(
+                        Galley.execute_code(
                             :ex, typeof(prgm_instance); mode=:fast
                         ),
                     ),
@@ -244,7 +244,7 @@ function execute_query(alias_dict, q::PlanNode, verbose, cannonicalize, return_p
         return :($output_name = $output_tensor_init), prgm_instance
     end
     start_time = time()
-    Finch.execute(prgm_instance; mode=:fast)
+    Galley.execute(prgm_instance; mode=:fast)
     verbose >= 2 && println("Kernel Execution Took: ", time() - start_time)
     verbose >= 2 && println("Stored Entries: ", count_stored(output_tensor))
     verbose >= 2 && println("Non fill Entries: ", count_non_fill(output_tensor))

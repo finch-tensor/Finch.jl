@@ -5,7 +5,7 @@ const BINSPARSE_VERSION = v"0.1.0"
     bspwrite(::HDF5.File, tns)
     bspwrite(::NPYPath, tns)
 
-Write the Finch tensor to a file using
+Write the Galley tensor to a file using
 [Binsparse](https://github.com/GraphBLAS/binsparse-specification) file format.
 
 Supported file extensions are:
@@ -29,7 +29,7 @@ bspread(::AbstractString)
 bspread(::HDF5.File)
 bspread(::NPYPath)
 
-Read the [Binsparse](https://github.com/GraphBLAS/binsparse-specification) file into a Finch tensor.
+Read the [Binsparse](https://github.com/GraphBLAS/binsparse-specification) file into a Galley tensor.
 
 The file version must have the same major and minor versions as
 `BINSPARSE_VERSION` and an equal or lower patch version.
@@ -45,7 +45,7 @@ be fully conformant. Please file bug reports if you see anything amiss.
 """
 function bspread end
 
-using Finch: level_ndims, SwizzleArray
+using Galley: level_ndims, SwizzleArray
 
 bspread_type_lookup = OrderedDict(
     "uint8" => UInt8,
@@ -303,7 +303,7 @@ function bspwrite_tensor(
     if !isempty(attrs)
         desc["attrs"] = attrs
     end
-    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Galley.
     transpose = reverse(invperm(Int[dims...])) .- 1
     if !issorted(transpose)
         desc["custom"]["transpose"] = transpose
@@ -375,7 +375,7 @@ function bspread(f)
     if !haskey(fmt, "transpose")
         fmt["transpose"] = collect(0:(length(desc["shape"]) - 1))
     end
-    # Binsparse lists dimensions from outermost to innermost, the reverse of Finch.
+    # Binsparse lists dimensions from outermost to innermost, the reverse of Galley.
     dims = reverse(Vector{Int}(fmt["transpose"]) .+ 1)
     desc["shape"] = desc["shape"][dims]
     fbr = Tensor(bspread_level(f, desc, fmt["level"]))

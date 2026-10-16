@@ -333,7 +333,7 @@ function sparse_bytemap_parent_position(
     else
         return :($srt_shape = $(Tp)($(ctx(lvl.shape)))),
         :(
-        Finch.sparse_bytemap_parent($q, $srt_shape)
+        Galley.sparse_bytemap_parent($q, $srt_shape)
 )
     end
 end
@@ -428,20 +428,20 @@ function assemble_level!(ctx, lvl::VirtualSparseByteMapLevel, pos_start, pos_sto
     tbl_len = freshen(ctx, lvl.tag, :tbl_len)
 
     quote
-        $q_start = Finch.sparse_bytemap_pack(
+        $q_start = Galley.sparse_bytemap_pack(
             $(ctx(pos_start)), $(Tp(1)), $(ctx(lvl.shape))
         )
-        $q_stop = Finch.sparse_bytemap_pack(
+        $q_stop = Galley.sparse_bytemap_pack(
             $(ctx(pos_stop)), $(Tp)($(ctx(lvl.shape))), $(ctx(lvl.shape))
         )
         # Existing storage is already clean; only initialize what this call grows.
         $ptr_len = length($(lvl.ptr))
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ptr), 0, max($pos_start + 1, $ptr_len + 1), $pos_stop + 1)
         $tbl_len = length($(lvl.tbl))
         $old = max($q_start, $tbl_len + 1)
-        Finch.resize_if_smaller!($(lvl.tbl), $q_stop)
-        Finch.fill_range!($(lvl.tbl), false, $old, $q_stop)
+        Galley.resize_if_smaller!($(lvl.tbl), $q_stop)
+        Galley.fill_range!($(lvl.tbl), false, $old, $q_stop)
         $(contain(
             # Children that can't be reassembled are stale after a run, so redo them all.
             ctx_2 -> assemble_level!(
@@ -471,8 +471,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
     push_preamble!(
         ctx,
         quote
-            Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
-            Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
+            Galley.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
+            Galley.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             resize!($(lvl.srt), $(lvl.qos_fill))
             sort!($(lvl.srt))
             $srt_shape_init
@@ -515,7 +515,7 @@ function unfurl(
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $my_q_offset = Finch.sparse_bytemap_q_offset(
+                $my_q_offset = Galley.sparse_bytemap_q_offset(
                     $(ctx(pos)), $(Tp)($(ctx(lvl.shape)))
                 )
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
@@ -584,7 +584,7 @@ function unfurl(
         arr=fbr,
         body=Thunk(;
             preamble=quote
-                $my_q_offset = Finch.sparse_bytemap_q_offset(
+                $my_q_offset = Galley.sparse_bytemap_q_offset(
                     $(ctx(pos)), $(Tp)($(ctx(lvl.shape)))
                 )
                 $my_r = $(lvl.ptr)[$(ctx(pos))]
@@ -648,7 +648,7 @@ function unfurl(
         body=Lookup(;
             body=(ctx, i) -> Thunk(;
                 preamble=quote
-                    $my_q = Finch.sparse_bytemap_pack(
+                    $my_q = Galley.sparse_bytemap_pack(
                         $(ctx(q)), $(ctx(i)), $(ctx(lvl.shape))
                     )
                 end,
@@ -692,7 +692,7 @@ function unfurl(
         body=Lookup(;
             body=(ctx, idx) -> Thunk(;
                 preamble=quote
-                    $my_q = Finch.sparse_bytemap_pack(
+                    $my_q = Galley.sparse_bytemap_pack(
                         $(ctx(pos)), $(ctx(idx)), $(ctx(lvl.shape))
                     )
                     $dirty = false
@@ -710,7 +710,7 @@ function unfurl(
                             $(lvl.qos_fill) += 1
                             if $(lvl.qos_fill) > $(lvl.qos_stop)
                                 $(lvl.qos_stop) = max($(lvl.qos_stop) << 1, 1)
-                                Finch.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
+                                Galley.resize_if_smaller!($(lvl.srt), $(lvl.qos_stop))
                             end
                             $(lvl.srt)[$(lvl.qos_fill)] = $my_q
                         end

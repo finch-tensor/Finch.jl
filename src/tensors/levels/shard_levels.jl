@@ -515,9 +515,9 @@ function assemble_level!(ctx, lvl::VirtualShardLevel, pos_start, pos_stop)
     push_preamble!(
         ctx,
         quote
-            Finch.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
-            Finch.resize_if_smaller!($(lvl.ptr), $(ctx(pos_stop)))
-            Finch.fill_range!($(lvl.ptr), 0, $(ctx(pos_start)), $(ctx(pos_stop)))
+            Galley.resize_if_smaller!($(lvl.task), $(ctx(pos_stop)))
+            Galley.resize_if_smaller!($(lvl.ptr), $(ctx(pos_stop)))
+            Galley.fill_range!($(lvl.ptr), 0, $(ctx(pos_start)), $(ctx(pos_stop)))
         end,
     )
     lvl

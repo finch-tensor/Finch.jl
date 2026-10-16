@@ -18,7 +18,7 @@ struct VirtualDiagMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{DiagMask}) = VirtualDiagMask()
 FinchNotation.finch_leaf(x::VirtualDiagMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualDiagMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualDiagMask) = (auto, auto)
 
 struct VirtualDiagMaskColumn
     j
@@ -71,7 +71,7 @@ struct VirtualUpTriMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{UpTriMask}) = VirtualUpTriMask()
 FinchNotation.finch_leaf(x::VirtualUpTriMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualUpTriMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualUpTriMask) = (auto, auto)
 
 struct VirtualUpTriMaskColumn
     j
@@ -121,7 +121,7 @@ struct VirtualLoTriMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{LoTriMask}) = VirtualLoTriMask()
 FinchNotation.finch_leaf(x::VirtualLoTriMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualLoTriMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualLoTriMask) = (auto, auto)
 
 struct VirtualLoTriMaskColumn
     j
@@ -170,7 +170,7 @@ struct VirtualBandMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{BandMask}) = VirtualBandMask()
 FinchNotation.finch_leaf(x::VirtualBandMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualBandMask) = (auto, auto, auto)
+Galley.virtual_size(ctx, ::VirtualBandMask) = (auto, auto, auto)
 
 struct VirtualBandMaskSlice
     j_lo
@@ -184,7 +184,7 @@ struct VirtualBandMaskColumn
 end
 
 FinchNotation.finch_leaf(x::VirtualBandMaskColumn) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualBandMaskColumn) = (auto,)
+Galley.virtual_size(ctx, ::VirtualBandMaskColumn) = (auto,)
 
 function unfurl(ctx, arr::VirtualBandMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
@@ -401,9 +401,9 @@ fill_value(::Type{SplitMask{Ti}}) where {Ti} = false
 
 A mask to evenly divide `n` indices into P regions. If `M = splitmask(P, n)`,
 then `M[i, j] = fld(n * (j - 1), P) <= i < fld(n * j, P)`.
-```jldoctest; setup=:(using Finch)
+```jldoctest; setup=:(using Galley)
 julia> splitmask(10, 3)
-10×3 Finch.SplitMask{Int64}:
+10×3 Galley.SplitMask{Int64}:
  1  0  0
  1  0  0
  1  0  0
@@ -522,9 +522,9 @@ end
 A mask to evenly divide `n` indices into regions of size `b`. If `m =
 chunkmask(b, n)`, then `m[i, j] = b * (j - 1) < i <= b * j`. Note that this
 specializes for the cleanup case at the end of the range.
-```jldoctest; setup=:(using Finch)
+```jldoctest; setup=:(using Galley)
 julia> chunkmask(10, 3)
-10×4 Finch.ChunkMask{Int64}:
+10×4 Galley.ChunkMask{Int64}:
  1  0  0  0
  1  0  0  0
  1  0  0  0
@@ -629,7 +629,7 @@ struct VirtualPairSumMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{PairSumMask}) = VirtualPairSumMask()
 FinchNotation.finch_leaf(x::VirtualPairSumMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualPairSumMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualPairSumMask) = (auto, auto)
 
 function unfurl(ctx, arr::VirtualPairSumMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
@@ -660,7 +660,7 @@ struct VirtualPairCarryMask <: AbstractVirtualTensor end
 
 virtualize(ctx, ex, ::Type{PairCarryMask}) = VirtualPairCarryMask()
 FinchNotation.finch_leaf(x::VirtualPairCarryMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualPairCarryMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualPairCarryMask) = (auto, auto)
 
 struct VirtualPairCarryMaskColumn
     j
@@ -843,7 +843,7 @@ function virtualize(ctx, ex, ::Type{RepeatMask})
 end
 
 FinchNotation.finch_leaf(x::VirtualRepeatMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualRepeatMask) = (auto, auto)
+Galley.virtual_size(ctx, ::VirtualRepeatMask) = (auto, auto)
 
 struct VirtualRepeatMaskColumn
     arr::VirtualRepeatMask
@@ -909,7 +909,7 @@ function virtualize(ctx, ex, ::Type{OneHotMask{Ti}}) where {Ti}
 end
 
 FinchNotation.finch_leaf(x::VirtualOneHotMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualOneHotMask) = (auto,)
+Galley.virtual_size(ctx, ::VirtualOneHotMask) = (auto,)
 
 function unfurl(ctx, arr::VirtualOneHotMask, ext, mode, proto::typeof(defaultread))
     Unfurled(;
@@ -949,7 +949,7 @@ function virtualize(ctx, ex, ::Type{ParityMask})
 end
 
 FinchNotation.finch_leaf(x::VirtualParityMask) = virtual(x)
-Finch.virtual_size(ctx, ::VirtualParityMask) = (auto,)
+Galley.virtual_size(ctx, ::VirtualParityMask) = (auto,)
 
 function unfurl(ctx, arr::VirtualParityMask, ext, mode, proto::typeof(defaultread))
     i = freshen(ctx, :parity_i)

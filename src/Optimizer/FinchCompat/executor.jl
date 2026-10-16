@@ -27,7 +27,7 @@ function (ctx::GalleyOptimizer)(prgm)
     )
     timer_idx = 1
     julia_prgm = :()
-    if operation(instance_prgm) == Finch.block
+    if operation(instance_prgm) == Galley.block
         for body in instance_prgm.bodies
             if ctx.verbose
                 timer_symbol = Symbol("t_$timer_idx")
@@ -57,7 +57,7 @@ function (ctx::GalleyOptimizer)(prgm)
     julia_prgm
 end
 
-function Finch.set_options(ctx::GalleyOptimizer; estimator=DCStats, verbose=false)
+function Galley.set_options(ctx::GalleyOptimizer; estimator=DCStats, verbose=false)
     ctx.estimator = estimator
     ctx.verbose = verbose
     return ctx
@@ -69,7 +69,7 @@ end
 Returns a dictionary mapping the location of input tensors in the program to their statistics objects.
 """
 function get_stats_list(ctx::GalleyOptimizer, prgm)
-    deferred_prgm = Finch.defer_tables(:prgm, prgm)
+    deferred_prgm = Galley.defer_tables(:prgm, prgm)
     stats_list = Vector{TensorStats}()
     idx_counter = 0
     cannonical_idx = OrderedDict{IndexExpr,IndexExpr}()
@@ -114,11 +114,11 @@ end
 function AdaptiveExecutor(ctx::GalleyOptimizer; threshold=2, verbose=false)
     AdaptiveExecutor(ctx, threshold, verbose)
 end
-function Finch.set_options(
+function Galley.set_options(
     ctx::AdaptiveExecutor; threshold=2, verbose=ctx.verbose, tag=:global, kwargs...
 )
     AdaptiveExecutor(
-        Finch.set_options(ctx.ctx; verbose=verbose, kwargs...), threshold, verbose
+        Galley.set_options(ctx.ctx; verbose=verbose, kwargs...), threshold, verbose
     )
 end
 
@@ -130,7 +130,7 @@ function (ctx::AdaptiveExecutor)(prgm)
     cur_stats_list::StatsList = get_stats_list(ctx.ctx, prgm)
     all_stats_lists::Vector{Tuple{StatsList,Tuple{Function,Expr}}} = get!(
         galley_codes,
-        (ctx.ctx, ctx.threshold, Finch.get_structure(prgm)),
+        (ctx.ctx, ctx.threshold, Galley.get_structure(prgm)),
         Vector{Tuple{StatsList,Tuple{Function,Expr}}}(),
     )
     valid_match = nothing
@@ -144,7 +144,7 @@ function (ctx::AdaptiveExecutor)(prgm)
         end
     end
     if isnothing(valid_match)
-        thunk = Finch.logic_executor_code(ctx.ctx, prgm)
+        thunk = Galley.logic_executor_code(ctx.ctx, prgm)
         valid_match = (eval(thunk), thunk)
         push!(all_stats_lists, (cur_stats_list, valid_match))
     end
@@ -166,7 +166,7 @@ struct AdaptiveExecutorCode
 end
 
 function (ctx::AdaptiveExecutorCode)(prgm)
-    return Finch.logic_executor_code(ctx.ctx, prgm)
+    return Galley.logic_executor_code(ctx.ctx, prgm)
 end
 
 """

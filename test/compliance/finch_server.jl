@@ -9,7 +9,7 @@
 # invokes the converter executables hundreds of times via subprocess.run().
 # Starting a fresh Julia process each time would be prohibitively slow.
 #
-# Instead we start ONE Julia process that loads Finch / HDF5 / NPZ once, then
+# Instead we start ONE Julia process that loads Galley / HDF5 / NPZ once, then
 # sits in a loop reading JSON-line requests from a named pipe (FIFO).  The
 # three thin bash wrappers (binsparse_to_npy, npy_to_binsparse,
 # binsparse_to_binsparse) each write a single request line and wait for a
@@ -26,13 +26,13 @@
 #
 # The special command {"cmd": "shutdown"} causes a clean exit.
 
-using Finch
+using Galley
 using HDF5
 using NPZ
 using JSON
 
 # ─── binsparse_to_npy ────────────────────────────────────────────────
-# Read a Binsparse HDF5 file with Finch, then write its dense values,
+# Read a Binsparse HDF5 file with Galley, then write its dense values,
 # explicit-storage pattern, and fill value as separate .npy files.
 
 function cmd_binsparse_to_npy(args)
@@ -40,17 +40,17 @@ function cmd_binsparse_to_npy(args)
         "binsparse_to_npy requires 4 args: tensor_in tensor_out pattern_out fill_value_out"
     )
     tensor_in, tensor_out, pattern_out, fill_value_out = args
-    tns = h5open(Finch.bspread, tensor_in, "r")
+    tns = h5open(Galley.bspread, tensor_in, "r")
     npzwrite(tensor_out, dense_array(tns))
     npzwrite(pattern_out, dense_array(pattern!(tns)))
-    npzwrite(fill_value_out, fill(Finch.fill_value(tns)))
+    npzwrite(fill_value_out, fill(Galley.fill_value(tns)))
     return nothing
 end
 
 # Scalar access avoids compiling a new copy kernel for every generated
 # fill value and layout in the compliance suite.
 dense_array(tns::Tensor) = [tns(Tuple(i)...) for i in CartesianIndices(size(tns))]
-function dense_array(tns::Finch.SwizzleArray{dims}) where {dims}
+function dense_array(tns::Galley.SwizzleArray{dims}) where {dims}
     permutedims_(dense_array(tns.body), dims)
 end
 
@@ -59,7 +59,7 @@ permutedims_(A, perm) = ndims(A) == 0 ? copy(A) : permutedims(A, perm)
 
 # ─── npy_to_binsparse ────────────────────────────────────────────────
 # Read dense .npy, pattern .npy, fill-value .npy, and a partial JSON
-# header, then write a Binsparse HDF5 file using Finch.
+# header, then write a Binsparse HDF5 file using Galley.
 
 function cmd_npy_to_binsparse(args)
     length(args) == 5 || error(
@@ -72,7 +72,7 @@ function cmd_npy_to_binsparse(args)
     header = JSON.parsefile(header_in)
     tns = finch_tensor(dense, pat, fill_value, header)
     h5open(tensor_out, "w") do io
-        Finch.bspwrite(io, tns; alias=header["format"] != "custom")
+        Galley.bspwrite(io, tns; alias=header["format"] != "custom")
         match_header!(io, header)
     end
     return nothing
@@ -81,7 +81,7 @@ end
 # NPZ.jl reads 0-d arrays as scalars.
 read_array(path) = (x = npzread(path); x isa AbstractArray ? x : fill(x))
 
-# Build the Finch tensor with the header's layout, storing exactly the entries
+# Build the Galley tensor with the header's layout, storing exactly the entries
 # marked in `pat` (including those equal to the fill value).
 function finch_tensor(dense, pat, fill_value, header)
     fmt = binsparse_format(header)
@@ -91,7 +91,7 @@ function finch_tensor(dense, pat, fill_value, header)
     coords = sort!(map(Tuple, findall(permutedims_(pat, transpose))))
     fill_value = convert(eltype(dense), fill_value)
     lvl = finch_level(fmt["level"], stored, coords, [()], 0, fill_value)
-    # Finch lists dimensions innermost first.
+    # Galley lists dimensions innermost first.
     return swizzle(Tensor(lvl), invperm(reverse(transpose))...)
 end
 
@@ -99,7 +99,7 @@ function binsparse_format(header)
     if header["format"] == "custom"
         header["custom"]
     else
-        Finch.bspread_tensor_lookup[header["format"]]
+        Galley.bspread_tensor_lookup[header["format"]]
     end
 end
 
@@ -125,7 +125,7 @@ function finch_level(fmt, A, coords, parents, depth, fill_value)
         push!(ptr, length(children) + 1)
     end
     lvl = finch_level(fmt["level"], A, coords, children, depth + rank, fill_value)
-    # Finch levels list dimensions innermost first.
+    # Galley levels list dimensions innermost first.
     if fmt["level_desc"] == "dense"
         for n in reverse(shape)
             lvl = Dense(lvl, n)
@@ -140,7 +140,7 @@ function finch_level(fmt, A, coords, parents, depth, fill_value)
 end
 
 # ─── binsparse_to_binsparse ──────────────────────────────────────────
-# Read the file into Finch, then write it back out with the input's header.
+# Read the file into Galley, then write it back out with the input's header.
 # Like the reference, write DMAT and COO under their canonical names.
 
 function cmd_binsparse_to_binsparse(args)
@@ -148,10 +148,10 @@ function cmd_binsparse_to_binsparse(args)
         error("binsparse_to_binsparse requires 2 args: tensor_in tensor_out")
     tensor_in, tensor_out = args
     header, tns = h5open(tensor_in, "r") do io
-        Finch.bspread_header(io)["binsparse"], Finch.bspread(io)
+        Galley.bspread_header(io)["binsparse"], Galley.bspread(io)
     end
     h5open(tensor_out, "w") do io
-        Finch.bspwrite(io, tns; alias=header["format"] != "custom")
+        Galley.bspwrite(io, tns; alias=header["format"] != "custom")
         match_header!(io, header; rename_aliases=false)
     end
     return nothing
@@ -159,13 +159,13 @@ end
 
 # ─── header matching ─────────────────────────────────────────────────
 # The harness expects the requested header verbatim, but some spellings have no
-# Finch equivalent: DMAT and COO are written as DMATR and COOR, dense levels of
+# Galley equivalent: DMAT and COO are written as DMATR and COOR, dense levels of
 # rank r are written as r levels of rank 1, identity transposes are omitted,
 # and ISO values are expanded. Adopt the requested spelling wherever it
-# describes what Finch wrote. Anything else is left for the harness to report.
+# describes what Galley wrote. Anything else is left for the harness to report.
 
 function match_header!(io, requested; rename_aliases=true)
-    desc = Finch.bspread_header(io)
+    desc = Galley.bspread_header(io)
     actual = desc["binsparse"]
     custom = requested["format"] == "custom"
     if (actual["format"] == "custom") == custom && (custom || rename_aliases) &&
@@ -187,7 +187,7 @@ function match_header!(io, requested; rename_aliases=true)
         end
     end
     delete_attribute(io, "binsparse")
-    Finch.bspwrite_header(io, JSON.json(desc, 4))
+    Galley.bspwrite_header(io, JSON.json(desc, 4))
 end
 
 # The transpose and a list of (level_desc, rank) pairs, with dense ranks split.

@@ -6,8 +6,8 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    Finch.resize_if_smaller!(tmp_lvl_val, ref_lvl.shape)
-    Finch.fill_range!(tmp_lvl_val, false, 1, ref_lvl.shape)
+    Galley.resize_if_smaller!(tmp_lvl_val, ref_lvl.shape)
+    Galley.fill_range!(tmp_lvl_val, false, 1, ref_lvl.shape)
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -18,7 +18,7 @@ quote
     phase_stop = min(ref_lvl.shape, ref_lvl_i1)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]

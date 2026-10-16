@@ -108,7 +108,7 @@ end
 # This function takes in a tensor and outputs the 0/1 tensor which is 0 at all fill
 # values and 1 at all other entries.
 function get_sparsity_structure(tensor::Tensor)
-    fill_value = Finch.fill_value(tensor)
+    fill_value = Galley.fill_value(tensor)
     index_sym_dict = OrderedDict()
     indices = [IndexExpr("t_" * string(i)) for i in 1:length(size(tensor))]
     tensor_instance = initialize_access(
@@ -139,7 +139,7 @@ function get_sparsity_structure(tensor::Tensor)
         variable_instance(:output_tensor), literal_instance(false), literal_instance(auto)
     )
     full_prgm = block_instance(initializer, full_prgm)
-    Finch.execute(full_prgm)
+    Galley.execute(full_prgm)
     return output_tensor
 end
 
@@ -199,9 +199,9 @@ function one_off_reduce(op,
         read=false,
     )
     op_instance = if op == max
-        literal_instance(initmax(Finch.fill_value(s)))
+        literal_instance(initmax(Galley.fill_value(s)))
     elseif op == min
-        literal_instance(initmin(Finch.fill_value(s)))
+        literal_instance(initmin(Galley.fill_value(s)))
     else
         literal_instance(op)
     end
@@ -214,12 +214,12 @@ function one_off_reduce(op,
         output_variable, literal_instance(0.0), literal_instance(auto)
     )
     full_prgm = block_instance(initializer, full_prgm)
-    Finch.execute(full_prgm; mode=:fast)
+    Galley.execute(full_prgm; mode=:fast)
     return output_tensor
 end
 
 function count_non_fill(A)
-    d = Finch.fill_value(A)
+    d = Galley.fill_value(A)
     n = length(size(A))
     indexes = [Symbol("i_$i") for i in 1:n]
     count = Scalar(0)
@@ -242,12 +242,12 @@ function count_non_fill(A)
         ),
         prgm,
     )
-    Finch.execute(prgm; mode=:fast)
+    Galley.execute(prgm; mode=:fast)
     return count[]
 end
 
 function count_stored(A)
-    Finch.with_scheduler(Finch.default_scheduler()) do
+    Galley.with_scheduler(Galley.default_scheduler()) do
         return sum(pattern!(A))
     end
 end

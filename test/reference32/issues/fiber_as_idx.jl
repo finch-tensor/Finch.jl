@@ -15,13 +15,13 @@ begin
     I_lvl_2 = I_lvl.lvl
     I_lvl_2_val = I_lvl_2.val
     A_lvl_stop == I_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_stop) != $(I_lvl_stop))"))
-    Finch.resize_if_smaller!(B_lvl_2_val, A_lvl_stop)
-    Finch.fill_range!(B_lvl_2_val, 0, 1, A_lvl_stop)
+    Galley.resize_if_smaller!(B_lvl_2_val, A_lvl_stop)
+    Galley.fill_range!(B_lvl_2_val, 0, 1, A_lvl_stop)
     I_lvl_q = I_lvl_ptr[1]
     I_lvl_q_stop = I_lvl_ptr[1 + 1]
     i = 1
     if I_lvl_right[I_lvl_q] < 1
-        I_lvl_q = Finch.scansearch(I_lvl_right, 1, I_lvl_q, I_lvl_q_stop - 1)
+        I_lvl_q = Galley.scansearch(I_lvl_right, 1, I_lvl_q, I_lvl_q_stop - 1)
     end
     while true
         I_lvl_i = I_lvl_right[I_lvl_q]
@@ -62,6 +62,6 @@ begin
             break
         end
     end
-    Finch.resize_if_larger!(B_lvl_2_val, A_lvl_stop)
+    Galley.resize_if_larger!(B_lvl_2_val, A_lvl_stop)
     (B = Tensor((DenseLevel){Int32}(ElementLevel{0, Int32, Int32}(B_lvl_2_val), A_lvl_stop)),)
 end

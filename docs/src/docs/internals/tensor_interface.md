@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Tensor Interface
 
-The `AbstractTensor` interface (defined in `src/abstract_tensor.jl`) is the interface through which Finch understands tensors. It is a high-level interace which allows tensors to interact with the rest of the Finch system. The interface is designed to be extensible, allowing users to define their own tensor types and behaviors. For a minimal example, read the definitions in [`/ext/SparseArraysExt.jl`](https://github.com/finch-tensor/Finch.jl/blob/main/ext/SparseArraysExt.jl) and in [`/src/interface/abstractarray.jl`](https://github.com/finch-tensor/Finch.jl/blob/main/src/interface/abstractarray.jl). Once these methods are defined that tell Finch how to generate code for an array, the `AbstractTensor` interface will also use Finch to generate code for several Julia `AbstractArray` methods, such as `getindex`, `setindex!`, `map`, and `reduce`. An important note: `getindex` and `setindex!` are not a source of truth for Finch tensors. Search the codebase for `::AbstractTensor` for a full list of methods that are implemented for `AbstractTensor`. Note than most `AbstractTensor` implement `labelled_show` and `labelled_children` methods instead of `show(::IO, ::MIME"text/plain", t::AbstractTensor)` for pretty printed display.
+The `AbstractTensor` interface (defined in `src/abstract_tensor.jl`) is the interface through which Finch understands tensors. It is a high-level interace which allows tensors to interact with the rest of the Finch system. The interface is designed to be extensible, allowing users to define their own tensor types and behaviors. For a minimal example, read the definitions in [`/ext/SparseArraysExt.jl`](https://github.com/finch-tensor/FinchGalley.jl/blob/main/ext/SparseArraysExt.jl) and in [`/src/interface/abstractarray.jl`](https://github.com/finch-tensor/FinchGalley.jl/blob/main/src/interface/abstractarray.jl). Once these methods are defined that tell Finch how to generate code for an array, the `AbstractTensor` interface will also use Finch to generate code for several Julia `AbstractArray` methods, such as `getindex`, `setindex!`, `map`, and `reduce`. An important note: `getindex` and `setindex!` are not a source of truth for Finch tensors. Search the codebase for `::AbstractTensor` for a full list of methods that are implemented for `AbstractTensor`. Note than most `AbstractTensor` implement `labelled_show` and `labelled_children` methods instead of `show(::IO, ::MIME"text/plain", t::AbstractTensor)` for pretty printed display.
 
 ## Tensor Methods
 
@@ -27,7 +27,7 @@ is_concurrent
 
 # Level Interface
 
-```jldoctest example1; setup=:(using Finch)
+```jldoctest example1; setup=:(using Galley)
 julia> A = [0.0 0.0 4.4; 1.1 0.0 0.0; 2.2 0.0 5.5; 3.3 0.0 0.0]
 4×3 Matrix{Float64}:
  0.0  0.0  4.4
@@ -74,7 +74,7 @@ instructional purposes, you can use parentheses to call a subfiber on an index t
 select among children of a subfiber.
 
 ```jldoctest example1
-julia> tensor_tree(Finch.SubFiber(A_fbr.lvl.lvl, 3))
+julia> tensor_tree(Galley.SubFiber(A_fbr.lvl.lvl, 3))
 Dense [1:4]
 ├─ [1]: 4.4
 ├─ [2]: 0.0
@@ -96,8 +96,8 @@ Dense [1:4]
 ├─ [3]: 5.5
 └─ [4]: 0.0
 
-julia> Finch.SubFiber(A_fbr.lvl.lvl.lvl, 9)
- Finch.SubFiber{ElementLevel{0.0, Float64, Int64, Vector{Float64}}, Int64}:
+julia> Galley.SubFiber(A_fbr.lvl.lvl.lvl, 9)
+ Galley.SubFiber{ElementLevel{0.0, Float64, Int64, Vector{Float64}}, Int64}:
 4.4
 
 julia> A_fbr[1, 3]
@@ -239,4 +239,4 @@ level_fill_value
 
 # Combinator Interface
 
-Tensor Combinators allow us to modify the behavior of tensors. The `AbstractCombinator` interface (defined in [`src/tensors/abstract_combinator.jl`](https://github.com/finch-tensor/Finch.jl/blob/main/src/tensors/abstract_combinator.jl)) is the interface through which Finch understands tensor combinators. The interface requires the combinator to overload all of the tensor methods, as well as the methods used by Looplets when lowering ranges, etc. For a minimal example, read the definitions in [`/src/tensors/combinators/offset.jl`](https://github.com/finch-tensor/Finch.jl/blob/main/src/tensors/combinators/offset.jl).
+Tensor Combinators allow us to modify the behavior of tensors. The `AbstractCombinator` interface (defined in [`src/tensors/abstract_combinator.jl`](https://github.com/finch-tensor/FinchGalley.jl/blob/main/src/tensors/abstract_combinator.jl)) is the interface through which Finch understands tensor combinators. The interface requires the combinator to overload all of the tensor methods, as well as the methods used by Looplets when lowering ranges, etc. For a minimal example, read the definitions in [`/src/tensors/combinators/offset.jl`](https://github.com/finch-tensor/FinchGalley.jl/blob/main/src/tensors/combinators/offset.jl).

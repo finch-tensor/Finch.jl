@@ -202,7 +202,7 @@ function virtual_call_def(
     VirtualCPU(value(n_2, Int), value(id_2))
 end
 function lower(ctx::AbstractCompiler, device::VirtualCPU, ::DefaultStyle)
-    :(Finch.CPU{$(QuoteNode(ctx(device.id)))}($(ctx(device.n))))
+    :(Galley.CPU{$(QuoteNode(ctx(device.id)))}($(ctx(device.n))))
 end
 get_num_tasks(device::VirtualCPU) = device.n
 Base.:(==)(::CPU{id1}, ::CPU{id2}) where {id1,id2} = id1 == id2
@@ -707,7 +707,7 @@ function virtual_parallel_region(
         end
     end
     return quote
-        Finch.@barrier begin
+        Galley.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
                 @inbounds @fastmath begin
@@ -755,7 +755,7 @@ function virtual_parallel_region(
     end
 
     return quote
-        Finch.@barrier begin
+        Galley.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
                 @inbounds @fastmath begin
@@ -812,7 +812,7 @@ function virtual_parallel_region(
             put!($tid_ch, $tid_tmp)
         end
 
-        Finch.@barrier begin
+        Galley.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $chk_id in 1:($num_chks)
                 @inbounds @fastmath begin
                     $code

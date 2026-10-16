@@ -1,7 +1,7 @@
 # Serial SparseHash workloads, without Coalesce:
 # julia --project=benchmark benchmark/sparse_hash.jl [results.json]
 using BenchmarkTools
-using Finch
+using Galley
 using Printf
 using Random
 
@@ -79,7 +79,7 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     println("Julia ", VERSION, "; CPU threads: ", Threads.nthreads())
-    println("Finch source: ", pathof(Finch))
+    println("Galley source: ", pathof(Galley))
     results = run(sparse_hash_benchmarks(); verbose=false)
     for (size, formats) in results, (fmt, group) in sort(collect(formats); by=first),
         (phase, trial) in sort(collect(group); by=first)

@@ -375,7 +375,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseDictLevel, pos_s
         quote
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
-            Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
+            Galley.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
             $pdx_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
             resize!($(lvl.idx), length($(lvl.tbl)))
             resize!($(lvl.val), length($(lvl.tbl)))
@@ -457,7 +457,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch(
+                            $my_q = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_q,
@@ -563,8 +563,8 @@ function unfurl(
                                     ),
                                     ctx,
                                 ))
-                                Finch.resize_if_smaller!($(lvl.val), $qos_stop)
-                                Finch.fill_range!($(lvl.val), 0, $qos, $qos_stop)
+                                Galley.resize_if_smaller!($(lvl.val), $qos_stop)
+                                Galley.fill_range!($(lvl.val), 0, $qos, $qos_stop)
                             end
                         end
                         $(lvl.tbl)[($(ctx(pos)), $(ctx(idx)))] = $qos
@@ -685,10 +685,10 @@ Base.@propagate_inbounds function process_next_lvl_hash(
     uq_ptr_s = s_prefix_sum(uq_ptr)
     uq_idx_s = s_prefix_sum(uq_idx)
 
-    Finch.resize_if_smaller!(lvl_ptr, max_level_dim + 1)
+    Galley.resize_if_smaller!(lvl_ptr, max_level_dim + 1)
     fill!(lvl_ptr, 0)
-    Finch.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
-    Finch.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
+    Galley.resize_if_smaller!(lvl_idx, uq_idx_s[length(uq_idx_s)])
+    Galley.resize_if_smaller!(lvl_val, uq_idx_s[length(uq_idx_s)])
     tbls = [Dict{Tuple{Int,Int},Int}() for _ in 1:P]
     sizehint!(lvl_tbl, nnz)
 

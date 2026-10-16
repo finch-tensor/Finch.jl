@@ -24,7 +24,7 @@ quote
     phase_stop = min(ref_lvl_i1, ref_lvl.shape)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]
@@ -38,10 +38,10 @@ quote
                         tmp_lvl_qos = length(tmp_lvl_tbl) + 1
                         if tmp_lvl_qos > tmp_lvl_qos_stop
                             tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                            Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                            Finch.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop)
-                            Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                            Finch.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
+                            Galley.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
+                            Galley.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop)
+                            Galley.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
+                            Galley.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
                         end
                     end
                     tmp_lvl_tbl[(1, ref_lvl_i)] = tmp_lvl_qos
@@ -61,10 +61,10 @@ quote
                             tmp_lvl_qos = length(tmp_lvl_tbl) + 1
                             if tmp_lvl_qos > tmp_lvl_qos_stop
                                 tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
-                                Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                                Finch.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop)
-                                Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-                                Finch.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
+                                Galley.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
+                                Galley.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos, tmp_lvl_qos_stop)
+                                Galley.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
+                                Galley.fill_range!(tmp_lvl_val, 0, tmp_lvl_qos, tmp_lvl_qos_stop)
                             end
                         end
                         tmp_lvl_tbl[(1, phase_stop_3)] = tmp_lvl_qos
@@ -79,7 +79,7 @@ quote
     end
     resize!(tmp_lvl_ptr, 1 + 1)
     tmp_lvl_ptr[1] = 1
-    Finch.fill_range!(tmp_lvl_ptr, 0, 2, 1 + 1)
+    Galley.fill_range!(tmp_lvl_ptr, 0, 2, 1 + 1)
     pdx_tmp = Vector{Int32}(undef, length(tmp_lvl_tbl))
     resize!(tmp_lvl_idx, length(tmp_lvl_tbl))
     resize!(tmp_lvl_val, length(tmp_lvl_tbl))

@@ -102,10 +102,10 @@ isidentity(::AbstractAlgebra, ::typeof(|), x) = !ismissing(x) && iszero(x)
 isidentity(::AbstractAlgebra, ::typeof(&), x) = !ismissing(x) && x == ~(zero(x))
 isidentity(::AbstractAlgebra, ::typeof(min), x) = !ismissing(x) && isinf(x) && x > 0
 isidentity(::AbstractAlgebra, ::typeof(max), x) = !ismissing(x) && isinf(x) && x < 0
-function isidentity(::Finch.AbstractAlgebra, ::InitMax{D}, x) where {D}
+function isidentity(::Galley.AbstractAlgebra, ::InitMax{D}, x) where {D}
     isequal(x, D) || isequal(x == D, true)
 end
-function isidentity(::Finch.AbstractAlgebra, ::InitMin{D}, x) where {D}
+function isidentity(::Galley.AbstractAlgebra, ::InitMin{D}, x) where {D}
     isequal(x, D) || isequal(x == D, true)
 end
 

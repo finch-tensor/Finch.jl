@@ -1,12 +1,12 @@
 # Run just this case (without downloading the matrix datasets used by the full suite):
 # julia --project=benchmark --threads=8 benchmark/coalesce_outer.jl [results.json]
 using BenchmarkTools
-using Finch
+using Galley
 using LinearAlgebra
 using Printf
 using Random
 
-# Output formats for the coalesced product. Formats a Finch version cannot build
+# Output formats for the coalesced product. Formats a Galley version cannot build
 # or merge correctly are skipped, so older versions still run the rest.
 const COALESCE_OUTER_FORMATS = [
     "SparseList(SparseList)" => () -> SparseList(SparseList(Element(0.0))),
@@ -66,7 +66,7 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     println("Julia ", VERSION, "; CPU threads: ", Threads.nthreads(), "; logical tasks: 8")
-    println("Finch source: ", pathof(Finch))
+    println("Galley source: ", pathof(Galley))
     suite = coalesce_outer_benchmarks()
     results = run(suite; verbose=false)
     for (size, group) in sort(collect(results); by=first), (name, trial) in group

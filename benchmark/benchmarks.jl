@@ -5,7 +5,7 @@ using Pkg
 #Pkg.add(["BenchmarkTools", "PkgBenchmark", "MatrixDepot"])
 #Pkg.resolve()
 
-using Finch
+using Galley
 using BenchmarkTools
 using MatrixDepot
 using SparseArrays
@@ -13,7 +13,7 @@ using Random
 using ArgParse
 
 s = ArgParseSettings(
-    "Run Finch.jl benchmarks. By default, all tests are run unless --include or --exclude options are provided. 
+    "Run Galley.jl benchmarks. By default, all tests are run unless --include or --exclude options are provided.
 If the environment variable FINCH_BENCHMARK_ARGS is set, it will override the given arguments.",
 )
 
@@ -46,20 +46,20 @@ SUITE["coalesce"] = coalesce_outer_benchmarks()
 SUITE["high-level"] = BenchmarkGroup()
 
 for (scheduler_name, scheduler) in [
-    "default_scheduler" => Finch.default_scheduler(),
-    "galley_scheduler" => Finch.galley_scheduler(),
+    "default_scheduler" => Galley.default_scheduler(),
+    "galley_scheduler" => Galley.galley_scheduler(),
 ]
     let
         A = Tensor(Dense(Sparse(Element(0.0))), fsprand(10000, 10000, 0.01))
         SUITE["high-level"]["permutedims(Dense(Sparse()))"][scheduler_name] = @benchmarkable(
-            permutedims($A, (2, 1)), setup = (Finch.set_scheduler!($scheduler))
+            permutedims($A, (2, 1)), setup = (Galley.set_scheduler!($scheduler))
         )
     end
 
     let
         A = Tensor(Dense(Dense(Element(0.0))), rand(10000, 10000))
         SUITE["high-level"]["permutedims(Dense(Dense()))"][scheduler_name] = @benchmarkable(
-            permutedims($A, (2, 1)), setup = (Finch.set_scheduler!($scheduler))
+            permutedims($A, (2, 1)), setup = (Galley.set_scheduler!($scheduler))
         )
     end
 
@@ -73,7 +73,7 @@ for (scheduler_name, scheduler) in [
                 @einsum y[i] += A[i, j] * x[j]
             end,
             setup = (
-                Finch.set_scheduler!($scheduler);
+                Galley.set_scheduler!($scheduler);
                 A = Tensor(
                     Dense(SparseList(Element($k[] += 1))), fsprand(1, 1, 1)
                 )
@@ -101,7 +101,7 @@ for (scheduler_name, scheduler) in [
                 compute(A * B * C)
             end,
             setup = begin
-                Finch.set_scheduler!($scheduler)
+                Galley.set_scheduler!($scheduler)
                 N = $N
                 $generate_kernel_defs()
                 A = lazy(fsprand(N, N, 4))
@@ -121,7 +121,7 @@ for (scheduler_name, scheduler) in [
                 A, x, y = ($A, $x, $y)
                 @einsum y[i] += A[i, j] * x[j]
             end,
-            setup = (Finch.set_scheduler!($scheduler)),
+            setup = (Galley.set_scheduler!($scheduler)),
             evals = 1
         )
     end
@@ -134,7 +134,7 @@ for (scheduler_name, scheduler) in [
                 A, x = (lazy($A), lazy($x))
                 compute(A * x)
             end,
-            setup = (Finch.set_scheduler!($scheduler)),
+            setup = (Galley.set_scheduler!($scheduler)),
             evals = 1
         )
     end
@@ -154,7 +154,7 @@ for (scheduler_name, scheduler) in [
                 B = lazy($B)
                 compute(M .* (A * B))
             end,
-            setup = (Finch.set_scheduler!($scheduler)),
+            setup = (Galley.set_scheduler!($scheduler)),
         )
 
         SUITE["high-level"]["sddmm_unfused"][scheduler_name] = @benchmarkable(
@@ -164,7 +164,7 @@ for (scheduler_name, scheduler) in [
                 B = $B
                 M .* (A * B)
             end,
-            setup = (Finch.set_scheduler!($scheduler)),
+            setup = (Galley.set_scheduler!($scheduler)),
         )
     end
 end
@@ -198,7 +198,7 @@ end
 SUITE["compile"] = BenchmarkGroup()
 
 code = """
-using Finch
+using Galley
 A = Tensor(Dense(SparseList(Element(0.0))))
 B = Tensor(Dense(SparseList(Element(0.0))))
 C = Tensor(Dense(SparseList(Element(0.0))))
@@ -219,10 +219,10 @@ let
 
     SUITE["compile"]["compile_SpGeMM"] = @benchmarkable begin
         A, B, C = ($A, $B, $C)
-        Finch.execute_code(
+        Galley.execute_code(
             :ex,
             typeof(
-                Finch.@finch_program_instance begin
+                Galley.@finch_program_instance begin
                     C .= 0
                     for i in _, j in _, k in _
                         C[j, i] += A[k, i] * B[k, j]
@@ -333,7 +333,8 @@ for mtx in ["SNAP/soc-Epinions1"]#, "SNAP/soc-LiveJournal1"]
     A = Tensor(
         Dense(
             SparseList(
-                Element(0.0, A.nzval), m, Finch.PlusOneVector(ptr), Finch.PlusOneVector(idx)
+                Element(0.0, A.nzval), m, Galley.PlusOneVector(ptr),
+                Galley.PlusOneVector(idx),
             ),
             n,
         ),

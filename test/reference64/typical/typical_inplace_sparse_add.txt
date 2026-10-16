@@ -47,7 +47,7 @@ quote
     phase_stop = min(A_lvl_stop, A_lvl_i1)
     if phase_stop >= 1
         if A_lvl_idx[A_lvl_q] < 1
-            A_lvl_q = Finch.scansearch(A_lvl_idx, 1, A_lvl_q, A_lvl_q_stop - 1)
+            A_lvl_q = Galley.scansearch(A_lvl_idx, 1, A_lvl_q, A_lvl_q_stop - 1)
         end
         while true
             A_lvl_i = A_lvl_idx[A_lvl_q]
@@ -69,7 +69,7 @@ quote
         end
     end
     result = ()
-    Finch.resize_if_larger!(B_lvl_2_val, B_lvl_stop)
+    Galley.resize_if_larger!(B_lvl_2_val, B_lvl_stop)
     result
 end
 julia> @finch for i = _

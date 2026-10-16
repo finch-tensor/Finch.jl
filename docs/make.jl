@@ -8,20 +8,20 @@ end
 
 using Documenter
 using Documenter.Remotes
-using Finch
+using Galley
 
 DocMeta.setdocmeta!(
-    Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true
+    Galley, :DocTestSetup, :(using Galley; using SparseArrays); recursive=true
 )
 
 makedocs(;
-    modules=[Finch],
+    modules=[Galley],
     authors="Willow Ahrens",
-    repo=Remotes.GitHub("finch-tensor", "Finch.jl"),
-    sitename="Finch.jl",
+    repo=Remotes.GitHub("finch-tensor", "FinchGalley.jl"),
+    sitename="Galley.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://finch-tensor.github.io/Finch.jl",
+        canonical="https://finch-tensor.github.io/FinchGalley.jl",
         assets=["assets/favicon.ico"],
         size_threshold=1_000_000,
     ),
@@ -72,6 +72,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/finch-tensor/Finch.jl",
+    repo="github.com/finch-tensor/FinchGalley.jl",
     devbranch="main",
 )

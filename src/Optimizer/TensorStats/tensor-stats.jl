@@ -63,7 +63,7 @@ function TensorDef(tensor::Tensor, indices)
     dim_size = OrderedDict{IndexExpr,Float64}(
         indices[i] => shape_tuple[i] for i in 1:length(size(tensor))
     )
-    fill_val = Finch.fill_value(tensor)
+    fill_val = Galley.fill_value(tensor)
     return TensorDef(
         StableSet{IndexExpr}(indices), dim_size, fill_val, level_formats, indices, nothing
     )
@@ -568,7 +568,7 @@ function _calc_dc_from_structure(
     end
     dc = one_off_reduce(max, X_ordered, IndexExpr[], x_counts)
 
-    return dc[] # `[]` used to retrieve the actual value of the Finch.Scalar type
+    return dc[] # `[]` used to retrieve the actual value of the Galley.Scalar type
 end
 
 function _vector_structure_to_dcs(indices::Vector{Int}, s::Tensor)

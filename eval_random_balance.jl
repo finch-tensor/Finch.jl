@@ -1,10 +1,10 @@
-using Finch, Random, Statistics
+using Galley, Random, Statistics
 
 CAPTURED = Vector{Tuple}(undef, 0)
 
-import Finch: balance, decrement_idxs, MergeRandom, build_sampler, sample
+import Galley: balance, decrement_idxs, MergeRandom, build_sampler, sample
 
-@inbounds function Finch.balance(
+@inbounds function Galley.balance(
     sampler::Vector{NTuple{m,Int}}, tid, P, shapes, style::MergeRandom
 ) where {m}
     neg = ntuple(_ -> -1, m)
@@ -22,9 +22,9 @@ import Finch: balance, decrement_idxs, MergeRandom, build_sampler, sample
 end
 
 const RATE = Ref(1000)
-function Finch.build_sampler(lvl::Finch.AbstractLevel, P, nnz, tsize)
+function Galley.build_sampler(lvl::Galley.AbstractLevel, P, nnz, tsize)
     elvl = lvl
-    while !(elvl isa Finch.ElementLevel)
+    while !(elvl isa Galley.ElementLevel)
         elvl = elvl.lvl
     end
     sampler = Vector{NTuple{tsize,Int}}(undef, 0)

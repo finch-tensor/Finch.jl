@@ -7,21 +7,21 @@ quote
     ref_lvl_ptr = ref_lvl.ptr
     ref_lvl_idx = ref_lvl.idx
     ref_lvl_val = ref_lvl.lvl.val
-    Finch.resize_if_smaller!(tmp_lvl_val, 1)
+    Galley.resize_if_smaller!(tmp_lvl_val, 1)
     for pos = 1:1
-        pointer_to_lvl = Finch.similar_level(tmp_lvl.lvl, Finch.level_fill_value(typeof(tmp_lvl.lvl)), Finch.level_eltype(typeof(tmp_lvl.lvl)), ref_lvl.shape)
+        pointer_to_lvl = Galley.similar_level(tmp_lvl.lvl, Galley.level_fill_value(typeof(tmp_lvl.lvl)), Galley.level_eltype(typeof(tmp_lvl.lvl)), ref_lvl.shape)
         pointer_to_lvl_3 = pointer_to_lvl.lvl
         pointer_to_lvl_2_val = pointer_to_lvl.lvl.val
-        Finch.resize_if_smaller!(pointer_to_lvl_2_val, ref_lvl.shape)
-        Finch.fill_range!(pointer_to_lvl_2_val, false, 1, ref_lvl.shape)
+        Galley.resize_if_smaller!(pointer_to_lvl_2_val, ref_lvl.shape)
+        Galley.fill_range!(pointer_to_lvl_2_val, false, 1, ref_lvl.shape)
         resize!(pointer_to_lvl_2_val, ref_lvl.shape)
         tmp_lvl_val[pos] = (DenseLevel){Int32}(pointer_to_lvl_3, ref_lvl.shape)
     end
     pointer_to_lvl_5 = tmp_lvl_val[1]
     pointer_to_lvl_6 = pointer_to_lvl_5.lvl
     pointer_to_lvl_5_val = pointer_to_lvl_5.lvl.val
-    Finch.resize_if_smaller!(pointer_to_lvl_5_val, pointer_to_lvl_5.shape)
-    Finch.fill_range!(pointer_to_lvl_5_val, false, 1, pointer_to_lvl_5.shape)
+    Galley.resize_if_smaller!(pointer_to_lvl_5_val, pointer_to_lvl_5.shape)
+    Galley.fill_range!(pointer_to_lvl_5_val, false, 1, pointer_to_lvl_5.shape)
     ref_lvl_q = ref_lvl_ptr[1]
     ref_lvl_q_stop = ref_lvl_ptr[1 + 1]
     if ref_lvl_q < ref_lvl_q_stop
@@ -32,7 +32,7 @@ quote
     phase_stop = min(ref_lvl.shape, ref_lvl_i1)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]

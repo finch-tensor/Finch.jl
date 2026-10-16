@@ -23,7 +23,7 @@ begin
         phase_stop = min(A_lvl_stop, A_lvl_2_i1)
         if phase_stop >= 1
             if A_lvl_2_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
                 A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
@@ -48,10 +48,10 @@ begin
                     if phase_stop_3 >= 1
                         k = 1
                         if A_lvl_2_idx[A_lvl_2_q_2] < 1
-                            A_lvl_2_q_2 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1)
+                            A_lvl_2_q_2 = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1)
                         end
                         if A_lvl_2_idx[A_lvl_2_q_3] < 1
-                            A_lvl_2_q_3 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_3, A_lvl_2_q_stop_3 - 1)
+                            A_lvl_2_q_3 = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_3, A_lvl_2_q_stop_3 - 1)
                         end
                         while k <= phase_stop_3
                             A_lvl_2_i_2 = A_lvl_2_idx[A_lvl_2_q_2]
@@ -95,10 +95,10 @@ begin
                         if phase_stop_9 >= 1
                             k = 1
                             if A_lvl_2_idx[A_lvl_2_q_4] < 1
-                                A_lvl_2_q_4 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_4, A_lvl_2_q_stop_4 - 1)
+                                A_lvl_2_q_4 = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_4, A_lvl_2_q_stop_4 - 1)
                             end
                             if A_lvl_2_idx[A_lvl_2_q_5] < 1
-                                A_lvl_2_q_5 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_5, A_lvl_2_q_stop_5 - 1)
+                                A_lvl_2_q_5 = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_5, A_lvl_2_q_stop_5 - 1)
                             end
                             while k <= phase_stop_9
                                 A_lvl_2_i_4 = A_lvl_2_idx[A_lvl_2_q_4]

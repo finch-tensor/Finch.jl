@@ -115,10 +115,10 @@
         ]
             hi = length(v)
             for lo in 1:hi, i in lo:hi
-                @test Finch.scansearch(v, v[i], lo, hi) == i
-                @test Finch.scansearch(v, v[i] - 1, lo, hi) ==
+                @test Galley.scansearch(v, v[i], lo, hi) == i
+                @test Galley.scansearch(v, v[i] - 1, lo, hi) ==
                     ((i > lo && v[i - 1] == v[i] - 1) ? i - 1 : i)
-                @test Finch.scansearch(v, v[i] + 1, lo, hi) == i + 1
+                @test Galley.scansearch(v, v[i] + 1, lo, hi) == i + 1
             end
         end
     end
@@ -191,7 +191,7 @@
 
     y = Array{Any}(undef, 4)
     x = Tensor(Dense(Element(0.0)), zeros(2))
-    X = Finch.permissive(x, true)
+    X = Galley.permissive(x, true)
 
     @finch for i in _
         y[i] := X[i]
@@ -202,14 +202,14 @@
     y = Array{Any}(undef, 4)
 
     @finch for i in _
-        y[i] := Finch.permissive(x, true)[i]
+        y[i] := Galley.permissive(x, true)[i]
     end
 
     @test isequal(y, [0.0, 0.0, missing, missing])
 
     y = Array{Any}(undef, 4)
 
-    z = Finch.permissive(x, true)
+    z = Galley.permissive(x, true)
 
     @finch begin
         for i in _
@@ -232,7 +232,7 @@
         println(io, "chunkmask tests")
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 15, 3)
-        @repl io m = Finch.chunkmask(15, 5)
+        @repl io m = Galley.chunkmask(15, 5)
         @repl io @finch begin
             for i in _
                 for j in _
@@ -243,7 +243,7 @@
         @repl io AsArray(A)
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 14, 3)
-        @repl io m = Finch.chunkmask(14, 5)
+        @repl io m = Galley.chunkmask(14, 5)
         @repl io @finch begin
             for i in _
                 for j in _
@@ -259,7 +259,7 @@
         println(io, "splitmask tests")
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 15, 5)
-        @repl io m = Finch.splitmask(15, 5)
+        @repl io m = Galley.splitmask(15, 5)
         @repl io @finch begin
             for i in _
                 for j in _
@@ -270,7 +270,7 @@
         @repl io AsArray(A)
 
         @repl io A = Tensor(Dense(Dense(Element(0.0))), 14, 5)
-        @repl io m = Finch.splitmask(14, 5)
+        @repl io m = Galley.splitmask(14, 5)
         @repl io @finch begin
             for i in _
                 for j in _
@@ -509,11 +509,11 @@ end
     @testset "reproducible bit mixing" begin
         # Fixed outputs pin down the integer arithmetic and seed interpretation
         # independently of Julia's built-in hash and platform word size.
-        @test Finch.randommask_mix(UInt64(0)) == 0xe220a8397b1dcdaf
-        @test Finch.randommask_mix(UInt64(1)) == 0x910a2dec89025cc1
-        @test Finch.randommask_mix(typemax(UInt64)) == 0xe4d971771b652c20
-        @test Finch.randommask_uniform(UInt64(0)) == 0.0
-        @test Finch.randommask_uniform(typemax(UInt64)) == prevfloat(1.0)
+        @test Galley.randommask_mix(UInt64(0)) == 0xe220a8397b1dcdaf
+        @test Galley.randommask_mix(UInt64(1)) == 0x910a2dec89025cc1
+        @test Galley.randommask_mix(typemax(UInt64)) == 0xe4d971771b652c20
+        @test Galley.randommask_uniform(UInt64(0)) == 0.0
+        @test Galley.randommask_uniform(typemax(UInt64)) == prevfloat(1.0)
         mask = randommask(16, 0.5; seed=42)
         @test copyto!(zeros(Bool, 16), mask) ==
             Bool[0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1]
@@ -534,7 +534,7 @@ end
             @test out == fill(Bool(p), shape)
             @test size(mask) == shape
             @test eltype(mask) == Bool
-            @test Finch.fill_value(mask) == false
+            @test Galley.fill_value(mask) == false
         end
         for shape in ((), (5,), (3, 4), (2, 3, 4))
             mask = randommask(rng, shape, 0.3)
@@ -547,7 +547,7 @@ end
             sample = copyto!(zeros(Bool, 10000), randommask(10000, p; seed=42))
             @test abs(count(sample) / length(sample) - p) < 0.03
         end
-        @test randommask(3, 0.5) isa Finch.RandomMask
+        @test randommask(3, 0.5) isa Galley.RandomMask
     end
 
     @testset "stable reads and traversal" begin

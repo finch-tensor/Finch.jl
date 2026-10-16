@@ -13,8 +13,8 @@ quote
     tmp_lvl_qos_fill = 0
     tmp_lvl_qos_stop = 0
     tmp_lvl_i_prev = 1 - 1
-    Finch.resize_if_smaller!(tmp_lvl_ptr, 1 + 1)
-    Finch.fill_range!(tmp_lvl_ptr, 1, 1 + 1, 1 + 1)
+    Galley.resize_if_smaller!(tmp_lvl_ptr, 1 + 1)
+    Galley.fill_range!(tmp_lvl_ptr, 1, 1 + 1, 1 + 1)
     tmp_lvl_qos = 0 + 1
     1 <= 1 || throw(FinchProtocolError("RunListLevels cannot be updated multiple times"))
     tmp_lvl_i_prev_3 = tmp_lvl_i_prev
@@ -34,7 +34,7 @@ quote
     phase_stop = min(ref_lvl_i1, ref_lvl.shape)
     if phase_stop >= 1
         if ref_lvl_idx[ref_lvl_q] < 1
-            ref_lvl_q = Finch.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
+            ref_lvl_q = Galley.scansearch(ref_lvl_idx, 1, ref_lvl_q, ref_lvl_q_stop - 1)
         end
         while true
             ref_lvl_i = ref_lvl_idx[ref_lvl_q]
@@ -46,10 +46,10 @@ quote
                     while tmp_lvl_qos_3 > tmp_lvl_qos_stop
                         tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
                     end
-                    Finch.resize_if_smaller!(tmp_lvl_right, tmp_lvl_qos_stop)
-                    Finch.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_2, tmp_lvl_qos_stop)
-                    Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                    Finch.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                    Galley.resize_if_smaller!(tmp_lvl_right, tmp_lvl_qos_stop)
+                    Galley.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                    Galley.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
+                    Galley.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos_2, tmp_lvl_qos_stop)
                 end
                 tmp_lvl_val_2[tmp_lvl_qos_3] = ref_lvl_2_val
                 tmp_lvl_right[tmp_lvl_qos] = ref_lvl_i - 1
@@ -67,10 +67,10 @@ quote
                         while tmp_lvl_qos_3 > tmp_lvl_qos_stop
                             tmp_lvl_qos_stop = max(tmp_lvl_qos_stop << 1, 1)
                         end
-                        Finch.resize_if_smaller!(tmp_lvl_right, tmp_lvl_qos_stop)
-                        Finch.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_2, tmp_lvl_qos_stop)
-                        Finch.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-                        Finch.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                        Galley.resize_if_smaller!(tmp_lvl_right, tmp_lvl_qos_stop)
+                        Galley.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_2, tmp_lvl_qos_stop)
+                        Galley.resize_if_smaller!(tmp_lvl_val_2, tmp_lvl_qos_stop)
+                        Galley.fill_range!(tmp_lvl_val_2, false, tmp_lvl_qos_2, tmp_lvl_qos_stop)
                     end
                     tmp_lvl_val_2[tmp_lvl_qos_3] = ref_lvl_2_val
                     tmp_lvl_right[tmp_lvl_qos] = phase_stop_3 - 1
@@ -91,11 +91,11 @@ quote
     qos = tmp_lvl_qos_fill + (tmp_lvl_i_prev < ref_lvl.shape)
     qos += 1 - 1
     if qos > tmp_lvl_qos_stop
-        Finch.resize_if_smaller!(tmp_lvl_right, qos)
-        Finch.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_fill + 1, qos)
+        Galley.resize_if_smaller!(tmp_lvl_right, qos)
+        Galley.fill_range!(tmp_lvl_right, ref_lvl.shape, tmp_lvl_qos_fill + 1, qos)
         pos_start = 1 + tmp_lvl_qos_fill
-        Finch.resize_if_smaller!(tmp_lvl_val_2, qos)
-        Finch.fill_range!(tmp_lvl_val_2, false, pos_start, qos)
+        Galley.resize_if_smaller!(tmp_lvl_val_2, qos)
+        Galley.fill_range!(tmp_lvl_val_2, false, pos_start, qos)
     end
     resize!(tmp_lvl_ptr, 1 + 1)
     for p = 1:1
@@ -103,8 +103,8 @@ quote
     end
     tmp_lvl_qos_stop = tmp_lvl_ptr[1 + 1] - 1
     resize!(tmp_lvl_val_2, tmp_lvl_qos_stop)
-    Finch.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
-    Finch.fill_range!(tmp_lvl_val, false, 1, tmp_lvl_qos_stop)
+    Galley.resize_if_smaller!(tmp_lvl_val, tmp_lvl_qos_stop)
+    Galley.fill_range!(tmp_lvl_val, false, 1, tmp_lvl_qos_stop)
     q = 1
     q_2 = 1
     for p_2 = 1:1

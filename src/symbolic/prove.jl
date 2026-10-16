@@ -1,10 +1,10 @@
 """
     get_prove_rules(alg, shash)
 
-Return the bound rule set for Finch. One can dispatch on the `alg` trait to
+Return the bound rule set for Galley. One can dispatch on the `alg` trait to
 specialize the rule set for different algebras. `shash` is an object that can be
 called to return a static hash value. This rule set is used to analyze loop
-bounds in Finch.
+bounds in Galley.
 """
 function get_prove_rules(alg, shash)
     return [

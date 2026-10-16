@@ -147,7 +147,7 @@ function concordize(ctx::AbstractCompiler, root)
                             ctx,
                             quote
                                 @warn(
-                                    "Performance Warning: non-concordant traversal of $($(sprint(Finch.FinchNotation.display_expression, MIME"text/plain"(), node))) (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
+                                    "Performance Warning: non-concordant traversal of $($(sprint(Galley.FinchNotation.display_expression, MIME"text/plain"(), node))) (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
                                 )
                             end,
                         )

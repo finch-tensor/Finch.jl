@@ -1,6 +1,6 @@
 @testitem "continuous_examples" begin
     include("../data/continuous_data.jl")
-    using Finch: Structure
+    using Galley: Structure
 
     @testset "openclosed + openclosed" begin
         A_left = [1.1, 6.6, 9.9]
@@ -11,7 +11,7 @@
                 Element(0, A_val),
                 12.0,
                 [1, 4],
-                Finch.PlusEpsVector(A_left),
+                Galley.PlusEpsVector(A_left),
                 A_right,
                 Element(0, Int[]),
             ),
@@ -24,7 +24,7 @@
                 Element(0, B_val),
                 12.0,
                 [1, 4],
-                Finch.PlusEpsVector(B_left),
+                Galley.PlusEpsVector(B_left),
                 B_right,
                 Element(0, Int[]),
             ),
@@ -34,7 +34,7 @@
                 Element(0),
                 12.0,
                 [1],
-                Finch.PlusEpsVector(Float64[]),
+                Galley.PlusEpsVector(Float64[]),
                 Float64[],
                 Element(0, Int[]),
             ),
@@ -50,7 +50,7 @@
                 Element(0, [1, 2, 1, 3, 1, 2, 3]),
                 12.0,
                 [1, 8],
-                Finch.PlusEpsVector([1.1, 2.2, 5.5, 6.6, 7.7, 8.8, 9.9]),
+                Galley.PlusEpsVector([1.1, 2.2, 5.5, 6.6, 7.7, 8.8, 9.9]),
                 [2.2, 3.3, 6.6, 7.7, 8.8, 9.9, 11.11],
                 Element(0, Int[]),
             ),

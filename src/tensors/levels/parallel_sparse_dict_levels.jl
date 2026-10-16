@@ -378,7 +378,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualParallelSparseDictLeve
         quote
             resize!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             $(lvl.ptr)[1] = 1
-            Finch.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
+            Galley.fill_range!($(lvl.ptr), 0, 2, $(ctx(pos_stop)) + 1)
             $pdx_tmp = Vector{$Tp}(undef, length($(lvl.tbl)))
             resize!($(lvl.idx), length($(lvl.tbl)))
             resize!($(lvl.val), length($(lvl.tbl)))
@@ -460,7 +460,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
-                            $my_q = Finch.scansearch(
+                            $my_q = Galley.scansearch(
                                 $(lvl.idx),
                                 $(ctx(getstart(ext))),
                                 $my_q,
@@ -568,8 +568,8 @@ function unfurl(
                                     ),
                                     ctx,
                                 ))
-                                Finch.resize_if_smaller!($(lvl.val), $qos_stop)
-                                Finch.fill_range!($(lvl.val), 0, $qos, $qos_stop)
+                                Galley.resize_if_smaller!($(lvl.val), $qos_stop)
+                                Galley.fill_range!($(lvl.val), 0, $qos, $qos_stop)
                             end
                         end
                         $(lvl.tbl)[($(ctx(pos)), $(ctx(idx)))] = $qos

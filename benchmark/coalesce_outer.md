@@ -91,8 +91,8 @@ inside the parallel accumulation's `@barrier` closure are boxed, as on `main`.
 ## No closure boxing, 2026-10-01
 
 Generated parallel loops now bind their free variables once, just before the
-thread closure, and never rebind the `Finch` module as a local, which had made
-every `Finch.f(...)` call inside parallel bodies dynamic. Same script, Julia
+thread closure, and never rebind the `Galley` module as a local, which had made
+every `Galley.f(...)` call inside parallel bodies dynamic. Same script, Julia
 1.12.6, eight CPU threads, seed 42; better minimum of two back-to-back rounds.
 
 | Case        | Format                   | `6e7d927ea`  | Compact layout | No boxing  |

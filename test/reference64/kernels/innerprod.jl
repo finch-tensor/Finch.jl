@@ -16,19 +16,19 @@ begin
     B_lvl_2_qos_fill = 0
     B_lvl_2_qos_stop = 0
     B_lvl_2_prev_pos = 0
-    Finch.resize_if_smaller!(B_lvl_2_ptr, A_lvl_stop + 1)
-    Finch.fill_range!(B_lvl_2_ptr, 0, 1 + 1, A_lvl_stop + 1)
+    Galley.resize_if_smaller!(B_lvl_2_ptr, A_lvl_stop + 1)
+    Galley.fill_range!(B_lvl_2_ptr, 0, 1 + 1, A_lvl_stop + 1)
     for j_4 = 1:A_lvl_stop
         B_lvl_q = (1 - 1) * A_lvl_stop + j_4
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
         B_lvl_2_qos = B_lvl_2_qos_fill + 1
-        B_lvl_2_prev_pos < B_lvl_q || throw((Finch.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
+        B_lvl_2_prev_pos < B_lvl_q || throw((Galley.FinchProtocolError)("SparseListLevels cannot be updated multiple times"))
         for i_4 = 1:A_lvl_stop
             if B_lvl_2_qos > B_lvl_2_qos_stop
                 B_lvl_2_qos_stop = max(B_lvl_2_qos_stop << 1, 1)
-                Finch.resize_if_smaller!(B_lvl_2_idx, B_lvl_2_qos_stop)
-                Finch.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_stop)
-                Finch.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_stop)
+                Galley.resize_if_smaller!(B_lvl_2_idx, B_lvl_2_qos_stop)
+                Galley.resize_if_smaller!(B_lvl_3_val, B_lvl_2_qos_stop)
+                Galley.fill_range!(B_lvl_3_val, 0.0, B_lvl_2_qos, B_lvl_2_qos_stop)
             end
             B_lvl_2dirty = false
             A_lvl_q_2 = (1 - 1) * A_lvl_stop + i_4
@@ -50,10 +50,10 @@ begin
             if phase_stop >= 1
                 k = 1
                 if A_lvl_2_idx[A_lvl_2_q] < 1
-                    A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                    A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
                 end
                 if A_lvl_2_idx[A_lvl_2_q_2] < 1
-                    A_lvl_2_q_2 = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1)
+                    A_lvl_2_q_2 = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q_2, A_lvl_2_q_stop_2 - 1)
                 end
                 while k <= phase_stop
                     A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
@@ -89,6 +89,6 @@ begin
     end
     qos_stop = B_lvl_2_ptr[A_lvl_stop + 1] - 1
     resize!(B_lvl_2_idx, qos_stop)
-    Finch.resize_if_larger!(B_lvl_3_val, qos_stop)
+    Galley.resize_if_larger!(B_lvl_3_val, qos_stop)
     (B = Tensor((DenseLevel){Int64}((SparseListLevel){Int64}(ElementLevel{0.0, Float64, Int64}(B_lvl_3_val), A_lvl_stop, B_lvl_2_ptr, B_lvl_2_idx), A_lvl_stop)),)
 end

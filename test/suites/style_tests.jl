@@ -6,13 +6,13 @@
     if parsed_args["overwrite"]
         mkpidlock(joinpath(@__DIR__, "..", "..", "lock.pid")) do
             for i in 1:10#https://github.com/domluna/JuliaFormatter.jl/issues/897
-                if JuliaFormatter.format(Finch)
+                if JuliaFormatter.format(Galley)
                     break
                 end
             end
-            @test JuliaFormatter.format(Finch)
+            @test JuliaFormatter.format(Galley)
         end
     else
-        @test JuliaFormatter.format(Finch, overwrite=false)
+        @test JuliaFormatter.format(Galley, overwrite=false)
     end
 end

@@ -10,8 +10,8 @@ using Test
 using ArgParse
 
 s = ArgParseSettings(
-    "Run Finch.jl tests. By default, all tests are run unless --include or --exclude options are provided. 
-Finch compares to reference output which depends on the system word size (currently $(Sys.WORD_SIZE)-bit).To overwrite $(Sys.WORD_SIZE==32 ? 64 : 32)-bit output, run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.
+    "Run Galley.jl tests. By default, all tests are run unless --include or --exclude options are provided.
+Galley compares to reference output which depends on the system word size (currently $(Sys.WORD_SIZE)-bit).To overwrite $(Sys.WORD_SIZE==32 ? 64 : 32)-bit output, run this with a $(Sys.WORD_SIZE==32 ? 64 : 32)-bit julia executable.
 If the environment variable FINCH_TEST_ARGS is set, it will override the given arguments.",
 )
 
@@ -52,7 +52,7 @@ function test_filter(name)
     return (isempty(inc) || name in inc) && !(name in exc)
 end
 
-using Finch
+using Galley
 
 if parsed_args["nprocs"] == 0
     using Test
@@ -157,7 +157,7 @@ if parsed_args["nprocs"] == 0
         )
     end
 
-    @testset "Finch" begin
+    @testset "Galley" begin
         include("suites/style_tests.jl")
         include("modules/checkoutput_testsetup.jl")
         include("suites/algebra_tests.jl")
@@ -187,11 +187,11 @@ else
 
     runtests(
         (ti) -> test_filter(ti.name),
-        Finch;
+        Galley;
         nworkers=parsed_args["nprocs"],
         nworker_threads=parsed_args["nthreads"],
         worker_init_expr=quote
-            using Finch
+            using Galley
             using SparseArrays
             parsed_args = $parsed_args
         end)

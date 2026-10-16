@@ -157,7 +157,7 @@ Limit{T}(x::Number) where {T} = limit(T(x))
 drop_eps(x::Limit) = x.val
 drop_eps(x::Number) = x
 
-const Eps = Finch.plus_eps(Int8(0))
+const Eps = Galley.plus_eps(Int8(0))
 
 function Base.show(io::IO, x::Limit)
     print(io, "limit(", x.val, x.sign, ")")

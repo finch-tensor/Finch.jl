@@ -101,7 +101,7 @@ temporary.replace(response)
         result = self.call()
         self.assertEqual(result.returncode, 1)
         self.assertIn("timed out", result.stderr)
-        self.assertIn("waiting for Finch server response", result.stderr)
+        self.assertIn("waiting for Galley server response", result.stderr)
 
     def test_full_fifo(self):
         fd = os.open(self.fifo, os.O_RDWR | os.O_NONBLOCK)
@@ -121,7 +121,7 @@ temporary.replace(response)
         server.wait(timeout=5)
         result = self.call()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("Finch server exited", result.stderr)
+        self.assertIn("Galley server exited", result.stderr)
 
 
 class RunnerTests(unittest.TestCase):
@@ -169,12 +169,12 @@ time.sleep(60)
     def test_startup_failure_does_not_hang_cleanup(self):
         result = self.run_harness("crash")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("Finch server failed to start", result.stderr)
+        self.assertIn("Galley server failed to start", result.stderr)
 
     def test_startup_timeout(self):
         result = self.run_harness("never-ready")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("timed out waiting for Finch server to start", result.stderr)
+        self.assertIn("timed out waiting for Galley server to start", result.stderr)
 
     def test_cleanup_with_unresponsive_server(self):
         result = self.run_harness("ignore-shutdown")

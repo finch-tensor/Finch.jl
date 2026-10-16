@@ -1,5 +1,5 @@
 # This file defines a prototype front-end which allows users to define tensor expressions and get their results.
-module Galley
+module Optimizer
 
 using AutoHashEquals
 using Base: hash, copy, convert, getproperty, getfield, setfield!, getindex, ==, show
@@ -10,18 +10,18 @@ using RewriteTools.Rewriters
 using SyntaxInterface
 using AbstractTrees
 using Statistics
-using Finch
-using Finch: Element, SparseListLevel, SparseDict, Dense, SparseCOO, fsparse_impl,
+using Galley
+using Galley: Element, SparseListLevel, SparseDict, Dense, SparseCOO, fsparse_impl,
     compute_parse,
     isimmediate, set_options, flatten_plans, initmax, initmin
-using Finch: StableSet
-using Finch.FinchNotation: index_instance, variable_instance, tag_instance,
+using Galley: StableSet
+using Galley.FinchNotation: index_instance, variable_instance, tag_instance,
     literal_instance,
     access_instance, reader_instance, updater_instance, assign_instance,
     loop_instance, declare_instance, block_instance, define_instance,
     call_instance, freeze_instance, thaw_instance, finch_unparse_program,
     Auto
-using Finch.FinchLogic
+using Galley.FinchLogic
 
 export galley
 export PlanNode,
@@ -33,10 +33,10 @@ export GalleyOptimizer, AdaptiveExecutor, AdaptiveExecutorCode, galley_scheduler
 
 IndexExpr = Symbol
 TensorId = Symbol
-# This defines the list of access protocols allowed by the Finch API
+# This defines the list of access protocols allowed by the Galley API
 @enum AccessProtocol t_walk = 1 t_lead = 2 t_follow = 3 t_gallop = 4 t_default = 5
 
-# A subset of the allowed level formats provided by the Finch API
+# A subset of the allowed level formats provided by the Galley API
 @enum LevelFormat t_sparse_list = 1 t_coo = 2 t_dense = 3 t_hash = 4 t_bytemap = 5 t_undef =
     6
 
@@ -83,7 +83,7 @@ function galley(input_plan::PlanNode;
     if input_plan.kind == Query
         input_plan = Plan(input_plan)
     end
-    counter_start = Galley.name_counter
+    counter_start = name_counter
 
     overall_start = time()
     # To avoid input corruption, we start by copying the input queries (except for the data)

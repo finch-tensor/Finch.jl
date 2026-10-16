@@ -1,4 +1,4 @@
-using Finch
+using Galley
 
 ##BUGS: The only failures are all the same already-known edge case: a processor whose entire quota got absorbed by a duplicate cluster, producing an inverted lb > ub 
 ##Probably not worth fixing as they won't happen under realistic conditions.
@@ -20,7 +20,7 @@ function decrement_idxs(idxs, shapes)
 end
 
 function balance(lvl, tid, P, nnz, style::Union{MergeNormalization})
-    shapes = collect(Finch.level_size(lvl))
+    shapes = collect(Galley.level_size(lvl))
     max_dim = length(shapes)
 
     base = div(nnz, P)
@@ -57,7 +57,7 @@ function find_normalizer_split(lvl, target_work, P, idxs, max_dim)
             idxs[max_dim - dim] = candidate
             stored = 0
             for p in 1:P
-                stored += Finch.countstored_level(lvl, 1, idxs, 0, p, true)
+                stored += Galley.countstored_level(lvl, 1, idxs, 0, p, true)
             end
             if stored >= target_work
                 truth = candidate

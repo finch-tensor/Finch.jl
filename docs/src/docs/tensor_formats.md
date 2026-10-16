@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Constructing Tensors
@@ -32,7 +32,7 @@ ByteMapFormat
 
 For example, to construct an empty sparse matrix:
 
-```jldoctest example1; setup=:(using Finch)
+```jldoctest example1; setup=:(using Galley)
 julia> A_fbr = Tensor(Dense(SparseList(Element(0.0))), 4, 3)
 4×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  0.0  0.0
@@ -80,11 +80,11 @@ julia> tensor_tree(A_fbr)
 
 # Custom Storage Tree Level Formats
 
-This section describes the formatted storage for Finch tensors, the first
+This section describes the formatted storage for Galley tensors, the first
 argument to the [`Tensor`](@ref) constructor. Level storage types holds all of
 the tensor data, and can be nested hierarchichally.
 
-Finch represents tensors hierarchically in a tree, where each node in the tree
+Galley represents tensors hierarchically in a tree, where each node in the tree
 is a vector of subtensors and the leaves are the elements.  Thus, a matrix is
 analogous to a vector of vectors, and a 3-tensor is analogous to a vector of
 vectors of vectors.  The vectors at each level of the tensor all have the same
@@ -95,9 +95,9 @@ tensor_tree(::AbstractTensor)
 tensor_tree(::IO, ::AbstractTensor)
 ```
 
-In a Finch tensor tree, the child of each node is selected by an array index.
+In a Galley tensor tree, the child of each node is selected by an array index.
 All of the children at the same level will use the same format and share the
-same storage. Finch is column major, so in an expression `A[i_1, ..., i_N]`, the
+same storage. Galley is column major, so in an expression `A[i_1, ..., i_N]`, the
 rightmost dimension `i_N` corresponds to the root level of the tree, and the
 leftmost dimension `i_1` corresponds to the leaf level.
 
@@ -107,7 +107,7 @@ Our example could be visualized as follows:
 
 # Types of Level Storage
 
-Finch supports a variety of storage formats for each level of the tensor tree,
+Galley supports a variety of storage formats for each level of the tensor tree,
 each with advantages and disadvantages. Some storage formats support in-order
 access, while others support random access. Some storage formats must be written
 to in column-major order, while others support out-of-order writes. The
@@ -204,9 +204,9 @@ The following diagrams illustrate the way that levels can be combined to form a 
 
 ![Diagram of Core Level Structures](../assets/Structures-structures.png)
 
-# Examples of Popular Formats in Finch
+# Examples of Popular Formats in Galley
 
-Finch levels can be used to construct a variety of popular sparse formats. A few examples follow:
+Galley levels can be used to construct a variety of popular sparse formats. A few examples follow:
 
 | Format Type               | Syntax                                                         |
 |:------------------------- |:-------------------------------------------------------------- |

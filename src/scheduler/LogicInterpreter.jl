@@ -1,4 +1,4 @@
-using Finch.FinchNotation: block_instance, declare_instance, call_instance, loop_instance,
+using Galley.FinchNotation: block_instance, declare_instance, call_instance, loop_instance,
     index_instance, variable_instance, tag_instance, access_instance, reader_instance,
     updater_instance, assign_instance, literal_instance, yieldbind_instance
 

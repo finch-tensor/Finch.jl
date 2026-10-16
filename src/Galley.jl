@@ -1,4 +1,4 @@
-module Finch
+module Galley
 
 using AcceleratedKernels: AcceleratedKernels
 
@@ -298,8 +298,8 @@ include("interface/einsum.jl")
 
 include("execute.jl")
 
-include("Galley/Galley.jl")
-using .Galley
+include("Optimizer/Optimizer.jl")
+using .Optimizer
 
 export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
 
@@ -332,7 +332,7 @@ export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
 end
 
 function workload()
-    @info "Running enhanced Finch.jl precompilation... (to disable, run `using Preferences; Preferences.set_preferences!(\"Finch\", \"precompile_workload\" => false; force=true)`). See https://julialang.github.io/PrecompileTools.jl/stable/#Package-developers:-reducing-the-cost-of-precompilation-during-development for more."
+    @info "Running enhanced Galley.jl precompilation... (to disable, run `using Preferences; Preferences.set_preferences!(\"Galley\", \"precompile_workload\" => false; force=true)`). See https://julialang.github.io/PrecompileTools.jl/stable/#Package-developers:-reducing-the-cost-of-precompilation-during-development for more."
     # all calls in this block will be precompiled, regardless of whether
     # they belong to your package or not (on Julia 1.8 and higher)
 

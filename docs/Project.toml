@@ -3,8 +3,11 @@ AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CIndices = "5a98b6c4-18fa-405d-92b3-8277d93fed36"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-Finch = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
+Galley = "9177782c-1635-4eb9-9bfb-d9dfa25e6bce"
 MatrixDepot = "b51810bb-c9f3-55da-ae3c-350fc1fbce05"
 RewriteTools = "5969e224-3634-4c61-9f66-721b69e98b8a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SyntaxInterface = "b33eeca9-aacb-4496-a840-e75f1646a4fb"
+
+[sources]
+Galley = {path = ".."}

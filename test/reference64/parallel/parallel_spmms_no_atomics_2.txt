@@ -24,29 +24,29 @@ begin
     @warn "Performance Warning: non-concordant traversal of Ct[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
     @warn "Performance Warning: non-concordant traversal of A[i, k] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)"
     pos_stop = A_lvl_stop1 * B_lvl_stop2
-    Finch.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
-    Finch.fill_range!(Ct_lvl_3_val, 0x0000000000000000, 1, pos_stop)
+    Galley.resize_if_smaller!(Ct_lvl_3_val, pos_stop)
+    Galley.fill_range!(Ct_lvl_3_val, 0x0000000000000000, 1, pos_stop)
     for i_4 = 1:A_lvl_stop1
-        Ct_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), Ct_lvl_3_val)
-        B_lvl_2_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), B_lvl_2_val)
-        B_lvl_ptr_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), B_lvl_ptr)
-        B_lvl_tbl1_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), B_lvl_tbl1)
-        B_lvl_tbl2_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), B_lvl_tbl2)
-        A_lvl_2_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_2_val)
-        A_lvl_ptr_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_ptr)
-        A_lvl_tbl1_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_tbl1)
-        A_lvl_tbl2_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_tbl2)
-        Finch.@barrier Threads.@threads(:dynamic, for tid = 1:n
+        Ct_lvl_3_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), Ct_lvl_3_val)
+        B_lvl_2_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), B_lvl_2_val)
+        B_lvl_ptr_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), B_lvl_ptr)
+        B_lvl_tbl1_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), B_lvl_tbl1)
+        B_lvl_tbl2_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), B_lvl_tbl2)
+        A_lvl_2_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_2_val)
+        A_lvl_ptr_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_ptr)
+        A_lvl_tbl1_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_tbl1)
+        A_lvl_tbl2_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_tbl2)
+        Galley.@barrier Threads.@threads(:dynamic, for tid = 1:n
                     @inbounds @fastmath(begin
-                                Ct_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), Ct_lvl_3_val_2)
-                                B_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), B_lvl_2_val_2)
-                                B_lvl_ptr_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), B_lvl_ptr_2)
-                                B_lvl_tbl1_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), B_lvl_tbl1_2)
-                                B_lvl_tbl2_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), B_lvl_tbl2_2)
-                                A_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_2_val_2)
-                                A_lvl_ptr_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_ptr_2)
-                                A_lvl_tbl1_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_tbl1_2)
-                                A_lvl_tbl2_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_tbl2_2)
+                                Ct_lvl_3_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), Ct_lvl_3_val_2)
+                                B_lvl_2_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), B_lvl_2_val_2)
+                                B_lvl_ptr_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), B_lvl_ptr_2)
+                                B_lvl_tbl1_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), B_lvl_tbl1_2)
+                                B_lvl_tbl2_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), B_lvl_tbl2_2)
+                                A_lvl_2_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_2_val_2)
+                                A_lvl_ptr_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_ptr_2)
+                                A_lvl_tbl1_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_tbl1_2)
+                                A_lvl_tbl2_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_tbl2_2)
                                 B_lvl_q = B_lvl_ptr_3[1]
                                 B_lvl_q_stop = B_lvl_ptr_3[1 + 1]
                                 if B_lvl_q < B_lvl_q_stop
@@ -58,13 +58,13 @@ begin
                                 phase_stop_2 = min(B_lvl_stop2, B_lvl_i_stop, fld(B_lvl_stop2 * tid, n))
                                 if phase_stop_2 >= phase_start_2
                                     if B_lvl_tbl2_3[B_lvl_q] < phase_start_2
-                                        B_lvl_q = Finch.scansearch(B_lvl_tbl2_3, phase_start_2, B_lvl_q, B_lvl_q_stop - 1)
+                                        B_lvl_q = Galley.scansearch(B_lvl_tbl2_3, phase_start_2, B_lvl_q, B_lvl_q_stop - 1)
                                     end
                                     while true
                                         B_lvl_i = B_lvl_tbl2_3[B_lvl_q]
                                         B_lvl_q_step = B_lvl_q
                                         if B_lvl_tbl2_3[B_lvl_q] == B_lvl_i
-                                            B_lvl_q_step = Finch.scansearch(B_lvl_tbl2_3, B_lvl_i + 1, B_lvl_q, B_lvl_q_stop - 1)
+                                            B_lvl_q_step = Galley.scansearch(B_lvl_tbl2_3, B_lvl_i + 1, B_lvl_q, B_lvl_q_stop - 1)
                                         end
                                         if B_lvl_i < phase_stop_2
                                             Ct_lvl_q = (1 - 1) * B_lvl_stop2 + B_lvl_i
@@ -86,16 +86,16 @@ begin
                                             if phase_stop_4 >= 1
                                                 k = 1
                                                 if A_lvl_tbl2_3[A_lvl_q] < 1
-                                                    A_lvl_q = Finch.scansearch(A_lvl_tbl2_3, 1, A_lvl_q, A_lvl_q_stop - 1)
+                                                    A_lvl_q = Galley.scansearch(A_lvl_tbl2_3, 1, A_lvl_q, A_lvl_q_stop - 1)
                                                 end
                                                 if B_lvl_tbl1_3[B_lvl_q] < 1
-                                                    B_lvl_q_2 = Finch.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
+                                                    B_lvl_q_2 = Galley.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
                                                 end
                                                 while k <= phase_stop_4
                                                     A_lvl_i = A_lvl_tbl2_3[A_lvl_q]
                                                     A_lvl_q_step = A_lvl_q
                                                     if A_lvl_tbl2_3[A_lvl_q] == A_lvl_i
-                                                        A_lvl_q_step = Finch.scansearch(A_lvl_tbl2_3, A_lvl_i + 1, A_lvl_q, A_lvl_q_stop - 1)
+                                                        A_lvl_q_step = Galley.scansearch(A_lvl_tbl2_3, A_lvl_i + 1, A_lvl_q, A_lvl_q_stop - 1)
                                                     end
                                                     B_lvl_i_2 = B_lvl_tbl1_3[B_lvl_q_2]
                                                     phase_stop_5 = min(B_lvl_i_2, phase_stop_4, A_lvl_i)
@@ -110,7 +110,7 @@ begin
                                                         phase_stop_6 = min(i_4, A_lvl_i_stop_2)
                                                         if phase_stop_6 >= i_4
                                                             if A_lvl_tbl1_3[A_lvl_q] < i_4
-                                                                A_lvl_q_2 = Finch.scansearch(A_lvl_tbl1_3, i_4, A_lvl_q, A_lvl_q_step - 1)
+                                                                A_lvl_q_2 = Galley.scansearch(A_lvl_tbl1_3, i_4, A_lvl_q, A_lvl_q_step - 1)
                                                             end
                                                             while true
                                                                 A_lvl_i_2 = A_lvl_tbl1_3[A_lvl_q_2]
@@ -162,16 +162,16 @@ begin
                                                 if phase_stop_14 >= 1
                                                     k = 1
                                                     if A_lvl_tbl2_3[A_lvl_q_3] < 1
-                                                        A_lvl_q_3 = Finch.scansearch(A_lvl_tbl2_3, 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
+                                                        A_lvl_q_3 = Galley.scansearch(A_lvl_tbl2_3, 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
                                                     end
                                                     if B_lvl_tbl1_3[B_lvl_q] < 1
-                                                        B_lvl_q_3 = Finch.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
+                                                        B_lvl_q_3 = Galley.scansearch(B_lvl_tbl1_3, 1, B_lvl_q, B_lvl_q_step - 1)
                                                     end
                                                     while k <= phase_stop_14
                                                         A_lvl_i_3 = A_lvl_tbl2_3[A_lvl_q_3]
                                                         A_lvl_q_step_3 = A_lvl_q_3
                                                         if A_lvl_tbl2_3[A_lvl_q_3] == A_lvl_i_3
-                                                            A_lvl_q_step_3 = Finch.scansearch(A_lvl_tbl2_3, A_lvl_i_3 + 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
+                                                            A_lvl_q_step_3 = Galley.scansearch(A_lvl_tbl2_3, A_lvl_i_3 + 1, A_lvl_q_3, A_lvl_q_stop_3 - 1)
                                                         end
                                                         B_lvl_i_3 = B_lvl_tbl1_3[B_lvl_q_3]
                                                         phase_stop_15 = min(B_lvl_i_3, phase_stop_14, A_lvl_i_3)
@@ -186,7 +186,7 @@ begin
                                                             phase_stop_16 = min(i_4, A_lvl_i_stop_4)
                                                             if phase_stop_16 >= i_4
                                                                 if A_lvl_tbl1_3[A_lvl_q_3] < i_4
-                                                                    A_lvl_q_4 = Finch.scansearch(A_lvl_tbl1_3, i_4, A_lvl_q_3, A_lvl_q_step_3 - 1)
+                                                                    A_lvl_q_4 = Galley.scansearch(A_lvl_tbl1_3, i_4, A_lvl_q_3, A_lvl_q_step_3 - 1)
                                                                 end
                                                                 while true
                                                                     A_lvl_i_4 = A_lvl_tbl1_3[A_lvl_q_4]
@@ -227,8 +227,8 @@ begin
                                 end
                             end)
                 end)
-        Ct_lvl_3_val = (Finch).transfer(Ct_lvl_3_val, Ct_lvl_3_val_2)
+        Ct_lvl_3_val = (Galley).transfer(Ct_lvl_3_val, Ct_lvl_3_val_2)
     end
-    Finch.resize_if_larger!(Ct_lvl_3_val, A_lvl_stop1 * B_lvl_stop2)
+    Galley.resize_if_larger!(Ct_lvl_3_val, A_lvl_stop1 * B_lvl_stop2)
     (Ct = Tensor((DenseLevel){Int64}((DenseLevel){Int64}(ElementLevel{0x0000000000000000, UInt64, Int64}(Ct_lvl_3_val), A_lvl_stop1), B_lvl_stop2)),)
 end

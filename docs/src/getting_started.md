@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Getting Started
@@ -8,9 +8,9 @@ CurrentModule = Finch
 
 ### Creating Tensors
 
-You can create Finch tensors using the [`Tensor`](@ref) constructor, which closely follows the `Array` constructor syntax. The first argument specifies the storage format.
+You can create Galley tensors using the [`Tensor`](@ref) constructor, which closely follows the `Array` constructor syntax. The first argument specifies the storage format.
 
-```jldoctest tensorformats; setup = :(using Finch)
+```jldoctest tensorformats; setup = :(using Galley)
 julia> A = Tensor(CSCFormat(), 4, 3);
 
 julia> B = Tensor(COOFormat(2), A);
@@ -36,10 +36,10 @@ It is also possible to build custom formats using the interface, as described in
 
 ### Basic Array Operations
 
-Finch tensors support indexing, slicing, mapping, broadcasting, and reducing.
+Galley tensors support indexing, slicing, mapping, broadcasting, and reducing.
 Many functions in the Julia standard array library are supported.
 
-```jldoctest arrayapi; setup = :(using Finch)
+```jldoctest arrayapi; setup = :(using Galley)
 julia> A = Tensor(CSCFormat(), [0 1; 2 3]);
 
 julia> B = A .+ 1
@@ -63,9 +63,9 @@ julia> E = B[1, :]
  2.0
 ```
 
-For situations which are difficult to express in the julia standard library, Finch also supports an `@einsum` syntax:
+For situations which are difficult to express in the julia standard library, Galley also supports an `@einsum` syntax:
 
-```jldoctest arrayapi; setup = :(using Finch)
+```jldoctest arrayapi; setup = :(using Galley)
 julia> @einsum F[i, j, k] *= A[i, j] * B[j, k]
 2×2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
 [:, :, 1] =
@@ -86,10 +86,10 @@ The `@einsum` macro is a powerful tool for expressing complex array operations c
 
 ## Array Fusion
 
-To get the full benefits of a sparse compiler, it is critical to fuse certain operations together. For this, Finch exposes two functions, [`lazy`](@ref) and [`compute`](@ref).
+To get the full benefits of a sparse compiler, it is critical to fuse certain operations together. For this, Galley exposes two functions, [`lazy`](@ref) and [`compute`](@ref).
 The `lazy` function creates a lazy tensor, which is a symbolic representation of the computation. The `compute` function evaluates the computation. For convenience, you may wish to use the [`fused`](@ref) function, which automatically fuses the computations it contains.
 
-```jldoctest fusion; setup = :(using Finch)
+```jldoctest fusion; setup = :(using Galley)
 julia> A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [1.0, 2.0, 3.0])
 3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0  1.0  0.0  2.0  0.0  0.0
@@ -159,7 +159,7 @@ julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
 
 [`fsparse`](@ref) constructs a tensor from lists of nonzero coordinates. For example,
 
-```jldoctest sparseutils; setup = :(using Finch)
+```jldoctest sparseutils; setup = :(using Galley)
 julia> A = fsparse([1, 2, 3], [2, 3, 4], [1.0, 2.0, 3.0])
 3×4 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0  1.0  0.0  0.0
@@ -169,7 +169,7 @@ julia> A = fsparse([1, 2, 3], [2, 3, 4], [1.0, 2.0, 3.0])
 
 The inverse of [`fsparse`](@ref) is [`ffindnz`](@ref), which returns a list of nonzero coordinates in a tensor.
 
-```jldoctest sparseutils; setup = :(using Finch)
+```jldoctest sparseutils; setup = :(using Galley)
 julia> ffindnz(A)
 ([1, 2, 3], [2, 3, 4], [1.0, 2.0, 3.0])
 ```
@@ -192,7 +192,7 @@ Fill values represent the background value of a sparse tensor. Usually, this val
   - **[`dropfills`](@ref)** or **[`dropfills!`](@ref)**: Remove elements matching the fill value.
   - **[`countstored`](@ref)**: Return the number of stored values in a tensor
 
-```jldoctest sparseutils; setup = :(using Finch)
+```jldoctest sparseutils; setup = :(using Galley)
 julia> t = Tensor(Dense(SparseList(Element(0.0))), 3, 3)
 3×3 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  0.0  0.0
@@ -219,7 +219,7 @@ julia> countstored(dropfills(t))
 
 The Tensor constructor initializes tensors to their fill value when given a list of dimensions, but you can also use [`fspzeros`](@ref) for an empty COO Tensor, for consistency with MATLAB.
 
-```jldoctest sparseutils; setup = :(using Finch)
+```jldoctest sparseutils; setup = :(using Galley)
 julia> A = fspzeros(3, 3)
 3×3 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
  0.0  0.0  0.0
@@ -237,7 +237,7 @@ julia> B = Tensor(CSCFormat(1.0), 3, 3)
 
 You can convert between tensor formats with the `Tensor` constructor. Simply construct a new Tensor in the desired format and
 
-```jldoctest tensorformats; setup = :(using Finch)
+```jldoctest tensorformats; setup = :(using Galley)
 julia> A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
 3×4 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  0.0  2.0  1.0
@@ -253,11 +253,11 @@ julia> B = Tensor(DCSCFormat(), A)
 
 ### Storage Order
 
-By default, tensors in Finch are column-major. However, you can use the
+By default, tensors in Galley are column-major. However, you can use the
 `swizzle` function to transpose them lazily. To convert to a transposed format,
 use the `dropfills!` function.
 
-```jldoctest tensorformats; setup = :(using Finch)
+```jldoctest tensorformats; setup = :(using Galley)
 julia> A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
 3×4 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
  0.0  0.0  2.0  1.0
@@ -265,14 +265,14 @@ julia> A = Tensor(CSCFormat(), [0 0 2 1; 0 0 1 0; 1 0 0 0])
  1.0  0.0  0.0  0.0
 
 julia> swizzle(A, 2, 1)
-4×3 Finch.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
+4×3 Galley.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
  0.0  0.0  1.0
  0.0  0.0  0.0
  2.0  1.0  0.0
  1.0  0.0  0.0
 
 julia> dropfills!(swizzle(Tensor(CSCFormat()), 2, 1), A)
-3×4 Finch.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
+3×4 Galley.SwizzleArray{(2, 1), Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
  0.0  0.0  2.0  1.0
  0.0  0.0  1.0  0.0
  1.0  0.0  0.0  0.0
@@ -282,7 +282,7 @@ julia> dropfills!(swizzle(Tensor(CSCFormat()), 2, 1), A)
 
 ### Reading and Writing Files
 
-Finch supports multiple formats, such as `.bsp`, `.mtx`, and `.tns`. Use `fread` and `fwrite` to read and write tensors.
+Galley supports multiple formats, such as `.bsp`, `.mtx`, and `.tns`. Use `fread` and `fwrite` to read and write tensors.
 
 ```julia
 julia> fwrite("tensor.bsp", A)

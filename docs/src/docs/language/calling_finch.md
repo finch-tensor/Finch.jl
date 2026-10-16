@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Finch Language
@@ -26,7 +26,7 @@ conditionals, multiple outputs, and even user-defined types and functions.
 To begin, the following program sums the rows of a sparse matrix:
 
 ```julia
-using Finch, SparseArrays
+using Galley, SparseArrays
 A = sprand(5, 5, 0.5)
 y = zeros(5)
 @finch begin
@@ -47,7 +47,7 @@ if the arguments are sparse. For example, the following program calculates the
 sum of the elements of a dense matrix:
 
 ```julia
-using Finch
+using Galley
 A = rand(5, 5)
 s = Scalar(0.0)
 @finch begin
@@ -61,7 +61,7 @@ end
 You can call [`@finch_code`](@ref) to see the generated code (since `A` is dense, the
 code is dense):
 
-```jldoctest example1; setup=:(using Finch; A = rand(5, 5); s = Scalar(0))
+```jldoctest example1; setup=:(using Galley; A = rand(5, 5); s = Scalar(0))
 julia> @finch_code for i in _, j in _
            s[] += A[i, j]
        end
@@ -87,10 +87,10 @@ end
 
 ### Calculating Sparse Vector Statistics
 
-Here, we write a Julia program using Finch to compute the minimum, maximum, sum, and variance of a sparse vector. This program efficiently reads the vector once, focusing only on nonzero values.
+Here, we write a Julia program using Galley to compute the minimum, maximum, sum, and variance of a sparse vector. This program efficiently reads the vector once, focusing only on nonzero values.
 
 ```julia
-using Finch
+using Galley
 
 X = Tensor(SparseList(Element(0.0)), fsprand(10, 0.5))
 x_min = Scalar(Inf)
@@ -127,7 +127,7 @@ y = Tensor(Dense(Element(0.0)));
 end
 ```
 
-More examples are given in the [examples directory](https://github.com/finch-tensor/Finch.jl/blob/main/docs/examples).
+More examples are given in the [examples directory](https://github.com/finch-tensor/FinchGalley.jl/blob/main/docs/examples).
 
 # Usage
 

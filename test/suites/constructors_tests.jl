@@ -4,8 +4,8 @@
     data = [mod(i + 3j, 5) == 0 ? i + j : 0 for i in 1:32, j in 1:5]
     # Both values differ from the module default, and share the same level type.
     # Compiled operations must read each table's multiplier at runtime.
-    for a in (Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2),
-            Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)), Ti in (Int, Int32)
+    for a in (Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2),
+            Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)), Ti in (Int, Int32)
         original = Tensor(Dense(SparseHash{Ti}(Element(0), 32, 8, a)), data)
         lvl = original.lvl.lvl
         @test lvl.pos_multiplier === a
@@ -13,14 +13,14 @@
         # Reconstruct from the scalar metadata and buffers a Python wrapper stores.
         rebuilt = SparseHash{Ti}(
             deepcopy(lvl.lvl), lvl.shape, lvl.subtables, lvl.pos_multiplier,
-            (copy(getfield(lvl, f)) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (copy(getfield(lvl, f)) for f in Galley.SPARSE_HASH_BUFFERS)...,
         )
         io = IOBuffer()
         serialize(io, lvl)
         seekstart(io)
         for restored in (rebuilt, deserialize(io), eval(Meta.parse(repr(lvl))))
             @test restored.pos_multiplier === a
-            @test Finch.isstructequal(lvl, restored)
+            @test Galley.isstructequal(lvl, restored)
             tensor = Tensor(Dense(restored, 5))
             @test [tensor[i, j] for i in 1:32, j in 1:5] == data
             output = Tensor(Dense(Dense(Element(0))), zeros(Int, 32, 5))
@@ -37,15 +37,15 @@
 
         for transformed in (resize!(deepcopy(lvl), 64), pattern!(deepcopy(lvl)),
             set_fill_value!(deepcopy(lvl), -1),
-            Finch.similar_level(lvl, 0, Int, 32),
-            transfer(Finch.CPUSharedMemory(cpu(:roundtrip)), lvl))
+            Galley.similar_level(lvl, 0, Int, 32),
+            transfer(Galley.CPUSharedMemory(cpu(:roundtrip)), lvl))
             @test transformed.pos_multiplier === a
         end
         other = SparseHash{Ti}(
             lvl.lvl, lvl.shape, lvl.subtables, a ⊻ UInt(2),
-            (getfield(lvl, f) for f in Finch.SPARSE_HASH_BUFFERS)...,
+            (getfield(lvl, f) for f in Galley.SPARSE_HASH_BUFFERS)...,
         )
-        @test !Finch.isstructequal(lvl, other)
+        @test !Galley.isstructequal(lvl, other)
     end
     @test isodd(SparseHash(Element(0)).pos_multiplier)
     for invalid in (0, 2, 3.0)
@@ -54,13 +54,13 @@
 end
 
 @testitem "sparse_hash" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     function check_counts(lvl)
         B = lvl.subtables
         pos_multiplier = lvl.pos_multiplier
         len = length(lvl.tbl_ctrl) ÷ B
         @test lvl.tbl_count[1:B] == [
-            count(!=(Finch.SPARSE_HASH_CTRL_EMPTY),
+            count(!=(Galley.SPARSE_HASH_CTRL_EMPTY),
                 view(lvl.tbl_ctrl, ((b - 1) * len + 1):(b * len))) for b in 1:B
         ]
         @test sum(lvl.tbl_count[1:B]) == length(lvl.perm)
@@ -71,8 +71,8 @@ end
             expected = zeros(Int, B)
             for q in lvl.perm[((j - 1) * B + 1):end]
                 p, i = lvl.key[q]
-                expected[Finch.sparse_hash_hash_subtable(
-                    Finch.sparse_hash_hash(p, i, pos_multiplier), B
+                expected[Galley.sparse_hash_hash_subtable(
+                    Galley.sparse_hash_hash(p, i, pos_multiplier), B
                 )] += 1
             end
             @test lvl.tbl_count[((j - 1) * B + 1):(j * B)] == expected
@@ -81,13 +81,13 @@ end
         # Every entry's key looks up its own child position.
         for q in lvl.perm
             p, i = lvl.key[q]
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 lvl.tbl_ctrl, lvl.tbl, lvl.key, p, i, B, pos_multiplier
             ) == q
         end
     end
     @testset "bucket rotation and slot hashing" begin
-        h(p, i) = Finch.sparse_hash_hash(p, i, pos_multiplier)
+        h(p, i) = Galley.sparse_hash_hash(p, i, pos_multiplier)
         a = h(1, 0) - h(0, 0)
         @test isodd(a)
         for i in (1, 37, typemax(Int))
@@ -101,83 +101,86 @@ end
         @test h(Int32(17), Int32(37)) == h(17, 37)
         # Buckets use the high bits of the linear hash; slots mix it first.
         x = UInt(0b101) << (Sys.WORD_SIZE - 3) | UInt(0b011)
-        @test Finch.sparse_hash_hash_subtable(x, 8) == 6
-        @test Finch.sparse_hash_hash_subtable(UInt(0b101), 8) == 1
-        @test Finch.sparse_hash_hash_subtable(typemax(UInt), 1) == 1
-        @test Finch.sparse_hash_hash_slot_parts(x, 512, 8) ==
+        @test Galley.sparse_hash_hash_subtable(x, 8) == 6
+        @test Galley.sparse_hash_hash_subtable(UInt(0b101), 8) == 1
+        @test Galley.sparse_hash_hash_subtable(typemax(UInt), 1) == 1
+        @test Galley.sparse_hash_hash_slot_parts(x, 512, 8) ==
             (321, Int((hash(x) >>> 7) & 63), 63)
-        @test Finch.sparse_hash_hash_slot_parts(typemax(UInt), 8, 8) == (8, 0, 0)
-        @test Finch.sparse_hash_hash_ctrl(x) == 0x80 | (hash(x) % UInt8 & 0x7f)
+        @test Galley.sparse_hash_hash_slot_parts(typemax(UInt), 8, 8) == (8, 0, 0)
+        @test Galley.sparse_hash_hash_ctrl(x) == 0x80 | (hash(x) % UInt8 & 0x7f)
         # Shifting parents moves a bucket up by the rotation, or one more where
         # the low bits carry.
         B = 16
-        bucket(p, i) = Finch.sparse_hash_hash_subtable(h(p, i), B)
+        bucket(p, i) = Galley.sparse_hash_hash_subtable(h(p, i), B)
         for delta in (1, 7, 12345, -3), p in 1:200, i in (1, 37, 1000)
-            r = Finch.sparse_hash_hash_subtable(a * (delta % UInt), B) - 1
+            r = Galley.sparse_hash_hash_subtable(a * (delta % UInt), B) - 1
             @test mod(bucket(p + delta, i) - bucket(p, i) - r, B) in (0, 1)
         end
     end
 
     @testset "collisions, wraparound, and resizing" for subtables in (1, 4)
         cap = 64 * subtables
-        ctrl = fill(Finch.SPARSE_HASH_CTRL_EMPTY, cap)
+        ctrl = fill(Galley.SPARSE_HASH_CTRL_EMPTY, cap)
         tbl = zeros(Int, cap)
         # Choose colliding keys at the last slot of the first subtable, so
         # insertion must wrap without crossing into the next subtable.
         parents = filter(1:20000) do p
-            hsh = Finch.sparse_hash_hash(p, 7, pos_multiplier)
-            Finch.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
+            hsh = Galley.sparse_hash_hash(p, 7, pos_multiplier)
+            Galley.sparse_hash_hash_slot_parts(hsh, cap, subtables) == (1, 63, 63)
         end
-        key = [(parents[q], 7, Finch.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
+        key = [(parents[q], 7, Galley.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
         function find(p, i)
-            Finch.sparse_hash_find(
-                ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i, pos_multiplier),
+            Galley.sparse_hash_find(
+                ctrl, tbl, key, p, i, Galley.sparse_hash_hash(p, i, pos_multiplier),
                 subtables,
             )
         end
         for (q, (p, i)) in enumerate(key)
             h = find(p, i)
-            ctrl[h] = Finch.sparse_hash_hash_ctrl(
-                Finch.sparse_hash_hash(p, i, pos_multiplier)
+            ctrl[h] = Galley.sparse_hash_hash_ctrl(
+                Galley.sparse_hash_hash(p, i, pos_multiplier)
             )
             tbl[h] = q
         end
-        @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
+        @test ctrl[1] != Galley.SPARSE_HASH_CTRL_EMPTY
         for newcap in (cap, 2cap, 4cap)
             if newcap != cap
-                Finch.sparse_hash_resize!(
+                Galley.sparse_hash_resize!(
                     ctrl, tbl, key, newcap, subtables, pos_multiplier, length(key)
                 )
             end
             for (q, (p, i)) in enumerate(key)
-                @test Finch.sparse_hash_lookup(
+                @test Galley.sparse_hash_lookup(
                     ctrl, tbl, key, p, i, subtables, pos_multiplier
                 ) == q
             end
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 ctrl, tbl, key, parents[13], 7, subtables, pos_multiplier
             ) == 0
         end
         # A present key probes to its own slot rather than a vacancy.
         @test tbl[find(parents[1], 7)] == 1
-        @test count(!=(Finch.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(key)
+        @test count(!=(Galley.SPARSE_HASH_CTRL_EMPTY), ctrl) == length(key)
     end
 
     @testset "dense rehash ignores unused key capacity" for Tp in (Int, Int32), B in (1, 8)
         key = Vector{Tuple{Tp,Int,UInt8}}(undef, 32)
-        key[1:12] .= [(Tp(mod(q, 3) + 1), 7q, Finch.SPARSE_HASH_KEY_RETAINED) for q in 1:12]
+        key[1:12] .= [
+            (Tp(mod(q, 3) + 1), 7q, Galley.SPARSE_HASH_KEY_RETAINED) for q in 1:12
+        ]
         ctrl, tbl = UInt8[], Tp[]
         for cap in (64B, 128B)
-            Finch.sparse_hash_resize!(ctrl, tbl, key, cap, B, pos_multiplier, 12)
+            Galley.sparse_hash_resize!(ctrl, tbl, key, cap, B, pos_multiplier, 12)
             @test count(!iszero, ctrl) == 12
             for q in 1:12
                 p, i = key[q]
-                @test Finch.sparse_hash_lookup(ctrl, tbl, key, p, i, B, pos_multiplier) == q
-                h = Finch.sparse_hash_find(
-                    ctrl, tbl, key, p, i, Finch.sparse_hash_hash(p, i, pos_multiplier), B
+                @test Galley.sparse_hash_lookup(ctrl, tbl, key, p, i, B, pos_multiplier) ==
+                    q
+                h = Galley.sparse_hash_find(
+                    ctrl, tbl, key, p, i, Galley.sparse_hash_hash(p, i, pos_multiplier), B
                 )
-                @test ctrl[h] == Finch.sparse_hash_hash_ctrl(
-                    Finch.sparse_hash_hash(p, i, pos_multiplier)
+                @test ctrl[h] == Galley.sparse_hash_hash_ctrl(
+                    Galley.sparse_hash_hash(p, i, pos_multiplier)
                 )
             end
         end
@@ -190,8 +193,8 @@ end
         indices = collect(
             Iterators.take(
                 Iterators.filter(Iterators.countfrom(1)) do i
-                    Finch.sparse_hash_hash_slot_parts(
-                        Finch.sparse_hash_hash(1, i, pos_multiplier), cap, B
+                    Galley.sparse_hash_hash_slot_parts(
+                        Galley.sparse_hash_hash(1, i, pos_multiplier), cap, B
                     ) ==
                     (1, 4095, 4095)
                 end, 4),
@@ -199,21 +202,21 @@ end
         # Interior child holes and a sorted permutation that differs from
         # insertion order. Clearing its first entry breaks the probe chain.
         perm = Tp[1, 4, 3, 6]
-        key = fill((Tp(0), 0, Finch.SPARSE_HASH_KEY_FREE), 6)
+        key = fill((Tp(0), 0, Galley.SPARSE_HASH_KEY_FREE), 6)
         for (q, i) in zip(perm, indices)
-            key[q] = (Tp(1), i, Finch.SPARSE_HASH_KEY_RETAINED)
+            key[q] = (Tp(1), i, Galley.SPARSE_HASH_KEY_RETAINED)
         end
         ctrl, tbl = UInt8[], Tp[]
-        Finch.sparse_hash_resize!(ctrl, tbl, key, cap, B, pos_multiplier)
-        @test ctrl[1] != Finch.SPARSE_HASH_CTRL_EMPTY
+        Galley.sparse_hash_resize!(ctrl, tbl, key, cap, B, pos_multiplier)
+        @test ctrl[1] != Galley.SPARSE_HASH_CTRL_EMPTY
         ctrl_ptr, tbl_ptr = pointer(ctrl), pointer(tbl)
-        Finch.sparse_hash_clear!(ctrl, tbl, key, perm, B, pos_multiplier)
+        Galley.sparse_hash_clear!(ctrl, tbl, key, perm, B, pos_multiplier)
         @test length(ctrl) == length(tbl) == cap
         @test pointer(ctrl) == ctrl_ptr
         @test pointer(tbl) == tbl_ptr
         @test all(iszero, ctrl)
         # Empty clearing also keeps the allocation, without visiting old keys.
-        Finch.sparse_hash_clear!(ctrl, tbl, empty(key), empty(perm), B, pos_multiplier)
+        Galley.sparse_hash_clear!(ctrl, tbl, empty(key), empty(perm), B, pos_multiplier)
         @test all(iszero, ctrl)
     end
 
@@ -246,14 +249,14 @@ end
     @testset "thawed growth recovers child holes" begin
         # Coalesce can leave free records without linking them together.
         ctrl, tbl = zeros(UInt8, 8), zeros(Int, 8)
-        key = fill((0, 0, Finch.SPARSE_HASH_KEY_FREE), 6)
+        key = fill((0, 0, Galley.SPARSE_HASH_KEY_FREE), 6)
         values = zeros(Int, 6)
         data = zeros(Int, 64)
         for (i, q) in ((1, 1), (4, 3), (6, 6))
-            key[q] = (1, i, Finch.SPARSE_HASH_KEY_RETAINED)
-            x = Finch.sparse_hash_hash(1, i, pos_multiplier)
-            h = Finch.sparse_hash_vacancy(ctrl, x, 1)
-            ctrl[h], tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
+            key[q] = (1, i, Galley.SPARSE_HASH_KEY_RETAINED)
+            x = Galley.sparse_hash_hash(1, i, pos_multiplier)
+            h = Galley.sparse_hash_vacancy(ctrl, x, 1)
+            ctrl[h], tbl[h] = Galley.sparse_hash_hash_ctrl(x), q
             values[q] = data[i] = 10i
         end
         tensor = Tensor(
@@ -270,7 +273,7 @@ end
         @test length(tensor.lvl.perm) == 64
         @test length(tensor.lvl.key) == 64
         for (i, q) in ((1, 1), (4, 3), (6, 6))
-            @test Finch.sparse_hash_lookup(ctrl, tbl, key, 1, i, 1, pos_multiplier) == q
+            @test Galley.sparse_hash_lookup(ctrl, tbl, key, 1, i, 1, pos_multiplier) == q
         end
         check_counts(tensor.lvl)
     end
@@ -296,8 +299,8 @@ end
         B = 8
         indices = filter(
             i ->
-                Finch.sparse_hash_hash_subtable(
-                    Finch.sparse_hash_hash(1, i, pos_multiplier), B
+                Galley.sparse_hash_hash_subtable(
+                    Galley.sparse_hash_hash(1, i, pos_multiplier), B
                 ) == 1,
             1:1000,
         )[1:40]
@@ -316,7 +319,7 @@ end
         @test length(tensor.lvl.tbl) == B * 128
         @test length(tensor.lvl.perm) == 40
         check_counts(tensor.lvl)
-        @test Finch.sparse_hash_lookup(
+        @test Galley.sparse_hash_lookup(
             tensor.lvl.tbl_ctrl, tensor.lvl.tbl, tensor.lvl.key, 1, 1001, B, pos_multiplier
         ) == 0
     end
@@ -324,8 +327,8 @@ end
     @testset "pending writers share keys across bucket growth" begin
         indices = filter(
             i ->
-                Finch.sparse_hash_hash_subtable(
-                    Finch.sparse_hash_hash(1, i, pos_multiplier), 8
+                Galley.sparse_hash_hash_subtable(
+                    Galley.sparse_hash_hash(1, i, pos_multiplier), 8
                 ) == 1,
             1:1000,
         )[1:40]
@@ -346,14 +349,14 @@ end
         expected[:, indices] .= 3
         @test Array(tensor) == expected
         @test length(tensor.lvl.perm) == 40
-        @test all(k -> k[3] == Finch.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
+        @test all(k -> k[3] == Galley.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
         check_counts(tensor.lvl)
     end
 
     @testset "pending keys invalidate cached slots" begin
         indices = filter(1:10000) do i
-            hsh = Finch.sparse_hash_hash(1, i, pos_multiplier)
-            Finch.sparse_hash_hash_slot_parts(hsh, 32, 8) == (1, 3, 3)
+            hsh = Galley.sparse_hash_hash(1, i, pos_multiplier)
+            Galley.sparse_hash_hash_slot_parts(hsh, 32, 8) == (1, 3, 3)
         end[1:40]
         left = Tensor(Dense(Element(0)), indices[1:2:end])
         right = Tensor(Dense(Element(0)), indices[2:2:end])
@@ -379,7 +382,7 @@ end
 end
 
 @testitem "sparse_hash_pending" begin
-    pos_multiplier = Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
+    pos_multiplier = Galley.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2)
     using Random
 
     function pending_table(Tp, B; capacity=4B)
@@ -388,14 +391,14 @@ end
     end
     function acquire!(t, k)
         Tp = eltype(t.tbl)
-        x = Finch.sparse_hash_hash(k..., pos_multiplier)
-        b = Finch.sparse_hash_hash_subtable(x, t.B)
+        x = Galley.sparse_hash_hash(k..., pos_multiplier)
+        b = Galley.sparse_hash_hash_subtable(x, t.B)
         if 2t.B * (t.counts[b] + 1) > length(t.ctrl)
-            Finch.sparse_hash_resize!(
+            Galley.sparse_hash_resize!(
                 t.ctrl, t.tbl, t.key, 2length(t.ctrl), t.B, pos_multiplier
             )
         end
-        h = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k..., x, t.B)
+        h = Galley.sparse_hash_find(t.ctrl, t.tbl, t.key, k..., x, t.B)
         pending = true
         if t.ctrl[h] == 0
             if t.free_head[] == 0
@@ -406,28 +409,28 @@ end
                 t.free_head[] = t.key[q][1]
                 t.key[q] = (k..., 0x01)
             end
-            t.ctrl[h], t.tbl[h] = Finch.sparse_hash_hash_ctrl(x), q
+            t.ctrl[h], t.tbl[h] = Galley.sparse_hash_hash_ctrl(x), q
             t.counts[b] += 1
         else
             q = t.tbl[h]
-            pending = t.key[q][3] != Finch.SPARSE_HASH_KEY_RETAINED
+            pending = t.key[q][3] != Galley.SPARSE_HASH_KEY_RETAINED
             if pending
-                Finch.sparse_hash_share!(t.key, q)
+                Galley.sparse_hash_share!(t.key, q)
             end
         end
         return (; q, h, x, pending)
     end
     function release!(t, handle, dirty)
-        if handle.pending && Finch.sparse_hash_release!(
+        if handle.pending && Galley.sparse_hash_release!(
             t.ctrl, t.tbl, t.key, handle.q, handle.x, t.B, dirty, t.free_head[],
             pos_multiplier,
         )
-            t.counts[Finch.sparse_hash_hash_subtable(handle.x, t.B)] -= 1
+            t.counts[Galley.sparse_hash_hash_subtable(handle.x, t.B)] -= 1
             t.free_head[] = handle.q
         end
     end
-    slot(t, k) = Finch.sparse_hash_find(t.ctrl, t.tbl, t.key, k...,
-        Finch.sparse_hash_hash(k..., pos_multiplier), t.B)
+    slot(t, k) = Galley.sparse_hash_find(t.ctrl, t.tbl, t.key, k...,
+        Galley.sparse_hash_hash(k..., pos_multiplier), t.B)
     state(t, k) = t.key[t.tbl[slot(t, k)]][3]
 
     function free_positions(t)
@@ -435,7 +438,7 @@ end
         q = t.free_head[]
         while q != 0
             @test 1 <= q <= length(t.key)
-            @test t.key[q][3] == Finch.SPARSE_HASH_KEY_FREE
+            @test t.key[q][3] == Galley.SPARSE_HASH_KEY_FREE
             q in positions && error("Cycle in free child positions")
             push!(positions, q)
             q = t.key[q][1]
@@ -467,13 +470,13 @@ end
         )
         if dirty
             release!(t, first(handles), true)
-            @test state(t, (1, 1)) >= Finch.SPARSE_HASH_CTRL_FULL
+            @test state(t, (1, 1)) >= Galley.SPARSE_HASH_CTRL_FULL
             # Retained entries no longer need counts or a writer limit.
             retained = [acquire!(t, (1, 1)) for _ in 1:128]
             @test all(!h.pending && h.q == q for h in retained)
             foreach(h -> release!(t, h, false), retained)
             foreach(h -> release!(t, h, false), handles[2:end])
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 t.ctrl, t.tbl, t.key, 1, 1, t.B, pos_multiplier
             ) == q
         else
@@ -485,14 +488,15 @@ end
             @test state(t, (1, 1)) == 127
             release!(t, replacement, false)
             foreach(h -> release!(t, h, false), handles[2:end])
-            @test Finch.sparse_hash_lookup(
+            @test Galley.sparse_hash_lookup(
                 t.ctrl, t.tbl, t.key, 1, 1, t.B, pos_multiplier
             ) == 0
             @test q in free_positions(t)
         end
         @test state(t, (1, 2)) == 127
         foreach(h -> release!(t, h, false), other)
-        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 2, t.B, pos_multiplier) == 0
+        @test Galley.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, 2, t.B, pos_multiplier) ==
+            0
         @test sum(t.counts) == (dirty ? 199 : 198)
         h = acquire!(t, (2, 201))
         @test h.q == first(other).q
@@ -507,8 +511,8 @@ end
             release!(t, h, isodd(i))
         end
         ptr, perm = Int[], Int[]
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, 1)
-        t.free_head[] = Finch.sparse_hash_free_head!(t.key, perm)
+        extent = Galley.sparse_hash_freeze!(ptr, perm, t.key, 1)
+        t.free_head[] = Galley.sparse_hash_free_head!(t.key, perm)
         @test extent == length(t.key) == 3
         @test free_positions(t) == [2]
         @test perm == [1, 3]
@@ -519,8 +523,8 @@ end
         t = pending_table(Int, 4)
         handles = [acquire!(t, (1, i)) for i in 1:4]
         foreach(h -> release!(t, h, false), handles)
-        extent = Finch.sparse_hash_freeze!(ptr, perm, t.key, 1)
-        t.free_head[] = Finch.sparse_hash_free_head!(t.key, perm)
+        extent = Galley.sparse_hash_freeze!(ptr, perm, t.key, 1)
+        t.free_head[] = Galley.sparse_hash_free_head!(t.key, perm)
         @test extent == 0
         @test isempty(t.key) && t.free_head[] == 0 && isempty(perm)
         h = acquire!(t, (1, 5))
@@ -534,8 +538,8 @@ end
         t = pending_table(Int, B; capacity=64B)
         function candidates(off)
             filter(1:50000) do i
-                Finch.sparse_hash_hash_slot_parts(
-                    Finch.sparse_hash_hash(1, i, pos_multiplier), 64B, B
+                Galley.sparse_hash_hash_slot_parts(
+                    Galley.sparse_hash_hash(1, i, pos_multiplier), 64B, B
                 ) ==
                 (1, off, 63)
             end
@@ -552,10 +556,10 @@ end
         release!(t, hc, false) # The writer count stays at the same child position.
         release!(t, hb, true)
         release!(t, shared, true)
-        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, a, B, pos_multiplier) == 0
-        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, b, B, pos_multiplier) ==
+        @test Galley.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, a, B, pos_multiplier) == 0
+        @test Galley.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, b, B, pos_multiplier) ==
             hb.q
-        @test Finch.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, c, B, pos_multiplier) ==
+        @test Galley.sparse_hash_lookup(t.ctrl, t.tbl, t.key, 1, c, B, pos_multiplier) ==
             hc.q
         @test sum(t.counts) == 2
     end
@@ -574,10 +578,10 @@ end
                 h = slot(t, k)
                 entry = t.key[t.tbl[h]]
                 @test t.ctrl[h] != 0 && (entry[1], entry[2]) == k
-                @test t.ctrl[h] == Finch.sparse_hash_hash_ctrl(
-                    Finch.sparse_hash_hash(k..., pos_multiplier)
+                @test t.ctrl[h] == Galley.sparse_hash_hash_ctrl(
+                    Galley.sparse_hash_hash(k..., pos_multiplier)
                 )
-                @test entry[3] == (retained ? Finch.SPARSE_HASH_KEY_RETAINED : n)
+                @test entry[3] == (retained ? Galley.SPARSE_HASH_KEY_RETAINED : n)
             end
             width = length(t.ctrl) ÷ B
             @test t.counts == [
@@ -610,7 +614,7 @@ end
             finish(lastindex(active), false)
         end
         check()
-        @test all(c == 0 || c >= Finch.SPARSE_HASH_CTRL_FULL for c in t.ctrl)
+        @test all(c == 0 || c >= Galley.SPARSE_HASH_CTRL_FULL for c in t.ctrl)
     end
 
     @testset "generated writers discard, retain, and reuse children across freeze" begin
@@ -638,13 +642,13 @@ end
         expected = zeros(Int, 2, 80)
         expected[:, 1:40] .= Array(weights)
         @test Array(tensor) == expected
-        @test all(c == 0 || c >= Finch.SPARSE_HASH_CTRL_FULL for c in tensor.lvl.tbl_ctrl)
+        @test all(c == 0 || c >= Galley.SPARSE_HASH_CTRL_FULL for c in tensor.lvl.tbl_ctrl)
         input = Tensor(Dense(Dense(Element(0))), ones(Int, 2, 80))
         @finch for i in _, j in _
             tensor[j, i] += input[j, i]
         end
         @test Array(tensor) == expected .+ 1
-        @test all(k -> k[3] == Finch.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
+        @test all(k -> k[3] == Galley.SPARSE_HASH_KEY_RETAINED, tensor.lvl.key)
         @test length(tensor.lvl.perm) == 80
     end
 
@@ -722,7 +726,7 @@ end
 
 @testitem "constructors" setup = [CheckOutput] begin
     using Base.Meta
-    using Finch: Structure
+    using Galley: Structure
 
     basic_levels = [
         ("Dense", Dense, (;), [[0.0, 2.0, 2.0, 0.0, 3.0, 3.0]]),
@@ -1062,7 +1066,7 @@ end
         #Test shard ShardLevel
         ncpu = cpu(:t, 4)
         A = Tensor(Dense(Shard(ncpu, Element(0.0))), 4)
-        @test Finch.pattern!(A.lvl) isa Finch.DenseLevel
+        @test Galley.pattern!(A.lvl) isa Galley.DenseLevel
         B = Tensor(Dense(Shard(ncpu, Sparse(Element(0.0)))), 4, 4)
         C = Tensor(Dense(Shard(ncpu, Dense(Element(0.0)))), 4, 4)
 
@@ -1162,7 +1166,7 @@ end
     @testset "SparseRunList merge flag" begin
         for merge in (true, false)
             lvl = SparseRunListLevel(Element(0.0), 10; merge=merge)
-            @test Finch.getmerge(similar(Tensor(lvl)).lvl) == merge
+            @test Galley.getmerge(similar(Tensor(lvl)).lvl) == merge
         end
     end
 end

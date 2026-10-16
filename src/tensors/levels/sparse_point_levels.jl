@@ -259,8 +259,8 @@ function assemble_level!(ctx, lvl::VirtualSparsePointLevel, pos_start, pos_stop)
     pos_stop = cache!(ctx, :p_start, pos_stop)
     Ti = lvl.Ti
     return quote
-        Finch.resize_if_smaller!($(lvl.idx), $(ctx(pos_stop)))
-        Finch.fill_range!($(lvl.idx), $(Ti(0)), $(ctx(pos_start)), $(ctx(pos_stop)))
+        Galley.resize_if_smaller!($(lvl.idx), $(ctx(pos_stop)))
+        Galley.fill_range!($(lvl.idx), $(Ti(0)), $(ctx(pos_start)), $(ctx(pos_stop)))
         $(assemble_level!(ctx, lvl.lvl, pos_start, pos_stop))
     end
 end

@@ -2,15 +2,16 @@
 if abspath(PROGRAM_FILE) == @__FILE__
     using Pkg
     Pkg.activate(@__DIR__)
+    Pkg.develop(PackageSpec(; path=joinpath(@__DIR__, "..")))
     Pkg.instantiate()
 end
 
 using Test
 using Documenter
-using Finch
+using Galley
 
 DocMeta.setdocmeta!(
-    Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true
+    Galley, :DocTestSetup, :(using Galley; using SparseArrays); recursive=true
 )
 
-doctest(Finch)
+doctest(Galley)

@@ -17,7 +17,7 @@ begin
     phase_stop = min(A_i1, ((ex.bodies[1]).bodies[2]).body.rhs.tns.bind.n)
     if phase_stop >= 1
         if A_idx[1] < 1
-            A_q = Finch.scansearch(A_idx, 1, 1, A_q_stop - 1)
+            A_q = Galley.scansearch(A_idx, 1, 1, A_q_stop - 1)
         end
         while true
             A_i = A_idx[A_q]
@@ -25,8 +25,8 @@ begin
                 A_val_2 = A_val[A_q]
                 if B_qos > B_qos_stop
                     B_qos_stop = max(B_qos_stop << 1, 1)
-                    Finch.resize_if_smaller!(B_idx, B_qos_stop)
-                    Finch.resize_if_smaller!(B_val, B_qos_stop)
+                    Galley.resize_if_smaller!(B_idx, B_qos_stop)
+                    Galley.resize_if_smaller!(B_val, B_qos_stop)
                 end
                 B_val[B_qos] = A_val_2
                 B_idx[B_qos] = A_i
@@ -38,8 +38,8 @@ begin
                     A_val_2 = A_val[A_q]
                     if B_qos > B_qos_stop
                         B_qos_stop = max(B_qos_stop << 1, 1)
-                        Finch.resize_if_smaller!(B_idx, B_qos_stop)
-                        Finch.resize_if_smaller!(B_val, B_qos_stop)
+                        Galley.resize_if_smaller!(B_idx, B_qos_stop)
+                        Galley.resize_if_smaller!(B_val, B_qos_stop)
                     end
                     B_val[B_qos] = A_val_2
                     B_idx[B_qos] = phase_stop_3

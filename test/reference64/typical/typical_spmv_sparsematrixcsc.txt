@@ -52,7 +52,7 @@ quote
         phase_stop = min(A_i1, A_m)
         if phase_stop >= 1
             if A_idx[A_q] < 1
-                A_q = Finch.scansearch(A_idx, 1, A_q, A_q_stop - 1)
+                A_q = Galley.scansearch(A_idx, 1, A_q, A_q_stop - 1)
             end
             while true
                 A_i = A_idx[A_q]

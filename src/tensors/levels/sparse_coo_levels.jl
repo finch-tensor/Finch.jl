@@ -364,8 +364,8 @@ function assemble_level!(ctx, lvl::VirtualSparseCOOLevel, pos_start, pos_stop)
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
-        Finch.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
+        Galley.resize_if_smaller!($(lvl.ptr), $pos_stop + 1)
+        Galley.fill_range!($(lvl.ptr), 0, $pos_start + 1, $pos_stop + 1)
     end
 end
 
@@ -450,7 +450,7 @@ function unfurl(
                         Stepper(;
                             seek=(ctx, ext) -> quote
                                 if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
-                                    $my_q = Finch.scansearch(
+                                    $my_q = Galley.scansearch(
                                         $(lvl.tbl[R]),
                                         $(ctx(getstart(ext))),
                                         $my_q,
@@ -470,7 +470,7 @@ function unfurl(
                         Stepper(;
                             seek=(ctx, ext) -> quote
                                 if $(lvl.tbl[R])[$my_q] < $(ctx(getstart(ext)))
-                                    $my_q = Finch.scansearch(
+                                    $my_q = Galley.scansearch(
                                         $(lvl.tbl[R]),
                                         $(ctx(getstart(ext))),
                                         $my_q,
@@ -482,7 +482,7 @@ function unfurl(
                                 $my_i = $(lvl.tbl[R])[$my_q]
                                 $my_q_step = $my_q
                                 if $(lvl.tbl[R])[$my_q_step] == $my_i
-                                    $my_q_step = Finch.scansearch(
+                                    $my_q_step = Galley.scansearch(
                                         $(lvl.tbl[R]),
                                         $my_i + 1,
                                         $my_q_step,
@@ -636,7 +636,7 @@ function unfurl(
                         $(Expr(
                             :block,
                             map(1:(lvl.N)) do n
-                                :(Finch.resize_if_smaller!($(lvl.tbl[n]), $qos_stop))
+                                :(Galley.resize_if_smaller!($(lvl.tbl[n]), $qos_stop))
                             end...,
                         ))
                         $(contain(

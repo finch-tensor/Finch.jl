@@ -3,7 +3,7 @@
 # from their string representation, validation against reference getindex, and
 # validation against reference conversion code
 @testsetup module RepresentationSetup
-using Finch
+using Galley
 
 export reference_getindex, reference_isequal, levels_1D, levels_2D
 
@@ -119,7 +119,7 @@ end
 end
 
 @testitem "representation1d" setup = [CheckOutput, RepresentationSetup] begin
-    using Finch: Structure
+    using Galley: Structure
 
     ios = Dict()
     compiled = Set()
@@ -247,7 +247,7 @@ end
                         @test Structure(tmp) == Structure(eval(Meta.parse(repr(tmp))))
                     end
                     @test reference_isequal(tmp, arr)
-                    @test Finch.AsArray(tmp) == arr
+                    @test Galley.AsArray(tmp) == arr
                     println(io, "tensor: ", repr(tmp))
                     println(io, "countstored: ", countstored(tmp))
                 end
@@ -257,7 +257,7 @@ end
 end
 
 @testitem "representation2d" setup = [CheckOutput, RepresentationSetup] begin
-    using Finch: Structure
+    using Galley: Structure
 
     ios = Dict()
     compiled = Set()

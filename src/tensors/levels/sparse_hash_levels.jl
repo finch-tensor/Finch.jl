@@ -630,7 +630,7 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
     push_preamble!(
         ctx,
         quote
-            Finch.sparse_hash_clear!(
+            Galley.sparse_hash_clear!(
                 $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(lvl.perm), $(ctx(lvl.subtables)),
                 $(ctx(lvl.pos_multiplier)),
             )
@@ -655,11 +655,11 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_s
         ctx,
         quote
             $(lvl.pending) == 0 || error("SparseHash has unfinished writers during freeze")
-            $qos_stop = Finch.sparse_hash_freeze!(
+            $qos_stop = Galley.sparse_hash_freeze!(
                 $(lvl.ptr), $(lvl.perm), $(lvl.key),
                 $(ctx(pos_stop)), $(lvl.qos_stop),
             )
-            Finch.sparse_hash_count_buckets!(
+            Galley.sparse_hash_count_buckets!(
                 $(lvl.tbl_count), $(lvl.perm), $(lvl.key), $(ctx(lvl.subtables)),
                 $(ctx(lvl.pos_multiplier)),
             )
@@ -677,7 +677,7 @@ function thaw_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_sto
         quote
             $(lvl.qos_stop) = length($(lvl.key))
             $(lvl.pending) = 0
-            $(lvl.free_head) = Finch.sparse_hash_free_head!($(lvl.key), $(lvl.perm))
+            $(lvl.free_head) = Galley.sparse_hash_free_head!($(lvl.key), $(lvl.perm))
         end,
     )
     lvl.lvl = thaw_level!(ctx, lvl.lvl, value(lvl.qos_stop))
@@ -720,7 +720,7 @@ function unfurl(
                 body=(ctx, ext) -> Stepper(;
                     seek=(ctx, ext) -> quote
                         if $(idx(my_r)) < $(ctx(getstart(ext)))
-                            $my_r = Finch.sparse_hash_scansearch(
+                            $my_r = Galley.sparse_hash_scansearch(
                                 $(lvl.key), $(lvl.perm), $(ctx(getstart(ext))),
                                 $my_r,
                                 $my_r_stop - 1,
@@ -756,7 +756,7 @@ function unfurl(
     Lookup(;
         body=(ctx, i) -> Thunk(;
             preamble=quote
-                $my_q = Finch.sparse_hash_lookup(
+                $my_q = Galley.sparse_hash_lookup(
                     $(lvl.tbl_ctrl), $(lvl.tbl), $(lvl.key), $(ctx(pos)), $(ctx(i)),
                     $(ctx(lvl.subtables)), $(ctx(lvl.pos_multiplier)),
                 )
@@ -813,20 +813,20 @@ function unfurl(
                 preamble=quote
                     $p = $(ctx(pos))
                     $i = $(ctx(idx))
-                    $x = Finch.sparse_hash_hash($p, $i, $pos_multiplier)
-                    $b = Finch.sparse_hash_hash_subtable($x, $B)
+                    $x = Galley.sparse_hash_hash($p, $i, $pos_multiplier)
+                    $b = Galley.sparse_hash_hash_subtable($x, $B)
                     # Grow before probing, so the probed slot stays valid if the
                     # key turns out to be new.
                     if 2 * $B * ($tbl_count[$b] + 1) > length($tbl_ctrl)
-                        Finch.sparse_hash_resize!(
+                        Galley.sparse_hash_resize!(
                             $tbl_ctrl, $tbl, $key,
                             max(2 * length($tbl_ctrl), 4 * $B), $B, $pos_multiplier,
                             $qos_stop,
                         )
                     end
-                    $h = Finch.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
+                    $h = Galley.sparse_hash_find($tbl_ctrl, $tbl, $key, $p, $i, $x, $B)
                     $s = true
-                    if $tbl_ctrl[$h] == Finch.SPARSE_HASH_CTRL_EMPTY
+                    if $tbl_ctrl[$h] == Galley.SPARSE_HASH_CTRL_EMPTY
                         # A new key: count it in its bucket and give it a child.
                         $tbl_count[$b] += 1
                         if $free_head == 0
@@ -848,12 +848,12 @@ function unfurl(
                             ))
                         end
                         $key[$qos] = ($p, $i, 0x01)
-                        $tbl_ctrl[$h] = Finch.sparse_hash_hash_ctrl($x)
+                        $tbl_ctrl[$h] = Galley.sparse_hash_hash_ctrl($x)
                         $tbl[$h] = $qos
                     else
                         $qos = $tbl[$h]
-                        $s = $key[$qos][3] != Finch.SPARSE_HASH_KEY_RETAINED
-                        $s && Finch.sparse_hash_share!($key, $qos)
+                        $s = $key[$qos][3] != Galley.SPARSE_HASH_KEY_RETAINED
+                        $s && Galley.sparse_hash_share!($key, $qos)
                     end
                     $s && ($pending += 1)
                     $dirty = false
@@ -865,7 +865,7 @@ function unfurl(
                 epilogue=quote
                     $dirty && ($(fbr.dirty) = true)
                     if $s
-                        if Finch.sparse_hash_release!(
+                        if Galley.sparse_hash_release!(
                             $tbl_ctrl, $tbl, $key, $qos, $x, $B, $dirty, $free_head,
                             $pos_multiplier,
                         )

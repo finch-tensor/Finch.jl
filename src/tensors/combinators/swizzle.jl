@@ -13,7 +13,7 @@ fill_value(arr::SwizzleArray) = fill_value(typeof(arr))
 fill_value(::Type{SwizzleArray{dims,Body}}) where {dims,Body} = fill_value(Body)
 Base.similar(arr::SwizzleArray{dims}) where {dims} = SwizzleArray{dims}(similar(arr.body))
 
-isstructequal(a::T, b::T) where {T<:Finch.SwizzleArray} = isstructequal(a.body, b.body)
+isstructequal(a::T, b::T) where {T<:Galley.SwizzleArray} = isstructequal(a.body, b.body)
 
 countstored(arr::SwizzleArray) = countstored(arr.body)
 pattern!(arr::SwizzleArray{dims}) where {dims} = swizzle(pattern!(arr.body), dims...)

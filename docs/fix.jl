@@ -8,12 +8,12 @@ end
 
 using Test
 using Documenter
-using Finch
+using Galley
 
 root = joinpath(@__DIR__, "..")
 
 DocMeta.setdocmeta!(
-    Finch, :DocTestSetup, :(using Finch; using SparseArrays); recursive=true
+    Galley, :DocTestSetup, :(using Galley; using SparseArrays); recursive=true
 )
 
-doctest(Finch; fix=true)
+doctest(Galley; fix=true)

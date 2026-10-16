@@ -37,7 +37,7 @@
         m, n = size(A_ref)
         if m == n
             A = Tensor(A_ref)
-            B = Finch.Scalar{0.0}()
+            B = Galley.Scalar{0.0}()
             if !seen
                 check_output(
                     "kernels/triangle.jl",

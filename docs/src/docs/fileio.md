@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
-# Finch Tensor File Input/Output
+# Galley Tensor File Input/Output
 
-All of the file formats supported by Finch are listed below. Each format has a
+All of the file formats supported by Galley are listed below. Each format has a
 corresponding `read` and `write` function, and can be selected automatically
 based on the file extension with the following functions:
 
@@ -15,7 +15,7 @@ fwrite
 
 ## Binsparse Format (`.bsp`)
 
-Finch supports the most recent revision of the
+Galley supports the most recent revision of the
 [Binsparse](https://github.com/GraphBLAS/binsparse-specification) binary sparse
 tensor format, including the v2.0 tensor extension. This is a good option for
 those who want an efficient way to transfer sparse tensors between supporting
@@ -34,7 +34,7 @@ bspread
 
 ## TensorMarket (`.mtx`, `.ttx`)
 
-Finch supports the [MatrixMarket](https://math.nist.gov/MatrixMarket/formats.html#MMformat) and [TensorMarket](https://github.com/finch-tensor/TensorMarket.jl) formats, which prioritize readability and archiveability, storing matrices and tensors in plaintext.
+Galley supports the [MatrixMarket](https://math.nist.gov/MatrixMarket/formats.html#MMformat) and [TensorMarket](https://github.com/finch-tensor/TensorMarket.jl) formats, which prioritize readability and archiveability, storing matrices and tensors in plaintext.
 
 ```@docs
 fttwrite
@@ -43,7 +43,7 @@ fttread
 
 ## FROSTT (`.tns`)
 
-Finch supports the [FROSTT](http://frostt.io/tensors/) format for legacy codes that still use it.
+Galley supports the [FROSTT](http://frostt.io/tensors/) format for legacy codes that still use it.
 
 ```@docs
 ftnswrite

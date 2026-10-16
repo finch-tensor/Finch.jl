@@ -10,8 +10,8 @@ quote
     tmp_lvl_ofs = tmp_lvl.ofs
     tmp_lvl_val = tmp_lvl.lvl.val
     res_lvl_qos_stop = 0
-    Finch.resize_if_smaller!(res_lvl_ptr, 1 + 1)
-    Finch.fill_range!(res_lvl_ptr, 0, 1 + 1, 1 + 1)
+    Galley.resize_if_smaller!(res_lvl_ptr, 1 + 1)
+    Galley.fill_range!(res_lvl_ptr, 0, 1 + 1, 1 + 1)
     res_lvl_qos = 0 + 1
     0 < 1 || throw(FinchProtocolError("SparseListLevels cannot be updated multiple times"))
     tmp_lvl_r = tmp_lvl_ptr[1]
@@ -25,7 +25,7 @@ quote
     if phase_stop >= 1
         i = 1
         if tmp_lvl_idx[tmp_lvl_r] < 1
-            tmp_lvl_r = Finch.scansearch(tmp_lvl_idx, 1, tmp_lvl_r, tmp_lvl_r_stop - 1)
+            tmp_lvl_r = Galley.scansearch(tmp_lvl_idx, 1, tmp_lvl_r, tmp_lvl_r_stop - 1)
         end
         while true
             i_start_2 = i
@@ -39,9 +39,9 @@ quote
                     for i_8 = phase_start_3:tmp_lvl_i
                         if res_lvl_qos > res_lvl_qos_stop
                             res_lvl_qos_stop = max(res_lvl_qos_stop << 1, 1)
-                            Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
-                            Finch.resize_if_smaller!(res_lvl_val, res_lvl_qos_stop)
-                            Finch.fill_range!(res_lvl_val, 0.0, res_lvl_qos, res_lvl_qos_stop)
+                            Galley.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
+                            Galley.resize_if_smaller!(res_lvl_val, res_lvl_qos_stop)
+                            Galley.fill_range!(res_lvl_val, 0.0, res_lvl_qos, res_lvl_qos_stop)
                         end
                         tmp_lvl_q = tmp_lvl_q_ofs + i_8
                         tmp_lvl_2_val = tmp_lvl_val[tmp_lvl_q]
@@ -60,9 +60,9 @@ quote
                     for i_11 = phase_start_6:phase_stop_5
                         if res_lvl_qos > res_lvl_qos_stop
                             res_lvl_qos_stop = max(res_lvl_qos_stop << 1, 1)
-                            Finch.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
-                            Finch.resize_if_smaller!(res_lvl_val, res_lvl_qos_stop)
-                            Finch.fill_range!(res_lvl_val, 0.0, res_lvl_qos, res_lvl_qos_stop)
+                            Galley.resize_if_smaller!(res_lvl_idx, res_lvl_qos_stop)
+                            Galley.resize_if_smaller!(res_lvl_val, res_lvl_qos_stop)
+                            Galley.fill_range!(res_lvl_val, 0.0, res_lvl_qos, res_lvl_qos_stop)
                         end
                         tmp_lvl_q = tmp_lvl_q_ofs + i_11
                         tmp_lvl_2_val_2 = tmp_lvl_val[tmp_lvl_q]

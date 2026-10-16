@@ -1,6 +1,6 @@
 module FinchLogic
-using RewriteTools, SyntaxInterface, AbstractTrees, Finch
-using Finch: virtualize, freshen
+using RewriteTools, SyntaxInterface, AbstractTrees, Galley
+using Galley: virtualize, freshen
 
 export logic_leaf
 export immediate

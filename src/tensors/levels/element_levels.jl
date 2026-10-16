@@ -23,7 +23,7 @@ end
 const Element = ElementLevel
 
 function ElementLevel(d, args...)
-    isbits(d) || throw(ArgumentError("Finch currently only supports isbits defaults"))
+    isbits(d) || throw(ArgumentError("Galley currently only supports isbits defaults"))
     ElementLevel{d}(args...)
 end
 ElementLevel{Vf}() where {Vf} = ElementLevel{Vf,typeof(Vf)}()
@@ -156,7 +156,7 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualElementLevel, pos)
     push_preamble!(
         ctx,
         quote
-            Finch.resize_if_larger!($(lvl.val), $(ctx(pos)))
+            Galley.resize_if_larger!($(lvl.val), $(ctx(pos)))
         end,
     )
     return lvl
@@ -168,8 +168,8 @@ function assemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
     pos_start = cache!(ctx, :pos_start, simplify(ctx, pos_start))
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))
     quote
-        Finch.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
-        Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+        Galley.resize_if_smaller!($(lvl.val), $(ctx(pos_stop)))
+        Galley.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
     end
 end
 
@@ -180,7 +180,7 @@ function reassemble_level!(ctx, lvl::VirtualElementLevel, pos_start, pos_stop)
     push_preamble!(
         ctx,
         quote
-            Finch.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
+            Galley.fill_range!($(lvl.val), $(lvl.Vf), $(ctx(pos_start)), $(ctx(pos_stop)))
         end,
     )
     lvl

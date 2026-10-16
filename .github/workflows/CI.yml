@@ -101,14 +101,14 @@ jobs:
     needs: style
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Finch.jl
+      - name: Checkout Galley.jl
         uses: actions/checkout@v4
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
           # Match the Julia versions supported by the Python backend.
           version: '1.12'
-      - name: Build Finch.jl package
+      - name: Build Galley.jl package
         uses: julia-actions/julia-buildpkg@v1
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -120,12 +120,14 @@ jobs:
           repository: finch-tensor/finch-tensor
           ref: 'main'
           path: 'finch-tensor'
+      - name: Point the Python backend at Galley
+        run: python test/rename_python_backend.py finch-tensor
       - name: Install package
         working-directory: finch-tensor
         run: |
           python -m pip install --upgrade pip
           python -m pip install --group test --editable '.[julia]'
-      - name: Use this Finch.jl checkout
+      - name: Use this Galley.jl checkout
         working-directory: finch-tensor
         run: |
           python - <<'PY'
@@ -133,7 +135,7 @@ jobs:
           import juliapkg
 
           juliapkg.add(
-              "Finch",
+              "Galley",
               uuid="9177782c-1635-4eb9-9bfb-d9dfa25e6bce",
               path=os.environ["GITHUB_WORKSPACE"],
               dev=True,
@@ -143,7 +145,7 @@ jobs:
           from finch.compile_jl.julia import jl
 
           assert os.path.samefile(
-              str(jl.seval("pkgdir(Finch)")), os.environ["GITHUB_WORKSPACE"]
+              str(jl.seval("pkgdir(Galley)")), os.environ["GITHUB_WORKSPACE"]
           )
           PY
       - name: Run finch-tensor tests
@@ -158,13 +160,13 @@ jobs:
     needs: style
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Finch.jl
+      - name: Checkout Galley.jl
         uses: actions/checkout@v4
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
           version: '1.10'
-      - name: Build Finch.jl package
+      - name: Build Galley.jl package
         uses: julia-actions/julia-buildpkg@v1
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -179,6 +181,8 @@ jobs:
           repository: finch-tensor/galley-jl-python
           ref: 'v0.2.13'
           path: 'galley-jl-python'
+      - name: Point the Python backend at Galley
+        run: python test/rename_python_backend.py galley-jl-python
       - name: Install package
         run: |
           cd galley-jl-python

@@ -301,10 +301,10 @@ function assemble_level!(ctx, lvl::VirtualSparseIntervalLevel, pos_start, pos_st
     pos_start = ctx(cache!(ctx, :p_start, pos_start))
     pos_stop = ctx(cache!(ctx, :p_start, pos_stop))
     return quote
-        Finch.resize_if_smaller!($(lvl.left), $pos_stop)
-        Finch.resize_if_smaller!($(lvl.right), $pos_stop)
-        Finch.fill_range!($(lvl.left), 1, $pos_start, $pos_stop)
-        Finch.fill_range!(
+        Galley.resize_if_smaller!($(lvl.left), $pos_stop)
+        Galley.resize_if_smaller!($(lvl.right), $pos_stop)
+        Galley.fill_range!($(lvl.left), 1, $pos_start, $pos_stop)
+        Galley.fill_range!(
             $(lvl.right),
             $(ctx(call(-, 1, getunit(virtual_level_size(ctx, lvl)[end])))),
             $pos_start,

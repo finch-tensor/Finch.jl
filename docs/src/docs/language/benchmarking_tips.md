@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = Finch
+CurrentModule = Galley
 ```
 
 # Benchmarking Tips
@@ -33,7 +33,7 @@ Finch is even trickier to benchmark, for a few reasons:
     way to do this.
 
 ````julia
-using Finch
+using Galley
 using BenchmarkTools
 using SparseArrays
 using MatrixDepot

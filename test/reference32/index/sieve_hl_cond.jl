@@ -19,7 +19,7 @@ begin
         if phase_stop < 1
         else
             if A_lvl_idx[A_lvl_q] < phase_stop
-                A_lvl_q = Finch.scansearch(A_lvl_idx, phase_stop, A_lvl_q, A_lvl_q_stop - 1)
+                A_lvl_q = Galley.scansearch(A_lvl_idx, phase_stop, A_lvl_q, A_lvl_q_stop - 1)
             end
             A_lvl_i = A_lvl_idx[A_lvl_q]
             phase_stop_2 = min(phase_stop, A_lvl_i)

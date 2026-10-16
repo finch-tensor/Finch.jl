@@ -192,9 +192,9 @@ function assemble_level!(ctx, lvl::VirtualMutexLevel, pos_start, pos_stop)
     push_preamble!(
         ctx,
         quote
-            Finch.resize_if_smaller!($(lvl.locks), $(ctx(pos_stop)))
+            Galley.resize_if_smaller!($(lvl.locks), $(ctx(pos_stop)))
             @inbounds for $idx in ($(ctx(pos_start))):($(ctx(pos_stop)))
-                $(lvl.locks)[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
+                $(lvl.locks)[$idx] = Galley.make_lock(eltype($(lvl.AVal)))
             end
         end,
     )
@@ -210,9 +210,9 @@ function reassemble_level!(ctx, lvl::VirtualMutexLevel, pos_start, pos_stop)
     push_preamble!(
         ctx,
         quote
-            Finch.resize_if_smaller!($lvl.locks, $(ctx(pos_stop)))
+            Galley.resize_if_smaller!($lvl.locks, $(ctx(pos_stop)))
             @inbounds for $idx in ($(ctx(pos_start))):($(ctx(pos_stop)))
-                $lvl.locks[$idx] = Finch.make_lock(eltype($(lvl.AVal)))
+                $lvl.locks[$idx] = Galley.make_lock(eltype($(lvl.AVal)))
             end
         end,
     )
@@ -258,17 +258,17 @@ function unfurl(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, ext, mode, proto)
         push_preamble!(
             ctx,
             quote
-                $atomicData = Finch.get_lock(
+                $atomicData = Galley.get_lock(
                     $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
                 )
-                $lockVal = Finch.aquire_lock!($dev, $atomicData)
+                $lockVal = Galley.aquire_lock!($dev, $atomicData)
             end,
         )
         res = unfurl(ctx, VirtualSubFiber(lvl.lvl, pos), ext, mode, proto)
         push_epilogue!(
             ctx,
             quote
-                Finch.release_lock!($dev, $atomicData)
+                Galley.release_lock!($dev, $atomicData)
             end,
         )
         return res
@@ -285,17 +285,17 @@ function unfurl(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, ext, mode, p
     push_preamble!(
         ctx,
         quote
-            $atomicData = Finch.get_lock(
+            $atomicData = Galley.get_lock(
                 $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
             )
-            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+            $lockVal = Galley.aquire_lock!($dev, $atomicData)
         end,
     )
     res = unfurl(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), ext, mode, proto)
     push_epilogue!(
         ctx,
         quote
-            Finch.release_lock!($dev, $atomicData)
+            Galley.release_lock!($dev, $atomicData)
         end,
     )
     return res
@@ -310,17 +310,17 @@ function lower_assign(ctx, fbr::VirtualSubFiber{VirtualMutexLevel}, mode, op, rh
     push_preamble!(
         ctx,
         quote
-            $atomicData = Finch.get_lock(
+            $atomicData = Galley.get_lock(
                 $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
             )
-            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+            $lockVal = Galley.aquire_lock!($dev, $atomicData)
         end,
     )
     res = lower_assign(ctx, VirtualSubFiber(lvl.lvl, pos), mode, op, rhs)
     push_epilogue!(
         ctx,
         quote
-            Finch.release_lock!($dev, $atomicData)
+            Galley.release_lock!($dev, $atomicData)
         end,
     )
     return res
@@ -335,17 +335,17 @@ function lower_assign(ctx, fbr::VirtualHollowSubFiber{VirtualMutexLevel}, mode, 
     push_preamble!(
         ctx,
         quote
-            $atomicData = Finch.get_lock(
+            $atomicData = Galley.get_lock(
                 $dev, $(lvl.locks), $(ctx(pos)), eltype($(lvl.AVal))
             )
-            $lockVal = Finch.aquire_lock!($dev, $atomicData)
+            $lockVal = Galley.aquire_lock!($dev, $atomicData)
         end,
     )
     res = lower_assign(ctx, VirtualHollowSubFiber(lvl.lvl, pos, fbr.dirty), mode, op, rhs)
     push_epilogue!(
         ctx,
         quote
-            Finch.release_lock!($dev, $atomicData)
+            Galley.release_lock!($dev, $atomicData)
         end,
     )
     return res

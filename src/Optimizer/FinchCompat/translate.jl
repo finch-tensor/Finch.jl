@@ -12,7 +12,7 @@ function push_relabels(prgm)
                     end),
                     (@rule relabel(aggregate(~op, ~init, ~arg, ~idxs1...), ~idxs2...) =>
                         begin
-                            arg_idxs = Finch.getfields(arg)
+                            arg_idxs = Galley.getfields(arg)
                             arg_relabel_idxs = filter((i) -> i ∉ idxs1, arg_idxs)
                             relabel_dict = merge(
                                 OrderedDict(i => i for i in idxs1),
@@ -97,11 +97,11 @@ function remove_reorders(prgm::LogicNode)
     for q in queries
         expr = q.rhs
         format = nothing
-        if operation(expr) == Finch.reformat
+        if operation(expr) == Galley.reformat
             format = expr.tns
             expr = expr.arg
         end
-        output_idx_order = Finch.getfields(expr)
+        output_idx_order = Galley.getfields(expr)
         expr = Rewrite(
             Fixpoint(
                 Postwalk(

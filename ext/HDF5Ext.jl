@@ -1,29 +1,29 @@
 module HDF5Ext
 
-using Finch
-using Finch.JSON
-using Finch.DataStructures
+using Galley
+using Galley.JSON
+using Galley.DataStructures
 
 isdefined(Base, :get_extension) ? (using HDF5) : (using ..HDF5)
 
 const HDF5Node = Union{HDF5.File,HDF5.Group}
 
-function Finch.bspread_h5(fname::AbstractString)
+function Galley.bspread_h5(fname::AbstractString)
     h5open(fname, "r") do io
-        Finch.bspread(io)
+        Galley.bspread(io)
     end
 end
 
-function Finch.bspwrite_h5(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
+function Galley.bspwrite_h5(fname::AbstractString, arr, attrs=OrderedDict(); kwargs...)
     h5open(fname, "w") do io
-        Finch.bspwrite(io, arr, attrs; kwargs...)
+        Galley.bspwrite(io, arr, attrs; kwargs...)
     end
     fname
 end
 
-Finch.bspread_header(f::HDF5Node) = JSON.parse(read(attributes(f)["binsparse"]))
-Finch.bspwrite_header(f::HDF5Node, str::String) = (attributes(f)["binsparse"] = str)
-Finch.bspread_vector(g::HDF5Node, key) = read(g[key])
-Finch.bspwrite_vector(g::HDF5Node, vec, key) = (g[key] = vec)
+Galley.bspread_header(f::HDF5Node) = JSON.parse(read(attributes(f)["binsparse"]))
+Galley.bspwrite_header(f::HDF5Node, str::String) = (attributes(f)["binsparse"] = str)
+Galley.bspread_vector(g::HDF5Node, key) = read(g[key])
+Galley.bspwrite_vector(g::HDF5Node, vec, key) = (g[key] = vec)
 
 end

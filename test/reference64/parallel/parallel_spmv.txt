@@ -16,20 +16,20 @@ begin
     A_lvl_3_val = A_lvl_3.val
     n = (Base.Threads).nthreads()
     A_lvl_2_stop == x_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(A_lvl_2_stop) != $(x_lvl_stop))"))
-    Finch.resize_if_smaller!(y_lvl_2_val, A_lvl_stop)
-    Finch.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_stop)
-    y_lvl_2_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), y_lvl_2_val)
-    A_lvl_3_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_3_val)
-    A_lvl_2_ptr_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_2_ptr)
-    A_lvl_2_idx_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), A_lvl_2_idx)
-    x_lvl_2_val_2 = (Finch).transfer((Finch.CPUSharedMemory)(Finch.CPU{:id}(n)), x_lvl_2_val)
-    Finch.@barrier Threads.@threads(:dynamic, for tid = 1:n
+    Galley.resize_if_smaller!(y_lvl_2_val, A_lvl_stop)
+    Galley.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_stop)
+    y_lvl_2_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), y_lvl_2_val)
+    A_lvl_3_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_3_val)
+    A_lvl_2_ptr_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_2_ptr)
+    A_lvl_2_idx_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), A_lvl_2_idx)
+    x_lvl_2_val_2 = (Galley).transfer((Galley.CPUSharedMemory)(Galley.CPU{:id}(n)), x_lvl_2_val)
+    Galley.@barrier Threads.@threads(:dynamic, for tid = 1:n
                 @inbounds @fastmath(begin
-                            y_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), y_lvl_2_val_2)
-                            A_lvl_3_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_3_val_2)
-                            A_lvl_2_ptr_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_2_ptr_2)
-                            A_lvl_2_idx_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), A_lvl_2_idx_2)
-                            x_lvl_2_val_3 = (Finch).transfer((Finch.CPUThread)(tid, Finch.CPU{:id}(n), (Finch.SerialTask)()), x_lvl_2_val_2)
+                            y_lvl_2_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), y_lvl_2_val_2)
+                            A_lvl_3_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_3_val_2)
+                            A_lvl_2_ptr_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_2_ptr_2)
+                            A_lvl_2_idx_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), A_lvl_2_idx_2)
+                            x_lvl_2_val_3 = (Galley).transfer((Galley.CPUThread)(tid, Galley.CPU{:id}(n), (Galley.SerialTask)()), x_lvl_2_val_2)
                             phase_start_2 = max(1, 1 + fld(A_lvl_stop * (tid + -1), n))
                             phase_stop_2 = min(A_lvl_stop, fld(A_lvl_stop * tid, n))
                             if phase_stop_2 >= phase_start_2
@@ -46,7 +46,7 @@ begin
                                     phase_stop_3 = min(A_lvl_2_stop, A_lvl_2_i1)
                                     if phase_stop_3 >= 1
                                         if A_lvl_2_idx_3[A_lvl_2_q] < 1
-                                            A_lvl_2_q = Finch.scansearch(A_lvl_2_idx_3, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                                            A_lvl_2_q = Galley.scansearch(A_lvl_2_idx_3, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
                                         end
                                         while true
                                             A_lvl_2_i = A_lvl_2_idx_3[A_lvl_2_q]
@@ -77,6 +77,6 @@ begin
                             end
                         end)
             end)
-    Finch.resize_if_larger!(y_lvl_2_val_2, A_lvl_stop)
+    Galley.resize_if_larger!(y_lvl_2_val_2, A_lvl_stop)
     (y = Tensor((DenseLevel){Int64}(ElementLevel{0.0, Float64, Int64}(y_lvl_2_val_2), A_lvl_stop)),)
 end

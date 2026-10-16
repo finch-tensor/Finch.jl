@@ -19,7 +19,7 @@ function getunbound(ex::FinchNode)
     elseif ex.kind === loop
         return setdiff(union(getunbound(ex.body), getunbound(ex.ext)), getunbound(ex.idx))
     elseif istree(ex)
-        return mapreduce(Finch.getunbound, union, arguments(ex); init=[])
+        return mapreduce(Galley.getunbound, union, arguments(ex); init=[])
     else
         return []
     end
@@ -28,12 +28,12 @@ end
 """
     get_simplify_rules(alg, shash)
 
-Return the program rule set for Finch. One can dispatch on the `alg` trait to
+Return the program rule set for Galley. One can dispatch on the `alg` trait to
 specialize the rule set for different algebras. Defaults to a collection of
 straightforward rules that use the algebra to check properties of functions
 like associativity, commutativity, etc. `shash` is an object that can be called
 to return a static hash value. This rule set simplifies, normalizes, and
-propagates constants, and is the basis for how Finch understands sparsity.
+propagates constants, and is the basis for how Galley understands sparsity.
 """
 function get_simplify_rules(alg, shash)
     return [

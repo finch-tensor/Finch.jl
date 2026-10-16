@@ -317,7 +317,7 @@ end
 
 function short_circuit_cases(ctx, tns::VirtualShortCircuitScalar, op)
     [
-        :(Finch.isannihilator($(ctx.algebra), $(ctx(op)), $(tns.val))) =>
+        :(Galley.isannihilator($(ctx.algebra), $(ctx(op)), $(tns.val))) =>
             Simplify(FillLeaf(Null())),
     ]
 end
@@ -449,7 +449,7 @@ end
 
 function short_circuit_cases(ctx, tns::VirtualSparseShortCircuitScalar, op)
     [
-        :(Finch.isannihilator($(ctx.algebra), $(ctx(op)), $(tns.val))) =>
+        :(Galley.isannihilator($(ctx.algebra), $(ctx(op)), $(tns.val))) =>
             Simplify(FillLeaf(Null())),
     ]
 end

@@ -40,8 +40,8 @@ quote
     x_lvl_2 = x_lvl.lvl
     x_lvl_2_val = x_lvl_2.val
     x_lvl_stop == A_lvl_stop || throw(DimensionMismatch("mismatched dimension limits ($(x_lvl_stop) != $(A_lvl_stop))"))
-    Finch.resize_if_smaller!(y_lvl_2_val, A_lvl_2_stop)
-    Finch.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_2_stop)
+    Galley.resize_if_smaller!(y_lvl_2_val, A_lvl_2_stop)
+    Galley.fill_range!(y_lvl_2_val, 0.0, 1, A_lvl_2_stop)
     for j_4 = 1:x_lvl_stop
         x_lvl_q = (1 - 1) * x_lvl_stop + j_4
         A_lvl_q = (1 - 1) * A_lvl_stop + j_4
@@ -56,7 +56,7 @@ quote
         phase_stop = min(A_lvl_2_stop, A_lvl_2_i1)
         if phase_stop >= 1
             if A_lvl_2_idx[A_lvl_2_q] < 1
-                A_lvl_2_q = Finch.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
+                A_lvl_2_q = Galley.scansearch(A_lvl_2_idx, 1, A_lvl_2_q, A_lvl_2_q_stop - 1)
             end
             while true
                 A_lvl_2_i = A_lvl_2_idx[A_lvl_2_q]
@@ -78,7 +78,7 @@ quote
             end
         end
     end
-    Finch.resize_if_larger!(y_lvl_2_val, A_lvl_2_stop)
+    Galley.resize_if_larger!(y_lvl_2_val, A_lvl_2_stop)
     (y = Tensor((DenseLevel){Int32}(ElementLevel{0.0, Float64, Int32}(y_lvl_2_val), A_lvl_2_stop)),)
 end
 julia> @finch begin
