@@ -241,10 +241,10 @@
     let
         B = Tensor(Dense(Element(0)), [2, 4, 5])
         A = Tensor(Dense(Element(0)), 6)
-        @finch (A .= 0;
-        for i in _
-            A[B[i]] = i
-        end)
+        @finch (A.=0;
+            for i in _
+                A[B[i]] = i
+            end)
         @test A == [0, 1, 0, 2, 3, 0]
     end
 
@@ -264,15 +264,15 @@
     B = Tensor(Dense(Element(0)))
 
     @test check_output(
-        "issues/fiber_as_idx.jl", @finch_code (B .= 0;
+        "issues/fiber_as_idx.jl", @finch_code (B.=0;
+            for i in _
+                B[i] = A[I[i], i]
+            end)
+    )
+    @finch (B.=0;
         for i in _
             B[i] = A[I[i], i]
         end)
-    )
-    @finch (B .= 0;
-    for i in _
-        B[i] = A[I[i], i]
-    end)
 
     @test B == [11, 12, 93, 34, 35]
 
@@ -284,15 +284,15 @@
             SparseList(SparseList(Element(0.0))),
             SparseMatrixCSC([0 0 0 0; -1 -1 -1 -1; -2 -2 -2 -2; -3 -3 -3 -3]),
         )
-        @test_throws DimensionMismatch @finch (t .= 0;
-        for j in _, i in _
-            t[i, j] = min(X[i, j], A[i, j])
-        end)
+        @test_throws DimensionMismatch @finch (t.=0;
+            for j in _, i in _
+                t[i, j] = min(X[i, j], A[i, j])
+            end)
         X = Tensor(SparseList(SparseList(Element(0.0))), 4, 4)
-        @finch (t .= 0;
-        for j in _, i in _
-            t[i, j] = min(X[i, j], A[i, j])
-        end)
+        @finch (t.=0;
+            for j in _, i in _
+                t[i, j] = min(X[i, j], A[i, j])
+            end)
         @test t == A
     end
 
@@ -306,10 +306,10 @@
         t = Tensor(SparseList(SparseList(Element(0.0))))
         B = SparseMatrixCSC([0 0 0 0; -1 -1 -1 -1; -2 -2 -2 -2; -3 -3 -3 -3])
         A = dropfills(copyto!(Tensor(SparseList(SparseList(Element(0.0)))), B))
-        @finch algebra = MyAlgebra115() (t .= 0;
-        for j in _, i in _
-            t[i, j] = f(A[i, j], A[i, j], A[i, j])
-        end)
+        @finch algebra = MyAlgebra115() (t.=0;
+            for j in _, i in _
+                t[i, j] = f(A[i, j], A[i, j], A[i, j])
+            end)
         @test t == B .* 3
     end
 
@@ -322,7 +322,7 @@
             :warn,
             "Performance Warning: non-concordant traversal of t[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)",
         ) match_mode = :any @test_throws Finch.FinchProtocolError @finch (
-            t .= 0;
+            t.=0;
             for i in _, j in _
                 t[i, j] = A[i, j]
             end
@@ -337,7 +337,7 @@
             :warn,
             "Performance Warning: non-concordant traversal of t[i, j] (hint: most arrays prefer column major or first index fast, run in fast mode to ignore this warning)",
         ) match_mode = :any @test_throws Finch.FinchProtocolError @finch (
-            t .= 0;
+            t.=0;
             for i in _, j in _
                 t[i, j] = A[i, j]
             end
@@ -368,10 +368,10 @@
 
         B = Tensor(Dense(SparseList(Element(0.0))))
 
-        @finch (B .= 0;
-        for j in _, i in _
-            B[i, j] = A[i, j]
-        end)
+        @finch (B.=0;
+            for j in _, i in _
+                B[i, j] = A[i, j]
+            end)
 
         @test Structure(B) == Structure(Tensor(A))
 
@@ -379,10 +379,10 @@
 
         w = Tensor(SparseList(Element(0.0)))
 
-        @finch (w .= 0;
-        for i in _
-            w[i] = v[i]
-        end)
+        @finch (w.=0;
+            for i in _
+                w[i] = v[i]
+            end)
 
         @test Structure(w) == Structure(Tensor(v))
     end
@@ -503,10 +503,10 @@
         A = [0.0 1.0 0.0 2.0; 0.0 1.0 0.0 3.0; 0.0 0.0 2.0 0.0]
         B = Tensor(Dense(SparseList(Element(0.0))), A)
         C = Tensor(Dense(SparseList(Element(Inf))))
-        @finch (C .= Inf;
-        for j in _, i in _
-            C[i, j] = ifelse(B[i, j] == 0, Inf, B[i, j])
-        end)
+        @finch (C.=Inf;
+            for j in _, i in _
+                C[i, j] = ifelse(B[i, j] == 0, Inf, B[i, j])
+            end)
 
         println(io, "A :", A)
         println(io, "C :", C)
@@ -524,18 +524,18 @@
         A = fsprand(10, 11, 0.5)
         B = Tensor(Dense(SparseList(Element(0.0))))
         C = fsprand(10, 10, 0.5)
-        @test_throws DimensionMismatch @finch (A .= 0;
-        for j in _, i in _
-            A[i, j] = B[i]
-        end)
-        @test_throws DimensionMismatch @finch (A .= 0;
-        for j in _, i in _
-            A[i] = B[i, j]
-        end)
-        @test_throws DimensionMismatch @finch (A .= 0;
-        for j in _, i in _
-            A[i, j] = B[i, j] + C[i, j]
-        end)
+        @test_throws DimensionMismatch @finch (A.=0;
+            for j in _, i in _
+                A[i, j] = B[i]
+            end)
+        @test_throws DimensionMismatch @finch (A.=0;
+            for j in _, i in _
+                A[i] = B[i, j]
+            end)
+        @test_throws DimensionMismatch @finch (A.=0;
+            for j in _, i in _
+                A[i, j] = B[i, j] + C[i, j]
+            end)
         @test_throws DimensionMismatch copyto!(Tensor(SparseList(Element(0.0))), A)
         @test_throws DimensionMismatch dropfills!(Tensor(SparseList(Element(0.0))), A)
 
@@ -582,10 +582,10 @@
     let
         A = [1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0]
         x = Scalar{0.0}()
-        @finch (x .= 0;
-        for i in _
-            x[] += A[i, i]
-        end)
+        @finch (x.=0;
+            for i in _
+                x[] += A[i, i]
+            end)
         @test x[] == 15.0
     end
 
@@ -643,92 +643,92 @@
         end
         @test x[] == 11.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i < j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i < j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 19.0
 
-        @finch mode = :fast (x .= 0;
-        for j in _, i in _
-            if i <= j
-                x[] += A[i, j]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for j in _, i in _
+                if i <= j
+                    x[] += A[i, j]
+                end
+            end)
         @test x[] == 26.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i <= j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i <= j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 34.0
 
-        @finch mode = :fast (x .= 0;
-        for j in _, i in _
-            if i > j
-                x[] += A[i, j]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for j in _, i in _
+                if i > j
+                    x[] += A[i, j]
+                end
+            end)
         @test x[] == 19.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i > j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i > j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 11.0
 
-        @finch mode = :fast (x .= 0;
-        for j in _, i in _
-            if i >= j
-                x[] += A[i, j]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for j in _, i in _
+                if i >= j
+                    x[] += A[i, j]
+                end
+            end)
         @test x[] == 34.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i >= j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i >= j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 26.0
 
-        @finch mode = :fast (x .= 0;
-        for j in _, i in _
-            if i == j
-                x[] += A[i, j]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for j in _, i in _
+                if i == j
+                    x[] += A[i, j]
+                end
+            end)
         @test x[] == 15.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i == j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i == j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 15.0
 
-        @finch mode = :fast (x .= 0;
-        for j in _, i in _
-            if i != j
-                x[] += A[i, j]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for j in _, i in _
+                if i != j
+                    x[] += A[i, j]
+                end
+            end)
         @test x[] == 30.0
 
-        @finch mode = :fast (x .= 0;
-        for i in _, j in _
-            if i != j
-                x[] += A[j, i]
-            end
-        end)
+        @finch mode = :fast (x.=0;
+            for i in _, j in _
+                if i != j
+                    x[] += A[j, i]
+                end
+            end)
         @test x[] == 30.0
     end
 
@@ -859,10 +859,10 @@
     let
         edge_matrix = Tensor(SparseList(SparseList(Element(0.0))), 254, 254)
         edge_values = fsprand(254, 254, 0.001)
-        @finch (edge_matrix .= 0;
-        for j in _, i in _
-            edge_matrix[i, j] = edge_values[i, j]
-        end)
+        @finch (edge_matrix.=0;
+            for j in _, i in _
+                edge_matrix[i, j] = edge_values[i, j]
+            end)
         output_matrix = Tensor(SparseDict(SparseDict(Element(0.0))), 254, 254)
         @finch (
             for v_4 in _, v_3 in _, v_2 in _, v_5 in _
@@ -880,7 +880,7 @@
         output_tensor = Tensor(SparseDict(SparseDict(Element(0.0))), 2, 2)
 
         @finch (
-            output_tensor .= 0;
+            output_tensor.=0;
             for j in _, i in _, k in _
                 output_tensor[i, k] += a_fiber[i, j] * b_fiber[k, j]
             end
@@ -1078,20 +1078,6 @@
         @test B == A_t
     end
 
-    #https://github.com/finch-tensor/Finch.jl/issues/474
-    let
-        A = [1 2 3; 4 5 6; 7 8 9]
-        A_t = permutedims(A, (2, 1))
-        A_tns = Tensor(Dense(Dense(Element(0.0))), A)
-        A_sw = swizzle(A_tns, 2, 1)
-
-        @test prod(A_t; dims=2) == prod(A_sw; dims=2)
-        @test prod(A_t; dims=1) == prod(A_sw; dims=1)
-        @test prod(A_t) == prod(A_sw)
-
-        @test tensordot(A_sw, A_sw, (2, 1)) == transpose(A * A)
-    end
-
     #https://github.com/finch-tensor/Finch.jl/issues/483
     let
         D = Tensor(
@@ -1151,19 +1137,7 @@
 
     #https://github.com/finch-tensor/Finch.jl/issues/480
     let
-        A = fsprand(10, 10, 0.5)
-        @test size(A[:, nothing, :]) == (10, 1, 10)
-
         copyto!(Tensor(Element(0.0)), swizzle(Tensor(Element(0.0, [1.0]))))
-    end
-
-    #https://github.com/finch-tensor/Finch.jl/issues/485
-    let
-        a = zeros(1, 1, 1)
-        a_tns = Tensor(Dense(SparseList(SparseList(Element(0.0)))), a)
-
-        sum(a; dims=(1, 2))
-        sum(a_tns; dims=(1, 2))
     end
 
     #https://github.com/finch-tensor/Finch.jl/issues/546
@@ -1192,7 +1166,7 @@
     #https://github.com/finch-tensor/Finch.jl/issues/580
     let
         n = 100
-        data = fsprand(Int, n, n, 0.01) .% 100
+        data = sprand(Int, n, n, 0.01) .% 100
         A_sbm = Tensor(Dense(SparseByteMap(Element(0))), data)
         A_d = Tensor(Dense(Dense(Element(0))), data)
         C1 = Scalar(0)
@@ -1249,30 +1223,23 @@
 
     #https://github.com/finch-tensor/Finch.jl/issues/767
     let
-        # real matrix: transpose == adjoint == permutedims
+        # real matrix: transpose == permutedims
         A = [1.0 2.0 3.0; 4.0 5.0 6.0]
         A_tns = Tensor(Dense(Dense(Element(0.0))), A)
         @test transpose(A_tns) == permutedims(A)
-        @test adjoint(A_tns) == permutedims(A)
-        @test compute(transpose(lazy(A_tns))) == permutedims(A)
-        @test compute(adjoint(lazy(A_tns))) == permutedims(A)
 
-        # complex matrix: adjoint conjugates, transpose does not
+        # complex matrix: transpose does not conjugate
         C = [1.0+2.0im 3.0-1.0im; 0.0+1.0im 2.0+0.0im]
         C_tns = Tensor(Dense(Dense(Element(0.0im))), C)
         @test transpose(C_tns) == permutedims(C)
-        @test adjoint(C_tns) == permutedims(conj.(C))
-        @test compute(transpose(lazy(C_tns))) == permutedims(C)
-        @test compute(adjoint(lazy(C_tns))) == permutedims(conj.(C))
 
         # sparse input, real
         S = fsprand(6, 8, 0.3)
         S_tns = Tensor(Dense(SparseList(Element(0.0))), S)
-        @test adjoint(S_tns) == permutedims(Array(S))
         @test transpose(S_tns) == permutedims(Array(S))
 
-        # exact reproducer from the issue: adjoint on a COO Bool tensor
+        # COO Bool tensor
         R = fsprand(Bool, 100, 100, 0.01)
-        @test adjoint(R) == permutedims(Array(R))
+        @test transpose(R) == permutedims(Array(R))
     end
 end

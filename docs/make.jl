@@ -30,7 +30,6 @@ makedocs(;
         "Getting Started" => "getting_started.md",
         "Documentation" => [
             "Tensor Formats" => "docs/tensor_formats.md",
-            "High-Level Array API" => "docs/array_api.md",
             "Sparse and Structured Utilities" => "docs/sparse_utils.md",
             "User-Defined Functions" => "docs/user-defined_functions.md",
             "FileIO" => "docs/fileio.md",
@@ -54,7 +53,6 @@ makedocs(;
                 "Tensor Interface" => "docs/internals/tensor_interface.md",
                 "Compiler Interfaces" => "docs/internals/compiler_interface.md",
                 "Finch Notation" => "docs/internals/finch_notation.md",
-                "Finch Logic" => "docs/internals/finch_logic.md",
                 #        "Looplets and Coiteration" => "internals/looplets_coiteration.md",
             ],
         ],

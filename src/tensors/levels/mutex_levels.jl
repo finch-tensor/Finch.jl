@@ -172,7 +172,7 @@ end
 
 Base.summary(lvl::VirtualMutexLevel) = "Mutex($(lvl.Lvl))"
 function virtual_level_resize!(ctx, lvl::VirtualMutexLevel, dims...)
-    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    (lvl.lvl=virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
 virtual_level_size(ctx, lvl::VirtualMutexLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_ndims(ctx, lvl::VirtualMutexLevel) = length(virtual_level_size(ctx, lvl.lvl))

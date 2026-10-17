@@ -192,7 +192,9 @@ end
         for (fmt, shared, shared_dst) in (
                 (() -> SparseList(Dense(Element(0))), 1, 2),
                 (() -> SparseByteMap(Dense(Element(0))), 4, 4),
-            ), bounded in (false, true)
+            ),
+            bounded in (false, true)
+
             src = band_shards(fmt, data, cuts)
             dst = Tensor(fmt(), zero(data)).lvl
             plan = Finch.setup_coalesce!(
@@ -874,7 +876,9 @@ end
     @testset "$(summary(fmt())) on $P workers" for fmt in (
             () -> Dense(SparseByteMap(Element(0))),
             () -> SparseByteMap(SparseByteMap(Element(0))),
-        ), P in (1, 2, 3)
+        ),
+        P in (1, 2, 3)
+
         device = cpu(:k, P)
         output = Tensor(Coalesce(device, fmt()))
         first = [1 0 2; 0 3 0; 4 0 0]

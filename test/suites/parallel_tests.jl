@@ -649,7 +649,8 @@
                 end
             end
 
-            @test norm(y - A * x) / norm(A * x) < 1e-10
+            y_ref = Array(A) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         #https://github.com/finch-tensor/Finch.jl/pull/668
@@ -667,7 +668,8 @@
                 end
             end
 
-            @test norm(y - A * x) / norm(A * x) < 1e-10
+            y_ref = Array(A) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         let
@@ -684,7 +686,8 @@
                 end
             end
 
-            @test norm(y - permutedims(A) * x) / norm(permutedims(A) * x) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         # Check that passing static_schedule() as argument to parallel is working
@@ -702,8 +705,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         let
@@ -720,8 +723,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         # Check that passing greedy_schedule as argument to parallel is working
@@ -739,8 +742,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         let
@@ -757,8 +760,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         # Check that passing julia_schedule as argument to parallel is working
@@ -776,8 +779,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
 
         let
@@ -794,8 +797,8 @@
                 end
             end
 
-            y_ref = swizzle(A, 2, 1) * x
-            @test norm(y - y_ref) / norm(y_ref) < 1e-10
+            y_ref = permutedims(Array(A)) * Array(x)
+            @test norm(Array(y) - y_ref) / norm(y_ref) < 1e-10
         end
     end
 end

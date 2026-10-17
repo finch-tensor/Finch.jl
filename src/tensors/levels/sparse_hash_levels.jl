@@ -646,7 +646,8 @@ function declare_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos,
     return lvl
 end
 
-assemble_level!(ctx, lvl::VirtualSparseHashLevel, pos_start, pos_stop) = quote end
+assemble_level!(ctx, lvl::VirtualSparseHashLevel, pos_start, pos_stop) = quote
+end
 
 function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseHashLevel, pos_stop)
     pos_stop = cache!(ctx, :pos_stop, simplify(ctx, pos_stop))

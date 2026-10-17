@@ -333,8 +333,8 @@ function sparse_bytemap_parent_position(
     else
         return :($srt_shape = $(Tp)($(ctx(lvl.shape)))),
         :(
-        Finch.sparse_bytemap_parent($q, $srt_shape)
-)
+            Finch.sparse_bytemap_parent($q, $srt_shape)
+        )
     end
 end
 
@@ -534,8 +534,8 @@ function unfurl(
                     body=(ctx, ext) -> Stepper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                $(lvl.srt)[$my_r] <
-                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
+                                  $(lvl.srt)[$my_r] <
+                                  $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,
@@ -603,8 +603,8 @@ function unfurl(
                     body=(ctx, ext) -> Jumper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                $(lvl.srt)[$my_r] <
-                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
+                                  $(lvl.srt)[$my_r] <
+                                  $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,

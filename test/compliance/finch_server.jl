@@ -79,7 +79,7 @@ function cmd_npy_to_binsparse(args)
 end
 
 # NPZ.jl reads 0-d arrays as scalars.
-read_array(path) = (x = npzread(path); x isa AbstractArray ? x : fill(x))
+read_array(path) = (x=npzread(path); x isa AbstractArray ? x : fill(x))
 
 # Build the Finch tensor with the header's layout, storing exactly the entries
 # marked in `pat` (including those equal to the fill value).
