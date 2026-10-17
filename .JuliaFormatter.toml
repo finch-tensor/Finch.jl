@@ -1,4 +1,4 @@
-ignore = ["test/reference32", "test/reference64"]
+ignore = ["test/reference32", "test/reference64", "build-compliance"]
 format_markdown = true
 style = "blue"
 always_for_in = "nothing" # keep `for i = _` as written
