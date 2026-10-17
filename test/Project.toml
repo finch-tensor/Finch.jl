@@ -35,5 +35,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Finch = {path = ".."}
 
 [compat]
-JuliaFormatter = "1.0.62"
 Pkg = "1.10.0"
