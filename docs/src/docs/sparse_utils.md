@@ -83,7 +83,8 @@ julia> B = Tensor(Dense(SparseList(Element((0.0, true)))), A)
  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (3.0, 0)  (0.0, 1)
  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)
 
-julia> n_fill = Scalar(0); total = Scalar(0.0);
+julia> n_fill = Scalar(0);
+       total = Scalar(0.0);
 
 julia> @finch for j = _, i = _
            n_fill[] += last(B[i, j])

@@ -103,9 +103,10 @@ julia> @finch begin
            D .= -Inf
            for j = _, i = _
                C[i, j] = A[i, j] * B[i, j]
-               D[i] <<max>>= A[i, j] + B[i, j]
+               D[i] << max >>= A[i, j] + B[i, j]
            end
        end;
+
 ```
 
 To generate a reusable function ahead of time, use the `@finch_kernel` macro. See the
