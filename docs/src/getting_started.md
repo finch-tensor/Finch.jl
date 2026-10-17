@@ -32,126 +32,67 @@ Some pre-defined formats include:
 
 It is also possible to build custom formats using the interface, as described in the [Tensor Formats](#tensor-formats) section.
 
-## High-Level Array API
+## Writing Finch Programs
 
-### Basic Array Operations
+### Indexing
 
-Finch tensors support indexing, slicing, mapping, broadcasting, and reducing.
-Many functions in the Julia standard array library are supported.
+Finch tensors support indexing and slicing, as well as standard array functions
+such as `copy`, `permutedims`, and `reshape`.
 
 ```jldoctest arrayapi; setup = :(using Finch)
 julia> A = Tensor(CSCFormat(), [0 1; 2 3]);
 
-julia> B = A .+ 1
-2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}}:
- 1.0  2.0
- 3.0  4.0
+julia> A[2, 1]
+2.0
 
-julia> C = max.(A, B)
-2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}}:
- 1.0  2.0
- 3.0  4.0
-
-julia> D = sum(C; dims=2)
-2×1 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
- 3.0
- 7.0
-
-julia> E = B[1, :]
-2 Tensor{DenseLevel{Int64, ElementLevel{1.0, Float64, Int64, Vector{Float64}}}}:
+julia> A[1, :]
+2 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 0.0
  1.0
- 2.0
+
+julia> permutedims(A)
+2×2 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0  2.0
+ 1.0  3.0
 ```
 
-For situations which are difficult to express in the julia standard library, Finch also supports an `@einsum` syntax:
+### Loops
+
+To compute with tensors, write loops with the [`@finch`](@ref) macro. Finch
+compiles each program for the formats of the tensors it touches, so every
+operation in the loop body is fused into a single kernel that skips the zeros of
+the sparse inputs.
 
 ```jldoctest arrayapi; setup = :(using Finch)
-julia> @einsum F[i, j, k] *= A[i, j] * B[j, k]
-2×2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}}:
-[:, :, 1] =
- 0.0  3.0
- 2.0  9.0
+julia> B = Tensor(CSCFormat(), [1 0; 0 4]);
 
-[:, :, 2] =
- 0.0   4.0
- 4.0  12.0
+julia> C = Tensor(CSCFormat());
 
-julia> @einsum G[j, k] << max >>= A[i, j] + B[j, k]
-2×2 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{-Inf, Float64, Int64, Vector{Float64}}}}}:
- 3.0  4.0
- 6.0  7.0
+julia> D = Tensor(Dense(Element(0.0)));
+
+julia> @finch begin
+           C .= 0
+           D .= 0
+           for j = _, i = _
+               C[i, j] = A[i, j] * B[i, j]
+               D[i] += A[i, j] + B[i, j]
+           end
+       end;
+
+julia> C
+2×2 Tensor{DenseLevel{Int64, SparseListLevel{Int64, Vector{Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
+ 0.0   0.0
+ 0.0  12.0
+
+julia> D
+2 Tensor{DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 2.0
+ 9.0
 ```
 
-The `@einsum` macro is a powerful tool for expressing complex array operations concisely.
-
-## Array Fusion
-
-To get the full benefits of a sparse compiler, it is critical to fuse certain operations together. For this, Finch exposes two functions, [`lazy`](@ref) and [`compute`](@ref).
-The `lazy` function creates a lazy tensor, which is a symbolic representation of the computation. The `compute` function evaluates the computation. For convenience, you may wish to use the [`fused`](@ref) function, which automatically fuses the computations it contains.
-
-```jldoctest fusion; setup = :(using Finch)
-julia> A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [1.0, 2.0, 3.0])
-3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
- 0.0  1.0  0.0  2.0  0.0  0.0
- 0.0  0.0  0.0  0.0  3.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0
-
-julia> B = A .* 2
-3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
- 0.0  2.0  0.0  4.0  0.0  0.0
- 0.0  0.0  0.0  0.0  6.0  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0
-
-julia> C = lazy(A)
-3×6-LazyTensor{Float64}
-
-julia> D = lazy(B)
-3×6-LazyTensor{Float64}
-
-julia> E = (C .+ D) ./ 2
-3×6-LazyTensor{Float64}
-
-julia> compute(E)
-3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
- 0.0  1.5  0.0  3.0  0.0  0.0
- 0.0  0.0  0.0  0.0  4.5  0.0
- 0.0  0.0  0.0  0.0  0.0  0.0
-```
-
-The `lazy` and `compute` functions allow the compiler to fuse operations together, resulting in asymptotically more efficient code.
-
-```julia
-julia> using BenchmarkTools
-
-julia> A = fsprand(1000, 1000, 100);
-       B = Tensor(rand(1000, 1000));
-       C = Tensor(rand(1000, 1000));
-
-julia> @btime A .* (B * C);
-  145.940 ms (859 allocations: 7.69 MiB)
-
-julia> @btime compute(lazy(A) .* (lazy(B) * lazy(C)));
-  694.666 μs (712 allocations: 60.86 KiB)
-```
-
-Different optimizers can be used with `compute`, such as the state-of-the-art `Galley` optimizer, which can adapt to the
-sparsity patterns of the inputs.
-
-```julia
-julia> A = fsprand(1000, 1000, 0.1);
-       B = fsprand(1000, 1000, 0.1);
-       C = fsprand(1000, 1000, 0.0001);
-
-julia> A = lazy(A);
-       B = lazy(B);
-       C = lazy(C);
-
-julia> @btime compute(sum(A * B * C));
-  282.503 ms (1018 allocations: 184.43 MiB)
-
-julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
-  152.792 μs (672 allocations: 28.81 KiB)
-```
+To generate a reusable function ahead of time instead, use the
+[`@finch_kernel`](@ref) macro. The [Finch Language](docs/language/finch_language.md)
+section describes the full language.
 
 ## Sparse and Structured Utilities
 

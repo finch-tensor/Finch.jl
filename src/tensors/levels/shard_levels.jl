@@ -450,7 +450,7 @@ end
 Base.summary(lvl::VirtualShardLevel) = "Shard($(lvl.Lvl))"
 
 function virtual_level_resize!(ctx, lvl::VirtualShardLevel, dims...)
-    (lvl.lvl = virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
+    (lvl.lvl=virtual_level_resize!(ctx, lvl.lvl, dims...); lvl)
 end
 virtual_level_size(ctx, lvl::VirtualShardLevel) = virtual_level_size(ctx, lvl.lvl)
 virtual_level_eltype(lvl::VirtualShardLevel) = virtual_level_eltype(lvl.lvl)

@@ -5,7 +5,9 @@
     # Both values differ from the module default, and share the same level type.
     # Compiled operations must read each table's multiplier at runtime.
     for a in (Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2),
-            Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)), Ti in (Int, Int32)
+            Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)),
+        Ti in (Int, Int32)
+
         original = Tensor(Dense(SparseHash{Ti}(Element(0), 32, 8, a)), data)
         lvl = original.lvl.lvl
         @test lvl.pos_multiplier === a
@@ -220,7 +222,9 @@ end
     @testset "declaration reuses capacity across dense, sparse, and empty outputs" for Tp in
                                                                                        (
             Int32, Int
-        ), B in (1, 8)
+        ),
+        B in (1, 8)
+
         tensor = Tensor(SparseHash(Element{0,Int,Tp}(), 8192, B, pos_multiplier))
         input = Tensor(Dense(Element(0)), zeros(Int, 8192))
         capacity = 0
@@ -682,7 +686,8 @@ end
             () -> SparseByteMap(SparseByteMap(Element(0))),
             () -> SparseByteMap(Dense(Element(0))),
             () -> SparseByteMap(SparseList(Element(0))),
-        ), n in (3, 64)
+        ),
+        n in (3, 64)
         # Exercise both bulk clearing and clearing just the dirty positions.
         first = hcat([1 0 2; 0 3 0; 4 0 0], zeros(Int, 3, n - 3))
         second = hcat([0 5 0; 6 0 0; 0 0 7], zeros(Int, 3, n - 3))
@@ -844,14 +849,14 @@ end
 
     multi_levels = [
         (
-            "SparseCOO",
-            SparseCOO,
-            (;),
-            [
-                [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
-                [0.0 2.0 2.0; 0.0 3.0 3.0],
-            ],
-        ),
+        "SparseCOO",
+        SparseCOO,
+        (;),
+        [
+            [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
+            [0.0 2.0 2.0; 0.0 3.0 3.0],
+        ],
+    ),
     ]
 
     for (key, Lvl, flags, arrs) in multi_levels
@@ -1049,6 +1054,8 @@ end
         @test obov == [2, val, 3, 4] && obov.data == [1, val - 1, 2, 3]
         obov[1:3] .= val
         @test obov == [val, val, val, 4] && obov.data == [val - 1, val - 1, val - 1, 3]
+        copyto!(obov, 2, obov, 3, 2)
+        @test obov == [val, val, 4, 4] && copy(obov) isa typeof(obov)
 
         # test tuple-valued off-by-one storage
         tbl = Tuple{Int,Int32,Int}[(0, 4, 8)]
@@ -1056,6 +1063,50 @@ end
         @test tuple_obov[1] === (1, Int32(5), 9)
         tuple_obov[1] = (3, Int32(7), 11)
         @test tbl[1] === (2, Int32(6), 10)
+
+        # test offsetting only some tuple fields
+        key = Tuple{Int,Int32,UInt8}[(0, 4, 0x80)]
+        key_obov = PlusOneVector(key, (1, 2))
+        @test @inferred(key_obov[1]) === (1, Int32(5), 0x80)
+        key_obov[1] = (3, 7, 0x7f)
+        @test key[1] === (2, Int32(6), 0x7f)
+        @test Finch.transfer(cpu(:t, 2), key_obov) isa typeof(key_obov)
+        @test resize!(key_obov, 2) === key_obov && length(key) == 2
+        @test empty!(key_obov) === key_obov && isempty(key)
+    end
+
+    @testset "MinusOneVector" begin
+        # test off-by-one
+        v = Vector([2, 1, 3, 4])
+        obov = MinusOneVector(v)
+        @test obov == v .- 1
+        @test obov.data == v
+
+        # test off-by-one write operation
+        val = 10
+        obov[2] = val
+        @test obov == [1, val, 2, 3] && obov.data == [2, val + 1, 3, 4]
+        obov[1:3] .= val
+        @test obov == [val, val, val, 3] && obov.data == [val + 1, val + 1, val + 1, 4]
+        copyto!(obov, 2, obov, 3, 2)
+        @test obov == [val, val, 3, 3] && copy(obov) isa typeof(obov)
+
+        # test tuple-valued off-by-one storage
+        tbl = Tuple{Int,Int32,Int}[(1, 5, 9)]
+        tuple_obov = MinusOneVector(tbl)
+        @test tuple_obov[1] === (0, Int32(4), 8)
+        tuple_obov[1] = (2, Int32(6), 10)
+        @test tbl[1] === (3, Int32(7), 11)
+
+        # test offsetting only some tuple fields
+        key = Tuple{Int,Int32,UInt8}[(1, 5, 0x80)]
+        key_obov = MinusOneVector(key, (1, 2))
+        @test @inferred(key_obov[1]) === (0, Int32(4), 0x80)
+        key_obov[1] = (1, 5, 0x7f)
+        @test key[1] === (2, Int32(6), 0x7f)
+        @test Finch.transfer(cpu(:t, 2), key_obov) isa typeof(key_obov)
+        @test resize!(key_obov, 2) === key_obov && length(key) == 2
+        @test empty!(key_obov) === key_obov && isempty(key)
     end
 
     @testset "ShardLevel" begin

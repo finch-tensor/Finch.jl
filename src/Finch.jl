@@ -16,13 +16,13 @@ using Random: AbstractRNG, default_rng, randexp, randperm
 using PrecompileTools
 using Compat
 using DataStructures
-using Statistics
 using JSON
 using Distributions: Binomial, Normal, Poisson
 using TOML
 using UUIDs
 using Preferences
 using UnsafeAtomics
+using LinearAlgebra: LinearAlgebra, norm
 
 export @finch, @finch_program, @finch_code, @finch_kernel, value
 
@@ -58,13 +58,11 @@ export pairsummask, paircarrymask, reversemask, rollmask, repeatmask, onehotmask
 export oddevenmergesortpartnermask, oddevenmergesortlowermask, reshapemask
 export randommask
 export scale, products, offset, permissive, protocolize, swizzle, toeplitz, window
-export PlusOneVector
-
-export lazy, compute, fused, tensordot, @einsum
+export PlusOneVector, MinusOneVector
 
 export choose, minby, maxby, overwrite, initwrite, filterop, d
 
-export fill_value, AsArray, expanddims, tensor_tree
+export fill_value, AsArray, tensor_tree
 
 export parallelAnalysis, ParallelAnalysisResults
 export parallel, extent, auto
@@ -276,14 +274,6 @@ export ftnsread, ftnswrite, fttread, fttwrite
 
 export transfer, postype
 
-include("FinchLogic/FinchLogic.jl")
-using .FinchLogic
-
-include("scheduler/LogicCompiler.jl")
-include("scheduler/LogicExecutor.jl")
-include("scheduler/LogicInterpreter.jl")
-include("scheduler/optimize.jl")
-
 include("interface/traits.jl")
 include("interface/abstract_arrays.jl")
 include("interface/abstract_unit_ranges.jl")
@@ -292,16 +282,9 @@ include("interface/compare.jl")
 include("interface/copy.jl")
 include("interface/fsparse.jl")
 include("interface/fileio/fileio.jl")
-include("interface/lazy.jl")
-include("interface/eager.jl")
-include("interface/einsum.jl")
+include("interface/reshape.jl")
 
 include("execute.jl")
-
-include("Galley/Galley.jl")
-using .Galley
-
-export galley_scheduler, GalleyOptimizer, AdaptiveExecutorCode, AdaptiveExecutor
 
 @deprecate default fill_value
 @deprecate redefault! set_fill_value!
@@ -388,33 +371,6 @@ function workload()
         A == B
         i = rand(1:2, ndims(A))
         A[i...]
-        #if eltype(format) == Bool
-        #    .!(A)
-        #    any(A)
-        #    all(A)
-        #end
-        if eltype(format) <: Integer
-            .~(A)
-            A .& B
-            A .| B
-        end
-        if eltype(format) <: Union{Integer,AbstractFloat} && eltype(format) != Bool
-            sum(A)
-            A .* B
-            A + A
-            A - A
-            maximum(A)
-            max.(A, B)
-            println("")
-            for T in Ts
-                A * rand(T)
-                A + rand(T)
-            end
-            if ndims(A) == 2
-                A * A
-                A * Tensor(Dense(Element(zero(eltype(A)))), rand(eltype(A), 2))
-            end
-        end
     end
 
     @info "Done!"

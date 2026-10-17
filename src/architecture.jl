@@ -710,6 +710,7 @@ function virtual_parallel_region(
         Finch.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
+
                 @inbounds @fastmath begin
                     $code
                 end
@@ -758,6 +759,7 @@ function virtual_parallel_region(
         Finch.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
+
                 @inbounds @fastmath begin
                     $code
                 end
@@ -939,9 +941,17 @@ function transfer(device::MultiChannelMemory, arr::AbstractArray)
     MultiChannelBuffer(device, data)
 end
 
-function transfer(device::MultiChannelMemory, arr::PlusOneVector{T}) where {T}
+function transfer(device::MultiChannelMemory, arr::PlusOneVector{T,A,F}) where {T,A,F}
     data = [
-        PlusOneVector{T}(transfer(device.device, copy(parent(arr)))) for
+        PlusOneVector(transfer(device.device, copy(parent(arr))), F) for
+        _ in 1:(device.n)
+    ]
+    MultiChannelBuffer(device, data)
+end
+
+function transfer(device::MultiChannelMemory, arr::MinusOneVector{T,A,F}) where {T,A,F}
+    data = [
+        MinusOneVector(transfer(device.device, copy(parent(arr))), F) for
         _ in 1:(device.n)
     ]
     MultiChannelBuffer(device, data)

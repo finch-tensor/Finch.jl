@@ -1,3 +1,11 @@
+function simple_map(::Type{T}, f::F, args) where {T,F}
+    res = Vector{T}(undef, length(args))
+    for i in 1:length(args)
+        res[i] = f(args[i])
+    end
+    res
+end
+
 struct All{F}
     f::F
 end

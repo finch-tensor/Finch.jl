@@ -39,7 +39,12 @@ function bellmanford(edges, source=1)
             end
         end
 
-        if !any(active)
+        any_active = Scalar(false)
+        @finch for i in _
+            any_active[] |= active[i]
+        end
+
+        if !any_active[]
             return dists
         end
         dists_prev, dists = dists, dists_prev

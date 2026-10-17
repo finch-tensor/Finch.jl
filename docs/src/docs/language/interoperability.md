@@ -2,7 +2,7 @@
 
 ## Python
 
-Finch has a dedicated Python frontend which can be installed with `pip install finch-tensor`. The frontend is [Array-API](https://data-apis.org/array-api/latest/) compliant. The code for the python wrapper is available at the [finch-tensor-python](https://github.com/finch-tensor/finch-tensor-python) repo. Finch is also available as a backend to [pydata/sparse](https://sparse.pydata.org/en/stable/).
+Finch has a dedicated Python frontend which can be installed with `pip install finch-tensor`. The frontend is [Array-API](https://data-apis.org/array-api/latest/) compliant. The code for the python wrapper is available at the [finch-tensor](https://github.com/finch-tensor/finch-tensor) repo. Finch is also available as a backend to [pydata/sparse](https://sparse.pydata.org/en/stable/).
 
 You can also use [juliacall](https://github.com/JuliaPy/PythonCall.jl) to access more advanced Finch features from Python.
 
@@ -39,7 +39,7 @@ julia> v = Vector([1, 0, 2, 3])
  3
 
 julia> obov = PlusOneVector(v)
-4-element PlusOneVector{Int64, Vector{Int64}}:
+4-element PlusOneVector{Int64, Vector{Int64}, nothing}:
  2
  1
  3
@@ -49,7 +49,7 @@ julia> obov[1] += 8
 10
 
 julia> obov
-4-element PlusOneVector{Int64, Vector{Int64}}:
+4-element PlusOneVector{Int64, Vector{Int64}, nothing}:
  10
   1
   3
@@ -66,7 +66,7 @@ julia> obov.data
 ### `CIndex`
 
 !!! warning
-    
+
     `CIndex` is no longer recommended - use `PlusOneVector` instead.
 
 Finch also interoperates with the [CIndices](https://github.com/JuliaSparse/CIndices.jl)

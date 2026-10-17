@@ -16,17 +16,17 @@
         if !seen
             check_output(
                 "kernels/innerprod.jl",
-                @finch_code (B .= 0;
-                for j in _, i in _, k in _
-                    B[i, j] += A[k, i] * A[k, j]
-                end)
+                @finch_code (B.=0;
+                    for j in _, i in _, k in _
+                        B[i, j] += A[k, i] * A[k, j]
+                    end)
             )
             seen = true
         end
-        @finch (B .= 0;
-        for j in _, i in _, k in _
-            B[i, j] += A[k, i] * A[k, j]
-        end)
+        @finch (B.=0;
+            for j in _, i in _, k in _
+                B[i, j] += A[k, i] * A[k, j]
+            end)
         @test B == B_ref
     end
 
@@ -41,17 +41,17 @@
             if !seen
                 check_output(
                     "kernels/triangle.jl",
-                    @finch_code (B .= 0;
-                    for i in _, j in _, k in _
-                        B[] += A[k, i] * A[j, i] * A[k, j]
-                    end)
+                    @finch_code (B.=0;
+                        for i in _, j in _, k in _
+                            B[] += A[k, i] * A[j, i] * A[k, j]
+                        end)
                 )
                 seen = true
             end
-            @finch (B .= 0;
-            for i in _, j in _, k in _
-                B[] += A[k, i] * A[j, i] * A[k, j]
-            end)
+            @finch (B.=0;
+                for i in _, j in _, k in _
+                    B[] += A[k, i] * A[j, i] * A[k, j]
+                end)
             @test B() ≈ sum(A_ref .* (A_ref * transpose(A_ref)))
         end
     end

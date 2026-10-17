@@ -23,7 +23,15 @@ function degree_centrality(edges, normalize=true)
     end
 
     if normalize
-        P = P ./ (n - 1)
+        P_norm = Tensor(Dense(Element(0.0)), n)
+        scale = 1 / (n - 1)
+        @finch begin
+            P_norm .= 0
+            for j in _
+                P_norm[j] = P[j] * scale
+            end
+        end
+        P = P_norm
     end
 
     return P

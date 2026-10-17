@@ -14,7 +14,7 @@ conditionals, multiple outputs, and even user-defined types and functions.
 |:------------------------------------------ |:-------------------------------------------------- |
 | Major Sparse Formats and Structured Arrays | `A = Tensor(Dense(SparseList(Element(0.0)), 3, 4)` |
 | Background Values Other Than Zero          | `B = Tensor(SparseList(Element(1.0)), 9)`          |
-| Broadcasts and Reductions                  | `sum(A .* B)`                                      |
+| Pointwise Operations and Reductions        | `x[] += A[i] * B[i]`                               |
 | User-Defined Functions                     | `x[] <<min>>= y[i] + z[i]`                         |
 | Multiple Outputs                           | `x[] <<min>>= y[i]; z[] <<max>>= y[i]`             |
 | Multicore Parallelism                      | `for i = parallel(1:100)`                          |
