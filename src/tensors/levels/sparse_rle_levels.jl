@@ -446,50 +446,50 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                     while $q < $q_stop
                         $q_head = $q
                         while $q + 1 < $q_stop &&
-                            $(lvl.right)[$q] == $(lvl.left)[$q + 1] - $(unit)
+                              $(lvl.right)[$q] == $(lvl.left)[$q + 1] - $(unit)
                             $checkval = true
                             $(
                                 contain(ctx) do ctx_2
-                                    left = variable(freshen(ctx, :left))
-                                    set_binding!(
-                                        ctx_2,
-                                        left,
-                                        virtual(
-                                            VirtualSubFiber(lvl.buf, value(q_head, Tp))
+                                left = variable(freshen(ctx, :left))
+                                set_binding!(
+                                    ctx_2,
+                                    left,
+                                    virtual(
+                                        VirtualSubFiber(lvl.buf, value(q_head, Tp))
+                                    ),
+                                )
+                                right = variable(freshen(ctx, :right))
+                                set_binding!(
+                                    ctx_2,
+                                    right,
+                                    virtual(
+                                        VirtualSubFiber(
+                                            lvl.buf, call(+, value(q, Tp), Tp(1))
                                         ),
-                                    )
-                                    right = variable(freshen(ctx, :right))
-                                    set_binding!(
-                                        ctx_2,
-                                        right,
-                                        virtual(
-                                            VirtualSubFiber(
-                                                lvl.buf, call(+, value(q, Tp), Tp(1))
-                                            ),
-                                        ),
-                                    )
-                                    check = VirtualScalar(
-                                        nothing, :UNREACHABLE, Bool, false, :check, checkval
-                                    )
-                                    exts = virtual_level_size(ctx_2, lvl.buf)
-                                    inds = [
-                                        index(freshen(ctx_2, :i, n)) for n in 1:length(exts)
-                                    ]
-                                    prgm = assign(
-                                        access(check, updater(and)),
-                                        and,
-                                        call(
-                                            isequal,
-                                            access(left, reader(), inds...),
-                                            access(right, reader(), inds...),
-                                        ),
-                                    )
-                                    for (ind, ext) in zip(inds, exts)
-                                        prgm = loop(ind, ext, prgm)
-                                    end
-                                    prgm = instantiate!(ctx_2, prgm)
-                                    ctx_2(prgm)
+                                    ),
+                                )
+                                check = VirtualScalar(
+                                    nothing, :UNREACHABLE, Bool, false, :check, checkval
+                                )
+                                exts = virtual_level_size(ctx_2, lvl.buf)
+                                inds = [
+                                    index(freshen(ctx_2, :i, n)) for n in 1:length(exts)
+                                ]
+                                prgm = assign(
+                                    access(check, updater(and)),
+                                    and,
+                                    call(
+                                        isequal,
+                                        access(left, reader(), inds...),
+                                        access(right, reader(), inds...),
+                                    ),
+                                )
+                                for (ind, ext) in zip(inds, exts)
+                                    prgm = loop(ind, ext, prgm)
                                 end
+                                prgm = instantiate!(ctx_2, prgm)
+                                ctx_2(prgm)
+                            end
                             )
                             if !$checkval
                                 break
@@ -501,34 +501,34 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseRunListLevel, po
                         $(lvl.right)[$q_2] = $(lvl.right)[$q]
                         $(
                             contain(ctx) do ctx_2
-                                src = variable(freshen(ctx, :src))
-                                set_binding!(
-                                    ctx_2,
-                                    src,
-                                    virtual(VirtualSubFiber(lvl.buf, value(q_head, Tp))),
-                                )
-                                dst = variable(freshen(ctx, :dst))
-                                set_binding!(
-                                    ctx_2,
-                                    dst,
-                                    virtual(VirtualSubFiber(lvl.lvl, value(q_2, Tp))),
-                                )
-                                exts = virtual_level_size(ctx_2, lvl.buf)
-                                inds = [
-                                    index(freshen(ctx_2, :i, n)) for n in 1:length(exts)
-                                ]
-                                op = initwrite(virtual_level_fill_value(lvl.lvl))
-                                prgm = assign(
-                                    access(dst, updater(op), inds...),
-                                    op,
-                                    access(src, reader(), inds...),
-                                )
-                                for (ind, ext) in zip(inds, exts)
-                                    prgm = loop(ind, ext, prgm)
-                                end
-                                prgm = instantiate!(ctx_2, prgm)
-                                ctx_2(prgm)
+                            src = variable(freshen(ctx, :src))
+                            set_binding!(
+                                ctx_2,
+                                src,
+                                virtual(VirtualSubFiber(lvl.buf, value(q_head, Tp))),
+                            )
+                            dst = variable(freshen(ctx, :dst))
+                            set_binding!(
+                                ctx_2,
+                                dst,
+                                virtual(VirtualSubFiber(lvl.lvl, value(q_2, Tp))),
+                            )
+                            exts = virtual_level_size(ctx_2, lvl.buf)
+                            inds = [
+                                index(freshen(ctx_2, :i, n)) for n in 1:length(exts)
+                            ]
+                            op = initwrite(virtual_level_fill_value(lvl.lvl))
+                            prgm = assign(
+                                access(dst, updater(op), inds...),
+                                op,
+                                access(src, reader(), inds...),
+                            )
+                            for (ind, ext) in zip(inds, exts)
+                                prgm = loop(ind, ext, prgm)
                             end
+                            prgm = instantiate!(ctx_2, prgm)
+                            ctx_2(prgm)
+                        end
                         )
                         $q_2 += 1
                         $q += 1

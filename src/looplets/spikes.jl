@@ -38,7 +38,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::SpikeStyle)
         )
         @assert isvirtual(root.ext)
         if prove(ctx, call(<=, measure(body_ext), 0))
-            body_expr = quote end
+            body_expr = quote
+            end
         else
             #TODO check body nonempty
             body_expr = contain(ctx) do ctx_2

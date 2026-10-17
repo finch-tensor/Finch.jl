@@ -66,7 +66,7 @@ julia> obov.data
 ### `CIndex`
 
 !!! warning
-    
+
     `CIndex` is no longer recommended - use `PlusOneVector` instead.
 
 Finch also interoperates with the [CIndices](https://github.com/JuliaSparse/CIndices.jl)

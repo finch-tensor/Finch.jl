@@ -710,6 +710,7 @@ function virtual_parallel_region(
         Finch.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
+
                 @inbounds @fastmath begin
                     $code
                 end
@@ -758,6 +759,7 @@ function virtual_parallel_region(
         Finch.@barrier begin
             Threads.@threads $(QuoteNode(schedule.schedule)) for $tid in
                                                                  1:($(ctx(device.n)))
+
                 @inbounds @fastmath begin
                     $code
                 end

@@ -5,7 +5,9 @@
     # Both values differ from the module default, and share the same level type.
     # Compiled operations must read each table's multiplier at runtime.
     for a in (Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(2),
-            Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)), Ti in (Int, Int32)
+            Finch.SPARSE_HASH_POS_MULTIPLIER ⊻ UInt(4)),
+        Ti in (Int, Int32)
+
         original = Tensor(Dense(SparseHash{Ti}(Element(0), 32, 8, a)), data)
         lvl = original.lvl.lvl
         @test lvl.pos_multiplier === a
@@ -220,7 +222,9 @@ end
     @testset "declaration reuses capacity across dense, sparse, and empty outputs" for Tp in
                                                                                        (
             Int32, Int
-        ), B in (1, 8)
+        ),
+        B in (1, 8)
+
         tensor = Tensor(SparseHash(Element{0,Int,Tp}(), 8192, B, pos_multiplier))
         input = Tensor(Dense(Element(0)), zeros(Int, 8192))
         capacity = 0
@@ -682,7 +686,8 @@ end
             () -> SparseByteMap(SparseByteMap(Element(0))),
             () -> SparseByteMap(Dense(Element(0))),
             () -> SparseByteMap(SparseList(Element(0))),
-        ), n in (3, 64)
+        ),
+        n in (3, 64)
         # Exercise both bulk clearing and clearing just the dirty positions.
         first = hcat([1 0 2; 0 3 0; 4 0 0], zeros(Int, 3, n - 3))
         second = hcat([0 5 0; 6 0 0; 0 0 7], zeros(Int, 3, n - 3))
@@ -844,14 +849,14 @@ end
 
     multi_levels = [
         (
-            "SparseCOO",
-            SparseCOO,
-            (;),
-            [
-                [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
-                [0.0 2.0 2.0; 0.0 3.0 3.0],
-            ],
-        ),
+        "SparseCOO",
+        SparseCOO,
+        (;),
+        [
+            [0.0, 2.0, 2.0, 0.0, 3.0, 3.0],
+            [0.0 2.0 2.0; 0.0 3.0 3.0],
+        ],
+    ),
     ]
 
     for (key, Lvl, flags, arrs) in multi_levels
