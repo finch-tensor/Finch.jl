@@ -39,7 +39,7 @@ julia> v = Vector([1, 0, 2, 3])
  3
 
 julia> obov = PlusOneVector(v)
-4-element PlusOneVector{Int64, Vector{Int64}}:
+4-element PlusOneVector{Int64, Vector{Int64}, nothing}:
  2
  1
  3
@@ -49,7 +49,7 @@ julia> obov[1] += 8
 10
 
 julia> obov
-4-element PlusOneVector{Int64, Vector{Int64}}:
+4-element PlusOneVector{Int64, Vector{Int64}, nothing}:
  10
   1
   3
