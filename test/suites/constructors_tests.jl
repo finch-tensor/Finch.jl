@@ -1054,6 +1054,8 @@ end
         @test obov == [2, val, 3, 4] && obov.data == [1, val - 1, 2, 3]
         obov[1:3] .= val
         @test obov == [val, val, val, 4] && obov.data == [val - 1, val - 1, val - 1, 3]
+        copyto!(obov, 2, obov, 3, 2)
+        @test obov == [val, val, 4, 4] && copy(obov) isa typeof(obov)
 
         # test tuple-valued off-by-one storage
         tbl = Tuple{Int,Int32,Int}[(0, 4, 8)]
@@ -1086,6 +1088,8 @@ end
         @test obov == [1, val, 2, 3] && obov.data == [2, val + 1, 3, 4]
         obov[1:3] .= val
         @test obov == [val, val, val, 3] && obov.data == [val + 1, val + 1, val + 1, 4]
+        copyto!(obov, 2, obov, 3, 2)
+        @test obov == [val, val, 3, 3] && copy(obov) isa typeof(obov)
 
         # test tuple-valued off-by-one storage
         tbl = Tuple{Int,Int32,Int}[(1, 5, 9)]

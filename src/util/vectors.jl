@@ -55,6 +55,8 @@ Base.size(vec::PlusOneVector{T}) where {T} = size(vec.data)
 Base.axes(vec::PlusOneVector{T}) where {T} = axes(vec.data)
 Base.resize!(vec::PlusOneVector{T}, dim) where {T} = (resize!(vec.data, dim); vec)
 Base.empty!(vec::PlusOneVector{T}) where {T} = (empty!(vec.data); vec)
+Base.copy(vec::PlusOneVector{T,A,F}) where {T,A,F} = PlusOneVector(copy(vec.data), F)
+Base.dataids(vec::PlusOneVector{T}) where {T} = Base.dataids(vec.data)
 
 function transfer(device, vec::PlusOneVector{T,A,F}) where {T,A,F}
     data = transfer(device, vec.data)
@@ -103,6 +105,8 @@ Base.size(vec::MinusOneVector{T}) where {T} = size(vec.data)
 Base.axes(vec::MinusOneVector{T}) where {T} = axes(vec.data)
 Base.resize!(vec::MinusOneVector{T}, dim) where {T} = (resize!(vec.data, dim); vec)
 Base.empty!(vec::MinusOneVector{T}) where {T} = (empty!(vec.data); vec)
+Base.copy(vec::MinusOneVector{T,A,F}) where {T,A,F} = MinusOneVector(copy(vec.data), F)
+Base.dataids(vec::MinusOneVector{T}) where {T} = Base.dataids(vec.data)
 
 function transfer(device, vec::MinusOneVector{T,A,F}) where {T,A,F}
     data = transfer(device, vec.data)
