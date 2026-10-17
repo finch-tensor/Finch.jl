@@ -19,13 +19,8 @@ not up to date.
 │   └── ...
 ├── ext                        # conditionally-loaded code for interaction with other packages (e.g. SparseArrays)
 ├── src                        # Source files
-│   ├── interface              # Implementations of array api functions (e.g. map, reduce, etc.)
+│   ├── interface              # Implementations of array functions (e.g. getindex, copyto!, reshape, etc.)
 │   │   ├── fileio             # File IO function definitions
-│   │   └── ...
-│   ├── FinchLogic             # SubModule containing the High-Level IR
-│   │   ├── nodes.jl           # defines the High-Level IR
-│   │   └── ...
-│   ├── scheduler              # Auto-Scheduler to compile High-Level IR to Finch IR
 │   │   └── ...
 │   ├── FinchNotation          # SubModule containing the Finch IR
 │   │   ├── nodes.jl           # defines the Finch IR

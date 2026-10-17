@@ -46,29 +46,21 @@ function Base.getindex(arr::AbstractTensor, inds::AbstractVector)
     getindex_helper(arr, to_indices(arr, axes(arr), (inds,)))
 end
 function Base.getindex(arr::AbstractTensor, inds...)
-    if nothing in inds && inds isa Tuple{Vararg{Union{Nothing,Colon}}}
-        return compute(lazy(arr)[inds...])
-    else
-        getindex_helper(arr, to_indices(arr, inds))
-    end
+    getindex_helper(arr, to_indices(arr, inds))
 end
 
 function Base.getindex(arr::SwizzleArray{perm}, inds::AbstractVector) where {perm}
     getindex_helper(arr, to_indices(arr, axes(arr), (inds,)))
 end
 function Base.getindex(arr::SwizzleArray{perm}, inds...) where {perm}
-    if nothing in inds && inds isa Tuple{Vararg{Union{Nothing,Colon}}}
-        return compute(lazy(arr)[inds...])
+    inds_2 = Base.to_indices(arr, axes(arr), inds)
+    perm_2 = collect(invperm(perm))
+    res = getindex(arr.body, inds_2[perm_2]...)
+    perm_3 = sortperm(filter(n -> ndims(inds_2[n]) > 0, perm_2))
+    if issorted(perm_3)
+        return res
     else
-        inds_2 = Base.to_indices(arr, axes(arr), inds)
-        perm_2 = collect(invperm(perm))
-        res = getindex(arr.body, inds_2[perm_2]...)
-        perm_3 = sortperm(filter(n -> ndims(inds_2[n]) > 0, perm_2))
-        if issorted(perm_3)
-            return res
-        else
-            return swizzle(res, perm_3...)
-        end
+        return swizzle(res, perm_3...)
     end
 end
 

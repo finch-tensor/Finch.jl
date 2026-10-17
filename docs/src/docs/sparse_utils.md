@@ -26,12 +26,6 @@ julia> A = fsparse([1, 1, 2, 3], [2, 4, 5, 6], [1.0, 2.0, 3.0])
  0.0  0.0  0.0  0.0  3.0  0.0
  0.0  0.0  0.0  0.0  0.0  0.0
 
-julia> min.(A, -1)
-3×6 Tensor{DenseLevel{Int64, DenseLevel{Int64, ElementLevel{-1.0, Float64, Int64, Vector{Float64}}}}}:
- -1.0  -1.0  -1.0  -1.0  -1.0  -1.0
- -1.0  -1.0  -1.0  -1.0  -1.0  -1.0
- -1.0  -1.0  -1.0  -1.0  -1.0  -1.0
-
 julia> fill_value(A)
 0.0
 
@@ -39,12 +33,6 @@ julia> B = set_fill_value!(A, -Inf)
 3×6 Tensor{SparseCOOLevel{2, Tuple{Int64, Int64}, Vector{Int64}, Tuple{Vector{Int64}, Vector{Int64}}, ElementLevel{-Inf, Float64, Int64, Vector{Float64}}}}:
  -Inf    1.0  -Inf    2.0  -Inf   -Inf
  -Inf  -Inf   -Inf  -Inf     3.0  -Inf
- -Inf  -Inf   -Inf  -Inf   -Inf   -Inf
-
-julia> min.(B, -1)
-3×6 Tensor{SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{-Inf, Float64, Int64, Vector{Float64}}}}}:
- -Inf   -1.0  -Inf   -1.0  -Inf   -Inf
- -Inf  -Inf   -Inf  -Inf    -1.0  -Inf
  -Inf  -Inf   -Inf  -Inf   -Inf   -Inf
 
 julia> countstored(A)
@@ -95,10 +83,17 @@ julia> B = Tensor(Dense(SparseList(Element((0.0, true)))), A)
  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (3.0, 0)  (0.0, 1)
  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)  (0.0, 1)
 
-julia> sum(map(last, B))
+julia> n_fill = Scalar(0); total = Scalar(0.0);
+
+julia> @finch for j = _, i = _
+           n_fill[] += last(B[i, j])
+           total[] += first(B[i, j])
+       end;
+
+julia> n_fill[]
 16
 
-julia> sum(map(first, B))
+julia> total[]
 4.0
 ```
 

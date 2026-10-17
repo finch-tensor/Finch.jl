@@ -80,28 +80,27 @@ You can also filter to only run a selection of test suitesusing the `--include` 
 `--exclude` arguments, or
 
 ```
-./test/runtests.jl --include constructors interface_einsum interface_asmd
+./test/runtests.jl --include constructors interface_arrays
 ```
 
 This information is summarized with `./test/runtests.jl --help`
 
 ### Python test suite
 
-[galley-jl-python](https://github.com/finch-tensor/galley-jl-python), formerly
-finch-tensor-python, contains a separate Array API compatible test suite written
-in Python. To match the `finch-tensor-tests` job in `.github/workflows/CI.yml`,
-use release `v0.2.13`, Julia 1.10, Python 3.11, and Poetry.
+[finch-tensor](https://github.com/finch-tensor/finch-tensor) uses Finch.jl as a
+code generation backend, and contains a separate test suite written in Python.
+To match the `finch-tensor-tests` job in `.github/workflows/CI.yml`, use Julia
+1.12 and Python 3.11.
 
-With Julia 1.10 on your `PATH`, run the following commands, replacing
+With Julia on your `PATH`, run the following commands, replacing
 `/absolute/path/to/Finch.jl` with the path to your Finch.jl checkout:
 
 ```sh
-git clone --branch v0.2.13 https://github.com/finch-tensor/galley-jl-python.git finch-tensor
+git clone https://github.com/finch-tensor/finch-tensor.git
 cd finch-tensor
-poetry env use python3.11
-poetry install --extras test
-poetry run python develop.py --path "/absolute/path/to/Finch.jl"
-poetry run pytest tests/
+python -m pip install --group test --editable '.[julia]'
+python -c 'import juliapkg; juliapkg.add("Finch", uuid="9177782c-1635-4eb9-9bfb-d9dfa25e6bce", path="/absolute/path/to/Finch.jl", dev=True); juliapkg.resolve()'
+python -m pytest src/finch/tests/test_julia*.py src/finch/tests/test_accuracy.py
 ```
 
 ## Benchmarking

@@ -1078,20 +1078,6 @@
         @test B == A_t
     end
 
-    #https://github.com/finch-tensor/Finch.jl/issues/474
-    let
-        A = [1 2 3; 4 5 6; 7 8 9]
-        A_t = permutedims(A, (2, 1))
-        A_tns = Tensor(Dense(Dense(Element(0.0))), A)
-        A_sw = swizzle(A_tns, 2, 1)
-
-        @test prod(A_t; dims=2) == prod(A_sw; dims=2)
-        @test prod(A_t; dims=1) == prod(A_sw; dims=1)
-        @test prod(A_t) == prod(A_sw)
-
-        @test tensordot(A_sw, A_sw, (2, 1)) == transpose(A * A)
-    end
-
     #https://github.com/finch-tensor/Finch.jl/issues/483
     let
         D = Tensor(
@@ -1151,19 +1137,7 @@
 
     #https://github.com/finch-tensor/Finch.jl/issues/480
     let
-        A = fsprand(10, 10, 0.5)
-        @test size(A[:, nothing, :]) == (10, 1, 10)
-
         copyto!(Tensor(Element(0.0)), swizzle(Tensor(Element(0.0, [1.0]))))
-    end
-
-    #https://github.com/finch-tensor/Finch.jl/issues/485
-    let
-        a = zeros(1, 1, 1)
-        a_tns = Tensor(Dense(SparseList(SparseList(Element(0.0)))), a)
-
-        sum(a; dims=(1, 2))
-        sum(a_tns; dims=(1, 2))
     end
 
     #https://github.com/finch-tensor/Finch.jl/issues/546
@@ -1192,7 +1166,7 @@
     #https://github.com/finch-tensor/Finch.jl/issues/580
     let
         n = 100
-        data = fsprand(Int, n, n, 0.01) .% 100
+        data = sprand(Int, n, n, 0.01) .% 100
         A_sbm = Tensor(Dense(SparseByteMap(Element(0))), data)
         A_d = Tensor(Dense(Dense(Element(0))), data)
         C1 = Scalar(0)
@@ -1249,30 +1223,23 @@
 
     #https://github.com/finch-tensor/Finch.jl/issues/767
     let
-        # real matrix: transpose == adjoint == permutedims
+        # real matrix: transpose == permutedims
         A = [1.0 2.0 3.0; 4.0 5.0 6.0]
         A_tns = Tensor(Dense(Dense(Element(0.0))), A)
         @test transpose(A_tns) == permutedims(A)
-        @test adjoint(A_tns) == permutedims(A)
-        @test compute(transpose(lazy(A_tns))) == permutedims(A)
-        @test compute(adjoint(lazy(A_tns))) == permutedims(A)
 
-        # complex matrix: adjoint conjugates, transpose does not
+        # complex matrix: transpose does not conjugate
         C = [1.0+2.0im 3.0-1.0im; 0.0+1.0im 2.0+0.0im]
         C_tns = Tensor(Dense(Dense(Element(0.0im))), C)
         @test transpose(C_tns) == permutedims(C)
-        @test adjoint(C_tns) == permutedims(conj.(C))
-        @test compute(transpose(lazy(C_tns))) == permutedims(C)
-        @test compute(adjoint(lazy(C_tns))) == permutedims(conj.(C))
 
         # sparse input, real
         S = fsprand(6, 8, 0.3)
         S_tns = Tensor(Dense(SparseList(Element(0.0))), S)
-        @test adjoint(S_tns) == permutedims(Array(S))
         @test transpose(S_tns) == permutedims(Array(S))
 
-        # exact reproducer from the issue: adjoint on a COO Bool tensor
+        # COO Bool tensor
         R = fsprand(Bool, 100, 100, 0.01)
-        @test adjoint(R) == permutedims(Array(R))
+        @test transpose(R) == permutedims(Array(R))
     end
 end

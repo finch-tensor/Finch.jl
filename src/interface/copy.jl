@@ -70,6 +70,17 @@ function Base.permutedims(src::AbstractTensor, perm)
 end
 
 """
+    transpose(arr::AbstractTensor)
+
+Transpose a 2-dimensional tensor, returning a new tensor (equivalent to
+`permutedims`).
+"""
+function LinearAlgebra.transpose(arr::AbstractTensor)
+    @assert ndims(arr) == 2 "transpose is only defined for 2-dimensional tensors"
+    permutedims(arr)
+end
+
+"""
     dropfills(src)
 
 Drop the fill values from `src` and return a new tensor with the same shape and

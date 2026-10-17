@@ -168,7 +168,6 @@ if parsed_args["nprocs"] == 0
         include("suites/docs_tests.jl")
         include("suites/examples_tests.jl")
         include("suites/fileio_tests.jl")
-        include("suites/galley_tests.jl")
         include("suites/index_tests.jl")
         include("suites/interface_tests.jl")
         include("suites/issue_tests.jl")
@@ -177,7 +176,6 @@ if parsed_args["nprocs"] == 0
         include("suites/parallel_tests.jl")
         include("suites/print_tests.jl")
         include("suites/representation_tests.jl")
-        include("suites/scheduler_tests.jl")
         include("suites/simple_tests.jl")
         include("suites/typical_tests.jl")
     end

@@ -7,12 +7,12 @@
 [![Coverage Report](https://codecov.io/gh/finch-tensor/Finch.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/finch-tensor/Finch.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle)
 
-Finch is a Julia-to-Julia compiler for sparse or structured multidimensional arrays. Finch empowers users to write high-level array programs which are transformed behind-the-scenes into fast sparse code.
+Finch is a Julia-to-Julia compiler for sparse or structured multidimensional arrays. Finch empowers users to write loop-based array programs which are transformed behind-the-scenes into fast sparse code.
 
 ## Why Finch.jl?
 
 Finch was built to make sparse and structured array programming easier and more efficient.  Finch.jl leverages compiler technology to automatically generate customized, fused sparse kernels for each specific
-use case. This allows users to write readable, high-level sparse array programs without worrying about the performance of the generated code. Finch can automatically generate efficient implementations even for unique problems that lack existing library solutions.
+use case. This allows users to write readable sparse array programs without worrying about the performance of the generated code. Finch can automatically generate efficient implementations even for unique problems that lack existing library solutions.
 
 # Documentation
 
@@ -41,13 +41,26 @@ julia> A = Tensor(CSCFormat(), [1 0 0; 0 2 0; 0 0 3])
  0.0  2.0  0.0
  0.0  0.0  3.0
 
-# Perform a simple operation
+# Create dense input and output vectors
 
-julia> B = A + A
-3×3 Tensor{DenseLevel{Int64, SparseDictLevel{Int64, Vector{Int64}, Vector{Int64}, Vector{Int64}, Dict{Tuple{Int64, Int64}, Int64}, Vector{Int64}, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}}:
- 2.0  0.0  0.0
- 0.0  4.0  0.0
- 0.0  0.0  6.0
+julia> x = Tensor(Dense(Element(0.0)), [1.0, 2.0, 3.0]);
+
+julia> y = Tensor(Dense(Element(0.0)), 3);
+
+# Compute a sparse matrix-vector product
+
+julia> @finch begin
+           y .= 0
+           for j = _, i = _
+               y[i] += A[i, j] * x[j]
+           end
+       end;
+
+julia> y
+3 Tensor{DenseLevel{Int64, ElementLevel{0.0, Float64, Int64, Vector{Float64}}}}:
+ 1.0
+ 4.0
+ 9.0
 ```
 
 ### Sparse and Structured Tensors
@@ -64,69 +77,44 @@ Finch also supports a wide variety of array structure beyond sparsity. Whether y
 
 ### Examples:
 
-Finch supports many high-level array operations out of the box, such as `+`, `*`, `maximum`, `sum`, `map`, `broadcast`, and `reduce`.
+Finch programs are loop nests written with the `@finch` macro. Finch compiles each program for the formats of the tensors it touches, so a single kernel can fuse several operations and skip the zeros of every sparse input.
 
 ```julia
 julia> using Finch
 
 # Define sparse tensor A
 
-julia> A = Tensor(Dense(SparseList(Element(0.0))), [0 1.1 0; 2.2 0 3.3; 4.4 0 0; 0 0 5.5])
+julia> A = Tensor(Dense(SparseList(Element(0.0))), [0 1.1 0; 2.2 0 3.3; 4.4 0 0; 0 0 5.5]);
 
 # Define sparse tensor B
 
-julia> B = Tensor(Dense(SparseList(Element(0.0))), [0 1 1; 1 0 0; 0 0 1; 0 0 1])
+julia> B = Tensor(Dense(SparseList(Element(0.0))), [0 1 1; 1 0 0; 0 0 1; 0 0 1]);
 
-# Element-wise multiplication
+# Define outputs: a sparse matrix and a dense vector with a fill value of -Inf
 
-julia> C = A .* B
+julia> C = Tensor(Dense(SparseList(Element(0.0))));
 
-# Element-wise max
+julia> D = Tensor(Dense(Element(-Inf)));
 
-julia> C = max.(A, B)
+# Element-wise multiplication and a max-plus row reduction, fused into one kernel
 
-# Sum over rows
-
-julia> D = sum(C; dims=2)
-
+julia> @finch begin
+           C .= 0
+           D .= -Inf
+           for j = _, i = _
+               C[i, j] = A[i, j] * B[i, j]
+               D[i] <<max>>= A[i, j] + B[i, j]
+           end
+       end;
 ```
 
-For situations where more complex operations are needed, Finch supports an `@einsum` syntax on sparse and structured tensors.
-
-```julia
-julia> @einsum E[i] += A[i, j] * B[i, j]
-
-julia> @einsum F[i, k] << max >>= A[i, j] + B[j, k]
-
-```
-
-Finch even allows users to fuse multiple operations into a single kernel with `lazy` and `compute`.  The `lazy` function creates a lazy tensor, which is a symbolic representation of the computation. The `compute` function evaluates the computation.
-Different optimizers can be used with `compute`, such as the state-of-the-art `Galley` optimizer, which can adapt to the
-sparsity patterns of the inputs.
-
-```julia
-julia> using Finch, BenchmarkTools
-
-julia> A = fsprand(1000, 1000, 0.1);
-       B = fsprand(1000, 1000, 0.1);
-       C = fsprand(1000, 1000, 0.0001);
-
-julia> A = lazy(A);
-       B = lazy(B);
-       C = lazy(C);
-
-julia> sum(A * B * C)
-
-julia> @btime compute(sum(A * B * C));
-  263.612 ms (1012 allocations: 185.08 MiB)
-
-julia> @btime compute(sum(A * B * C), ctx=galley_scheduler());
-  153.708 μs (667 allocations: 29.02 KiB)
-```
+To generate a reusable function ahead of time, use the `@finch_kernel` macro. See the
+[documentation](https://finch-tensor.github.io/Finch.jl/stable/docs/language/calling_finch/)
+for details.
 
 ### How it Works
 
-Finch first translates high-level array code into **FinchLogic**, a custom intermediate representation that captures operator fusion and enables loop ordering optimizations. Using advanced schedulers, Finch optimizes FinchLogic and lowers it to **FinchNotation**, a more refined representation that precisely defines control flow. This optimized FinchNotation is then compiled into highly efficient, sparsity-aware code. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically.
+Finch programs are expressed in **FinchNotation**, a loop-based representation that precisely defines control flow. Finch compiles FinchNotation into highly efficient, sparsity-aware code by specializing each loop to the structure of the tensors it iterates over. Finch can specialize to each combination of sparse formats and algebraic properties, such as `x * 0 => 0`, eliminating unnecessary computations in sparse code automatically.
 
 ## Learn More
 
@@ -138,9 +126,6 @@ Willow Ahrens, Teodoro Fields Collin, Radha Patel, Kyle Deeds, Changwan Hong, Sa
 [Looplets: A Language for Structured Coiteration](https://doi.org/10.1145/3579990.3580020). CGO 2023.
 Willow Ahrens, Daniel Donenfeld, Fredrik Kjolstad, Saman Amarasinghe.
 
-[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
-Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
-
 ## Beyond Finch
 
 The following research efforts use Finch:
@@ -150,6 +135,9 @@ Radha Patel, Willow Ahrens, Saman Amarasinghe.
 
 [The Continuous Tensor Abstraction: Where Indices are Real](https://arxiv.org/abs/2407.01742).
 Jaeyeon Won, Willow Ahrens, Joel S. Emer, Saman Amarasinghe.
+
+[Galley: Modern Query Optimization for Sparse Tensor Programs](https://arxiv.org/abs/2408.14706).
+Kyle Deeds, Willow Ahrens, Magda Balazinska, Dan Suciu.
 
 ## Contributing
 
