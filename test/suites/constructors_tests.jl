@@ -1061,6 +1061,48 @@ end
         @test tuple_obov[1] === (1, Int32(5), 9)
         tuple_obov[1] = (3, Int32(7), 11)
         @test tbl[1] === (2, Int32(6), 10)
+
+        # test offsetting only some tuple fields
+        key = Tuple{Int,Int32,UInt8}[(0, 4, 0x80)]
+        key_obov = PlusOneVector(key, (1, 2))
+        @test @inferred(key_obov[1]) === (1, Int32(5), 0x80)
+        key_obov[1] = (3, 7, 0x7f)
+        @test key[1] === (2, Int32(6), 0x7f)
+        @test Finch.transfer(cpu(:t, 2), key_obov) isa typeof(key_obov)
+        @test resize!(key_obov, 2) === key_obov && length(key) == 2
+        @test empty!(key_obov) === key_obov && isempty(key)
+    end
+
+    @testset "MinusOneVector" begin
+        # test off-by-one
+        v = Vector([2, 1, 3, 4])
+        obov = MinusOneVector(v)
+        @test obov == v .- 1
+        @test obov.data == v
+
+        # test off-by-one write operation
+        val = 10
+        obov[2] = val
+        @test obov == [1, val, 2, 3] && obov.data == [2, val + 1, 3, 4]
+        obov[1:3] .= val
+        @test obov == [val, val, val, 3] && obov.data == [val + 1, val + 1, val + 1, 4]
+
+        # test tuple-valued off-by-one storage
+        tbl = Tuple{Int,Int32,Int}[(1, 5, 9)]
+        tuple_obov = MinusOneVector(tbl)
+        @test tuple_obov[1] === (0, Int32(4), 8)
+        tuple_obov[1] = (2, Int32(6), 10)
+        @test tbl[1] === (3, Int32(7), 11)
+
+        # test offsetting only some tuple fields
+        key = Tuple{Int,Int32,UInt8}[(1, 5, 0x80)]
+        key_obov = MinusOneVector(key, (1, 2))
+        @test @inferred(key_obov[1]) === (0, Int32(4), 0x80)
+        key_obov[1] = (1, 5, 0x7f)
+        @test key[1] === (2, Int32(6), 0x7f)
+        @test Finch.transfer(cpu(:t, 2), key_obov) isa typeof(key_obov)
+        @test resize!(key_obov, 2) === key_obov && length(key) == 2
+        @test empty!(key_obov) === key_obov && isempty(key)
     end
 
     @testset "ShardLevel" begin

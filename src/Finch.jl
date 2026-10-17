@@ -58,7 +58,7 @@ export pairsummask, paircarrymask, reversemask, rollmask, repeatmask, onehotmask
 export oddevenmergesortpartnermask, oddevenmergesortlowermask, reshapemask
 export randommask
 export scale, products, offset, permissive, protocolize, swizzle, toeplitz, window
-export PlusOneVector
+export PlusOneVector, MinusOneVector
 
 export choose, minby, maxby, overwrite, initwrite, filterop, d
 
