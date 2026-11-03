@@ -430,7 +430,7 @@ function unfurl(
     fbr::VirtualSubFiber{VirtualParallelSparseDictLevel},
     ext,
     mode,
-    ::Union{typeof(defaultread),typeof(walk)},
+    proto::Union{typeof(defaultread),typeof(walk),typeof(gallop)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.tag
@@ -457,7 +457,7 @@ function unfurl(
         body=(ctx) -> Sequence([
             Phase(;
                 stop=(ctx, ext) -> value(my_i1),
-                body=(ctx, ext) -> Stepper(;
+                body=(ctx, ext) -> (proto === gallop ? Jumper : Stepper)(;
                     seek=(ctx, ext) -> quote
                         if $(lvl.idx)[$my_q] < $(ctx(getstart(ext)))
                             $my_q = Finch.scansearch(
@@ -524,7 +524,7 @@ function unfurl(
     fbr::VirtualSubFiber{VirtualParallelSparseDictLevel},
     ext,
     mode,
-    proto::Union{typeof(defaultupdate),typeof(extrude)},
+    proto::Union{typeof(defaultupdate),typeof(extrude),typeof(laminate)},
 )
     unfurl(
         ctx, VirtualHollowSubFiber(fbr.lvl, fbr.pos, freshen(ctx, :null)), ext, mode, proto
@@ -535,7 +535,7 @@ function unfurl(
     fbr::VirtualHollowSubFiber{VirtualParallelSparseDictLevel},
     ext,
     mode,
-    ::Union{typeof(defaultupdate),typeof(extrude)},
+    ::Union{typeof(defaultupdate),typeof(extrude),typeof(laminate)},
 )
     (lvl, pos) = (fbr.lvl, fbr.pos)
     tag = lvl.tag
