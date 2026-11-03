@@ -80,6 +80,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                 val = freshen(ctx, :val)
                 if mode.kind === reader
                     #=We don't know what init is, but it won't be used here =#
+
                     Thunk(;
                         preamble=quote
                             $val = $(arr.data)[$(map(ctx, idx_2)...)]
@@ -94,6 +95,7 @@ function unfurl(ctx, tns::VirtualAbstractArraySlice, ext, mode, proto)
                     )
                 else
                     #=We don't know what init is, but it won't be used here =#
+
                     Thunk(;
                         body=(ctx,) -> instantiate(
                             ctx,
@@ -128,6 +130,11 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
         val = freshen(ctx, :val)
         if mode.kind === reader
             #=We don't know what init is, but it won't be used here =#
+
+            #is_injective(ctx, tns::VirtualAbstractArraySlice) = is_injective(ctx, tns.body)
+            #is_atomic(ctx, tns::VirtualAbstractArraySlice) = is_atomic(ctx, tns.body)
+            #is_concurrent(ctx, tns::VirtualAbstractArraySlice) = is_concurrent(ctx, tns.body)
+
             Thunk(;
                 preamble=quote
                     $val = $(arr.data)[]
@@ -140,6 +147,11 @@ function instantiate(ctx::AbstractCompiler, arr::VirtualAbstractArray, mode)
             )
         else
             #=We don't know what init is, but it won't be used here =#
+
+            #is_injective(ctx, tns::VirtualAbstractArraySlice) = is_injective(ctx, tns.body)
+            #is_atomic(ctx, tns::VirtualAbstractArraySlice) = is_atomic(ctx, tns.body)
+            #is_concurrent(ctx, tns::VirtualAbstractArraySlice) = is_concurrent(ctx, tns.body)
+
             Thunk(;
                 body=(ctx,) -> instantiate(
                     ctx,

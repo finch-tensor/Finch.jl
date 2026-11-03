@@ -16,17 +16,21 @@ function PlusOneVector(data::AbstractVector{T}, fields=nothing) where {T}
 end
 
 @inline plus_one_offset(x) = x + 0x01
-@inline plus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} =
-    ntuple(i -> plus_one_offset(x[i]), Val(N))
+@inline plus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} = ntuple(
+    i -> plus_one_offset(x[i]), Val(N)
+)
 @inline plus_one_offset(x, ::Nothing) = plus_one_offset(x)
-@inline plus_one_offset(x::Tuple{Vararg{Any,N}}, fields::Tuple) where {N} =
-    ntuple(i -> i in fields ? plus_one_offset(x[i]) : x[i], Val(N))
+@inline plus_one_offset(x::Tuple{Vararg{Any,N}}, fields::Tuple) where {N} = ntuple(
+    i -> i in fields ? plus_one_offset(x[i]) : x[i], Val(N)
+)
 @inline minus_one_offset(x) = x - 0x01
-@inline minus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} =
-    ntuple(i -> minus_one_offset(x[i]), Val(N))
+@inline minus_one_offset(x::Tuple{Vararg{Any,N}}) where {N} = ntuple(
+    i -> minus_one_offset(x[i]), Val(N)
+)
 @inline minus_one_offset(x, ::Nothing) = minus_one_offset(x)
-@inline minus_one_offset(x::Tuple{Vararg{Any,N}}, fields::Tuple) where {N} =
-    ntuple(i -> i in fields ? minus_one_offset(x[i]) : x[i], Val(N))
+@inline minus_one_offset(x::Tuple{Vararg{Any,N}}, fields::Tuple) where {N} = ntuple(
+    i -> i in fields ? minus_one_offset(x[i]) : x[i], Val(N)
+)
 
 @propagate_inbounds function Base.getindex(vec::PlusOneVector{T,A,F},
     index::Int) where {T,A,F}

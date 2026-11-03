@@ -72,10 +72,9 @@ end
 @inline level_size(lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl} = level_size(lvl.lvl)
 @inline level_axes(lvl::MutexLevel{AVal,Lvl}) where {AVal,Lvl} = level_axes(lvl.lvl)
 @inline level_eltype(::Type{MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = level_eltype(Lvl)
-@inline level_fill_value(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} =
-    level_fill_value(
-        Lvl
-    )
+@inline level_fill_value(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = level_fill_value(
+    Lvl
+)
 data_rep_level(::Type{<:MutexLevel{AVal,Lvl}}) where {AVal,Lvl} = data_rep_level(Lvl)
 
 function isstructequal(a::T, b::T) where {T<:Mutex}

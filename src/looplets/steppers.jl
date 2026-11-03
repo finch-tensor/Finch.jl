@@ -33,8 +33,7 @@ combine_style(a::StepperStyle, b::JumperStyle) = JumperStyle()
 combine_style(a::StepperStyle, b::PhaseStyle) = b
 
 stepper_seek(ctx, node::Stepper, ext) = node.seek(ctx, ext)
-stepper_seek(ctx, node, ext) = quote
-end
+stepper_seek(ctx, node, ext) = quote end
 
 stepper_range(ctx, node, ext) = auto
 
@@ -47,8 +46,7 @@ function stepper_range(ctx, node::FinchNode, ext)
 end
 
 function stepper_range(ctx, node::Stepper, ext)
-    push_preamble!(ctx, node.preamble !== nothing ? node.preamble : quote
-    end)
+    push_preamble!(ctx, node.preamble !== nothing ? node.preamble : quote end)
     ext_2 = similar_extent(ext, getstart(ext), node.stop(ctx, ext))
     bound_measure_below!(ext_2, get_smallest_measure(ext))
 end
@@ -141,8 +139,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                 $i1 = $i
                 $(
                     contain(ctx_2) do ctx_3
-                    ctx_3(loop(root.idx, ext_5, full_body))
-                end
+                        ctx_3(loop(root.idx, ext_5, full_body))
+                    end
                 )
 
                 $i = $(ctx_2(getstop(ext_5))) + $(ctx_2(getunit(ext_5)))
@@ -159,8 +157,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                     $i1 = $i
                     $(
                         contain(ctx_3) do ctx_4
-                        ctx_4(loop(root.idx, ext_4, truncated_body))
-                    end
+                            ctx_4(loop(root.idx, ext_4, truncated_body))
+                        end
                     )
 
                     $i = $(ctx_3(getstop(ext_4))) + $(ctx_3(getunit(ext_4)))
@@ -189,8 +187,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
 
         @assert isvirtual(root.ext)
 
-        cases = quote
-        end
+        cases = quote end
         for (guard, root_2) in ShortCircuitVisitor(ctx)(root)
             push!(
                 cases.args,
@@ -198,12 +195,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                     if $guard
                         $(
                             contain(ctx) do ctx_2
-                            ext_1 = bound_measure_below!(
-                                similar_extent(root.ext, value(i), getstop(root.ext)),
-                                get_smallest_measure(root.ext),
-                            )
-                            ctx_2(loop(root.idx, ext_1, root_2))
-                        end
+                                ext_1 = bound_measure_below!(
+                                    similar_extent(root.ext, value(i), getstop(root.ext)),
+                                    get_smallest_measure(root.ext),
+                                )
+                                ctx_2(loop(root.idx, ext_1, root_2))
+                            end
                         )
                         break
                     end
@@ -246,8 +243,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                 $i1 = $i
                 $(
                     contain(ctx_2) do ctx_3
-                    ctx_3(loop(root.idx, ext_4, body))
-                end
+                        ctx_3(loop(root.idx, ext_4, body))
+                    end
                 )
 
                 $i = $(ctx_2(getstop(ext_4))) + $(ctx_2(getunit(ext_4)))
@@ -266,8 +263,7 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
 
         @assert isvirtual(root.ext)
 
-        cases = quote
-        end
+        cases = quote end
         for (guard, root_2) in ShortCircuitVisitor(ctx)(root)
             push!(
                 cases.args,
@@ -275,12 +271,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::StepperStyle)
                     if $guard
                         $(
                             contain(ctx) do ctx_2
-                            ext_1 = bound_measure_below!(
-                                similar_extent(root.ext, value(i), getstop(root.ext)),
-                                get_smallest_measure(root.ext),
-                            )
-                            ctx_2(loop(root.idx, ext_1, root_2))
-                        end
+                                ext_1 = bound_measure_below!(
+                                    similar_extent(root.ext, value(i), getstop(root.ext)),
+                                    get_smallest_measure(root.ext),
+                                )
+                                ctx_2(loop(root.idx, ext_1, root_2))
+                            end
                         )
                         break
                     end

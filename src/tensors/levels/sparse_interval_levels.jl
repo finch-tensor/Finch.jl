@@ -149,10 +149,10 @@ end
     level_axes(lvl.lvl)..., Base.OneTo(lvl.shape)
 )
 @inline level_eltype(
-    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
 ) where {Ti,Left,Right,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
+::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}
 ) where {Ti,Left,Right,Lvl} = level_fill_value(Lvl)
 function data_rep_level(
     ::Type{<:SparseIntervalLevel{Ti,Left,Right,Lvl}}

@@ -182,13 +182,14 @@ end
     ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} = 1 + level_ndims(Lvl)
 @inline level_size(lvl::ParallelSparseDictLevel) = (level_size(lvl.lvl)..., lvl.shape)
-@inline level_axes(lvl::ParallelSparseDictLevel) =
-    (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
+@inline level_axes(lvl::ParallelSparseDictLevel) = (
+    level_axes(lvl.lvl)..., Base.OneTo(lvl.shape)
+)
 @inline level_eltype(
-    ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
+::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
+::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}
 ) where {Ti,Ptr,Idx,Val,Tbl,Pool,Lvl} = level_fill_value(Lvl)
 function data_rep_level(
     ::Type{<:ParallelSparseDictLevel{Ti,Ptr,Idx,Val,Tbl,Pool,Lvl}}

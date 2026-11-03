@@ -166,10 +166,10 @@ end
     level_axes(lvl.lvl)..., Base.OneTo(lvl.shape)
 )
 @inline level_eltype(
-    ::Type{<:SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}
+::Type{<:SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}
 ) where {Ti,Ptr,Tbl,Srt,Lvl} = level_eltype(Lvl)
 @inline level_fill_value(
-    ::Type{<:SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}
+::Type{<:SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}
 ) where {Ti,Ptr,Tbl,Srt,Lvl} = level_fill_value(Lvl)
 function data_rep_level(
     ::Type{<:SparseByteMapLevel{Ti,Ptr,Tbl,Srt,Lvl}}
@@ -534,8 +534,8 @@ function unfurl(
                     body=(ctx, ext) -> Stepper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                  $(lvl.srt)[$my_r] <
-                                  $my_q_offset + $(Tp)($(ctx(getstart(ext))))
+                                $(lvl.srt)[$my_r] <
+                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,
@@ -603,8 +603,8 @@ function unfurl(
                     body=(ctx, ext) -> Jumper(;
                         seek=(ctx, ext) -> quote
                             while $my_r + $(Tp(1)) < $my_r_stop &&
-                                  $(lvl.srt)[$my_r] <
-                                  $my_q_offset + $(Tp)($(ctx(getstart(ext))))
+                                $(lvl.srt)[$my_r] <
+                                $my_q_offset + $(Tp)($(ctx(getstart(ext))))
                                 $my_r += $(Tp(1))
                             end
                         end,

@@ -173,12 +173,11 @@ end
 @inline level_axes(lvl::SparseCOOLevel) = (
     level_axes(lvl.lvl)..., map(Base.OneTo, lvl.shape)...
 )
-@inline level_eltype(::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,Lvl} =
-    level_eltype(
-        Lvl
-    )
+@inline level_eltype(::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,Lvl} = level_eltype(
+    Lvl
+)
 @inline level_fill_value(
-    ::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}
+::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}
 ) where {N,TI,Ptr,Tbl,Lvl} = level_fill_value(Lvl)
 function data_rep_level(::Type{<:SparseCOOLevel{N,TI,Ptr,Tbl,Lvl}}) where {N,TI,Ptr,Tbl,Lvl}
     (SparseData^N)(data_rep_level(Lvl))
