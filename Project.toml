@@ -5,7 +5,6 @@ authors = ["Willow Ahrens"]
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
-AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -37,8 +36,6 @@ TensorMarketExt = "TensorMarket"
 
 [compat]
 AbstractTrees = "0.3.4, 0.4"
-# 0.5 allows KernelAbstractions 0.10, whose POCL dependency does not support Windows x86.
-AcceleratedKernels = "0.4.3"
 Compat = "3.29, 4"
 DataStructures = "0.18, 0.19"
 Distributions = "0.25"
