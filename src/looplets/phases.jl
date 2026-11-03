@@ -82,12 +82,12 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::PhaseStyle)
             $i0 = $i
             $(
                 contain(ctx) do ctx_4
-                    (ctx_4)(loop(
-                        root.idx,
-                        ext_4,
-                        body,
-                    ))
-                end
+                (ctx_4)(loop(
+                    root.idx,
+                    ext_4,
+                    body,
+                ))
+            end
             )
 
             $i = $(ctx(getstop(ext_4))) + $(ctx(getunit(ext_4)))

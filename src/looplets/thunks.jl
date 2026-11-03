@@ -1,9 +1,11 @@
 struct ThunkStyle end
 
 @kwdef struct Thunk
-    preamble = quote end
+    preamble = quote
+    end
     body
-    epilogue = quote end
+    epilogue = quote
+    end
 end
 FinchNotation.finch_leaf(x::Thunk) = virtual(x)
 

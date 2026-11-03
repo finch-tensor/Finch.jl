@@ -123,8 +123,10 @@ freeze_level!(ctx, lvl::VirtualPatternLevel, pos) = lvl
 
 thaw_level!(ctx, lvl::VirtualPatternLevel, pos) = lvl
 
-assemble_level!(ctx, lvl::VirtualPatternLevel, pos_start, pos_stop) = quote end
-reassemble_level!(ctx, lvl::VirtualPatternLevel, pos_start, pos_stop) = quote end
+assemble_level!(ctx, lvl::VirtualPatternLevel, pos_start, pos_stop) = quote
+end
+reassemble_level!(ctx, lvl::VirtualPatternLevel, pos_start, pos_stop) = quote
+end
 
 function instantiate(ctx, ::VirtualSubFiber{VirtualPatternLevel}, mode)
     if mode.kind === reader

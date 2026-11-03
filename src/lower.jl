@@ -137,11 +137,13 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         end
     elseif root.kind === block
         if isempty(root.bodies)
-            return quote end
+            return quote
+            end
         else
             head = root.bodies[1]
             body = block(root.bodies[2:end]...)
-            preamble = quote end
+            preamble = quote
+            end
 
             #The idea here is that we expect parent blocks to eagerly process
             #child blocks, so the effects of the statements like freeze or thaw
@@ -168,8 +170,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
                 $preamble
                 $(
                     contain(ctx) do ctx_2
-                        (ctx_2)(body)
-                    end
+                    (ctx_2)(body)
+                end
                 )
             end
         end
@@ -185,7 +187,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
         #these statements only apply to subsequent statements in a block
         #if we try to lower them directly they are a no-op
         #arguably, the declare, freeze, or thaw nodes should never reach this case but we'll leave that alone for now
-        quote end
+        quote
+        end
     elseif root.kind === access
         tns = resolve(ctx, root.tns)
         if length(root.idxs) > 0
@@ -228,10 +231,10 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::DefaultStyle)
             if $cond
                 $(
                     contain(ctx) do ctx_2
-                        open_scope(ctx_2) do ctx_3
-                            ctx_3(root.body)
-                        end
+                    open_scope(ctx_2) do ctx_3
+                        ctx_3(root.body)
                     end
+                end
                 )
             end
         end

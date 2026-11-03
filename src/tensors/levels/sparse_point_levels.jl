@@ -125,12 +125,14 @@ end
     1 + level_ndims(Lvl)
 @inline level_size(lvl::SparsePointLevel) = (level_size(lvl.lvl)..., lvl.shape)
 @inline level_axes(lvl::SparsePointLevel) = (level_axes(lvl.lvl)..., Base.OneTo(lvl.shape))
-@inline level_eltype(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} = level_eltype(
-    Lvl
-)
-@inline level_fill_value(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} = level_fill_value(
-    Lvl
-)
+@inline level_eltype(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
+    level_eltype(
+        Lvl
+    )
+@inline level_fill_value(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl} =
+    level_fill_value(
+        Lvl
+    )
 function data_rep_level(::Type{<:SparsePointLevel{Ti,Idx,Lvl}}) where {Ti,Idx,Lvl}
     SparseData(data_rep_level(Lvl))
 end

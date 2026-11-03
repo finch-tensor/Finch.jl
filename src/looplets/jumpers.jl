@@ -31,7 +31,8 @@ combine_style(a::ThunkStyle, b::JumperStyle) = ThunkStyle()
 combine_style(a::JumperStyle, b::PhaseStyle) = b
 
 jumper_seek(ctx, node::Jumper, ext) = node.seek(ctx, ext)
-jumper_seek(ctx, node, ext) = quote end
+jumper_seek(ctx, node, ext) = quote
+end
 
 jumper_range(ctx, node, ext) = auto
 
@@ -44,8 +45,10 @@ function jumper_range(ctx, node::FinchNode, ext)
 end
 
 function jumper_range(ctx, node::Jumper, ext)
-    push_preamble!(ctx, node.seek !== nothing ? node.seek(ctx, ext) : quote end)
-    push_preamble!(ctx, node.preamble !== nothing ? node.preamble : quote end)
+    push_preamble!(ctx, node.seek !== nothing ? node.seek(ctx, ext) : quote
+    end)
+    push_preamble!(ctx, node.preamble !== nothing ? node.preamble : quote
+    end)
     ext_2 = similar_extent(ext, getstart(ext), node.stop(ctx, ext))
     bound_measure_below!(ext_2, get_smallest_measure(ext))
 end
@@ -125,8 +128,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, style::JumperStyle)
             $i1 = $i
             $(
                 contain(ctx_2) do ctx_3
-                    ctx_3(loop(root.idx, ext_4, body))
-                end
+                ctx_3(loop(root.idx, ext_4, body))
+            end
             )
 
             $i = $(ctx_2(getstop(ext_4))) + $(ctx_2(getunit(ext_4)))

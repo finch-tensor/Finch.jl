@@ -95,7 +95,8 @@ function lower(ctx::AbstractCompiler, root::FinchNode, ::AcceptRunStyle)
             return ctx(body)
         end
     elseif root.kind === block
-        quote end #TODO this shouldn't need to be specified
+        quote
+        end #TODO this shouldn't need to be specified
     else
         error("unimplemented")
     end
