@@ -282,9 +282,6 @@ function unwrap_roots(ctx, root)
         !isnothing,
         map(PostOrderDFS(root)) do node
             if @capture(node, access(~A, ~m, ~i...))
-                if getroot(A) === nothing
-                    @info "Hi" (A)
-                end
                 getroot(A)
             elseif @capture(node, declare(~A, ~i, ~op))
                 A
