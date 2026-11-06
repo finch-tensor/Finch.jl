@@ -47,6 +47,12 @@ For your convenience, Finch defines a few useful functions that help express com
 choose
 minby
 maxby
+logical_and
+logical_or
+logical_xor
+scaled_square
+scaled_power
+scaled_negative_power
 ```
 
 ## Properties

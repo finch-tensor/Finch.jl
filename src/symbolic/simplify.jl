@@ -78,6 +78,12 @@ function get_simplify_rules(alg, shash)
         (@rule call(<, ~a, call(min, ~b...)) => call(and, map(x -> call(<, a, x), b)...)),
         (@rule call(<=, call(min, ~a...), ~b) => call(or, map(x -> call(<=, x, b), a)...)),
         (@rule call(<, call(min, ~a...), ~b) => call(or, map(x -> call(<, x, b), a)...)),
+        # Reading each argument as a Bool lets `and` and `or` annihilate with
+        # any zero, so logical_and(A[i], B[i]) iterates over the intersection.
+        (@rule call(logical_and, ~a...) =>
+            call(and, map(x -> call(!, call(iszero, x)), a)...)),
+        (@rule call(logical_or, ~a...) =>
+            call(or, map(x -> call(!, call(iszero, x)), a)...)),
         (@rule call(==, ~a, ~a) => literal(true)),
         (@rule call(<=, ~a, ~a) => literal(true)),
         (@rule call(<, ~a, ~a) => literal(false)),
