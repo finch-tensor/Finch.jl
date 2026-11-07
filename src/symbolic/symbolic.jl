@@ -22,6 +22,11 @@ isassociative(::AbstractAlgebra, ::typeof(max)) = true
 isassociative(::AbstractAlgebra, ::typeof(minby)) = true
 isassociative(::AbstractAlgebra, ::typeof(maxby)) = true
 isassociative(::AbstractAlgebra, ::Chooser) = true
+isassociative(::AbstractAlgebra, ::typeof(add_scaled_square)) = true
+isassociative(::AbstractAlgebra, ::AddScaledPower) = true
+isassociative(::AbstractAlgebra, ::AddScaledNegativePower) = true
+# logical_and, logical_or, and logical_xor are not declared associative, as that
+# would simplify `f(x)` to `x`, which is not the Bool that f returns.
 
 iscommutative(alg) = (f) -> iscommutative(alg, f)
 iscommutative(alg, f::FinchNode) = f.kind === literal && iscommutative(alg, f.val)
@@ -39,6 +44,12 @@ iscommutative(::AbstractAlgebra, ::typeof(+)) = true
 iscommutative(::AbstractAlgebra, ::typeof(*)) = true
 iscommutative(::AbstractAlgebra, ::typeof(min)) = true
 iscommutative(::AbstractAlgebra, ::typeof(max)) = true
+iscommutative(::AbstractAlgebra, ::typeof(logical_and)) = true
+iscommutative(::AbstractAlgebra, ::typeof(logical_or)) = true
+iscommutative(::AbstractAlgebra, ::typeof(logical_xor)) = true
+iscommutative(::AbstractAlgebra, ::typeof(add_scaled_square)) = true
+iscommutative(::AbstractAlgebra, ::AddScaledPower) = true
+iscommutative(::AbstractAlgebra, ::AddScaledNegativePower) = true
 
 isabelian(alg) = (f) -> isabelian(alg, f)
 isabelian(alg, f) = isassociative(alg, f) && iscommutative(alg, f)
@@ -80,6 +91,8 @@ isidempotent(::AbstractAlgebra, ::typeof(max)) = true
 isidempotent(::AbstractAlgebra, ::typeof(minby)) = true
 isidempotent(::AbstractAlgebra, ::typeof(maxby)) = true
 isidempotent(::AbstractAlgebra, ::Chooser) = true
+isidempotent(::AbstractAlgebra, ::typeof(logical_and)) = true
+isidempotent(::AbstractAlgebra, ::typeof(logical_or)) = true
 
 """
     isidentity(algebra, f, x)
@@ -102,6 +115,18 @@ isidentity(::AbstractAlgebra, ::typeof(|), x) = !ismissing(x) && iszero(x)
 isidentity(::AbstractAlgebra, ::typeof(&), x) = !ismissing(x) && x == ~(zero(x))
 isidentity(::AbstractAlgebra, ::typeof(min), x) = !ismissing(x) && isinf(x) && x > 0
 isidentity(::AbstractAlgebra, ::typeof(max), x) = !ismissing(x) && isinf(x) && x < 0
+isidentity(::AbstractAlgebra, ::typeof(logical_and), x) = !ismissing(x) && !iszero(x)
+isidentity(::AbstractAlgebra, ::typeof(logical_or), x) = !ismissing(x) && iszero(x)
+isidentity(::AbstractAlgebra, ::typeof(logical_xor), x) = !ismissing(x) && iszero(x)
+function isidentity(::AbstractAlgebra, ::typeof(add_scaled_square), x)
+    x isa Tuple{Number,Number} && iszero(x[1]) && iszero(x[2])
+end
+function isidentity(::AbstractAlgebra, ::AddScaledPower, x)
+    x isa Tuple{Number,Number} && iszero(x[1]) && iszero(x[2])
+end
+function isidentity(::AbstractAlgebra, ::AddScaledNegativePower, x)
+    x isa Tuple{Number,Number} && iszero(x[1]) && isinf(x[2])
+end
 function isidentity(::Finch.AbstractAlgebra, ::InitMax{D}, x) where {D}
     isequal(x, D) || isequal(x == D, true)
 end
@@ -151,6 +176,10 @@ isannihilator(::AbstractAlgebra, ::typeof(or), x) = ismissing(x) || x === true
 isannihilator(::AbstractAlgebra, ::typeof(and), x) = ismissing(x) || x === false
 isannihilator(::AbstractAlgebra, ::typeof(|), x) = !ismissing(x) && x == ~(zero(x))
 isannihilator(::AbstractAlgebra, ::typeof(&), x) = !ismissing(x) && iszero(x)
+# Only Bools, as an annihilator is the result. The simplifier expands calls into
+# `and` and `or` to annihilate with other values.
+isannihilator(::AbstractAlgebra, ::typeof(logical_and), x) = x === false
+isannihilator(::AbstractAlgebra, ::typeof(logical_or), x) = x === true
 function isannihilator_by_fn(alg::AbstractAlgebra, ::typeof(minby), x::FinchNode)
     if @capture x call(tuple, ~a::isliteral, ~b)
         return isannihilator(alg, min, a.val)
