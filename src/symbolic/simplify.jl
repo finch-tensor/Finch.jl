@@ -45,6 +45,25 @@ function writes_tensor(stmt, tns)
 end
 
 """
+    only_lifecycles(stmt)
+
+Return whether `stmt` only declares, freezes, or thaws tensors, possibly under
+sieves. Running such a statement twice in a row has the same effect as running
+it once.
+"""
+function only_lifecycles(stmt)
+    if stmt.kind === declare || stmt.kind === freeze || stmt.kind === thaw
+        true
+    elseif stmt.kind === block
+        !isempty(stmt.bodies) && all(only_lifecycles, stmt.bodies)
+    elseif stmt.kind === sieve
+        only_lifecycles(stmt.body)
+    else
+        false
+    end
+end
+
+"""
     read_declared(tns, init, stmts)
 
 Read `tns`, just declared with the constant `init`, as `init` in each of
@@ -235,6 +254,14 @@ function get_simplify_rules(alg, shash)
                 )(
                     body
                 )
+            end
+        end),
+
+        # A loop which only resets tensors, as is left where reads of a declared
+        # tensor simplify away, has the effect of one iteration if it runs any.
+        (@rule loop(~idx, ~ext::isvirtual, ~body) => begin
+            if idx ∉ getunbound(body) && only_lifecycles(body)
+                sieve(call(>=, measure(ext.val), get_smallest_measure(ext.val)), body)
             end
         end),
 

@@ -1265,8 +1265,10 @@
             end
             return X
         end)
-        # The reset value isn't compared with the fill at run time.
+        # The reset value isn't compared with the fill at run time, and no loop
+        # is left which only resets the accumulator.
         @test !occursin(r"(?<![\w.])0(\.0)? != 0", code)
+        @test !occursin(r"for \w+ = [^\n]+\n\s+acc_data\.val = [^\n]+\n\s+end", code)
         @finch begin
             X .= 0
             for i = _, j = _
