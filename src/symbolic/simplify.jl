@@ -26,6 +26,49 @@ function getunbound(ex::FinchNode)
 end
 
 """
+    writes_tensor(stmt, tns)
+
+Return whether running `stmt` may change the values of `tns`: whether it
+assigns to, declares, or thaws `tns`.
+"""
+function writes_tensor(stmt, tns)
+    any(PostOrderDFS(stmt)) do node
+        if @capture(node, assign(access(~lhs, ~mode, ~i...), ~op, ~rhs))
+            getroot(lhs) == getroot(tns)
+        elseif @capture(node, declare(~a, ~init, ~op)) ||
+            @capture(node, thaw(~a, ~op))
+            getroot(a) == getroot(tns)
+        else
+            false
+        end
+    end
+end
+
+"""
+    read_declared(tns, init, stmts)
+
+Read `tns`, just declared with the constant `init`, as `init` in each of
+`stmts` until the first which may write it, as `writes_tensor` finds. Every
+element of a declared tensor holds `init` until it is written. Return the new
+statements, or `nothing` if no read changed.
+"""
+function read_declared(tns, init, stmts)
+    stmts_2 = collect(stmts)
+    changed = false
+    for (n, stmt) in enumerate(stmts_2)
+        writes_tensor(stmt, tns) && break
+        stmt_2 = Rewrite(Postwalk(@rule access(~a, reader(), ~i...) => if a == tns
+            init
+        end))(stmt)
+        if stmt_2 !== stmt
+            stmts_2[n] = stmt_2
+            changed = true
+        end
+    end
+    changed ? stmts_2 : nothing
+end
+
+"""
     get_simplify_rules(alg, shash)
 
 Return the program rule set for Finch. One can dispatch on the `alg` trait to
@@ -246,6 +289,16 @@ function get_simplify_rules(alg, shash)
                         block(collapsed_body, loop(idx, ext, block(s1..., s2...)))
                     end
                 end
+            end
+        end),
+        # A tensor holds the constant it was declared with until it is written,
+        # so a loop body which resets an accumulator and copies it out where
+        # nothing was accumulated, such as the gaps of a sparse walk, writes
+        # nothing.
+        (@rule block(~s1..., declare(~a, ~init::isliteral, ~op), ~s2...) => begin
+            s2_2 = read_declared(a, init, s2)
+            if s2_2 !== nothing
+                block(s1..., declare(a, init, op), s2_2...)
             end
         end),
         (@rule block(~s1..., thaw(~a::isvariable, ~f), ~s2..., freeze(~a, ~f), ~s3...) =>
