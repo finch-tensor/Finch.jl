@@ -247,6 +247,16 @@ end
 # beyond it, so an empty hash also has an empty child.
 function sparse_hash_freeze!(ptr, perm, key, pos_stop, qos_stop=length(key))
     n = count(q -> key[q][3] != SPARSE_HASH_KEY_FREE, 1:qos_stop)
+    if n == 0
+        # An empty hash, such as a workspace which a loop declares and freezes
+        # in every iteration but rarely writes, freezes without allocating:
+        # every parent's run is empty.
+        resize!(ptr, pos_stop + 1)
+        fill!(ptr, 1)
+        empty!(perm)
+        empty!(key)
+        return 0
+    end
     qs = Vector{eltype(perm)}(undef, n)
     ps = Vector{fieldtype(eltype(key), 1)}(undef, n)
     is = Vector{fieldtype(eltype(key), 2)}(undef, n)
@@ -283,6 +293,12 @@ end
 # Walking `perm` backward, each block starts from the one after it.
 function sparse_hash_count_buckets!(tbl_count, perm, key, B, pos_multiplier)
     n = length(perm)
+    if n == 0
+        # Only the trailing block, all zeros.
+        resize!(tbl_count, B)
+        fill!(tbl_count, 0)
+        return tbl_count
+    end
     m = cld(n, B) + 1
     resize!(tbl_count, m * B)
     fill!(view(tbl_count, ((m - 1) * B + 1):(m * B)), 0)

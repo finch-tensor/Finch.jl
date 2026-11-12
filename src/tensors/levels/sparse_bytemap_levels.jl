@@ -473,19 +473,27 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
         quote
             Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
-            resize!($(lvl.srt), $(lvl.qos_fill))
-            sort!($(lvl.srt))
-            $srt_shape_init
-            $p_prev = $(Tp(0))
-            for $r in 1:($(lvl.qos_fill))
-                $p = $parent_position
-                if $p != $p_prev
-                    $(lvl.ptr)[$p_prev + 1] = $r
-                    $(lvl.ptr)[$p] = $r
+            if $(lvl.qos_fill) == 0
+                # Nothing was written since the level was declared, as in a
+                # workspace which a loop declares and freezes in every
+                # iteration but rarely writes: every parent's run is empty.
+                isempty($(lvl.srt)) || empty!($(lvl.srt))
+                $(lvl.ptr)[1] = $(Tp(1))
+            else
+                resize!($(lvl.srt), $(lvl.qos_fill))
+                sort!($(lvl.srt))
+                $srt_shape_init
+                $p_prev = $(Tp(0))
+                for $r in 1:($(lvl.qos_fill))
+                    $p = $parent_position
+                    if $p != $p_prev
+                        $(lvl.ptr)[$p_prev + 1] = $r
+                        $(lvl.ptr)[$p] = $r
+                    end
+                    $p_prev = $p
                 end
-                $p_prev = $p
+                $(lvl.ptr)[$p_prev + 1] = $(lvl.qos_fill) + 1
             end
-            $(lvl.ptr)[$p_prev + 1] = $(lvl.qos_fill) + 1
             $(lvl.qos_stop) = $(lvl.qos_fill)
         end,
     )
