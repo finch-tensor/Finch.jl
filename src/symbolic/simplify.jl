@@ -318,10 +318,8 @@ function get_simplify_rules(alg, shash)
                 end
             end
         end),
-        # A tensor holds the constant it was declared with until it is written,
-        # so a loop body which resets an accumulator and copies it out where
-        # nothing was accumulated, such as the gaps of a sparse walk, writes
-        # nothing.
+        # A tensor holds the constant it was declared with until it is written, so we
+        # rewrite any later reads before writes with that constant. 
         (@rule block(~s1..., declare(~a, ~init::isliteral, ~op), ~s2...) => begin
             s2_2 = read_declared(a, init, s2)
             if s2_2 !== nothing
