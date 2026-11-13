@@ -248,9 +248,7 @@ end
 function sparse_hash_freeze!(ptr, perm, key, pos_stop, qos_stop=length(key))
     n = count(q -> key[q][3] != SPARSE_HASH_KEY_FREE, 1:qos_stop)
     if n == 0
-        # An empty hash, such as a workspace which a loop declares and freezes
-        # in every iteration but rarely writes, freezes without allocating:
-        # every parent's run is empty.
+        # If no writes were done, skip most of the work.
         resize!(ptr, pos_stop + 1)
         fill!(ptr, 1)
         empty!(perm)

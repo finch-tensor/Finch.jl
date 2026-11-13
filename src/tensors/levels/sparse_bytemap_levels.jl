@@ -474,9 +474,8 @@ function freeze_level!(ctx::AbstractCompiler, lvl::VirtualSparseByteMapLevel, po
             Finch.resize_if_larger!($(lvl.ptr), $(ctx(pos_stop)) + 1)
             Finch.resize_if_larger!($(lvl.tbl), $(ctx(pos_stop)) * $(ctx(lvl.shape)))
             if $(lvl.qos_fill) == 0
-                # Nothing was written since the level was declared, as in a
-                # workspace which a loop declares and freezes in every
-                # iteration but rarely writes: every parent's run is empty.
+                # Nothing was written since the level was declared, so skip
+                # the extra work.
                 isempty($(lvl.srt)) || empty!($(lvl.srt))
                 $(lvl.ptr)[1] = $(Tp(1))
             else
