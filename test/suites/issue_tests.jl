@@ -1242,4 +1242,47 @@
         R = fsprand(Bool, 100, 100, 0.01)
         @test transpose(R) == permutedims(Array(R))
     end
+
+    # A declared tensor reads as its initial value until it is written, so an
+    # accumulator which is reset and copied out for every (i, j) writes nothing
+    # where V or A leave nothing to accumulate, and those loops are skipped.
+    let
+        n = 200
+        V = Tensor(SparseList(Element(0.0)), fsprand(n, 0.1))
+        A = Tensor(Dense(SparseList(Element(0.0))), fsprand(n, n, 0.05))
+        X = Tensor(SparseByteMap(SparseList(Element(0.0))), n, n)
+        acc = Scalar(0.0)
+        code = string(@finch_code begin
+            X .= 0
+            for i = _, j = _
+                acc .= 0
+                for k = _
+                    acc[] += V[i] * A[j, i] * A[k, i]
+                end
+                if acc[] != 0
+                    X[j, i] = acc[]
+                end
+            end
+            return X
+        end)
+        # The reset value isn't compared with the fill at run time, and no loop
+        # is left which only resets the accumulator.
+        @test !occursin(r"(?<![\w.])0(\.0)? != 0", code)
+        @test !occursin(r"for \w+ = [^\n]+\n\s+acc_data\.val = [^\n]+\n\s+end", code)
+        @finch begin
+            X .= 0
+            for i = _, j = _
+                acc .= 0
+                for k = _
+                    acc[] += V[i] * A[j, i] * A[k, i]
+                end
+                if acc[] != 0
+                    X[j, i] = acc[]
+                end
+            end
+            return X
+        end
+        v, a = Array(V), Array(A)
+        @test Array(X) ≈ a .* (v .* vec(sum(a; dims=1)))'
+    end
 end
